@@ -1,0 +1,422 @@
+[2026-08-29 14:20:27.746] [INFO ] ROG FALCHION ACE HFX 守护进程正在启动...
+[2026-08-29 14:20:27.747] [INFO ] ==========================================================
+[2026-08-29 14:20:27.747] [INFO ] 开始执行 CreateLedDevice 内存安全与初始化循环压力测试
+[2026-08-29 14:20:27.747] [INFO ] 测试目标: 连续执行 100 次完整的 COM 加载/建构/释放循环
+[2026-08-29 14:20:27.747] [INFO ] ==========================================================
+[2026-08-29 14:20:27.747] [INFO ] 初始内存占用 - WorkingSet: 6.96 MB, PrivateBytes: 1.05 MB
+[2026-08-29 14:20:27.747] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:20:29.406] [INFO ] HAL Access() 调用完成，返回值: -1219500192
+[2026-08-29 14:20:30.771] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:20:30.771] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:20:30.771] [INFO ] [Cycle 1/100] 成功! 耗时: 3024274 us, WorkingSet: 12.83 MB, PrivateBytes: 3.07 MB
+[2026-08-29 14:20:30.927] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:20:32.533] [INFO ] HAL Access() 调用完成，返回值: -1219498176
+[2026-08-29 14:20:33.905] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:20:33.905] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:20:34.062] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:20:35.663] [INFO ] HAL Access() 调用完成，返回值: -1219500192
+[2026-08-29 14:20:37.051] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:20:37.052] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:20:37.205] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:20:38.826] [INFO ] HAL Access() 调用完成，返回值: -1219501056
+[2026-08-29 14:20:40.258] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:20:40.258] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:20:40.414] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:20:42.112] [INFO ] HAL Access() 调用完成，返回值: -1219499136
+[2026-08-29 14:20:43.527] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:20:43.527] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:20:43.684] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:20:45.286] [INFO ] HAL Access() 调用完成，返回值: -1219499136
+[2026-08-29 14:20:46.672] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:20:46.672] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:20:46.829] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:20:48.444] [INFO ] HAL Access() 调用完成，返回值: -1219499136
+[2026-08-29 14:20:49.820] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:20:49.820] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:20:49.978] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:20:51.604] [INFO ] HAL Access() 调用完成，返回值: -1219499136
+[2026-08-29 14:20:52.978] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:20:52.978] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:20:53.134] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:20:54.820] [INFO ] HAL Access() 调用完成，返回值: -1218972400
+[2026-08-29 14:20:56.271] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:20:56.271] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:20:56.425] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:20:58.070] [INFO ] HAL Access() 调用完成，返回值: -1218972208
+[2026-08-29 14:20:59.448] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:20:59.449] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:20:59.449] [INFO ] [Cycle 10/100] 成功! 耗时: 3023304 us, WorkingSet: 16.38 MB, PrivateBytes: 7.47 MB
+[2026-08-29 14:20:59.604] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:21:01.217] [INFO ] HAL Access() 调用完成，返回值: -1218971152
+[2026-08-29 14:21:02.603] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:21:02.603] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:21:02.761] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:21:04.371] [INFO ] HAL Access() 调用完成，返回值: -1218972496
+[2026-08-29 14:21:05.755] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:21:05.755] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:21:05.911] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:21:07.520] [INFO ] HAL Access() 调用完成，返回值: -1218972688
+[2026-08-29 14:21:08.986] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:21:08.986] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:21:09.142] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:21:10.843] [INFO ] HAL Access() 调用完成，返回值: -1218973168
+[2026-08-29 14:21:12.232] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:21:12.232] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:21:12.387] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:21:14.009] [INFO ] HAL Access() 调用完成，返回值: -1218972208
+[2026-08-29 14:21:15.393] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:21:15.393] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:21:15.549] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:21:17.154] [INFO ] HAL Access() 调用完成，返回值: -1218972688
+[2026-08-29 14:21:18.520] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:21:18.521] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:21:18.675] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:21:20.281] [INFO ] HAL Access() 调用完成，返回值: -1218972688
+[2026-08-29 14:21:21.666] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:21:21.666] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:21:21.823] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:21:23.506] [INFO ] HAL Access() 调用完成，返回值: -1219499136
+[2026-08-29 14:21:24.971] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:21:24.971] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:21:25.125] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:21:26.740] [INFO ] HAL Access() 调用完成，返回值: -1187191584
+[2026-08-29 14:21:28.124] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:21:28.124] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:21:28.280] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:21:29.885] [INFO ] HAL Access() 调用完成，返回值: -1187191872
+[2026-08-29 14:21:31.254] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:21:31.254] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:21:31.254] [INFO ] [Cycle 20/100] 成功! 耗时: 2973990 us, WorkingSet: 20.26 MB, PrivateBytes: 11.54 MB
+[2026-08-29 14:21:31.410] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:21:33.018] [INFO ] HAL Access() 调用完成，返回值: -1187194080
+[2026-08-29 14:21:34.374] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:21:34.374] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:21:34.533] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:21:36.202] [INFO ] HAL Access() 调用完成，返回值: -1187194080
+[2026-08-29 14:21:37.653] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:21:37.653] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:21:37.809] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:21:39.466] [INFO ] HAL Access() 调用完成，返回值: -1187193312
+[2026-08-29 14:21:40.837] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:21:40.837] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:21:40.992] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:21:42.618] [INFO ] HAL Access() 调用完成，返回值: -1187191680
+[2026-08-29 14:21:44.009] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:21:44.009] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:21:44.165] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:21:45.771] [INFO ] HAL Access() 调用完成，返回值: -1187194080
+[2026-08-29 14:21:47.157] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:21:47.157] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:21:47.312] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:21:48.935] [INFO ] HAL Access() 调用完成，返回值: -1187195040
+[2026-08-29 14:21:50.359] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:21:50.359] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:21:50.515] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:21:52.215] [INFO ] HAL Access() 调用完成，返回值: -1187194464
+[2026-08-29 14:21:53.623] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:21:53.623] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:21:53.781] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:21:55.405] [INFO ] HAL Access() 调用完成，返回值: -1187194464
+[2026-08-29 14:21:56.777] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:21:56.777] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:21:56.933] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:21:58.552] [INFO ] HAL Access() 调用完成，返回值: -1183994880
+[2026-08-29 14:21:59.922] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:21:59.922] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:22:00.077] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:22:01.688] [INFO ] HAL Access() 调用完成，返回值: -1183996704
+[2026-08-29 14:22:03.069] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:22:03.069] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:22:03.069] [INFO ] [Cycle 30/100] 成功! 耗时: 2992061 us, WorkingSet: 23.79 MB, PrivateBytes: 15.67 MB
+[2026-08-29 14:22:03.227] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:22:04.924] [INFO ] HAL Access() 调用完成，返回值: -1183995360
+[2026-08-29 14:22:06.392] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:22:06.392] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:22:06.548] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:22:08.168] [INFO ] HAL Access() 调用完成，返回值: -1183995840
+[2026-08-29 14:22:09.555] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:22:09.555] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:22:09.710] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:22:11.315] [INFO ] HAL Access() 调用完成，返回值: -1183996416
+[2026-08-29 14:22:12.682] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:22:12.682] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:22:12.837] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:22:14.462] [INFO ] HAL Access() 调用完成，返回值: -1183997664
+[2026-08-29 14:22:15.834] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:22:15.834] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:22:15.989] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:22:17.623] [INFO ] HAL Access() 调用完成，返回值: -1183995936
+[2026-08-29 14:22:19.086] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:22:19.086] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:22:19.242] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:22:20.928] [INFO ] HAL Access() 调用完成，返回值: -1183994688
+[2026-08-29 14:22:22.302] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:22:22.302] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:22:22.458] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:22:24.082] [INFO ] HAL Access() 调用完成，返回值: -1183995840
+[2026-08-29 14:22:25.480] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:22:25.480] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:22:25.637] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:22:27.242] [INFO ] HAL Access() 调用完成，返回值: -1183994688
+[2026-08-29 14:22:28.631] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:22:28.631] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:22:28.788] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:22:30.397] [INFO ] HAL Access() 调用完成，返回值: -1187243888
+[2026-08-29 14:22:31.799] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:22:31.799] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:22:31.955] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:22:33.656] [INFO ] HAL Access() 调用完成，返回值: -1187245712
+[2026-08-29 14:22:35.121] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:22:35.121] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:22:35.121] [INFO ] [Cycle 40/100] 成功! 耗时: 3166079 us, WorkingSet: 27.41 MB, PrivateBytes: 19.78 MB
+[2026-08-29 14:22:35.277] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:22:36.900] [INFO ] HAL Access() 调用完成，返回值: -1187246000
+[2026-08-29 14:22:38.274] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:22:38.274] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:22:38.428] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:22:40.052] [INFO ] HAL Access() 调用完成，返回值: -1187243120
+[2026-08-29 14:22:41.434] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:22:41.434] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:22:41.591] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:22:43.212] [INFO ] HAL Access() 调用完成，返回值: -1187244944
+[2026-08-29 14:22:44.597] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:22:44.597] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:22:44.753] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:22:46.419] [INFO ] HAL Access() 调用完成，返回值: -1187243888
+[2026-08-29 14:22:47.870] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:22:47.870] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:22:48.025] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:22:49.676] [INFO ] HAL Access() 调用完成，返回值: -1187245712
+[2026-08-29 14:22:51.063] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:22:51.064] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:22:51.218] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:22:52.828] [INFO ] HAL Access() 调用完成，返回值: -1187243504
+[2026-08-29 14:22:54.216] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:22:54.216] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:22:54.371] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:22:55.990] [INFO ] HAL Access() 调用完成，返回值: -1187244560
+[2026-08-29 14:22:57.376] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:22:57.376] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:22:57.533] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:22:59.154] [INFO ] HAL Access() 调用完成，返回值: -1187245808
+[2026-08-29 14:23:00.615] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:23:00.615] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:23:00.769] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:23:02.455] [INFO ] HAL Access() 调用完成，返回值: -1187245808
+[2026-08-29 14:23:03.873] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:23:03.874] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:23:04.029] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:23:05.634] [INFO ] HAL Access() 调用完成，返回值: -1180221136
+[2026-08-29 14:23:07.007] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:23:07.007] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:23:07.007] [INFO ] [Cycle 50/100] 成功! 耗时: 2977466 us, WorkingSet: 31.17 MB, PrivateBytes: 24.14 MB
+[2026-08-29 14:23:07.163] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:23:08.791] [INFO ] HAL Access() 调用完成，返回值: -1180220656
+[2026-08-29 14:23:10.162] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:23:10.162] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:23:10.317] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:23:11.925] [INFO ] HAL Access() 调用完成，返回值: -1180221520
+[2026-08-29 14:23:13.295] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:23:13.295] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:23:13.452] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:23:15.138] [INFO ] HAL Access() 调用完成，返回值: -1180223248
+[2026-08-29 14:23:16.604] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:23:16.604] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:23:16.761] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:23:18.365] [INFO ] HAL Access() 调用完成，返回值: -1180223152
+[2026-08-29 14:23:19.739] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:23:19.739] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:23:19.896] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:23:21.520] [INFO ] HAL Access() 调用完成，返回值: -1180223440
+[2026-08-29 14:23:22.912] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:23:22.912] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:23:23.067] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:23:24.674] [INFO ] HAL Access() 调用完成，返回值: -1180220752
+[2026-08-29 14:23:26.048] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:23:26.048] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:23:26.204] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:23:27.858] [INFO ] HAL Access() 调用完成，返回值: -1180220752
+[2026-08-29 14:23:29.320] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:23:29.320] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:23:29.476] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:23:31.161] [INFO ] HAL Access() 调用完成，返回值: -1180223248
+[2026-08-29 14:23:32.537] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:23:32.537] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:23:32.693] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:23:34.301] [INFO ] HAL Access() 调用完成，返回值: -1187245808
+[2026-08-29 14:23:35.681] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:23:35.681] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:23:35.837] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:23:37.458] [INFO ] HAL Access() 调用完成，返回值: -1188391392
+[2026-08-29 14:23:38.842] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:23:38.842] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:23:38.842] [INFO ] [Cycle 60/100] 成功! 耗时: 3005092 us, WorkingSet: 34.51 MB, PrivateBytes: 28.09 MB
+[2026-08-29 14:23:38.998] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:23:40.620] [INFO ] HAL Access() 调用完成，返回值: -1188391776
+[2026-08-29 14:23:42.023] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:23:42.023] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:23:42.179] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:23:43.872] [INFO ] HAL Access() 调用完成，返回值: -1188392064
+[2026-08-29 14:23:45.320] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:23:45.320] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:23:45.476] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:23:47.090] [INFO ] HAL Access() 调用完成，返回值: -1188392352
+[2026-08-29 14:23:48.476] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:23:48.476] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:23:48.633] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:23:50.240] [INFO ] HAL Access() 调用完成，返回值: -1188389952
+[2026-08-29 14:23:51.628] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:23:51.628] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:23:51.785] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:23:53.414] [INFO ] HAL Access() 调用完成，返回值: -1188393792
+[2026-08-29 14:23:54.803] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:23:54.803] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:23:54.958] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:23:56.661] [INFO ] HAL Access() 调用完成，返回值: -1188391776
+[2026-08-29 14:23:58.099] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:23:58.099] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:23:58.255] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:23:59.916] [INFO ] HAL Access() 调用完成，返回值: -1188391776
+[2026-08-29 14:24:01.304] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:24:01.304] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:24:01.460] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:24:03.088] [INFO ] HAL Access() 调用完成，返回值: -1188393696
+[2026-08-29 14:24:04.465] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:24:04.465] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:24:04.622] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:24:06.223] [INFO ] HAL Access() 调用完成，返回值: -1188393696
+[2026-08-29 14:24:07.596] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:24:07.596] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:24:07.752] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:24:09.364] [INFO ] HAL Access() 调用完成，返回值: -1183396400
+[2026-08-29 14:24:10.826] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:24:10.826] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:24:10.826] [INFO ] [Cycle 70/100] 成功! 耗时: 3073567 us, WorkingSet: 37.87 MB, PrivateBytes: 31.96 MB
+[2026-08-29 14:24:10.981] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:24:12.667] [INFO ] HAL Access() 调用完成，返回值: -1183397648
+[2026-08-29 14:24:14.055] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:24:14.055] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:24:14.211] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:24:15.817] [INFO ] HAL Access() 调用完成，返回值: -1183397840
+[2026-08-29 14:24:17.189] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:24:17.189] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:24:17.344] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:24:18.963] [INFO ] HAL Access() 调用完成，返回值: -1183396208
+[2026-08-29 14:24:20.333] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:24:20.333] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:24:20.489] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:24:22.112] [INFO ] HAL Access() 调用完成，返回值: -1183396976
+[2026-08-29 14:24:23.482] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:24:23.482] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:24:23.638] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:24:25.329] [INFO ] HAL Access() 调用完成，返回值: -1183396208
+[2026-08-29 14:24:26.760] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:24:26.760] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:24:26.915] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:24:28.520] [INFO ] HAL Access() 调用完成，返回值: -1183396208
+[2026-08-29 14:24:29.904] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:24:29.904] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:24:30.060] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:24:31.666] [INFO ] HAL Access() 调用完成，返回值: -1183396976
+[2026-08-29 14:24:33.038] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:24:33.038] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:24:33.192] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:24:34.813] [INFO ] HAL Access() 调用完成，返回值: -1183396976
+[2026-08-29 14:24:36.201] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:24:36.201] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:24:36.357] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:24:38.027] [INFO ] HAL Access() 调用完成，返回值: -1183396208
+[2026-08-29 14:24:39.492] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:24:39.492] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:24:39.649] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:24:41.300] [INFO ] HAL Access() 调用完成，返回值: -1183396208
+[2026-08-29 14:24:42.672] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:24:42.672] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:24:42.672] [INFO ] [Cycle 80/100] 成功! 耗时: 3023105 us, WorkingSet: 41.75 MB, PrivateBytes: 36.39 MB
+[2026-08-29 14:24:42.829] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:24:44.442] [INFO ] HAL Access() 调用完成，返回值: -1183396976
+[2026-08-29 14:24:45.829] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:24:45.829] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:24:45.985] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:24:47.593] [INFO ] HAL Access() 调用完成，返回值: -1183396976
+[2026-08-29 14:24:48.965] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:24:48.965] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:24:49.121] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:24:50.743] [INFO ] HAL Access() 调用完成，返回值: -1183396976
+[2026-08-29 14:24:52.163] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:24:52.163] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:24:52.320] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:24:54.000] [INFO ] HAL Access() 调用完成，返回值: -1183396976
+[2026-08-29 14:24:55.404] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:24:55.404] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:24:55.560] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:24:57.185] [INFO ] HAL Access() 调用完成，返回值: -1183396208
+[2026-08-29 14:24:58.568] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:24:58.568] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:24:58.725] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:25:00.341] [INFO ] HAL Access() 调用完成，返回值: -1183396208
+[2026-08-29 14:25:01.731] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:25:01.731] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:25:01.886] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:25:03.509] [INFO ] HAL Access() 调用完成，返回值: -1183396976
+[2026-08-29 14:25:04.897] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:25:04.897] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:25:05.051] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:25:06.738] [INFO ] HAL Access() 调用完成，返回值: -1183396208
+[2026-08-29 14:25:08.205] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:25:08.205] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:25:08.359] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:25:09.981] [INFO ] HAL Access() 调用完成，返回值: -1183396976
+[2026-08-29 14:25:11.364] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:25:11.364] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:25:11.520] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:25:13.137] [INFO ] HAL Access() 调用完成，返回值: -1183396976
+[2026-08-29 14:25:14.530] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:25:14.530] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:25:14.530] [INFO ] [Cycle 90/100] 成功! 耗时: 3009275 us, WorkingSet: 45.27 MB, PrivateBytes: 40.52 MB
+[2026-08-29 14:25:14.687] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:25:16.315] [INFO ] HAL Access() 调用完成，返回值: -1174156480
+[2026-08-29 14:25:17.704] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:25:17.704] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:25:17.858] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:25:19.466] [INFO ] HAL Access() 调用完成，返回值: -1174158976
+[2026-08-29 14:25:20.935] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:25:20.935] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:25:21.089] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:25:22.789] [INFO ] HAL Access() 调用完成，返回值: -1174159168
+[2026-08-29 14:25:24.178] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:25:24.178] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:25:24.335] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:25:25.958] [INFO ] HAL Access() 调用完成，返回值: -1174160032
+[2026-08-29 14:25:27.329] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:25:27.329] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:25:27.486] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:25:29.086] [INFO ] HAL Access() 调用完成，返回值: -1174158112
+[2026-08-29 14:25:30.455] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:25:30.455] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:25:30.610] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:25:32.217] [INFO ] HAL Access() 调用完成，返回值: -1174159744
+[2026-08-29 14:25:33.610] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:25:33.610] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:25:33.767] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:25:35.455] [INFO ] HAL Access() 调用完成，返回值: -1174156864
+[2026-08-29 14:25:36.906] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:25:36.906] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:25:37.062] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:25:38.682] [INFO ] HAL Access() 调用完成，返回值: -1174159744
+[2026-08-29 14:25:40.042] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:25:40.042] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:25:40.196] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:25:41.816] [INFO ] HAL Access() 调用完成，返回值: -1174156960
+[2026-08-29 14:25:43.187] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:25:43.187] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:25:43.343] [INFO ] 正在尝试挂载华硕底层驱动 AacKbHal_x64.dll (CLSID_ClaymoreHal)...
+[2026-08-29 14:25:44.961] [INFO ] HAL Access() 调用完成，返回值: -1183396976
+[2026-08-29 14:25:46.335] [INFO ] CreateLedDevice 执行完成，检测到设备数量: 1
+[2026-08-29 14:25:46.335] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
+[2026-08-29 14:25:46.335] [INFO ] [Cycle 100/100] 成功! 耗时: 2992039 us, WorkingSet: 48.57 MB, PrivateBytes: 44.30 MB
+[2026-08-29 14:25:46.494] [INFO ] ==========================================================
+[2026-08-29 14:25:46.494] [INFO ] 压测完成结果: 成功 100 次, 失败 0 次
+[2026-08-29 14:25:46.494] [INFO ] 最终内存占用 - WorkingSet: 48.57 MB, PrivateBytes: 44.30 MB
+[2026-08-29 14:25:46.494] [INFO ] ==========================================================
+[2026-08-29 14:25:46.494] [INFO ] [+] AuraAdapter 已安全关闭并释放所有 COM 资源

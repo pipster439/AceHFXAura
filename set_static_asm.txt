@@ -1,0 +1,72 @@
+﻿Microsoft (R) COFF/PE Dumper Version 14.44.35228.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+
+Dump of file C:\Program Files\ASUS\Aac_Keyboard\AacKbHal_x64.dll
+
+File Type: DLL
+
+  0000000180066A10: 45 E8 48 89 9F 34  call        00000001B4A5F35E
+  0000000180066A16: 01 00              add         dword ptr [rax],eax
+  0000000180066A18: 00 8B 86 A0 00 00  add         byte ptr [rbx+000000000000A086h],cl
+  0000000180066A1E: 00 C7              add         bh,al
+  0000000180066A20: 45 B0 51           mov         r8b,51h
+  0000000180066A23: 2C 01              sub         al,1
+  0000000180066A25: 00 85 C0 75 07 41  add         byte ptr [rbp+00000000410775C0h],al
+  0000000180066A2B: 0F B6 46 08        movzx       eax,byte ptr [rsi+8]
+  0000000180066A2F: EB 16              jmp         0000000180066A47
+  0000000180066A31: 83 F8 01           cmp         eax,1
+  0000000180066A34: 75 07              jne         0000000180066A3D
+  0000000180066A36: 41 0F B6 46 0C     movzx       eax,byte ptr [r14+0Ch]
+  0000000180066A3B: EB 0A              jmp         0000000180066A47
+  0000000180066A3D: 83 F8 02           cmp         eax,2
+  0000000180066A40: 75 08              jne         0000000180066A4A
+  0000000180066A42: 41 0F B6 46 10     movzx       eax,byte ptr [r14+10h]
+  0000000180066A47: 88 45 B4           mov         byte ptr [rbp-4Ch],al
+  0000000180066A4A: 0F B6 86 A8 00 00  movzx       eax,byte ptr [rsi+00000000000000A8h]
+                    00
+  0000000180066A51: 6B C8 19           imul        ecx,eax,19h
+  0000000180066A54: 83 BE AC 00 00 00  cmp         dword ptr [rsi+00000000000000ACh],1
+                    01
+  0000000180066A5B: 88 4D B5           mov         byte ptr [rbp-4Bh],cl
+  0000000180066A5E: 0F 85 D9 00 00 00  jne         0000000180066B3D
+  0000000180066A64: 89 9E B0 00 00 00  mov         dword ptr [rsi+00000000000000B0h],ebx
+  0000000180066A6A: 41 B7 01           mov         r15b,1
+  0000000180066A6D: 44 8B F3           mov         r14d,ebx
+  0000000180066A70: F2 0F 10 0D 28 C8  movsd       xmm1,mmword ptr [00000001801A32A0h]
+                    13 00
+  0000000180066A78: F2 0F 10 05 18 C8  movsd       xmm0,mmword ptr [00000001801A3298h]
+                    13 00
+  0000000180066A80: E8 4B 5B 0B 00     call        000000018011C5D0
+  0000000180066A85: F2 0F 2C C0        cvttsd2si   eax,xmm0
+  0000000180066A89: 41 0F AF C6        imul        eax,r14d
+  0000000180066A8D: 44 02 F8           add         r15b,al
+  0000000180066A90: 66 C7 45 B7 FF FF  mov         word ptr [rbp-49h],0FFFFh
+  0000000180066A96: 0F B6 06           movzx       eax,byte ptr [rsi]
+  0000000180066A99: 48 8D 55 B0        lea         rdx,[rbp-50h]
+  0000000180066A9D: 88 45 B9           mov         byte ptr [rbp-47h],al
+  0000000180066AA0: 41 B8 40 00 00 00  mov         r8d,40h
+  0000000180066AA6: 0F B6 46 04        movzx       eax,byte ptr [rsi+4]
+  0000000180066AAA: 88 45 BA           mov         byte ptr [rbp-46h],al
+  0000000180066AAD: 0F B6 46 08        movzx       eax,byte ptr [rsi+8]
+  0000000180066AB1: 88 45 BB           mov         byte ptr [rbp-45h],al
+  0000000180066AB4: 0F B6 46 0C        movzx       eax,byte ptr [rsi+0Ch]
+  0000000180066AB8: 88 45 BC           mov         byte ptr [rbp-44h],al
+  0000000180066ABB: 0F B6 46 10        movzx       eax,byte ptr [rsi+10h]
+  0000000180066ABF: 88 45 BD           mov         byte ptr [rbp-43h],al
+  0000000180066AC2: 0F B6 46 14        movzx       eax,byte ptr [rsi+14h]
+  0000000180066AC6: 88 45 BE           mov         byte ptr [rbp-42h],al
+  0000000180066AC9: 48 8B 07           mov         rax,qword ptr [rdi]
+  0000000180066ACC: 44 88 7D B6        mov         byte ptr [rbp-4Ah],r15b
+  0000000180066AD0: 66 89 5D BF        mov         word ptr [rbp-41h],bx
+  0000000180066AD4: 88 5D C1           mov         byte ptr [rbp-3Fh],bl
+  0000000180066AD7: 48 8B 88 70 10 00  mov         rcx,qword ptr [rax+0000000000001070h]
+                    00
+  0000000180066ADE: 48 8B 01           mov         rax,qword ptr [rcx]
+  0000000180066AE1: FF 50 08           call        qword ptr [rax+8]
+  0000000180066AE4: 39
+  0000000180066AE5: 9F                 lahf
+
+  Summary
+
+      137000 .text

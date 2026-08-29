@@ -1,0 +1,193 @@
+{
+  "default_profile": "desktop",
+  "profiles": {
+    "coding": {
+      "color": [
+        10,
+        30,
+        50
+      ],
+      "keys": {
+        "ENTER": [
+          0,
+          255,
+          120
+        ],
+        "ESC": [
+          255,
+          120,
+          0
+        ],
+        "TAB": [
+          0,
+          200,
+          255
+        ]
+      },
+      "type": "static"
+    },
+    "cs2_gamer": {
+      "bg": [
+        0,
+        0,
+        0
+      ],
+      "keys": {
+        "ARROWS": [
+          255,
+          255,
+          0
+        ],
+        "ESC": [
+          255,
+          0,
+          0
+        ],
+        "SPACE": [
+          0,
+          200,
+          255
+        ],
+        "WASD": [
+          0,
+          255,
+          0
+        ]
+      },
+      "type": "custom_keymap"
+    },
+    "cyberpunk": {
+      "bg": [
+        10,
+        0,
+        20
+      ],
+      "keys": {
+        "ARROWS": [
+          255,
+          0,
+          128
+        ],
+        "ESC": [
+          0,
+          255,
+          255
+        ],
+        "SPACE": [
+          255,
+          255,
+          0
+        ],
+        "WASD": [
+          0,
+          255,
+          255
+        ]
+      },
+      "type": "custom_keymap"
+    },
+    "desktop": {
+      "analog": true,
+      "brightness": 1,
+      "color": [
+        255,
+        25,
+        41
+      ],
+      "color1": [
+        255,
+        25,
+        41
+      ],
+      "color2": [
+        20,
+        138,
+        196
+      ],
+      "direction": "diag_dl",
+      "period_ms": 5500,
+      "speed_index": 0,
+      "type": "breathing"
+    },
+    "office": {
+      "color": [
+        40,
+        40,
+        40
+      ],
+      "keys": {
+        "ENTER": [
+          0,
+          180,
+          255
+        ]
+      },
+      "type": "static"
+    },
+    "rainbow_wave": {
+      "period_ms": 1600,
+      "type": "wave"
+    },
+    "reactive": {
+      "bg": [
+        0,
+        5,
+        15
+      ],
+      "color": [
+        255,
+        25,
+        41
+      ],
+      "color1": [
+        255,
+        25,
+        41
+      ],
+      "period_ms": 2500,
+      "type": "reactive"
+    },
+    "ripple": {
+      "bg": [
+        0,
+        5,
+        15
+      ],
+      "color": [
+        0,
+        240,
+        255
+      ],
+      "color1": [
+        0,
+        240,
+        255
+      ],
+      "period_ms": 2500,
+      "type": "ripple"
+    }
+  },
+  "rules": [
+    {
+      "process": "cs2.exe",
+      "profile": "cs2_gamer",
+      "suppress_web_ui": true
+    },
+    {
+      "process": "code.exe",
+      "profile": "coding"
+    },
+    {
+      "process": "devenv.exe",
+      "profile": "coding"
+    },
+    {
+      "process": "notepad.exe",
+      "profile": "office"
+    },
+    {
+      "process": "chrome.exe",
+      "profile": "cyberpunk"
+    }
+  ]
+}

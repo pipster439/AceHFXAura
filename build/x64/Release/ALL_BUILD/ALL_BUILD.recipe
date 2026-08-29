@@ -1,0 +1,23 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project>
+  <ProjectOutputs>
+    <ProjectOutput>
+      <FullPath>G:\Aura\build\x64\Release\ZERO_CHECK</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>G:\Aura\build\Release\aura_daemon.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>G:\Aura\build\Release\aura_web_ui.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>G:\Aura\build\Release\test_com.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>G:\Aura\build\x64\Release\ALL_BUILD</FullPath>
+    </ProjectOutput>
+  </ProjectOutputs>
+  <ContentFiles />
+  <SatelliteDlls />
+  <NonRecipeFileRefs />
+</Project>
