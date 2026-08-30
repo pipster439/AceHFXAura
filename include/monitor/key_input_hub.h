@@ -27,6 +27,11 @@ public:
 
         std::lock_guard<std::mutex> lock(mutex_);
         events_.push_back({key_name, static_cast<uint64_t>(now)});
+        // 环形上限保护：当活跃灯效不消费按键事件时 (常亮/呼吸/波浪等)，
+        // 防止长时间运行下事件队列无界增长；仅保留最近 MAX_PENDING_EVENTS 条
+        if (events_.size() > MAX_PENDING_EVENTS) {
+            events_.erase(events_.begin(), events_.begin() + (events_.size() - MAX_PENDING_EVENTS));
+        }
     }
 
     void DrainEvents(std::vector<KeyPressEvent>& out_events) {
@@ -36,6 +41,7 @@ public:
     }
 
 private:
+    static constexpr size_t MAX_PENDING_EVENTS = 64;
     KeyInputHub() = default;
     std::mutex mutex_;
     std::vector<KeyPressEvent> events_;

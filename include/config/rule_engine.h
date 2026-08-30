@@ -25,8 +25,10 @@ public:
     // Checks file modification time and reloads if changed
     bool CheckAndReload();
 
-    // Matches process name against configured rules, falling back to default
-    const Profile* MatchProfile(const std::string& process_name);
+    // Matches process name against configured rules, falling back to default.
+    // Returns a shared_ptr copy so the caller keeps the Profile alive even if a
+    // concurrent hot reload replaces the internal profile table (no dangling pointers).
+    std::shared_ptr<const Profile> MatchProfile(const std::string& process_name);
 
     // Checks if the matched rule requests suppressing the web UI service
     bool ShouldSuppressWebUi(const std::string& process_name);

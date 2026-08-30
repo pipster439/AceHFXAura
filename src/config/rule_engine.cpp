@@ -211,7 +211,7 @@ bool RuleEngine::CheckAndReload() {
     return false;
 }
 
-const Profile* RuleEngine::MatchProfile(const std::string& process_name) {
+std::shared_ptr<const Profile> RuleEngine::MatchProfile(const std::string& process_name) {
     std::lock_guard<std::mutex> lock(mutex_);
 
     std::string lower_proc = ToLower(process_name);
@@ -221,7 +221,7 @@ const Profile* RuleEngine::MatchProfile(const std::string& process_name) {
             if (rule.process_name == lower_proc) {
                 auto it = profiles_.find(rule.profile_name);
                 if (it != profiles_.end()) {
-                    return it->second.get();
+                    return it->second;
                 }
             }
             // Also try without .exe if applicable
@@ -230,7 +230,7 @@ const Profile* RuleEngine::MatchProfile(const std::string& process_name) {
                 if (base == lower_proc) {
                     auto it = profiles_.find(rule.profile_name);
                     if (it != profiles_.end()) {
-                        return it->second.get();
+                        return it->second;
                     }
                 }
             }
@@ -240,12 +240,12 @@ const Profile* RuleEngine::MatchProfile(const std::string& process_name) {
     // Fallback to default profile
     auto def_it = profiles_.find(default_profile_name_);
     if (def_it != profiles_.end()) {
-        return def_it->second.get();
+        return def_it->second;
     }
 
     // If default profile name not found, return first available profile or nullptr
     if (!profiles_.empty()) {
-        return profiles_.begin()->second.get();
+        return profiles_.begin()->second;
     }
 
     return nullptr;

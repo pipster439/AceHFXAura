@@ -87,7 +87,7 @@
       "type": "custom_keymap"
     },
     "desktop": {
-      "analog": true,
+      "analog": false,
       "brightness": 1,
       "color": [
         255,
@@ -105,9 +105,9 @@
         196
       ],
       "direction": "diag_dl",
-      "period_ms": 5500,
-      "speed_index": 0,
-      "type": "breathing"
+      "period_ms": 1600,
+      "speed_index": 2,
+      "type": "ripple"
     },
     "office": {
       "color": [

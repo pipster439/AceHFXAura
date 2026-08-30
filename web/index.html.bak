@@ -1,0 +1,2324 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-color-mode="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ASUS GearLink | ROG FALCHION ACE HFX 灯效设置中心</title>
+    <style>
+        :root {
+            --font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+            --rog-red: #ff1929;
+            --rog-red-dark: #b80010;
+            --rog-cyan: #00f0ff;
+            --rog-cyan-dark: #00b4d8;
+            --bg-body: #07090d;
+            --bg-stage: #0c0f15;
+            --bg-panel: #10141c;
+            --bg-card: #151922;
+            --bg-card-hover: #1c222e;
+            --bg-active: #202735;
+            --border-subtle: #1e2430;
+            --border-card: #28303f;
+            --border-active: #ff1929;
+            --text-primary: #e6ecf5;
+            --text-secondary: #8c97a8;
+            --text-muted: #535d6e;
+            --radius-sm: 3px;
+            --radius-md: 6px;
+            --radius-lg: 10px;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: var(--font-family);
+            background-color: var(--bg-body);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+            user-select: none;
+        }
+
+        /* 顶部 GearLink 风格导航栏 */
+        header {
+            background-color: rgba(13, 16, 23, 0.95);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border-subtle);
+            padding: 10px 32px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-left { display: flex; align-items: center; gap: 14px; }
+        .rog-logo {
+            width: 34px;
+            height: 34px;
+            background: linear-gradient(135deg, var(--rog-red), #880010);
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 14px rgba(255, 25, 41, 0.35);
+        }
+        .rog-logo svg { width: 20px; height: 20px; fill: #fff; }
+
+        .brand-info h1 {
+            font-size: 15px;
+            font-weight: 800;
+            letter-spacing: 0.6px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .brand-info h1 span.tag {
+            font-size: 10px;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 3px;
+            background: rgba(255, 25, 41, 0.15);
+            border: 1px solid rgba(255, 25, 41, 0.4);
+            color: var(--rog-red);
+        }
+        .brand-info p { font-size: 11px; color: var(--text-secondary); }
+
+        .header-right { display: flex; align-items: center; gap: 16px; }
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 5px 12px;
+            background-color: rgba(0, 230, 118, 0.08);
+            border: 1px solid rgba(0, 230, 118, 0.3);
+            border-radius: 16px;
+            font-size: 11px;
+            color: #00e676;
+        }
+        .status-dot {
+            width: 7px;
+            height: 7px;
+            background-color: #00e676;
+            border-radius: 50%;
+            box-shadow: 0 0 8px #00e676;
+            animation: pulse-dot 2s infinite;
+        }
+        @keyframes pulse-dot {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.3); opacity: 0.5; }
+        }
+
+        .btn-rog {
+            background: linear-gradient(135deg, var(--rog-red), #b00012);
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 7px 18px;
+            font-size: 12px;
+            font-weight: 700;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            box-shadow: 0 0 14px rgba(255, 25, 41, 0.3);
+            transition: all 0.2s ease;
+        }
+        .btn-rog:hover {
+            box-shadow: 0 0 22px rgba(255, 25, 41, 0.6);
+            transform: translateY(-1px);
+        }
+
+        /* 页面主体内容容器 */
+        main {
+            flex: 1;
+            max-width: 1240px;
+            width: 100%;
+            margin: 18px auto 36px;
+            padding: 0 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* ========================================================
+           1. 顶部舞台：ASUS GearLink 键盘视觉模块
+           ======================================================== */
+        .stage-container {
+            background-color: var(--bg-stage);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg);
+            padding: 22px 18px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            box-shadow: inset 0 0 60px rgba(0, 0, 0, 0.65);
+            position: relative;
+        }
+
+        .stage-header {
+            width: 908px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 14px;
+        }
+        .stage-title {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .stage-fps-badge {
+            font-size: 11px;
+            color: var(--rog-cyan);
+            background: rgba(0, 240, 255, 0.08);
+            border: 1px solid rgba(0, 240, 255, 0.2);
+            padding: 2px 10px;
+            border-radius: 10px;
+        }
+
+        /* 官方 GearLink 规范命名：device-keyboard-module__keyboard */
+        .device-keyboard-module__keyboard {
+            position: relative;
+            width: 908px;
+            height: auto;
+            margin: 0 auto;
+            border-radius: 16px;
+            background: #0f1218;
+            border: 8px solid #1a1e27;
+            box-shadow: 0 14px 40px rgba(0, 0, 0, 0.8), 0 0 30px rgba(0, 240, 255, 0.03);
+            user-select: none;
+        }
+
+        .device-keyboard-module__keyboard_base-layer {
+            padding: 8px;
+            border-radius: 8px;
+            background: #0a0d12;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .device-keyboard-module__keyboard-row {
+            position: relative;
+            height: 50px;
+            display: flex;
+            gap: 4px;
+        }
+
+        /* 68 键键帽规范命名：device-keyboard-module__key */
+        .device-keyboard-module__key {
+            position: relative;
+            height: 50px;
+            border-radius: 4px;
+            background: #181d26;
+            border: 1px solid #28303f;
+            outline: 2px solid transparent;
+            outline-offset: 1px;
+            color: var(--text-primary);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background 0.08s, box-shadow 0.08s, transform 0.06s;
+            box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.5), 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+        .device-keyboard-module__key:active,
+        .device-keyboard-module__key.key-pressed {
+            transform: translateY(2px);
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.8), 0 0 16px rgba(255, 255, 255, 0.7) !important;
+        }
+        .device-keyboard-module__key .key-label {
+            pointer-events: none;
+            letter-spacing: 0.5px;
+            transition: color 0.1s;
+        }
+        .device-keyboard-module__key .key-sublabel {
+            font-size: 8px;
+            color: rgba(255, 255, 255, 0.35);
+            margin-top: -2px;
+            pointer-events: none;
+        }
+
+        /* 选项卡切换条 */
+        .tab-nav {
+            display: flex;
+            gap: 8px;
+            border-bottom: 1px solid var(--border-subtle);
+            margin-top: 4px;
+        }
+        .tab-btn {
+            background: none;
+            border: none;
+            border-bottom: 2px solid transparent;
+            padding: 8px 16px;
+            color: var(--text-secondary);
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .tab-btn:hover { color: var(--text-primary); }
+        .tab-btn.active {
+            color: var(--rog-red);
+            border-bottom-color: var(--rog-red);
+        }
+
+        /* ========================================================
+           2. 核心双栏设置中枢 (完美复刻参考图片布局)
+           ======================================================== */
+        .gearlink-main-panel {
+            display: grid;
+            grid-template-columns: 1fr 340px;
+            gap: 20px;
+            background-color: var(--bg-panel);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg);
+            padding: 24px 26px;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+        }
+
+        /* ----- 左侧：基本效果网格 ----- */
+        .effects-left-section {
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            padding-right: 12px;
+        }
+
+        /* 赛博斜向警戒斜纹底层图案 (参考图右下角底纹) */
+        .effects-left-section::after {
+            content: "";
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            width: 140px;
+            height: 110px;
+            pointer-events: none;
+            background: repeating-linear-gradient(
+                -45deg,
+                rgba(255, 255, 255, 0.02) 0,
+                rgba(255, 255, 255, 0.02) 10px,
+                transparent 10px,
+                transparent 22px
+            );
+            border-radius: 4px;
+        }
+
+        /* 顶部开关与标题 */
+        .effects-top-bar {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 24px;
+        }
+
+        /* 赛博青色拨码开关 [ON / OFF] */
+        .cyber-switch {
+            display: inline-flex;
+            align-items: center;
+            cursor: pointer;
+            user-select: none;
+            width: 48px;
+            height: 22px;
+            background: #1e2430;
+            border-radius: 2px;
+            position: relative;
+            border: 1px solid #333d4e;
+            transition: all 0.2s ease;
+        }
+        .cyber-switch.on {
+            background: var(--rog-cyan-dark);
+            border-color: var(--rog-cyan);
+            box-shadow: 0 0 10px rgba(0, 240, 255, 0.3);
+        }
+        .cyber-switch-thumb {
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 16px;
+            height: 16px;
+            background: #fff;
+            border-radius: 2px;
+            transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+        }
+        .cyber-switch.on .cyber-switch-thumb {
+            transform: translateX(26px);
+        }
+        .cyber-switch-text {
+            position: absolute;
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 0.5px;
+            color: #fff;
+            top: 2px;
+        }
+        .cyber-switch.on .cyber-switch-text {
+            left: 6px;
+        }
+        .cyber-switch:not(.on) .cyber-switch-text {
+            right: 6px;
+            color: #8c97a8;
+        }
+
+        .effects-section-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--text-primary);
+            letter-spacing: 0.5px;
+        }
+
+        /* 10 大基础效果网格排布 (参考图 1/2/3 标准布局) */
+        .effects-grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 20px 16px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .effect-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            padding: 12px 6px;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            background: transparent;
+            border: 1px solid transparent;
+        }
+        .effect-item:hover {
+            background: rgba(255, 255, 255, 0.03);
+            border-color: rgba(255, 255, 255, 0.08);
+        }
+        .effect-item.active {
+            background: rgba(255, 25, 41, 0.05);
+            border-color: rgba(255, 25, 41, 0.3);
+            box-shadow: 0 0 16px rgba(255, 25, 41, 0.15);
+        }
+        .effect-item.active-cyan {
+            background: rgba(0, 240, 255, 0.05);
+            border-color: rgba(0, 240, 255, 0.3);
+            box-shadow: 0 0 16px rgba(0, 240, 255, 0.15);
+        }
+
+        .effect-icon-wrapper {
+            width: 44px;
+            height: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-secondary);
+            transition: all 0.2s ease;
+        }
+        .effect-item:hover .effect-icon-wrapper {
+            color: var(--text-primary);
+            transform: scale(1.06);
+        }
+        .effect-item.active .effect-icon-wrapper {
+            color: var(--rog-red);
+            filter: drop-shadow(0 0 8px rgba(255, 25, 41, 0.7));
+        }
+        .effect-item.active-cyan .effect-icon-wrapper {
+            color: var(--rog-cyan);
+            filter: drop-shadow(0 0 8px rgba(0, 240, 255, 0.7));
+        }
+
+        .effect-label {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            letter-spacing: 0.3px;
+            transition: color 0.2s;
+        }
+        .effect-item:hover .effect-label { color: var(--text-primary); }
+        .effect-item.active .effect-label {
+            color: var(--text-primary);
+            font-weight: 700;
+        }
+        .effect-item.active-cyan .effect-label {
+            color: var(--text-primary);
+            font-weight: 700;
+        }
+
+        /* ----- 右侧：赛博参数调控卡片 (ASUS Cyber Box) ----- */
+        .cyber-settings-card {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-card);
+            border-radius: 4px;
+            padding: 22px 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 22px;
+            position: relative;
+            box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.5);
+        }
+
+        /* 顶部 Micro-stripes 赛博条纹底纹 */
+        .cyber-settings-card::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 18px;
+            border-top-left-radius: 3px;
+            border-top-right-radius: 3px;
+            background: repeating-linear-gradient(
+                45deg,
+                rgba(255, 255, 255, 0.02) 0,
+                rgba(255, 255, 255, 0.02) 2px,
+                transparent 2px,
+                transparent 6px
+            );
+            pointer-events: none;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+        }
+
+        /* 四角准星切线 Corner Brackets */
+        .corner-bracket {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            pointer-events: none;
+            border-color: #434e62;
+            border-style: solid;
+        }
+        .corner-tl { top: -1px; left: -1px; border-width: 2px 0 0 2px; }
+        .corner-tr { top: -1px; right: -1px; border-width: 2px 2px 0 0; }
+        .corner-bl { bottom: -1px; left: -1px; border-width: 0 0 2px 2px; }
+        .corner-br { bottom: -1px; right: -1px; border-width: 0 2px 2px 0; }
+
+        /* 参数区块小节 */
+        .param-group {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            position: relative;
+            z-index: 1;
+        }
+        .param-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text-primary);
+            letter-spacing: 0.4px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        /* 颜色单选 (样式 / 随机) */
+        .color-radio-row {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+        .cyber-radio {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            cursor: pointer;
+            font-size: 12px;
+            color: var(--text-primary);
+        }
+        .cyber-radio input[type="radio"] { display: none; }
+        .radio-dot {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            border: 1px solid #5a667d;
+            background: #0f131a;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+        .cyber-radio input[type="radio"]:checked + .radio-dot {
+            border-color: #fff;
+        }
+        .cyber-radio input[type="radio"]:checked + .radio-dot::after {
+            content: "";
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #fff;
+        }
+
+        /* 预设下拉选择器 (默认样式 ▼) */
+        .cyber-select-wrapper {
+            position: relative;
+            width: 100%;
+        }
+        .cyber-select {
+            width: 100%;
+            background-color: #1a202c;
+            border: 1px solid #333e52;
+            color: var(--text-primary);
+            padding: 6px 12px;
+            font-size: 12px;
+            font-weight: 600;
+            border-radius: var(--radius-sm);
+            outline: none;
+            cursor: pointer;
+            appearance: none;
+            -webkit-appearance: none;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .cyber-select:focus { border-color: var(--rog-cyan); }
+        .cyber-select-arrow {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            pointer-events: none;
+            color: var(--rog-red);
+            font-size: 10px;
+        }
+
+        /* 多阶渐变色条组件 (Gradient Stop Bar) */
+        .gradient-editor-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 4px;
+        }
+        .grad-btn {
+            background: #1c222e;
+            border: 1px solid #364257;
+            color: var(--text-secondary);
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 2px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            transition: all 0.15s;
+        }
+        .grad-btn:hover {
+            color: #fff;
+            border-color: #556685;
+            background: #252e3d;
+        }
+
+        .gradient-track-container {
+            flex: 1;
+            position: relative;
+            height: 28px;
+            display: flex;
+            align-items: center;
+        }
+        .gradient-bar {
+            width: 100%;
+            height: 12px;
+            border-radius: 2px;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            background: linear-gradient(to right, #ff1929 0%, #148ac4 60%, #e040fb 100%);
+            cursor: crosshair;
+        }
+
+        /* 渐变停靠手柄 (Stop Pin) */
+        .gradient-stop-pin {
+            position: absolute;
+            top: -2px;
+            width: 14px;
+            height: 16px;
+            transform: translateX(-50%);
+            border: 1px solid #ffffff;
+            border-radius: 2px;
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.6);
+            transition: transform 0.1s, box-shadow 0.1s;
+            z-index: 2;
+        }
+        .gradient-stop-pin.selected {
+            transform: translateX(-50%) scale(1.15);
+            border-color: #fff;
+            box-shadow: 0 0 10px #ffffff;
+            z-index: 3;
+        }
+        .gradient-stop-pin::after {
+            content: "";
+            position: absolute;
+            bottom: -5px;
+            left: 50%;
+            transform: translateX(-50%);
+            border-width: 4px 4px 0 4px;
+            border-style: solid;
+            border-color: #fff transparent transparent transparent;
+        }
+
+        /* 模拟灯效组件 */
+        .analog-box {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            border-radius: 4px;
+            padding: 10px 12px;
+        }
+        .analog-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .analog-desc {
+            font-size: 11px;
+            color: #7b889d;
+            line-height: 1.45;
+        }
+
+        /* LED 亮度条 (发光青色 Cyan Track) */
+        .cyber-slider-track {
+            position: relative;
+            width: 100%;
+            height: 6px;
+            background: #19202c;
+            border-radius: 3px;
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+        }
+        .cyber-slider-fill {
+            position: absolute;
+            left: 0;
+            height: 100%;
+            background: linear-gradient(to right, #0088cc, var(--rog-cyan));
+            border-radius: 3px;
+            box-shadow: 0 0 10px rgba(0, 240, 255, 0.5);
+            pointer-events: none;
+        }
+        .cyber-slider-thumb {
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            background: #ffffff;
+            border-radius: 2px;
+            transform: translateX(-50%);
+            box-shadow: 0 0 8px rgba(0, 240, 255, 0.8), 0 2px 4px rgba(0,0,0,0.5);
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+        .cyber-slider-thumb:hover { transform: translateX(-50%) scale(1.15); }
+
+        /* 速度档位滑块 (慢 / 正常 / 快) */
+        .speed-ticks-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-top: 6px;
+            padding: 0 2px;
+        }
+        .speed-step-track {
+            position: relative;
+            width: 100%;
+            height: 4px;
+            background: #252e3e;
+            border-radius: 2px;
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+        }
+        .speed-tick-mark {
+            position: absolute;
+            width: 2px;
+            height: 10px;
+            background: #46556e;
+            transform: translateX(-50%);
+            top: -3px;
+        }
+        .speed-thumb {
+            position: absolute;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #ffffff;
+            border: 2px solid #334257;
+            transform: translateX(-50%);
+            box-shadow: 0 0 6px rgba(255,255,255,0.4);
+            cursor: pointer;
+            transition: left 0.15s ease;
+        }
+
+        /* 8 方向三角罗盘矩阵 (Direction Compass) */
+        .direction-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 10px 8px;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 12px 10px;
+            border-radius: 4px;
+            border: 1px solid rgba(255, 255, 255, 0.04);
+        }
+        .dir-btn {
+            background: #151a23;
+            border: 1px solid #2d384b;
+            border-radius: 2px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: #8c9bb0;
+            transition: all 0.15s ease;
+        }
+        .dir-btn:hover {
+            border-color: #4b5d7d;
+            color: #ffffff;
+            background: #1c2330;
+        }
+        .dir-btn.active {
+            border-color: var(--rog-red);
+            background: rgba(255, 25, 41, 0.15);
+            color: var(--rog-red);
+            box-shadow: 0 0 10px rgba(255, 25, 41, 0.4);
+        }
+        .dir-btn svg { width: 14px; height: 14px; fill: currentColor; }
+
+        /* 隐藏的色彩拾取器 */
+        #hidden-color-picker {
+            position: absolute;
+            opacity: 0;
+            pointer-events: none;
+            width: 0;
+            height: 0;
+        }
+
+        /* 前台规则表格 */
+        .rules-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        .rules-table th {
+            text-align: left;
+            color: var(--text-secondary);
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+        .rules-table td {
+            padding: 12px;
+            border-bottom: 1px solid rgba(45, 52, 68, 0.4);
+        }
+        .input-text {
+            background-color: #1a202c;
+            border: 1px solid #333e52;
+            border-radius: var(--radius-sm);
+            color: var(--text-primary);
+            padding: 6px 12px;
+            font-size: 13px;
+            outline: none;
+            font-family: monospace;
+            font-weight: 700;
+        }
+        .input-text:focus { border-color: var(--rog-cyan); }
+
+        /* 全屏优雅降级游戏遮罩 */
+        #game-mode-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(7, 9, 13, 0.94);
+            backdrop-filter: blur(20px);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.35s ease;
+        }
+        #game-mode-overlay.visible {
+            opacity: 1;
+            pointer-events: all;
+        }
+        .game-card {
+            background: #11151e;
+            border: 1px solid rgba(255, 25, 41, 0.4);
+            box-shadow: 0 0 50px rgba(255, 25, 41, 0.2);
+            border-radius: 14px;
+            padding: 40px 50px;
+            max-width: 540px;
+            text-align: center;
+        }
+        .game-icon { font-size: 44px; margin-bottom: 16px; display: inline-block; }
+        .game-card h2 { font-size: 20px; color: var(--rog-red); margin-bottom: 10px; font-weight: 800; }
+        .game-card p { font-size: 13px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 20px; }
+        .pulse-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 6px 18px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 20px;
+            font-size: 12px;
+            color: #fff;
+        }
+        .pulse-ring {
+            width: 8px;
+            height: 8px;
+            background-color: #ffcc00;
+            border-radius: 50%;
+            box-shadow: 0 0 10px #ffcc00;
+            animation: pulse-ring 1.5s infinite;
+        }
+        @keyframes pulse-ring {
+            0%, 100% { transform: scale(0.9); opacity: 1; }
+            50% { transform: scale(1.4); opacity: 0.4; }
+        }
+
+        #toast {
+            position: fixed;
+            bottom: 28px;
+            right: 28px;
+            background: #18202d;
+            border: 1px solid var(--rog-red);
+            box-shadow: 0 4px 20px rgba(255, 25, 41, 0.3);
+            border-radius: var(--radius-sm);
+            padding: 12px 20px;
+            font-size: 13px;
+            color: #fff;
+            transform: translateY(100px);
+            opacity: 0;
+            transition: all 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+            z-index: 1000;
+        }
+        #toast.show { transform: translateY(0); opacity: 1; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="header-left">
+        <div class="rog-logo" title="ROG GearLink">
+            <svg viewBox="0 0 24 24"><path d="M21.9 9.4L14 4.8 6.1 9.4l-.1 9.2 7.9 4.6 7.9-4.6.1-9.2zM14 6.8l5.8 3.4v6.8L14 20.4l-5.8-3.4v-6.8L14 6.8z"/></svg>
+        </div>
+        <div class="brand-info">
+            <h1>奥创极速网页版 <span class="tag">ROG FALCHION ACE HFX</span></h1>
+            <p>ASUS GearLink 官方灯效设置中枢 · 127.0.0.1:19898</p>
+        </div>
+    </div>
+    <div class="header-right">
+        <div class="status-badge" id="service-status">
+            <span class="status-dot"></span>
+            <span>硬件推流就绪 (25 FPS)</span>
+        </div>
+        <button class="btn-rog" onclick="saveConfiguration()">
+            💾 保存并应用到设备
+        </button>
+    </div>
+</header>
+
+<main>
+    <!-- ========================================================
+         1. 顶部舞台：符合 official 规范的 68 键全物理虚拟键盘
+         ======================================================== -->
+    <div class="stage-container">
+        <div class="stage-header">
+            <div class="stage-title">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="var(--rog-red)"><path d="M20 5H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm-9 3h2v2h-2V8zm0 3h2v2h-2v-2zM8 8h2v2H8V8zm0 3h2v2H8v-2zm-1 2H5v-2h2v2zm0-3H5V8h2v2zm8 7H9v-2h6v2zm1-4h-2v-2h2v2zm0-3h-2V8h2v2zm3 3h-2v-2h2v2zm0-3h-2V8h2v2z"/></svg>
+                实时灯效预览 · 68 键全物理矩阵同步
+            </div>
+            <div class="stage-fps-badge" id="stage-badge">
+                ● 预览时钟：60 FPS 硬件同步驱动
+            </div>
+        </div>
+
+        <!-- 按照用户明确指定的需求：具备 "device-keyboard-module__keyboard" 类名 -->
+        <div class="device-keyboard-module__keyboard" id="device-keyboard">
+            <div class="device-keyboard-module__keyboard_base-layer" id="keyboard-base-layer">
+                <!-- 5 排键盘布局由 JS 依据 calibrated_keymap.json 自动高精度生成 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- 选项卡导航条 -->
+    <div class="tab-nav">
+        <button class="tab-btn active" onclick="switchMainTab('lighting')">灯光效果设置</button>
+        <button class="tab-btn" onclick="switchMainTab('rules')">前台自适应规则</button>
+    </div>
+
+    <!-- ========================================================
+         2. Tab 1: 完美复刻 ASUS GearLink 参考图片的灯效设置界面
+         ======================================================== -->
+    <div id="tab-lighting-content" class="gearlink-main-panel">
+        <!-- 左栏：基本效果选择网格 (参考图 1/2/3 左半部) -->
+        <div class="effects-left-section">
+            <div class="effects-top-bar">
+                <div class="cyber-switch on" id="master-light-switch" onclick="toggleMasterLight()">
+                    <span class="cyber-switch-text">ON</span>
+                    <div class="cyber-switch-thumb"></div>
+                </div>
+                <div class="effects-section-title">基本效果</div>
+            </div>
+
+            <!-- 10 款基础灯效网格 -->
+            <div class="effects-grid" id="effects-grid">
+                <!-- 1. 恒亮 (Static) -->
+                <div class="effect-item" data-id="static" onclick="selectEffect('static')">
+                    <div class="effect-icon-wrapper">
+                        <svg viewBox="0 0 24 24" width="30" height="30" fill="currentColor">
+                            <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2.2"/>
+                            <circle cx="12" cy="12" r="3.5" fill="currentColor"/>
+                        </svg>
+                    </div>
+                    <span class="effect-label">恒亮</span>
+                </div>
+
+                <!-- 2. 呼吸 (Breathing) -->
+                <div class="effect-item" data-id="breathing" onclick="selectEffect('breathing')">
+                    <div class="effect-icon-wrapper">
+                        <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M2 12h5l2.5-6 4 12 3.5-6h5"/>
+                        </svg>
+                    </div>
+                    <span class="effect-label">呼吸</span>
+                </div>
+
+                <!-- 3. 彩色循环 (Color Cycle) -->
+                <div class="effect-item" data-id="color_cycle" onclick="selectEffect('color_cycle')">
+                    <div class="effect-icon-wrapper">
+                        <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+                            <path d="M20.5 12A8.5 8.5 0 0 0 6 6l-2 2"/>
+                            <path d="M4 3v5h5"/>
+                            <path d="M3.5 12a8.5 8.5 0 0 0 14.5 6l2-2"/>
+                            <path d="M20 21v-5h-5"/>
+                        </svg>
+                    </div>
+                    <span class="effect-label">彩色循环</span>
+                </div>
+
+                <!-- 4. 触发 (Reactive) -->
+                <div class="effect-item" data-id="reactive" onclick="selectEffect('reactive')">
+                    <div class="effect-icon-wrapper">
+                        <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2">
+                            <ellipse cx="12" cy="8" rx="3.5" ry="5.5"/>
+                            <ellipse cx="12" cy="16" rx="3.5" ry="5.5"/>
+                            <ellipse cx="8" cy="12" rx="5.5" ry="3.5"/>
+                            <ellipse cx="16" cy="12" rx="5.5" ry="3.5"/>
+                        </svg>
+                    </div>
+                    <span class="effect-label">触发</span>
+                </div>
+
+                <!-- 5. 彩虹 (Rainbow) -->
+                <div class="effect-item active" data-id="wave" onclick="selectEffect('wave')">
+                    <div class="effect-icon-wrapper">
+                        <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+                            <path d="M4 19a8 8 0 0 1 16 0"/>
+                            <path d="M7.5 19a4.5 4.5 0 0 1 9 0"/>
+                            <path d="M10.5 19a1.5 1.5 0 0 1 3 0"/>
+                        </svg>
+                    </div>
+                    <span class="effect-label">彩虹</span>
+                </div>
+
+                <!-- 6. 涟漪 (Ripple) -->
+                <div class="effect-item" data-id="ripple" onclick="selectEffect('ripple')">
+                    <div class="effect-icon-wrapper">
+                        <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="2.5" fill="currentColor"/>
+                            <circle cx="12" cy="12" r="6"/>
+                            <circle cx="12" cy="12" r="9.5"/>
+                        </svg>
+                    </div>
+                    <span class="effect-label">涟漪</span>
+                </div>
+
+                <!-- 7. 星空 (Starry Night) -->
+                <div class="effect-item" data-id="starry_night" onclick="selectEffect('starry_night')">
+                    <div class="effect-icon-wrapper">
+                        <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M4 8V4h4"/>
+                            <path d="M20 8V4h-4"/>
+                            <path d="M4 16v4h4"/>
+                            <path d="M20 16v4h-4"/>
+                            <path d="M12 7l1.5 3.5L17 12l-3.5 1.5L12 17l-1.5-3.5L7 12l3.5-1.5z" fill="currentColor" stroke="none"/>
+                        </svg>
+                    </div>
+                    <span class="effect-label">星空</span>
+                </div>
+
+                <!-- 8. 流沙 (Quicksand) -->
+                <div class="effect-item" data-id="quicksand" onclick="selectEffect('quicksand')">
+                    <div class="effect-icon-wrapper">
+                        <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+                            <path d="M3 8c2.5-2 5.5-2 8 0s5.5 2 8 0"/>
+                            <path d="M3 13c2.5-2 5.5-2 8 0s5.5 2 8 0"/>
+                            <path d="M3 18c2.5-2 5.5-2 8 0s5.5 2 8 0"/>
+                        </svg>
+                    </div>
+                    <span class="effect-label">流沙</span>
+                </div>
+
+                <!-- 9. 电流 (Current) -->
+                <div class="effect-item" data-id="current" onclick="selectEffect('current')">
+                    <div class="effect-icon-wrapper">
+                        <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M2 13h4l2.5-7 3.5 14 3-10 2.5 5 2-2h4"/>
+                        </svg>
+                    </div>
+                    <span class="effect-label">电流</span>
+                </div>
+
+                <!-- 10. 雨滴 (Raindrops) -->
+                <div class="effect-item" data-id="raindrop" onclick="selectEffect('raindrop')">
+                    <div class="effect-icon-wrapper">
+                        <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+                            <path d="M7 4l-4 8"/>
+                            <path d="M12 4l-4 16"/>
+                            <path d="M17 4l-4 12"/>
+                            <path d="M22 6l-4 10"/>
+                        </svg>
+                    </div>
+                    <span class="effect-label">雨滴</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右栏：ASUS 赛博参数卡片 (参考图 1/2/3 右半部) -->
+        <div class="cyber-settings-card" id="cyber-settings-card">
+            <!-- 四角准星切角 -->
+            <div class="corner-bracket corner-tl"></div>
+            <div class="corner-bracket corner-tr"></div>
+            <div class="corner-bracket corner-bl"></div>
+            <div class="corner-bracket corner-br"></div>
+
+            <!-- 1. 颜色设置区 (Color) -->
+            <div class="param-group" id="param-group-color">
+                <div class="param-title">颜色</div>
+
+                <!-- 样式 / 随机 单选 (参考图 3 星空效果) -->
+                <div class="color-radio-row" id="color-radio-row" style="display: none;">
+                    <label class="cyber-radio">
+                        <input type="radio" name="color-mode" value="style" checked onchange="onColorModeChange('style')">
+                        <span class="radio-dot"></span>
+                        <span>样式</span>
+                    </label>
+                    <label class="cyber-radio">
+                        <input type="radio" name="color-mode" value="random" onchange="onColorModeChange('random')">
+                        <span class="radio-dot"></span>
+                        <span>随机</span>
+                    </label>
+                </div>
+
+                <!-- 预设样式下拉菜单 (默认样式 ▼) -->
+                <div class="cyber-select-wrapper" id="preset-select-wrapper">
+                    <select class="cyber-select" id="preset-theme-select" onchange="onPresetThemeChange(this.value)">
+                        <option value="default">默认样式</option>
+                        <option value="rainbow">彩虹全谱</option>
+                        <option value="cyberpunk">赛博朋克</option>
+                        <option value="aurora">极光之境</option>
+                        <option value="lava">烈焰熔岩</option>
+                        <option value="frost">冷艳冰霜</option>
+                        <option value="single_red">ROG 专属红</option>
+                    </select>
+                    <span class="cyber-select-arrow">▼</span>
+                </div>
+
+                <!-- 多阶渐变条与加减按键 (参考图 1/3 核心特性) -->
+                <div class="gradient-editor-row" id="gradient-editor-row">
+                    <button class="grad-btn" title="删除当前选中的色标" onclick="removeSelectedStop()">−</button>
+                    <div class="gradient-track-container" id="gradient-track-container" onclick="onGradientTrackClick(event)">
+                        <div class="gradient-bar" id="gradient-bar"></div>
+                        <!-- 动态生成色标手柄 -->
+                    </div>
+                    <button class="grad-btn" title="增加新色标" onclick="addGradientStop()">+</button>
+                </div>
+            </div>
+
+            <!-- 2. 模拟灯效 (Analog Effect Toggle, 参考图 1) -->
+            <div class="analog-box" id="param-group-analog">
+                <div class="analog-header">
+                    <span style="font-size: 13px; font-weight: 700; color: #fff;">模拟灯效</span>
+                    <div class="cyber-switch" id="analog-switch" onclick="toggleAnalogSwitch()">
+                        <span class="cyber-switch-text">OFF</span>
+                        <div class="cyber-switch-thumb"></div>
+                    </div>
+                </div>
+                <div class="analog-desc">
+                    开启此设置时，按下的按键及周围按键将依按压深浅显示不同亮度及范围的灯效。
+                </div>
+            </div>
+
+            <!-- 3. LED 亮度 (LED Brightness, 发光青色条) -->
+            <div class="param-group" id="param-group-brightness">
+                <div class="param-title">
+                    <span>LED 亮度</span>
+                    <span id="brightness-val-text" style="font-size: 11px; color: var(--rog-cyan); font-weight: 700;">100%</span>
+                </div>
+                <div class="cyber-slider-track" id="brightness-track" onmousedown="startDragBrightness(event)">
+                    <div class="cyber-slider-fill" id="brightness-fill" style="width: 100%;"></div>
+                    <div class="cyber-slider-thumb" id="brightness-thumb" style="left: 100%;"></div>
+                </div>
+            </div>
+
+            <!-- 4. 速度 (Speed, 慢 / 正常 / 快 3 档滑块, 参考图 2) -->
+            <div class="param-group" id="param-group-speed">
+                <div class="param-title">速度</div>
+                <div class="speed-step-track" id="speed-track" onmousedown="onSpeedTrackClick(event)">
+                    <div class="speed-tick-mark" style="left: 0%;"></div>
+                    <div class="speed-tick-mark" style="left: 50%;"></div>
+                    <div class="speed-tick-mark" style="left: 100%;"></div>
+                    <div class="speed-thumb" id="speed-thumb" style="left: 100%;"></div>
+                </div>
+                <div class="speed-ticks-row">
+                    <span>慢</span>
+                    <span>正常</span>
+                    <span>快</span>
+                </div>
+            </div>
+
+            <!-- 5. 方向 (Direction 8 方向矩阵, 参考图 2) -->
+            <div class="param-group" id="param-group-direction">
+                <div class="param-title">方向</div>
+                <div class="direction-grid">
+                    <!-- 第一行: 上, 下, 左, 右, 右上 -->
+                    <button class="dir-btn" data-dir="up" title="向上" onclick="setDirection('up')">
+                        <svg viewBox="0 0 24 24"><path d="M12 4l-8 8h16z"/></svg>
+                    </button>
+                    <button class="dir-btn" data-dir="down" title="向下" onclick="setDirection('down')">
+                        <svg viewBox="0 0 24 24"><path d="M12 20l-8-8h16z"/></svg>
+                    </button>
+                    <button class="dir-btn" data-dir="left" title="向左" onclick="setDirection('left')">
+                        <svg viewBox="0 0 24 24"><path d="M4 12l8-8v16z"/></svg>
+                    </button>
+                    <button class="dir-btn" data-dir="right" title="向右" onclick="setDirection('right')">
+                        <svg viewBox="0 0 24 24"><path d="M20 12l-8-8v16z"/></svg>
+                    </button>
+                    <button class="dir-btn" data-dir="diag_ur" title="右上" onclick="setDirection('diag_ur')">
+                        <svg viewBox="0 0 24 24"><path d="M6 18L18 6v12z"/></svg>
+                    </button>
+
+                    <!-- 第二行: 左下(默认激活态), 左上, 右下, 往复扩散 -->
+                    <button class="dir-btn active" data-dir="diag_dl" title="左下" onclick="setDirection('diag_dl')">
+                        <svg viewBox="0 0 24 24"><path d="M6 6v12h12z"/></svg>
+                    </button>
+                    <button class="dir-btn" data-dir="diag_ul" title="左上" onclick="setDirection('diag_ul')">
+                        <svg viewBox="0 0 24 24"><path d="M18 18L6 6h12z"/></svg>
+                    </button>
+                    <button class="dir-btn" data-dir="diag_dr" title="右下" onclick="setDirection('diag_dr')">
+                        <svg viewBox="0 0 24 24"><path d="M6 6l12 12H6z"/></svg>
+                    </button>
+                    <button class="dir-btn" data-dir="spread" title="往复/扩散" onclick="setDirection('spread')">
+                        <svg viewBox="0 0 24 24"><path d="M4 12l5-5v10zm16 0l-5-5v10z"/></svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 6. 粗细 (Thickness, 参考图 2) -->
+            <div class="param-group" id="param-group-thickness">
+                <div class="param-title">
+                    <span>粗细</span>
+                    <span id="thickness-val-text" style="font-size: 11px; color: var(--text-secondary);">1.0x</span>
+                </div>
+                <div class="cyber-slider-track" id="thickness-track" onmousedown="startDragThickness(event)">
+                    <div class="cyber-slider-fill" id="thickness-fill" style="width: 50%; background: #3c495e;"></div>
+                    <div class="cyber-slider-thumb" id="thickness-thumb" style="left: 50%;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================================
+         3. Tab 2: 前台进程自适应规则设置
+         ======================================================== -->
+    <div id="tab-rules-content" class="gearlink-main-panel" style="display: none; grid-template-columns: 1fr;">
+        <div class="effects-left-section" style="padding: 10px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px;">
+                <h2 style="font-size: 16px; font-weight: 700; color: #fff;">前台进程专属灯效绑定规则</h2>
+                <button class="btn-rog" onclick="addRule()">+ 添加新规则</button>
+            </div>
+            <table class="rules-table">
+                <thead>
+                    <tr>
+                        <th>程序文件名 (EXE)</th>
+                        <th>关联灯效方案</th>
+                        <th>进入游戏模式 (关闭WebUI)</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="rules-tbody"></tbody>
+            </table>
+        </div>
+    </div>
+</main>
+
+<!-- 全屏游戏模式优雅降级遮罩 -->
+<div id="game-mode-overlay">
+    <div class="game-card">
+        <div class="game-icon">🎮</div>
+        <h2>已进入游戏 / 性能抑制模式</h2>
+        <p>检测到前台正在运行全屏游戏或标记了抑制标记的高性能程序。<br>为保障键盘硬件极速响应与系统零占用，配置服务已由守护进程自动暂停。</p>
+        <div class="pulse-status">
+            <span class="pulse-ring"></span>
+            <span>切回桌面后界面将自动恢复...</span>
+        </div>
+    </div>
+</div>
+
+<div id="toast"></div>
+<input type="color" id="hidden-color-picker" onchange="onColorPickerSelected(this.value)">
+
+<script>
+// ========================================================
+// 4. 68 键完整物理布局矩阵 (权威 calibrated_keymap.json 标准)
+// ========================================================
+const KEYBOARD_LAYOUT = [
+    // Row 1 (15 keys, 16u)
+    [
+        { name: 'ESC', label: 'Esc', width: 1 },
+        { name: '1', label: '1', sub: '!', width: 1 },
+        { name: '2', label: '2', sub: '@', width: 1 },
+        { name: '3', label: '3', sub: '#', width: 1 },
+        { name: '4', label: '4', sub: '$', width: 1 },
+        { name: '5', label: '5', sub: '%', width: 1 },
+        { name: '6', label: '6', sub: '^', width: 1 },
+        { name: '7', label: '7', sub: '&', width: 1 },
+        { name: '8', label: '8', sub: '*', width: 1 },
+        { name: '9', label: '9', sub: '(', width: 1 },
+        { name: '0', label: '0', sub: ')', width: 1 },
+        { name: '-', label: '-', sub: '_', width: 1 },
+        { name: '=', label: '=', sub: '+', width: 1 },
+        { name: 'BACKSPACE', label: 'Backspace', width: 2 },
+        { name: 'INS', label: 'Ins', width: 1 }
+    ],
+    // Row 2 (15 keys, 16u)
+    [
+        { name: 'TAB', label: 'Tab', width: 1.5 },
+        { name: 'Q', label: 'Q', width: 1 },
+        { name: 'W', label: 'W', width: 1 },
+        { name: 'E', label: 'E', width: 1 },
+        { name: 'R', label: 'R', width: 1 },
+        { name: 'T', label: 'T', width: 1 },
+        { name: 'Y', label: 'Y', width: 1 },
+        { name: 'U', label: 'U', width: 1 },
+        { name: 'I', label: 'I', width: 1 },
+        { name: 'O', label: 'O', width: 1 },
+        { name: 'P', label: 'P', width: 1 },
+        { name: '[', label: '[', sub: '{', width: 1 },
+        { name: ']', label: ']', sub: '}', width: 1 },
+        { name: '\\', label: '\\', sub: '|', width: 1.5 },
+        { name: 'DEL', label: 'Del', width: 1 }
+    ],
+    // Row 3 (14 keys, 16u)
+    [
+        { name: 'CAPS', label: 'Caps', width: 1.75 },
+        { name: 'A', label: 'A', width: 1 },
+        { name: 'S', label: 'S', width: 1 },
+        { name: 'D', label: 'D', width: 1 },
+        { name: 'F', label: 'F', width: 1 },
+        { name: 'G', label: 'G', width: 1 },
+        { name: 'H', label: 'H', width: 1 },
+        { name: 'J', label: 'J', width: 1 },
+        { name: 'K', label: 'K', width: 1 },
+        { name: 'L', label: 'L', width: 1 },
+        { name: ';', label: ';', sub: ':', width: 1 },
+        { name: '\'', label: '\'', sub: '"', width: 1 },
+        { name: 'ENTER', label: 'Enter', width: 2.25 },
+        { name: 'PGUP', label: 'PgUp', width: 1 }
+    ],
+    // Row 4 (14 keys, 16u)
+    [
+        { name: 'L_SHIFT', label: 'Shift', width: 2.25 },
+        { name: 'Z', label: 'Z', width: 1 },
+        { name: 'X', label: 'X', width: 1 },
+        { name: 'C', label: 'C', width: 1 },
+        { name: 'V', label: 'V', width: 1 },
+        { name: 'B', label: 'B', width: 1 },
+        { name: 'N', label: 'N', width: 1 },
+        { name: 'M', label: 'M', width: 1 },
+        { name: ',', label: ',', sub: '<', width: 1 },
+        { name: '.', label: '.', sub: '>', width: 1 },
+        { name: '/', label: '/', sub: '?', width: 1 },
+        { name: 'R_SHIFT', label: 'Shift', width: 1.75 },
+        { name: 'UP', label: '▲', width: 1 },
+        { name: 'PGDN', label: 'PgDn', width: 1 }
+    ],
+    // Row 5 (10 keys, 16u)
+    [
+        { name: 'L_CTRL', label: 'Ctrl', width: 1.25 },
+        { name: 'L_WIN', label: 'Win', width: 1.25 },
+        { name: 'L_ALT', label: 'Alt', width: 1.25 },
+        { name: 'SPACE', label: 'Space', width: 6.25 },
+        { name: 'R_ALT', label: 'Alt', width: 1 },
+        { name: 'FN', label: 'Fn', width: 1 },
+        { name: 'COPILOT', label: 'Co', width: 1 },
+        { name: 'LEFT', label: '◀', width: 1 },
+        { name: 'DOWN', label: '▼', width: 1 },
+        { name: 'RIGHT', label: '▶', width: 1 }
+    ]
+];
+
+// ========================================================
+// 5. 前端全局状态模型与预设库
+// ========================================================
+const GRADIENT_PRESETS = {
+    default: [
+        { id: 1, pos: 0.15, color: '#FF1929' },
+        { id: 2, pos: 0.65, color: '#148AC4' },
+        { id: 3, pos: 0.85, color: '#E040FB' }
+    ],
+    rainbow: [
+        { id: 1, pos: 0.00, color: '#E040FB' },
+        { id: 2, pos: 0.16, color: '#0070F3' },
+        { id: 3, pos: 0.33, color: '#00F0FF' },
+        { id: 4, pos: 0.50, color: '#00E676' },
+        { id: 5, pos: 0.66, color: '#FFCC00' },
+        { id: 6, pos: 0.83, color: '#FF6600' },
+        { id: 7, pos: 1.00, color: '#FF1929' }
+    ],
+    cyberpunk: [
+        { id: 1, pos: 0.00, color: '#00F0FF' },
+        { id: 2, pos: 0.50, color: '#7928CA' },
+        { id: 3, pos: 1.00, color: '#FF0080' }
+    ],
+    aurora: [
+        { id: 1, pos: 0.00, color: '#00E676' },
+        { id: 2, pos: 0.50, color: '#00F0FF' },
+        { id: 3, pos: 1.00, color: '#0070F3' }
+    ],
+    lava: [
+        { id: 1, pos: 0.00, color: '#FFCC00' },
+        { id: 2, pos: 0.50, color: '#FF6600' },
+        { id: 3, pos: 1.00, color: '#FF1929' }
+    ],
+    frost: [
+        { id: 1, pos: 0.00, color: '#FFFFFF' },
+        { id: 2, pos: 0.50, color: '#80D8FF' },
+        { id: 3, pos: 1.00, color: '#0091EA' }
+    ],
+    single_red: [
+        { id: 1, pos: 0.00, color: '#FF1929' },
+        { id: 2, pos: 1.00, color: '#990014' }
+    ]
+};
+
+// 状态变量
+let currentConfig = null;
+let currentProfileName = 'desktop';
+let isMasterLightOn = true;
+let currentEffect = 'wave'; // 默认彩虹波浪
+let colorMode = 'style';    // style 或 random
+let currentPresetTheme = 'default';
+let gradientStops = JSON.parse(JSON.stringify(GRADIENT_PRESETS.default));
+let selectedStopId = 1;
+// 用户「模拟触发」开关意图，跨灯效切换保留（仅作偏好记忆，不代表当前生效）
+let isAnalogEnabled = false;
+let brightnessVal = 1.0;    // 0.0 ~ 1.0
+let speedIndex = 2;         // 0: 慢, 1: 正常, 2: 快 (默认快)
+let currentDirection = 'diag_dl'; // 默认左下 ◣
+let thicknessVal = 1.0;
+
+// 键盘元素引用与动画参数
+let keyElements = [];
+let reactiveDecays = {};
+let analogDecays = {};      // 常亮类模拟灯效按压增亮 (仅 static 使用)
+let activeRipples = [];
+let lastUserKeystrokeTime = performance.now();
+
+// ========================================================
+// 6. 页面初始化
+// ========================================================
+window.addEventListener('DOMContentLoaded', () => {
+    buildVirtualKeyboard();
+    renderGradientStops();
+    updateCyberCardUI();
+    loadConfig();
+    startHeartbeat();
+    requestAnimationFrame(renderLightingLoop);
+});
+
+// 构建符合 ASUS 尺寸规格与 class 规范的虚拟键盘 DOM
+function buildVirtualKeyboard() {
+    const baseLayer = document.getElementById('keyboard-base-layer');
+    baseLayer.innerHTML = '';
+    keyElements = [];
+
+    const unitWidth = 51.75;
+    const gap = 4;
+
+    KEYBOARD_LAYOUT.forEach((rowKeys, rowIndex) => {
+        const rowDiv = document.createElement('div');
+        rowDiv.className = 'device-keyboard-module__keyboard-row';
+
+        let colOffset = 0;
+        rowKeys.forEach((keyData) => {
+            const keyDiv = document.createElement('div');
+            keyDiv.className = 'device-keyboard-module__key';
+            keyDiv.setAttribute('data-key', keyData.name);
+            keyDiv.setAttribute('data-row', rowIndex);
+            keyDiv.setAttribute('data-col', colOffset);
+
+            const calculatedWidth = (keyData.width * unitWidth) + ((keyData.width - 1) * gap);
+            keyDiv.style.width = calculatedWidth + 'px';
+
+            const labelSpan = document.createElement('span');
+            labelSpan.className = 'key-label';
+            labelSpan.textContent = keyData.label;
+            keyDiv.appendChild(labelSpan);
+
+            if (keyData.sub) {
+                const subSpan = document.createElement('span');
+                subSpan.className = 'key-sublabel';
+                subSpan.textContent = keyData.sub;
+                keyDiv.appendChild(subSpan);
+            }
+
+            // 敲击或点击触发按键交互
+            keyDiv.onmousedown = (e) => {
+                e.preventDefault();
+                triggerKeyReactive(keyData.name, false);
+            };
+            keyDiv.onmouseup = () => releaseKeyReactive(keyData.name);
+            keyDiv.onmouseleave = () => releaseKeyReactive(keyData.name);
+            keyDiv.ontouchstart = (e) => {
+                e.preventDefault();
+                triggerKeyReactive(keyData.name, false);
+            };
+            keyDiv.ontouchend = () => releaseKeyReactive(keyData.name);
+
+            rowDiv.appendChild(keyDiv);
+            keyElements.push({
+                el: keyDiv,
+                name: keyData.name,
+                row: rowIndex,
+                col: colOffset,
+                width: keyData.width
+            });
+
+            colOffset += keyData.width;
+        });
+
+        baseLayer.appendChild(rowDiv);
+    });
+}
+
+// ========================================================
+// 7. 灯效选择与界面自适应调控
+// ========================================================
+function selectEffect(effId) {
+    currentEffect = effId;
+
+    // 更新左侧列表状态
+    document.querySelectorAll('.effect-item').forEach(el => {
+        el.classList.remove('active', 'active-cyan');
+        if (el.getAttribute('data-id') === effId) {
+            if (effId === 'starry_night') {
+                el.classList.add('active-cyan'); // 星空使用青色高亮 (参考图 3)
+            } else {
+                el.classList.add('active');      // 其他使用经典 ROG 红 (参考图 1)
+            }
+        }
+    });
+
+    updateCyberCardUI();
+
+    // 模拟触发仅属于常亮类灯效。此处只隐藏开关并让持久化值写为 false，
+    // 但**不清空** isAnalogEnabled —— 它是用户的偏好记忆，切回常亮时应自动恢复，
+    // 否则「常亮(开) -> 涟漪 -> 常亮」会把用户设置悄悄丢掉。
+    saveCurrentInputsToProfile();
+
+    if (effId === 'reactive' || effId === 'ripple') {
+        // 键盘响应型灯效：仅等待真实物理敲击/虚拟键点击，不做任何模拟自动触发
+        const badge = document.getElementById('stage-badge');
+        if (badge) {
+            badge.innerHTML = '● <b>按键响应就绪</b>：敲击键盘任意键或点击虚拟键帽激荡光晕与涟漪！';
+            badge.style.color = 'var(--rog-cyan)';
+        }
+    }
+}
+
+// 依据选中的灯效动态调整右侧参数卡片项的可见性
+function updateCyberCardUI() {
+    const isRainbow = (currentEffect === 'wave');
+    const isStarry = (currentEffect === 'starry_night');
+    const isQuicksand = (currentEffect === 'quicksand');
+    const isCurrent = (currentEffect === 'current');
+    const isRaindrop = (currentEffect === 'raindrop');
+    const isStatic = (currentEffect === 'static');
+    const isBreathing = (currentEffect === 'breathing');
+    const isReactive = (currentEffect === 'reactive' || currentEffect === 'ripple');
+
+    // 1. 颜色模式 (样式 / 随机) 仅在 星空 / 流沙 模式下展示
+    document.getElementById('color-radio-row').style.display = (isStarry || isQuicksand) ? 'flex' : 'none';
+
+    // 2. 模拟灯效组件 (仅在 恒亮/常亮 类灯效可见；键盘响应型灯效不提供模拟触发)
+    document.getElementById('param-group-analog').style.display = (isStatic) ? 'flex' : 'none';
+
+    // 3. 方向选择罗盘 (仅在 彩虹 / 流沙 / 电流 模式可见)
+    document.getElementById('param-group-direction').style.display = (isRainbow || isQuicksand || isCurrent) ? 'flex' : 'none';
+
+    // 4. 粗细调节 (仅在 彩虹 / 电流 模式可见)
+    document.getElementById('param-group-thickness').style.display = (isRainbow || isCurrent) ? 'flex' : 'none';
+
+    // 5. 速度调节 (恒亮无速度，其余均有)
+    document.getElementById('param-group-speed').style.display = (isStatic) ? 'none' : 'flex';
+}
+
+// ========================================================
+// 8. 赛博控件交互 (拨码开关、色标条、罗盘、滑条)
+// ========================================================
+function toggleMasterLight() {
+    isMasterLightOn = !isMasterLightOn;
+    const sw = document.getElementById('master-light-switch');
+    if (isMasterLightOn) {
+        sw.classList.add('on');
+        sw.querySelector('.cyber-switch-text').textContent = 'ON';
+    } else {
+        sw.classList.remove('on');
+        sw.querySelector('.cyber-switch-text').textContent = 'OFF';
+    }
+}
+
+function setAnalogSwitchUI(on) {
+    const sw = document.getElementById('analog-switch');
+    if (sw) {
+        if (on) { sw.classList.add('on'); } else { sw.classList.remove('on'); }
+        const txt = sw.querySelector('.cyber-switch-text');
+        if (txt) txt.textContent = on ? 'ON' : 'OFF';
+    }
+}
+
+// 模拟触发是否「当前真正生效」：仅常亮类灯效下生效。
+// 渲染与预览一律以此为准，而不是直接用 isAnalogEnabled。
+function analogActive() {
+    return (currentEffect === 'static') && isAnalogEnabled;
+}
+
+function toggleAnalogSwitch() {
+    isAnalogEnabled = !isAnalogEnabled;
+    setAnalogSwitchUI(isAnalogEnabled);
+}
+
+// 方向控制
+function setDirection(dir) {
+    currentDirection = dir;
+    document.querySelectorAll('.dir-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('data-dir') === dir);
+    });
+    saveCurrentInputsToProfile();
+}
+
+// 速度档位点击 (慢 0, 正常 1, 快 2)
+function onSpeedTrackClick(e) {
+    const track = document.getElementById('speed-track');
+    const rect = track.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const ratio = Math.max(0, Math.min(1, clickX / rect.width));
+
+    if (ratio < 0.33) {
+        speedIndex = 0; // 慢
+    } else if (ratio < 0.66) {
+        speedIndex = 1; // 正常
+    } else {
+        speedIndex = 2; // 快
+    }
+    updateSpeedUI();
+    saveCurrentInputsToProfile();
+}
+
+function updateSpeedUI() {
+    const percent = speedIndex === 0 ? 0 : (speedIndex === 1 ? 50 : 100);
+    document.getElementById('speed-thumb').style.left = percent + '%';
+}
+
+// LED 亮度拖拽
+function startDragBrightness(e) {
+    updateBrightnessFromEvent(e);
+    const onMouseMove = (ev) => updateBrightnessFromEvent(ev);
+    const onMouseUp = () => {
+        window.removeEventListener('mousemove', onMouseMove);
+        window.removeEventListener('mouseup', onMouseUp);
+        saveCurrentInputsToProfile();
+    };
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+}
+
+function updateBrightnessFromEvent(e) {
+    const track = document.getElementById('brightness-track');
+    const rect = track.getBoundingClientRect();
+    let ratio = (e.clientX - rect.left) / rect.width;
+    ratio = Math.max(0.05, Math.min(1.0, ratio));
+    brightnessVal = ratio;
+    const pct = Math.round(ratio * 100);
+    document.getElementById('brightness-fill').style.width = pct + '%';
+    document.getElementById('brightness-thumb').style.left = pct + '%';
+    document.getElementById('brightness-val-text').textContent = pct + '%';
+}
+
+// 粗细拖拽
+function startDragThickness(e) {
+    updateThicknessFromEvent(e);
+    const onMouseMove = (ev) => updateThicknessFromEvent(ev);
+    const onMouseUp = () => {
+        window.removeEventListener('mousemove', onMouseMove);
+        window.removeEventListener('mouseup', onMouseUp);
+    };
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+}
+
+function updateThicknessFromEvent(e) {
+    const track = document.getElementById('thickness-track');
+    const rect = track.getBoundingClientRect();
+    let ratio = (e.clientX - rect.left) / rect.width;
+    ratio = Math.max(0.2, Math.min(2.0, ratio * 2.0));
+    thicknessVal = ratio;
+    const pct = Math.round((ratio / 2.0) * 100);
+    document.getElementById('thickness-fill').style.width = pct + '%';
+    document.getElementById('thickness-thumb').style.left = pct + '%';
+    document.getElementById('thickness-val-text').textContent = ratio.toFixed(1) + 'x';
+}
+
+// 颜色模式切换 (样式 / 随机)
+function onColorModeChange(mode) {
+    colorMode = mode;
+    document.getElementById('preset-select-wrapper').style.opacity = (mode === 'random') ? '0.4' : '1';
+    document.getElementById('gradient-editor-row').style.opacity = (mode === 'random') ? '0.4' : '1';
+    saveCurrentInputsToProfile();
+}
+
+// 预设主题切换
+function onPresetThemeChange(val) {
+    currentPresetTheme = val;
+    if (GRADIENT_PRESETS[val]) {
+        gradientStops = JSON.parse(JSON.stringify(GRADIENT_PRESETS[val]));
+        selectedStopId = gradientStops[0].id;
+        renderGradientStops();
+        saveCurrentInputsToProfile();
+    }
+}
+
+// ========================================================
+// 9. 多阶渐变色标编辑器核心逻辑
+// ========================================================
+function renderGradientStops() {
+    const container = document.getElementById('gradient-track-container');
+    // 保留渐变条，清理已存在的手柄
+    container.querySelectorAll('.gradient-stop-pin').forEach(pin => pin.remove());
+
+    gradientStops.sort((a, b) => a.pos - b.pos);
+
+    // 构造 linear-gradient CSS 字符串
+    const stopsCss = gradientStops.map(s => `${s.color} ${(s.pos * 100).toFixed(1)}%`).join(', ');
+    document.getElementById('gradient-bar').style.background = `linear-gradient(to right, ${stopsCss})`;
+
+    gradientStops.forEach(stop => {
+        const pin = document.createElement('div');
+        pin.className = 'gradient-stop-pin' + (stop.id === selectedStopId ? ' selected' : '');
+        pin.style.left = (stop.pos * 100) + '%';
+        pin.style.backgroundColor = stop.color;
+        pin.title = `双击更改颜色 (当前位置: ${Math.round(stop.pos * 100)}%)`;
+
+        // 单击选中
+        pin.onmousedown = (e) => {
+            e.stopPropagation();
+            selectedStopId = stop.id;
+            renderGradientStops();
+            startDragStopPin(e, stop);
+        };
+
+        // 双击调用系统拾色器
+        pin.ondblclick = (e) => {
+            e.stopPropagation();
+            selectedStopId = stop.id;
+            const picker = document.getElementById('hidden-color-picker');
+            picker.value = stop.color;
+            picker.click();
+        };
+
+        container.appendChild(pin);
+    });
+}
+
+function onGradientTrackClick(e) {
+    const track = document.getElementById('gradient-bar');
+    const rect = track.getBoundingClientRect();
+    const pos = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+
+    // 计算点击处在当前渐变下的插值色彩
+    const sampledColor = sampleGradientColor(pos);
+    const newId = Date.now();
+    gradientStops.push({
+        id: newId,
+        pos: pos,
+        color: sampledColor
+    });
+    selectedStopId = newId;
+    renderGradientStops();
+    saveCurrentInputsToProfile();
+}
+
+function addGradientStop() {
+    let nextPos = 0.5;
+    const newId = Date.now();
+    gradientStops.push({
+        id: newId,
+        pos: nextPos,
+        color: sampleGradientColor(nextPos)
+    });
+    selectedStopId = newId;
+    renderGradientStops();
+    saveCurrentInputsToProfile();
+}
+
+function removeSelectedStop() {
+    if (gradientStops.length <= 2) {
+        showToast('⚠️ 渐变色条最少保留 2 个色标！');
+        return;
+    }
+    gradientStops = gradientStops.filter(s => s.id !== selectedStopId);
+    selectedStopId = gradientStops[0].id;
+    renderGradientStops();
+    saveCurrentInputsToProfile();
+}
+
+function startDragStopPin(e, stop) {
+    const track = document.getElementById('gradient-bar');
+    const rect = track.getBoundingClientRect();
+
+    const onMouseMove = (ev) => {
+        let newPos = (ev.clientX - rect.left) / rect.width;
+        newPos = Math.max(0, Math.min(1, newPos));
+        stop.pos = newPos;
+        renderGradientStops();
+    };
+
+    const onMouseUp = () => {
+        window.removeEventListener('mousemove', onMouseMove);
+        window.removeEventListener('mouseup', onMouseUp);
+        saveCurrentInputsToProfile();
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+}
+
+function onColorPickerSelected(hex) {
+    const curStop = gradientStops.find(s => s.id === selectedStopId);
+    if (curStop) {
+        curStop.color = hex.toUpperCase();
+        renderGradientStops();
+        saveCurrentInputsToProfile();
+    }
+}
+
+// 从当前多阶色标插值获取任意位置的颜色 [r, g, b]
+function sampleGradientColor(ratio) {
+    if (gradientStops.length === 0) return '#FF1929';
+    if (gradientStops.length === 1) return gradientStops[0].color;
+
+    const r = Math.max(0, Math.min(1, ratio));
+    if (r <= gradientStops[0].pos) return gradientStops[0].color;
+    if (r >= gradientStops[gradientStops.length - 1].pos) return gradientStops[gradientStops.length - 1].color;
+
+    for (let i = 0; i < gradientStops.length - 1; ++i) {
+        const s1 = gradientStops[i];
+        const s2 = gradientStops[i + 1];
+        if (r >= s1.pos && r <= s2.pos) {
+            const range = s2.pos - s1.pos || 0.001;
+            const t = (r - s1.pos) / range;
+            const c1 = hexToRgb(s1.color);
+            const c2 = hexToRgb(s2.color);
+            const red = Math.round(c1[0] + (c2[0] - c1[0]) * t);
+            const grn = Math.round(c1[1] + (c2[1] - c1[1]) * t);
+            const blu = Math.round(c1[2] + (c2[2] - c1[2]) * t);
+            return rgbToHex([red, grn, blu]);
+        }
+    }
+    return gradientStops[0].color;
+}
+
+// ========================================================
+// 10. 60 FPS 虚拟键盘灯效渲染引擎 (支持 8 方向与多阶色彩)
+// ========================================================
+function getPeriodMsFromSpeed() {
+    if (speedIndex === 0) return 5500; // 慢
+    if (speedIndex === 1) return 3200; // 正常
+    return 1600;                       // 快
+}
+
+// 8 方向单位向量
+const DIR_VECTORS = {
+    'up':      { x:  0.0, y: -1.0 },
+    'down':    { x:  0.0, y:  1.0 },
+    'left':    { x: -1.0, y:  0.0 },
+    'right':   { x:  1.0, y:  0.0 },
+    'diag_ur': { x:  0.707, y: -0.707 },
+    'diag_dl': { x: -0.707, y:  0.707 },
+    'diag_ul': { x: -0.707, y: -0.707 },
+    'diag_dr': { x:  0.707, y:  0.707 },
+    'spread':  { x:  0.0, y:  0.0 } // 往复中心扩散
+};
+
+function renderLightingLoop(timestamp) {
+    const t = timestamp || 0;
+    const period = getPeriodMsFromSpeed();
+
+    // 键盘响应型灯效 (reactive/ripple) 无自动演练：仅由真实物理敲击或虚拟键点击驱动
+
+    const dirVec = DIR_VECTORS[currentDirection] || DIR_VECTORS['right'];
+
+    keyElements.forEach(item => {
+        let r = 0, g = 0, b = 0;
+
+        if (!isMasterLightOn) {
+            // 开关关闭，全黑
+            r = 0; g = 0; b = 0;
+        } else if (currentEffect === 'static') {
+            // 恒亮模式：取第一个色标颜色
+            const col = hexToRgb(gradientStops[0].color);
+            r = col[0]; g = col[1]; b = col[2];
+            // 模拟灯效 (仅常亮类)：真实按压的按键叠加白炽增亮并逐帧衰减 (与 C++ StaticEffect analog 对齐)
+            if (analogActive()) {
+                const extra = analogDecays[item.name] || 0;
+                if (extra > 0) {
+                    analogDecays[item.name] = Math.max(0, extra - 0.035);
+                    r = Math.min(255, r + extra * (255 - r));
+                    g = Math.min(255, g + extra * (255 - g));
+                    b = Math.min(255, b + extra * (255 - b));
+                }
+            }
+        } else if (currentEffect === 'breathing') {
+            // 呼吸模式：正弦循环渐隐
+            const phase = (t % period) / period;
+            const factor = 0.5 - 0.5 * Math.cos(2.0 * Math.PI * phase);
+            const col1 = hexToRgb(gradientStops[0].color);
+            const col2 = hexToRgb(gradientStops.length > 1 ? gradientStops[1].color : '#000000');
+            r = col1[0] * factor + col2[0] * (1.0 - factor);
+            g = col1[1] * factor + col2[1] * (1.0 - factor);
+            b = col1[2] * factor + col2[2] * (1.0 - factor);
+        } else if (currentEffect === 'color_cycle') {
+            // 全彩谱循环
+            const hue = ((t % period) / period) * 360.0;
+            [r, g, b] = hsvToRgb(hue, 1.0, 1.0);
+        } else if (currentEffect === 'wave') {
+            // 彩虹波浪：支持 8 方向向量投影计算！
+            let proj = 0.0;
+            if (currentDirection === 'spread') {
+                const centerCol = 8.0;
+                const centerRow = 2.0;
+                const dx = (item.col - centerCol);
+                const dy = (item.row - centerRow) * 2.0;
+                proj = Math.sqrt(dx * dx + dy * dy) / 10.0;
+            } else {
+                // 投影在指定方向上的比例 (0.0 ~ 1.0)
+                const normX = item.col / 16.0;
+                const normY = item.row / 4.0;
+                proj = (normX * dirVec.x + normY * dirVec.y) * thicknessVal;
+            }
+
+            const phase = (t % period) / period;
+            const ratio = ((proj - phase + 100.0) % 1.0);
+            const hexColor = sampleGradientColor(ratio);
+            const col = hexToRgb(hexColor);
+            r = col[0]; g = col[1]; b = col[2];
+        } else if (currentEffect === 'starry_night') {
+            // 星空：繁星微光随机闪烁 (参考图 3)
+            if (colorMode === 'random') {
+                const seed = (item.col * 19 + item.row * 37) % 360;
+                const starPhase = ((t + seed * 40) % 2200) / 2200;
+                const starGlow = Math.max(0, Math.sin(starPhase * Math.PI) * 1.5 - 0.5);
+                [r, g, b] = hsvToRgb(seed, 1.0, starGlow);
+            } else {
+                const seed = (item.col * 17 + item.row * 31) % 100;
+                const starPhase = ((t + seed * 50) % 2000) / 2000;
+                const starGlow = Math.max(0, Math.sin(starPhase * Math.PI) * 1.5 - 0.5);
+                const col = hexToRgb(sampleGradientColor(seed / 100.0));
+                r = col[0] * starGlow;
+                g = col[1] * starGlow;
+                b = col[2] * starGlow;
+            }
+        } else if (currentEffect === 'quicksand') {
+            // 流沙模式
+            const phase = (t % period) / period;
+            const wave = Math.sin((item.col * 0.4 * dirVec.x + item.row * 0.8 * dirVec.y) + (phase * 2 * Math.PI));
+            const factor = wave * 0.5 + 0.5;
+            const col = hexToRgb(sampleGradientColor(factor));
+            r = col[0]; g = col[1]; b = col[2];
+        } else if (currentEffect === 'current') {
+            // 电流模式：电光雷鸣
+            const phase = (t % (period / 2)) / (period / 2);
+            const isPulse = (Math.abs(item.col - (phase * 16.0)) < 1.8 * thicknessVal);
+            if (isPulse) {
+                r = 255; g = 255; b = 255; // 核心白炽
+            } else {
+                const col = hexToRgb(gradientStops[0].color);
+                r = col[0] * 0.15;
+                g = col[1] * 0.15;
+                b = col[2] * 0.15;
+            }
+        } else if (currentEffect === 'raindrop') {
+            // 雨滴淅沥
+            const seed = (item.col * 23 + item.row * 47) % 80;
+            const dropPhase = ((t + seed * 80) % 2800) / 2800;
+            const dropGlow = Math.pow(Math.max(0, 1.0 - dropPhase * 4), 2);
+            const col = hexToRgb(gradientStops[0].color);
+            r = col[0] * (0.15 + 0.85 * dropGlow);
+            g = col[1] * (0.15 + 0.85 * dropGlow);
+            b = col[2] * (0.15 + 0.85 * dropGlow);
+        } else if (currentEffect === 'reactive' || currentEffect === 'ripple') {
+            // 触发与水波涟漪
+            let totalGlow = 0.0;
+            const decay = reactiveDecays[item.name] || 0;
+            if (decay > 0) {
+                totalGlow += decay;
+                reactiveDecays[item.name] = Math.max(0, decay - 0.025);
+            }
+
+            const keyCenterCol = item.col + item.width / 2.0;
+            const keyRow = item.row;
+
+            for (const rip of activeRipples) {
+                const currentRadius = (t - rip.startTime) * rip.speed;
+                if (currentRadius <= rip.maxRadius) {
+                    const dx = keyCenterCol - rip.col;
+                    const dy = (keyRow - rip.row) * 2.2;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    const diff = Math.abs(dist - currentRadius);
+                    if (diff < 1.8) {
+                        const waveFactor = (1.0 - diff / 1.8) * (1.0 - currentRadius / rip.maxRadius);
+                        totalGlow += waveFactor * 0.95;
+                    }
+                }
+            }
+
+            const baseCol = hexToRgb(gradientStops[0].color);
+            if (totalGlow > 0.01) {
+                const factor = Math.min(1.0, totalGlow);
+                r = baseCol[0] * factor;
+                g = baseCol[1] * factor;
+                b = baseCol[2] * factor;
+
+                if (totalGlow > 0.8) {
+                    const peak = Math.min(1.0, (totalGlow - 0.8) * 1.5);
+                    r += (255 - r) * peak;
+                    g += (255 - g) * peak;
+                    b += (255 - b) * peak;
+                }
+            } else {
+                r = 6; g = 10; b = 18;
+            }
+        }
+
+        // 应用亮度权重
+        r = Math.min(255, Math.floor(r * brightnessVal));
+        g = Math.min(255, Math.floor(g * brightnessVal));
+        b = Math.min(255, Math.floor(b * brightnessVal));
+
+        // 动态注入样式与背光光晕
+        const keyEl = item.el;
+        keyEl.style.backgroundColor = `rgb(${r}, ${g}, ${b})`;
+
+        const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
+        if (luminance > 45) {
+            keyEl.style.color = '#fff';
+            keyEl.style.boxShadow = `0 0 16px rgba(${r}, ${g}, ${b}, 0.8), inset 0 0 5px rgba(255,255,255,0.45)`;
+            keyEl.style.borderColor = `rgba(${Math.min(255, r + 50)}, ${Math.min(255, g + 50)}, ${Math.min(255, b + 50)}, 0.95)`;
+        } else {
+            keyEl.style.color = 'var(--text-primary)';
+            keyEl.style.boxShadow = `inset 0 -2px 0 rgba(0,0,0,0.5), 0 2px 4px rgba(0,0,0,0.3)`;
+            keyEl.style.borderColor = '#28303f';
+        }
+    });
+
+    activeRipples = activeRipples.filter(rip => (t - rip.startTime) * rip.speed <= rip.maxRadius);
+    requestAnimationFrame(renderLightingLoop);
+}
+
+// 按键物理响应触发
+function triggerKeyReactive(keyName, fromPhysical = false) {
+    reactiveDecays[keyName] = 1.4;
+    analogDecays[keyName] = 1.0;
+    lastUserKeystrokeTime = performance.now();
+
+    const targetKey = keyElements.find(k => k.name === keyName);
+    if (targetKey) {
+        targetKey.el.classList.add('key-pressed');
+
+        activeRipples.push({
+            col: targetKey.col + targetKey.width / 2.0,
+            row: targetKey.row,
+            startTime: performance.now(),
+            maxRadius: 18.0,
+            speed: 0.016,
+            color: hexToRgb(gradientStops[0].color)
+        });
+
+        if (activeRipples.length > 10) activeRipples.shift();
+    }
+
+    if (fromPhysical) {
+        const badge = document.getElementById('stage-badge');
+        if (badge) {
+            badge.textContent = `● 捕获实体按键: ${keyName} (已激发光晕与涟漪)`;
+            badge.style.color = 'var(--rog-cyan)';
+            setTimeout(() => {
+                badge.textContent = '● 预览时钟：60 FPS 硬件同步驱动';
+            }, 1200);
+        }
+    }
+}
+
+function releaseKeyReactive(keyName) {
+    const targetKey = keyElements.find(k => k.name === keyName);
+    if (targetKey) {
+        targetKey.el.classList.remove('key-pressed');
+    }
+}
+
+// 物理键盘监听
+const CODE_TO_KEY_MAP = {
+    'Escape': 'ESC', 'Digit1': '1', 'Digit2': '2', 'Digit3': '3', 'Digit4': '4', 'Digit5': '5',
+    'Digit6': '6', 'Digit7': '7', 'Digit8': '8', 'Digit9': '9', 'Digit0': '0',
+    'Minus': '-', 'Equal': '=', 'Backspace': 'BACKSPACE', 'Insert': 'INS',
+    'Tab': 'TAB', 'KeyQ': 'Q', 'KeyW': 'W', 'KeyE': 'E', 'KeyR': 'R', 'KeyT': 'T',
+    'KeyY': 'Y', 'KeyU': 'U', 'KeyI': 'I', 'KeyO': 'O', 'KeyP': 'P',
+    'BracketLeft': '[', 'BracketRight': ']', 'Backslash': '\\', 'Delete': 'DEL',
+    'CapsLock': 'CAPS', 'KeyA': 'A', 'KeyS': 'S', 'KeyD': 'D', 'KeyF': 'F', 'KeyG': 'G',
+    'KeyH': 'H', 'KeyJ': 'J', 'KeyK': 'K', 'KeyL': 'L', 'Semicolon': ';', 'Quote': '\'',
+    'Enter': 'ENTER', 'PageUp': 'PGUP', 'ShiftLeft': 'L_SHIFT',
+    'KeyZ': 'Z', 'KeyX': 'X', 'KeyC': 'C', 'KeyV': 'V', 'KeyB': 'B', 'KeyN': 'N',
+    'KeyM': 'M', 'Comma': ',', 'Period': '.', 'Slash': '/', 'ShiftRight': 'R_SHIFT',
+    'ArrowUp': 'UP', 'PageDown': 'PGDN', 'ControlLeft': 'L_CTRL', 'MetaLeft': 'L_WIN',
+    'AltLeft': 'L_ALT', 'Space': 'SPACE', 'AltRight': 'R_ALT', 'ControlRight': 'R_CTRL',
+    'ArrowLeft': 'LEFT', 'ArrowDown': 'DOWN', 'ArrowRight': 'RIGHT'
+};
+
+window.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+    const keyName = CODE_TO_KEY_MAP[e.code] || (e.key ? e.key.toUpperCase() : null);
+    if (keyName) triggerKeyReactive(keyName, true);
+});
+
+window.addEventListener('keyup', (e) => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+    const keyName = CODE_TO_KEY_MAP[e.code] || (e.key ? e.key.toUpperCase() : null);
+    if (keyName) releaseKeyReactive(keyName);
+});
+
+// ========================================================
+// 11. 配置加载、同步与持久化保存 (打通后端 daemon)
+// ========================================================
+async function loadConfig() {
+    try {
+        const res = await fetch('/api/config');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        currentConfig = await res.json();
+
+        currentProfileName = currentConfig.default_profile || 'desktop';
+        if (currentConfig.profiles && currentConfig.profiles[currentProfileName]) {
+            const prof = currentConfig.profiles[currentProfileName];
+            // 先捕获配置中的模拟开关状态 (selectEffect 内部的保存动作会用当前内存值覆写 prof.analog)
+            const savedAnalog = (prof.analog === true);
+            if (prof.type) {
+                selectEffect(prof.type);
+            }
+            // 仅常亮类灯效恢复模拟开关状态 (键盘响应型灯效无模拟触发)
+            if (prof.type === 'static' && savedAnalog !== isAnalogEnabled) {
+                isAnalogEnabled = savedAnalog;
+                setAnalogSwitchUI(savedAnalog);
+            }
+            if (prof.color) {
+                gradientStops[0].color = rgbToHex(prof.color);
+                renderGradientStops();
+            }
+            if (prof.period_ms) {
+                if (prof.period_ms > 4500) speedIndex = 0;
+                else if (prof.period_ms > 2400) speedIndex = 1;
+                else speedIndex = 2;
+                updateSpeedUI();
+            }
+            if (prof.direction) {
+                setDirection(prof.direction);
+            }
+        }
+        renderRulesTab();
+    } catch (e) {
+        console.warn('获取配置失败:', e);
+    }
+}
+
+function saveCurrentInputsToProfile() {
+    if (!currentConfig || !currentConfig.profiles[currentProfileName]) return;
+    const prof = currentConfig.profiles[currentProfileName];
+
+    prof.type = currentEffect;
+    prof.direction = currentDirection;
+    prof.speed_index = speedIndex;
+    prof.period_ms = getPeriodMsFromSpeed();
+    prof.brightness = brightnessVal;
+    // 模拟触发仅存在于常亮类灯效
+    prof.analog = (currentEffect === 'static') ? isAnalogEnabled : false;
+
+    // 映射主要颜色给 C++ 效果引擎
+    if (gradientStops.length > 0) {
+        prof.color = hexToRgb(gradientStops[0].color);
+        prof.color1 = hexToRgb(gradientStops[0].color);
+    }
+    if (gradientStops.length > 1) {
+        prof.color2 = hexToRgb(gradientStops[1].color);
+    }
+}
+
+async function saveConfiguration() {
+    saveCurrentInputsToProfile();
+    try {
+        const res = await fetch('/api/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(currentConfig)
+        });
+        const ret = await res.json();
+        if (res.ok) {
+            showToast('✅ ' + (ret.message || '配置已成功保存，daemon 已自动热重载！'));
+        } else {
+            showToast('❌ 保存失败: ' + (ret.message || '未知错误'));
+        }
+    } catch (e) {
+        showToast('❌ 请求失败: ' + e.message);
+    }
+}
+
+// 选项卡切换
+function switchMainTab(tab) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    if (tab === 'lighting') {
+        document.querySelector('.tab-btn:nth-child(1)').classList.add('active');
+        document.getElementById('tab-lighting-content').style.display = 'grid';
+        document.getElementById('tab-rules-content').style.display = 'none';
+    } else {
+        document.querySelector('.tab-btn:nth-child(2)').classList.add('active');
+        document.getElementById('tab-lighting-content').style.display = 'none';
+        document.getElementById('tab-rules-content').style.display = 'grid';
+        renderRulesTab();
+    }
+}
+
+// 前台规则渲染与编辑
+function renderRulesTab() {
+    const tbody = document.getElementById('rules-tbody');
+    tbody.innerHTML = '';
+    if (!currentConfig || !currentConfig.rules) return;
+
+    currentConfig.rules.forEach((rule, idx) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td><input type="text" class="input-text" style="width: 200px;" value="${rule.process || ''}" onchange="currentConfig.rules[${idx}].process = this.value.trim().toLowerCase()"></td>
+            <td><input type="text" class="input-text" style="width: 180px;" value="${rule.profile || ''}" onchange="currentConfig.rules[${idx}].profile = this.value.trim()"></td>
+            <td>
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="checkbox" ${rule.suppress_web_ui ? 'checked' : ''} onchange="currentConfig.rules[${idx}].suppress_web_ui = this.checked">
+                    <span style="font-size: 12px; color: var(--text-secondary);">🎮 游戏模式自动关停网页服务</span>
+                </label>
+            </td>
+            <td><button class="btn-rog" style="padding: 4px 10px; font-size: 11px; background: #441118;" onclick="deleteRule(${idx})">删除</button></td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+function addRule() {
+    if (!currentConfig.rules) currentConfig.rules = [];
+    currentConfig.rules.push({ process: '', profile: 'desktop', suppress_web_ui: false });
+    renderRulesTab();
+}
+
+function deleteRule(idx) {
+    currentConfig.rules.splice(idx, 1);
+    renderRulesTab();
+}
+
+// 心跳检测与游戏降级
+let consecutiveFails = 0;
+let isConnected = true;
+
+function startHeartbeat() {
+    setInterval(async () => {
+        try {
+            const res = await fetch('/api/status', { cache: 'no-store' });
+            if (res.ok) {
+                consecutiveFails = 0;
+                if (!isConnected) {
+                    isConnected = true;
+                    document.getElementById('game-mode-overlay').classList.remove('visible');
+                    loadConfig();
+                }
+            } else {
+                handleDisconnect();
+            }
+        } catch (e) {
+            handleDisconnect();
+        }
+    }, 1500);
+}
+
+function handleDisconnect() {
+    consecutiveFails++;
+    if (consecutiveFails >= 2 && isConnected) {
+        isConnected = false;
+        document.getElementById('game-mode-overlay').classList.add('visible');
+    }
+}
+
+function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 3500);
+}
+
+// 色彩转换工具函数
+function rgbToHex(rgb) {
+    if (!rgb || rgb.length < 3) return '#000000';
+    return '#' + rgb.slice(0, 3).map(x => Math.max(0, Math.min(255, Math.floor(x))).toString(16).padStart(2, '0')).join('').toUpperCase();
+}
+
+function hexToRgb(hex) {
+    let clean = hex.replace('#', '');
+    if (clean.length === 3) clean = clean.split('').map(c => c + c).join('');
+    const num = parseInt(clean, 16);
+    return [(num >> 16) & 255, (num >> 8) & 255, num & 255];
+}
+
+function hsvToRgb(h, s, v) {
+    let c = v * s;
+    let x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+    let m = v - c;
+    let r1 = 0, g1 = 0, b1 = 0;
+    if (h >= 0 && h < 60) { r1 = c; g1 = x; b1 = 0; }
+    else if (h >= 60 && h < 120) { r1 = x; g1 = c; b1 = 0; }
+    else if (h >= 120 && h < 180) { r1 = 0; g1 = c; b1 = x; }
+    else if (h >= 180 && h < 240) { r1 = 0; g1 = x; b1 = c; }
+    else if (h >= 240 && h < 300) { r1 = x; g1 = 0; b1 = c; }
+    else if (h >= 300 && h < 360) { r1 = c; g1 = 0; b1 = x; }
+    return [Math.round((r1 + m) * 255), Math.round((g1 + m) * 255), Math.round((b1 + m) * 255)];
+}
+</script>
+
+</body>
+</html>
