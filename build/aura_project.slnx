@@ -7,7 +7,7 @@
 		<BuildType Name="RelWithDebInfo"/>
 		<Platform Name="x64"/>
 	</Configurations>
-	<Project Path="ALL_BUILD.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="a29ebcbb-691e-3a86-996d-1a63d7632748" DefaultStartup="true">
+	<Project Path="ALL_BUILD.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="54f5545e-d4a8-383e-ba26-52eab79b7a9c" DefaultStartup="true">
 		<BuildDependency Project="ZERO_CHECK.vcxproj"/>
 		<BuildDependency Project="aura_daemon.vcxproj"/>
 		<BuildDependency Project="aura_web_ui.vcxproj"/>
@@ -17,14 +17,14 @@
 		<Build Solution="MinSizeRel|*" Project="false"/>
 		<Build Solution="RelWithDebInfo|*" Project="false"/>
 	</Project>
-	<Project Path="ZERO_CHECK.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="79b03ae4-e82d-3aa8-9e14-c678c8523fdd"/>
-	<Project Path="aura_daemon.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="75384c7e-0234-3371-9f23-39e7d7b49abc">
+	<Project Path="ZERO_CHECK.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="f68fdf21-71f0-31ac-84f9-885dc632406a"/>
+	<Project Path="aura_daemon.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="0aefafd4-63f0-3f10-bc50-4879e236e23e">
 		<BuildDependency Project="ZERO_CHECK.vcxproj"/>
 	</Project>
-	<Project Path="aura_web_ui.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="5f4e0b52-09c9-3faa-87ad-07f79c828e2e">
+	<Project Path="aura_web_ui.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="27f9d992-9e70-36e3-9f52-782eab5943c1">
 		<BuildDependency Project="ZERO_CHECK.vcxproj"/>
 	</Project>
-	<Project Path="test_com.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="81fecd1a-0fdb-351a-b820-c585d4f811f2">
+	<Project Path="test_com.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="e28c9aa8-1581-3bca-9fd1-3247ee65870d">
 		<BuildDependency Project="ZERO_CHECK.vcxproj"/>
 	</Project>
 </Solution>

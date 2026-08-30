@@ -1,8 +1,8 @@
-G:\Aura\src\main.cpp;G:\Aura\build\aura_daemon.dir\Release\main.obj
-G:\Aura\src\aura\aura_adapter.cpp;G:\Aura\build\aura_daemon.dir\Release\aura_adapter.obj
-G:\Aura\src\aura\keymap.cpp;G:\Aura\build\aura_daemon.dir\Release\keymap.obj
-G:\Aura\src\monitor\foreground_monitor.cpp;G:\Aura\build\aura_daemon.dir\Release\foreground_monitor.obj
-G:\Aura\src\config\rule_engine.cpp;G:\Aura\build\aura_daemon.dir\Release\rule_engine.obj
-G:\Aura\src\engine\effect_engine.cpp;G:\Aura\build\aura_daemon.dir\Release\effect_engine.obj
-G:\Aura\src\engine\builtin_effects.cpp;G:\Aura\build\aura_daemon.dir\Release\builtin_effects.obj
-G:\Aura\src\supervisor\web_supervisor.cpp;G:\Aura\build\aura_daemon.dir\Release\web_supervisor.obj
+C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\src\main.cpp;C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\build\aura_daemon.dir\Release\main.obj
+C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\src\aura\aura_adapter.cpp;C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\build\aura_daemon.dir\Release\aura_adapter.obj
+C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\src\aura\keymap.cpp;C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\build\aura_daemon.dir\Release\keymap.obj
+C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\src\monitor\foreground_monitor.cpp;C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\build\aura_daemon.dir\Release\foreground_monitor.obj
+C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\src\config\rule_engine.cpp;C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\build\aura_daemon.dir\Release\rule_engine.obj
+C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\src\engine\effect_engine.cpp;C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\build\aura_daemon.dir\Release\effect_engine.obj
+C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\src\engine\builtin_effects.cpp;C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\build\aura_daemon.dir\Release\builtin_effects.obj
+C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\src\supervisor\web_supervisor.cpp;C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\build\aura_daemon.dir\Release\web_supervisor.obj

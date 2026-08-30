@@ -1,6 +1,6 @@
-^G:\AURA\BUILD\CMAKEFILES\48E71008EC91EB5199CE4ABFC89EBB66\GENERATE.STAMP.RULE
+^C:\USERS\ROG\WORKBUDDY\WORKTREES\AURA\MAIN-0D4CB138\BUILD\CMAKEFILES\5F27AFC4E14872ED5C6F26F951A477E8\GENERATE.STAMP.RULE
 setlocal
-"C:\Program Files\Microsoft Visual Studio\18\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -SG:/Aura -BG:/Aura/build --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file G:/Aura/build/aura_project.slnx
+"C:\Program Files\Microsoft Visual Studio\18\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -SC:/Users/ROG/WorkBuddy/Worktrees/Aura/main-0d4cb138 -BC:/Users/ROG/WorkBuddy/Worktrees/Aura/main-0d4cb138/build --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file C:/Users/ROG/WorkBuddy/Worktrees/Aura/main-0d4cb138/build/aura_project.slnx
 if %errorlevel% neq 0 goto :cmEnd
 :cmEnd
 endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
