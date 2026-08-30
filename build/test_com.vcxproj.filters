@@ -1,16 +1,16 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="18.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <ClCompile Include="G:\Aura\test_com.cpp">
+    <ClCompile Include="C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\test_com.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <CustomBuild Include="G:\Aura\CMakeLists.txt" />
+    <CustomBuild Include="C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\CMakeLists.txt" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Source Files">
-      <UniqueIdentifier>{068A8E5C-96E9-34FD-A2D0-DDBDD4F5E8DC}</UniqueIdentifier>
+      <UniqueIdentifier>{950B4CA3-BBD7-3D44-8CB0-0BAE44F4A905}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
 </Project>

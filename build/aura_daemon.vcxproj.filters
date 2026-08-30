@@ -1,78 +1,78 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="18.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <ClCompile Include="G:\Aura\src\main.cpp">
+    <ClCompile Include="C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\src\main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="G:\Aura\src\aura\aura_adapter.cpp">
+    <ClCompile Include="C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\src\aura\aura_adapter.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="G:\Aura\src\aura\keymap.cpp">
+    <ClCompile Include="C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\src\aura\keymap.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="G:\Aura\src\monitor\foreground_monitor.cpp">
+    <ClCompile Include="C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\src\monitor\foreground_monitor.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="G:\Aura\src\config\rule_engine.cpp">
+    <ClCompile Include="C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\src\config\rule_engine.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="G:\Aura\src\engine\effect_engine.cpp">
+    <ClCompile Include="C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\src\engine\effect_engine.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="G:\Aura\src\engine\builtin_effects.cpp">
+    <ClCompile Include="C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\src\engine\builtin_effects.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="G:\Aura\src\supervisor\web_supervisor.cpp">
+    <ClCompile Include="C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\src\supervisor\web_supervisor.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="G:\Aura\include\aura\aura_adapter.h">
+    <ClInclude Include="C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\include\aura\aura_adapter.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="G:\Aura\include\aura\aura_types.h">
+    <ClInclude Include="C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\include\aura\aura_types.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="G:\Aura\include\aura\keymap.h">
+    <ClInclude Include="C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\include\aura\keymap.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="G:\Aura\include\monitor\foreground_monitor.h">
+    <ClInclude Include="C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\include\monitor\foreground_monitor.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="G:\Aura\include\config\rule_engine.h">
+    <ClInclude Include="C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\include\config\rule_engine.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="G:\Aura\include\engine\effect.h">
+    <ClInclude Include="C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\include\engine\effect.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="G:\Aura\include\engine\builtin_effects.h">
+    <ClInclude Include="C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\include\engine\builtin_effects.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="G:\Aura\include\engine\effect_engine.h">
+    <ClInclude Include="C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\include\engine\effect_engine.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="G:\Aura\include\supervisor\web_supervisor.h">
+    <ClInclude Include="C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\include\supervisor\web_supervisor.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="G:\Aura\include\utils\logger.h">
+    <ClInclude Include="C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\include\utils\logger.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="G:\Aura\include\utils\system_info.h">
+    <ClInclude Include="C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\include\utils\system_info.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="G:\Aura\include\third_party\json.hpp">
+    <ClInclude Include="C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\include\third_party\json.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <CustomBuild Include="G:\Aura\CMakeLists.txt" />
+    <CustomBuild Include="C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\CMakeLists.txt" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Header Files">
-      <UniqueIdentifier>{D8919295-E6A2-3A42-8D78-7CCF5025E30E}</UniqueIdentifier>
+      <UniqueIdentifier>{A0690519-C313-3206-8654-10FFF5BF3AE9}</UniqueIdentifier>
     </Filter>
     <Filter Include="Source Files">
-      <UniqueIdentifier>{068A8E5C-96E9-34FD-A2D0-DDBDD4F5E8DC}</UniqueIdentifier>
+      <UniqueIdentifier>{950B4CA3-BBD7-3D44-8CB0-0BAE44F4A905}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
 </Project>

@@ -10,6 +10,7 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <memory>
 #include <chrono>
 #include <thread>
 #include <atomic>
@@ -153,7 +154,7 @@ int main(int argc, char* argv[]) {
 
     // 9. 构建效果引擎
     aura::EffectEngine effect_engine;
-    const aura::Profile* initial_profile = rule_engine.MatchProfile("");
+    std::shared_ptr<const aura::Profile> initial_profile = rule_engine.MatchProfile("");
     effect_engine.SetActiveProfile(initial_profile);
 
     // 10. 启动网页配置服务后台监护器 (默认桌面状态自动拉起，由独立工线程异步监护)
@@ -168,7 +169,7 @@ int main(int argc, char* argv[]) {
         if (proc_name == last_proc_name) return;
         last_proc_name = proc_name;
 
-        const aura::Profile* matched = rule_engine.MatchProfile(proc_name);
+        std::shared_ptr<const aura::Profile> matched = rule_engine.MatchProfile(proc_name);
         effect_engine.SetActiveProfile(matched);
 
         bool suppress = rule_engine.ShouldSuppressWebUi(proc_name);
@@ -216,7 +217,7 @@ int main(int argc, char* argv[]) {
         if (total_frames % TARGET_FPS == 0) {
             if (rule_engine.CheckAndReload()) {
                 std::string cur_proc = monitor.GetCurrentProcessName();
-                const aura::Profile* matched = rule_engine.MatchProfile(cur_proc);
+                std::shared_ptr<const aura::Profile> matched = rule_engine.MatchProfile(cur_proc);
                 effect_engine.SetActiveProfile(matched);
 
                 bool suppress = rule_engine.ShouldSuppressWebUi(cur_proc);

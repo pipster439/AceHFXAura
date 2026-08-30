@@ -1,34 +1,66 @@
 <!DOCTYPE html>
-<html lang="zh-CN" data-color-mode="dark">
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ASUS GearLink | ROG FALCHION ACE HFX 灯效设置中心</title>
+    <title>ROG FALCHION ACE HFX | 极客灯效控制中枢</title>
     <style>
+        /* ========================================================
+           1. 现代化设计系统与 CSS 变量体系 (Modern Web Standards)
+           ======================================================== */
         :root {
+            color-scheme: dark;
             --font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
             --rog-red: #ff1929;
+            --rog-red-hover: #ff3342;
             --rog-red-dark: #b80010;
+            --rog-red-glow: rgba(255, 25, 41, 0.4);
             --rog-cyan: #00f0ff;
             --rog-cyan-dark: #00b4d8;
-            --bg-body: #07090d;
-            --bg-stage: #0c0f15;
-            --bg-panel: #10141c;
-            --bg-card: #151922;
-            --bg-card-hover: #1c222e;
-            --bg-active: #202735;
-            --border-subtle: #1e2430;
-            --border-card: #28303f;
+            --rog-cyan-glow: rgba(0, 240, 255, 0.35);
+            --rog-purple: #a855f7;
+
+            --bg-body: #06080c;
+            --bg-stage: #0a0d13;
+            --bg-panel: #0f131a;
+            --bg-card: #141822;
+            --bg-card-hover: #1b212e;
+            --bg-input: #1a202c;
+            
+            --border-subtle: #1c222e;
+            --border-card: #273040;
             --border-active: #ff1929;
-            --text-primary: #e6ecf5;
-            --text-secondary: #8c97a8;
-            --text-muted: #535d6e;
-            --radius-sm: 3px;
-            --radius-md: 6px;
-            --radius-lg: 10px;
+            
+            --text-primary: #eaf0f8;
+            --text-secondary: #8d98a9;
+            --text-muted: #525c6e;
+            
+            --radius-xs: 2px;
+            --radius-sm: 4px;
+            --radius-md: 8px;
+            --radius-lg: 12px;
+
+            --scrollbar-thumb: #303a4d;
+            --scrollbar-track: #0f131a;
+
+            accent-color: var(--rog-red);
         }
 
-        * { box-sizing: border-box; margin: 0; padding: 0; }
+        /* 滚动条规范适配 (customize-scrollbar-color-and-thickness) */
+        * {
+            scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+            scrollbar-width: thin;
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        @supports not (scrollbar-color: auto) {
+            *::-webkit-scrollbar { width: 8px; height: 8px; }
+            *::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 4px; }
+            *::-webkit-scrollbar-track { background: var(--scrollbar-track); }
+        }
+
         body {
             font-family: var(--font-family);
             background-color: var(--bg-body);
@@ -38,12 +70,16 @@
             flex-direction: column;
             overflow-x: hidden;
             user-select: none;
+            -webkit-user-select: none;
         }
 
-        /* 顶部 GearLink 风格导航栏 */
+        /* ========================================================
+           2. 顶部导航与 Profile 控制中枢
+           ======================================================== */
         header {
-            background-color: rgba(13, 16, 23, 0.95);
-            backdrop-filter: blur(12px);
+            background-color: rgba(12, 16, 23, 0.94);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
             border-bottom: 1px solid var(--border-subtle);
             padding: 10px 32px;
             display: flex;
@@ -51,23 +87,28 @@
             justify-content: space-between;
             position: sticky;
             top: 0;
-            z-index: 100;
+            z-index: 50;
         }
 
-        .header-left { display: flex; align-items: center; gap: 14px; }
-        .rog-logo {
-            width: 34px;
-            height: 34px;
-            background: linear-gradient(135deg, var(--rog-red), #880010);
-            border-radius: 4px;
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .rog-brand-badge {
+            width: 36px;
+            height: 36px;
+            background: linear-gradient(135deg, var(--rog-red), #77000d);
+            border-radius: var(--radius-sm);
             display: flex;
             align-items: center;
             justify-content: center;
-            box-shadow: 0 0 14px rgba(255, 25, 41, 0.35);
+            box-shadow: 0 0 16px var(--rog-red-glow);
         }
-        .rog-logo svg { width: 20px; height: 20px; fill: #fff; }
+        .rog-brand-badge svg { width: 22px; height: 22px; fill: #fff; }
 
-        .brand-info h1 {
+        .brand-meta h1 {
             font-size: 15px;
             font-weight: 800;
             letter-spacing: 0.6px;
@@ -75,28 +116,83 @@
             align-items: center;
             gap: 8px;
         }
-        .brand-info h1 span.tag {
+        .brand-meta h1 .tag-hfx {
             font-size: 10px;
-            font-weight: 700;
+            font-weight: 800;
             padding: 2px 6px;
             border-radius: 3px;
             background: rgba(255, 25, 41, 0.15);
             border: 1px solid rgba(255, 25, 41, 0.4);
             color: var(--rog-red);
+            letter-spacing: 0.5px;
         }
-        .brand-info p { font-size: 11px; color: var(--text-secondary); }
+        .brand-meta p { font-size: 11px; color: var(--text-secondary); }
 
-        .header-right { display: flex; align-items: center; gap: 16px; }
+        /* Profile 管理工具条 */
+        .profile-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--bg-card);
+            padding: 4px 10px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border-card);
+        }
+        .profile-label {
+            font-size: 11px;
+            color: var(--text-secondary);
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .profile-select {
+            background: var(--bg-input);
+            border: 1px solid #333d4e;
+            color: #fff;
+            padding: 4px 8px;
+            font-size: 12px;
+            font-weight: 700;
+            border-radius: 3px;
+            outline: none;
+            cursor: pointer;
+            min-width: 140px;
+        }
+        .profile-select:focus-visible { border-color: var(--rog-cyan); }
+        .profile-btn {
+            background: transparent;
+            border: 1px solid #333d4e;
+            color: var(--text-secondary);
+            padding: 4px 8px;
+            font-size: 11px;
+            border-radius: 3px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .profile-btn:hover {
+            color: #fff;
+            border-color: #556680;
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
         .status-badge {
             display: flex;
             align-items: center;
             gap: 8px;
             padding: 5px 12px;
-            background-color: rgba(0, 230, 118, 0.08);
+            background: rgba(0, 230, 118, 0.08);
             border: 1px solid rgba(0, 230, 118, 0.3);
             border-radius: 16px;
             font-size: 11px;
             color: #00e676;
+            font-weight: 600;
         }
         .status-dot {
             width: 7px;
@@ -104,18 +200,18 @@
             background-color: #00e676;
             border-radius: 50%;
             box-shadow: 0 0 8px #00e676;
-            animation: pulse-dot 2s infinite;
+            animation: pulse-dot 2s infinite ease-in-out;
         }
         @keyframes pulse-dot {
             0%, 100% { transform: scale(1); opacity: 1; }
             50% { transform: scale(1.3); opacity: 0.5; }
         }
 
-        .btn-rog {
-            background: linear-gradient(135deg, var(--rog-red), #b00012);
+        .btn-action-save {
+            background: linear-gradient(135deg, var(--rog-red), #9e0010);
             color: #fff;
             border: 1px solid rgba(255, 255, 255, 0.2);
-            padding: 7px 18px;
+            padding: 7px 20px;
             font-size: 12px;
             font-weight: 700;
             border-radius: var(--radius-sm);
@@ -123,43 +219,80 @@
             display: flex;
             align-items: center;
             gap: 6px;
-            box-shadow: 0 0 14px rgba(255, 25, 41, 0.3);
+            box-shadow: 0 0 16px var(--rog-red-glow);
             transition: all 0.2s ease;
         }
-        .btn-rog:hover {
-            box-shadow: 0 0 22px rgba(255, 25, 41, 0.6);
+        .btn-action-save:hover {
             transform: translateY(-1px);
+            box-shadow: 0 0 24px rgba(255, 25, 41, 0.65);
+        }
+        .btn-action-save:active { transform: translateY(1px); }
+
+        /* ========================================================
+           3. 导航选项卡 (Tabs)
+           ======================================================== */
+        .tab-bar {
+            max-width: 1280px;
+            width: 100%;
+            margin: 16px auto 0;
+            padding: 0 24px;
+            display: flex;
+            gap: 12px;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+        .tab-btn {
+            background: none;
+            border: none;
+            border-bottom: 2px solid transparent;
+            padding: 10px 20px;
+            color: var(--text-secondary);
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s ease;
+        }
+        .tab-btn:hover { color: var(--text-primary); }
+        .tab-btn.active {
+            color: var(--rog-red);
+            border-bottom-color: var(--rog-red);
+            text-shadow: 0 0 12px var(--rog-red-glow);
         }
 
-        /* 页面主体内容容器 */
+        /* ========================================================
+           4. 键盘视觉舞台 (Container Queries 响应式缩放)
+           ======================================================== */
         main {
             flex: 1;
-            max-width: 1240px;
+            max-width: 1280px;
             width: 100%;
-            margin: 18px auto 36px;
-            padding: 0 20px;
+            margin: 16px auto 40px;
+            padding: 0 24px;
             display: flex;
             flex-direction: column;
             gap: 20px;
         }
 
-        /* ========================================================
-           1. 顶部舞台：ASUS GearLink 键盘视觉模块
-           ======================================================== */
         .stage-container {
+            container-type: inline-size;
+            container-name: keyboard-stage;
             background-color: var(--bg-stage);
             border: 1px solid var(--border-subtle);
             border-radius: var(--radius-lg);
-            padding: 22px 18px;
+            padding: 20px;
             display: flex;
             flex-direction: column;
             align-items: center;
-            box-shadow: inset 0 0 60px rgba(0, 0, 0, 0.65);
+            box-shadow: inset 0 0 50px rgba(0, 0, 0, 0.7);
             position: relative;
+            overflow: hidden;
         }
 
         .stage-header {
             width: 908px;
+            max-width: 100%;
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -175,32 +308,49 @@
             align-items: center;
             gap: 8px;
         }
-        .stage-fps-badge {
+        .stage-badge-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .stage-badge {
             font-size: 11px;
             color: var(--rog-cyan);
             background: rgba(0, 240, 255, 0.08);
             border: 1px solid rgba(0, 240, 255, 0.2);
-            padding: 2px 10px;
-            border-radius: 10px;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-weight: 600;
         }
 
-        /* 官方 GearLink 规范命名：device-keyboard-module__keyboard */
+        /* 键盘本体框架 */
         .device-keyboard-module__keyboard {
             position: relative;
             width: 908px;
             height: auto;
             margin: 0 auto;
             border-radius: 16px;
-            background: #0f1218;
-            border: 8px solid #1a1e27;
-            box-shadow: 0 14px 40px rgba(0, 0, 0, 0.8), 0 0 30px rgba(0, 240, 255, 0.03);
+            background: #0d1017;
+            border: 8px solid #181c25;
+            box-shadow: 0 16px 48px rgba(0, 0, 0, 0.85), 0 0 32px rgba(0, 240, 255, 0.03);
             user-select: none;
+            transition: transform 0.2s ease-out;
+        }
+
+        @container keyboard-stage (max-width: 950px) {
+            .device-keyboard-module__keyboard { transform: scale(0.92); transform-origin: top center; margin-bottom: -25px; }
+        }
+        @container keyboard-stage (max-width: 860px) {
+            .device-keyboard-module__keyboard { transform: scale(0.80); transform-origin: top center; margin-bottom: -60px; }
+        }
+        @container keyboard-stage (max-width: 740px) {
+            .device-keyboard-module__keyboard { transform: scale(0.68); transform-origin: top center; margin-bottom: -95px; }
         }
 
         .device-keyboard-module__keyboard_base-layer {
             padding: 8px;
             border-radius: 8px;
-            background: #0a0d12;
+            background: #080a0e;
             display: flex;
             flex-direction: column;
             gap: 4px;
@@ -208,18 +358,18 @@
 
         .device-keyboard-module__keyboard-row {
             position: relative;
-            height: 50px;
+            height: 48px;
             display: flex;
             gap: 4px;
         }
 
-        /* 68 键键帽规范命名：device-keyboard-module__key */
+        /* 68 键键帽规范 */
         .device-keyboard-module__key {
             position: relative;
-            height: 50px;
+            height: 48px;
             border-radius: 4px;
-            background: #181d26;
-            border: 1px solid #28303f;
+            background: #151922;
+            border: 1px solid #252d3c;
             outline: 2px solid transparent;
             outline-offset: 1px;
             color: var(--text-primary);
@@ -230,13 +380,29 @@
             font-size: 11px;
             font-weight: 700;
             cursor: pointer;
-            transition: background 0.08s, box-shadow 0.08s, transform 0.06s;
+            transition: background 0.08s, box-shadow 0.08s, transform 0.06s, border-color 0.1s;
             box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.5), 0 2px 4px rgba(0, 0, 0, 0.3);
         }
         .device-keyboard-module__key:active,
         .device-keyboard-module__key.key-pressed {
             transform: translateY(2px);
-            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.8), 0 0 16px rgba(255, 255, 255, 0.7) !important;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.8), 0 0 16px rgba(255, 255, 255, 0.8) !important;
+        }
+        .device-keyboard-module__key.key-selected {
+            outline: 2px solid var(--rog-cyan) !important;
+            outline-offset: 1px;
+            box-shadow: 0 0 14px var(--rog-cyan-glow) !important;
+        }
+        .device-keyboard-module__key.has-override::after {
+            content: "";
+            position: absolute;
+            top: 3px;
+            right: 3px;
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            background: var(--rog-cyan);
+            box-shadow: 0 0 6px var(--rog-cyan);
         }
         .device-keyboard-module__key .key-label {
             pointer-events: none;
@@ -250,32 +416,8 @@
             pointer-events: none;
         }
 
-        /* 选项卡切换条 */
-        .tab-nav {
-            display: flex;
-            gap: 8px;
-            border-bottom: 1px solid var(--border-subtle);
-            margin-top: 4px;
-        }
-        .tab-btn {
-            background: none;
-            border: none;
-            border-bottom: 2px solid transparent;
-            padding: 8px 16px;
-            color: var(--text-secondary);
-            font-size: 13px;
-            font-weight: 700;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        .tab-btn:hover { color: var(--text-primary); }
-        .tab-btn.active {
-            color: var(--rog-red);
-            border-bottom-color: var(--rog-red);
-        }
-
         /* ========================================================
-           2. 核心双栏设置中枢 (完美复刻参考图片布局)
+           5. Tab 1: 全局灯效面板 (双栏布局)
            ======================================================== */
         .gearlink-main-panel {
             display: grid;
@@ -288,42 +430,36 @@
             box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
         }
 
-        /* ----- 左侧：基本效果网格 ----- */
+        @media (max-width: 960px) {
+            .gearlink-main-panel { grid-template-columns: 1fr; }
+        }
+
         .effects-left-section {
             display: flex;
             flex-direction: column;
             position: relative;
-            padding-right: 12px;
         }
 
-        /* 赛博斜向警戒斜纹底层图案 (参考图右下角底纹) */
-        .effects-left-section::after {
-            content: "";
-            position: absolute;
-            bottom: 0;
-            right: 0;
-            width: 140px;
-            height: 110px;
-            pointer-events: none;
-            background: repeating-linear-gradient(
-                -45deg,
-                rgba(255, 255, 255, 0.02) 0,
-                rgba(255, 255, 255, 0.02) 10px,
-                transparent 10px,
-                transparent 22px
-            );
-            border-radius: 4px;
-        }
-
-        /* 顶部开关与标题 */
         .effects-top-bar {
             display: flex;
-            flex-direction: column;
-            gap: 10px;
-            margin-bottom: 24px;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 22px;
+        }
+        .effects-section-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--text-primary);
+            letter-spacing: 0.5px;
         }
 
-        /* 赛博青色拨码开关 [ON / OFF] */
+        /* 开关切换器 */
+        .cyber-switch-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .cyber-switch-container span { font-size: 12px; color: var(--text-secondary); font-weight: 600; }
         .cyber-switch {
             display: inline-flex;
             align-items: center;
@@ -331,16 +467,16 @@
             user-select: none;
             width: 48px;
             height: 22px;
-            background: #1e2430;
+            background: #1c222e;
             border-radius: 2px;
             position: relative;
-            border: 1px solid #333d4e;
+            border: 1px solid #323c4d;
             transition: all 0.2s ease;
         }
         .cyber-switch.on {
             background: var(--rog-cyan-dark);
             border-color: var(--rog-cyan);
-            box-shadow: 0 0 10px rgba(0, 240, 255, 0.3);
+            box-shadow: 0 0 10px rgba(0, 240, 255, 0.35);
         }
         .cyber-switch-thumb {
             position: absolute;
@@ -353,9 +489,7 @@
             transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
             box-shadow: 0 1px 4px rgba(0,0,0,0.4);
         }
-        .cyber-switch.on .cyber-switch-thumb {
-            transform: translateX(26px);
-        }
+        .cyber-switch.on .cyber-switch-thumb { transform: translateX(26px); }
         .cyber-switch-text {
             position: absolute;
             font-size: 10px;
@@ -364,26 +498,14 @@
             color: #fff;
             top: 2px;
         }
-        .cyber-switch.on .cyber-switch-text {
-            left: 6px;
-        }
-        .cyber-switch:not(.on) .cyber-switch-text {
-            right: 6px;
-            color: #8c97a8;
-        }
+        .cyber-switch.on .cyber-switch-text { left: 6px; }
+        .cyber-switch:not(.on) .cyber-switch-text { right: 6px; color: #8c97a8; }
 
-        .effects-section-title {
-            font-size: 14px;
-            font-weight: 700;
-            color: var(--text-primary);
-            letter-spacing: 0.5px;
-        }
-
-        /* 10 大基础效果网格排布 (参考图 1/2/3 标准布局) */
+        /* 10 大核心效果网格 */
         .effects-grid {
             display: grid;
-            grid-template-columns: repeat(6, 1fr);
-            gap: 20px 16px;
+            grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+            gap: 16px 12px;
             position: relative;
             z-index: 1;
         }
@@ -406,16 +528,10 @@
             border-color: rgba(255, 255, 255, 0.08);
         }
         .effect-item.active {
-            background: rgba(255, 25, 41, 0.05);
-            border-color: rgba(255, 25, 41, 0.3);
-            box-shadow: 0 0 16px rgba(255, 25, 41, 0.15);
+            background: rgba(255, 25, 41, 0.06);
+            border-color: rgba(255, 25, 41, 0.4);
+            box-shadow: 0 0 16px rgba(255, 25, 41, 0.2);
         }
-        .effect-item.active-cyan {
-            background: rgba(0, 240, 255, 0.05);
-            border-color: rgba(0, 240, 255, 0.3);
-            box-shadow: 0 0 16px rgba(0, 240, 255, 0.15);
-        }
-
         .effect-icon-wrapper {
             width: 44px;
             height: 44px;
@@ -425,41 +541,24 @@
             color: var(--text-secondary);
             transition: all 0.2s ease;
         }
-        .effect-item:hover .effect-icon-wrapper {
-            color: var(--text-primary);
-            transform: scale(1.06);
-        }
+        .effect-item:hover .effect-icon-wrapper { color: var(--text-primary); transform: scale(1.06); }
         .effect-item.active .effect-icon-wrapper {
             color: var(--rog-red);
-            filter: drop-shadow(0 0 8px rgba(255, 25, 41, 0.7));
+            filter: drop-shadow(0 0 8px var(--rog-red-glow));
         }
-        .effect-item.active-cyan .effect-icon-wrapper {
-            color: var(--rog-cyan);
-            filter: drop-shadow(0 0 8px rgba(0, 240, 255, 0.7));
-        }
-
         .effect-label {
-            font-size: 13px;
-            font-weight: 500;
+            font-size: 12px;
+            font-weight: 600;
             color: var(--text-secondary);
             letter-spacing: 0.3px;
-            transition: color 0.2s;
         }
-        .effect-item:hover .effect-label { color: var(--text-primary); }
-        .effect-item.active .effect-label {
-            color: var(--text-primary);
-            font-weight: 700;
-        }
-        .effect-item.active-cyan .effect-label {
-            color: var(--text-primary);
-            font-weight: 700;
-        }
+        .effect-item.active .effect-label { color: #fff; font-weight: 700; }
 
-        /* ----- 右侧：赛博参数调控卡片 (ASUS Cyber Box) ----- */
+        /* 右栏：赛博机能参数盒子 */
         .cyber-settings-card {
             background-color: var(--bg-card);
             border: 1px solid var(--border-card);
-            border-radius: 4px;
+            border-radius: var(--radius-sm);
             padding: 22px 20px;
             display: flex;
             flex-direction: column;
@@ -467,35 +566,12 @@
             position: relative;
             box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.5);
         }
-
-        /* 顶部 Micro-stripes 赛博条纹底纹 */
-        .cyber-settings-card::before {
-            content: "";
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 18px;
-            border-top-left-radius: 3px;
-            border-top-right-radius: 3px;
-            background: repeating-linear-gradient(
-                45deg,
-                rgba(255, 255, 255, 0.02) 0,
-                rgba(255, 255, 255, 0.02) 2px,
-                transparent 2px,
-                transparent 6px
-            );
-            pointer-events: none;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-        }
-
-        /* 四角准星切线 Corner Brackets */
         .corner-bracket {
             position: absolute;
             width: 8px;
             height: 8px;
             pointer-events: none;
-            border-color: #434e62;
+            border-color: #424e62;
             border-style: solid;
         }
         .corner-tl { top: -1px; left: -1px; border-width: 2px 0 0 2px; }
@@ -503,95 +579,35 @@
         .corner-bl { bottom: -1px; left: -1px; border-width: 0 0 2px 2px; }
         .corner-br { bottom: -1px; right: -1px; border-width: 0 2px 2px 0; }
 
-        /* 参数区块小节 */
         .param-group {
             display: flex;
             flex-direction: column;
-            gap: 12px;
-            position: relative;
-            z-index: 1;
+            gap: 10px;
         }
         .param-title {
             font-size: 13px;
             font-weight: 700;
             color: var(--text-primary);
-            letter-spacing: 0.4px;
             display: flex;
             align-items: center;
             justify-content: space-between;
         }
 
-        /* 颜色单选 (样式 / 随机) */
-        .color-radio-row {
-            display: flex;
-            align-items: center;
-            gap: 20px;
-        }
-        .cyber-radio {
-            display: inline-flex;
-            align-items: center;
-            gap: 7px;
-            cursor: pointer;
-            font-size: 12px;
-            color: var(--text-primary);
-        }
-        .cyber-radio input[type="radio"] { display: none; }
-        .radio-dot {
-            width: 14px;
-            height: 14px;
-            border-radius: 50%;
-            border: 1px solid #5a667d;
-            background: #0f131a;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.2s;
-        }
-        .cyber-radio input[type="radio"]:checked + .radio-dot {
-            border-color: #fff;
-        }
-        .cyber-radio input[type="radio"]:checked + .radio-dot::after {
-            content: "";
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-            background: #fff;
-        }
-
-        /* 预设下拉选择器 (默认样式 ▼) */
-        .cyber-select-wrapper {
-            position: relative;
-            width: 100%;
-        }
+        /* 渐变与色彩编辑组件 */
         .cyber-select {
             width: 100%;
-            background-color: #1a202c;
+            background-color: var(--bg-input);
             border: 1px solid #333e52;
             color: var(--text-primary);
-            padding: 6px 12px;
+            padding: 7px 12px;
             font-size: 12px;
             font-weight: 600;
             border-radius: var(--radius-sm);
             outline: none;
             cursor: pointer;
-            appearance: none;
-            -webkit-appearance: none;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
         }
-        .cyber-select:focus { border-color: var(--rog-cyan); }
-        .cyber-select-arrow {
-            position: absolute;
-            right: 12px;
-            top: 50%;
-            transform: translateY(-50%);
-            pointer-events: none;
-            color: var(--rog-red);
-            font-size: 10px;
-        }
+        .cyber-select:focus-visible { border-color: var(--rog-cyan); }
 
-        /* 多阶渐变色条组件 (Gradient Stop Bar) */
         .gradient-editor-row {
             display: flex;
             align-items: center;
@@ -599,1705 +615,2041 @@
             margin-top: 4px;
         }
         .grad-btn {
+            width: 28px;
+            height: 28px;
             background: #1c222e;
-            border: 1px solid #364257;
-            color: var(--text-secondary);
-            width: 24px;
-            height: 24px;
+            border: 1px solid #333e52;
+            color: var(--text-primary);
+            border-radius: 3px;
+            cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            border-radius: 2px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: bold;
-            transition: all 0.15s;
+            font-size: 16px;
+            font-weight: 700;
         }
-        .grad-btn:hover {
-            color: #fff;
-            border-color: #556685;
-            background: #252e3d;
-        }
-
+        .grad-btn:hover { background: #2a3346; }
         .gradient-track-container {
             flex: 1;
-            position: relative;
             height: 28px;
-            display: flex;
-            align-items: center;
+            position: relative;
+            cursor: crosshair;
         }
         .gradient-bar {
             width: 100%;
             height: 12px;
-            border-radius: 2px;
+            border-radius: 3px;
+            position: absolute;
+            top: 8px;
             border: 1px solid rgba(255, 255, 255, 0.15);
-            background: linear-gradient(to right, #ff1929 0%, #148ac4 60%, #e040fb 100%);
-            cursor: crosshair;
         }
-
-        /* 渐变停靠手柄 (Stop Pin) */
         .gradient-stop-pin {
             position: absolute;
-            top: -2px;
+            top: 2px;
             width: 14px;
-            height: 16px;
+            height: 24px;
             transform: translateX(-50%);
-            border: 1px solid #ffffff;
-            border-radius: 2px;
-            cursor: pointer;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.6);
-            transition: transform 0.1s, box-shadow 0.1s;
+            cursor: ew-resize;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
             z-index: 2;
         }
-        .gradient-stop-pin.selected {
-            transform: translateX(-50%) scale(1.15);
-            border-color: #fff;
-            box-shadow: 0 0 10px #ffffff;
-            z-index: 3;
+        .stop-color-head {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            border: 2px solid #fff;
+            box-shadow: 0 0 4px rgba(0,0,0,0.8);
         }
-        .gradient-stop-pin::after {
-            content: "";
-            position: absolute;
-            bottom: -5px;
-            left: 50%;
-            transform: translateX(-50%);
-            border-width: 4px 4px 0 4px;
-            border-style: solid;
-            border-color: #fff transparent transparent transparent;
+        .gradient-stop-pin.selected .stop-color-head {
+            border-color: var(--rog-cyan);
+            box-shadow: 0 0 8px var(--rog-cyan);
+        }
+        .stop-pointer {
+            width: 0;
+            height: 0;
+            border-left: 4px solid transparent;
+            border-right: 4px solid transparent;
+            border-top: 5px solid #fff;
+            margin-top: -1px;
         }
 
-        /* 模拟灯效组件 */
+        /* 模拟灯效说明 */
         .analog-box {
+            background: rgba(0, 240, 255, 0.03);
+            border: 1px dashed rgba(0, 240, 255, 0.25);
+            padding: 12px;
+            border-radius: var(--radius-sm);
             display: flex;
             flex-direction: column;
             gap: 8px;
-            background: rgba(0, 0, 0, 0.2);
-            border: 1px solid rgba(255, 255, 255, 0.04);
-            border-radius: 4px;
-            padding: 10px 12px;
-        }
-        .analog-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
         }
         .analog-desc {
             font-size: 11px;
-            color: #7b889d;
-            line-height: 1.45;
+            color: var(--text-secondary);
+            line-height: 1.5;
         }
 
-        /* LED 亮度条 (发光青色 Cyan Track) */
+        /* 亮度与粗细滑块 */
         .cyber-slider-track {
+            height: 8px;
+            background: #1b202c;
+            border-radius: 4px;
             position: relative;
-            width: 100%;
-            height: 6px;
-            background: #19202c;
-            border-radius: 3px;
-            display: flex;
-            align-items: center;
             cursor: pointer;
+            border: 1px solid #2e384b;
         }
         .cyber-slider-fill {
-            position: absolute;
-            left: 0;
             height: 100%;
-            background: linear-gradient(to right, #0088cc, var(--rog-cyan));
-            border-radius: 3px;
-            box-shadow: 0 0 10px rgba(0, 240, 255, 0.5);
-            pointer-events: none;
+            background: linear-gradient(90deg, #0088a3, var(--rog-cyan));
+            border-radius: 4px;
         }
         .cyber-slider-thumb {
             position: absolute;
+            top: -5px;
             width: 16px;
             height: 16px;
-            background: #ffffff;
-            border-radius: 2px;
+            border-radius: 50%;
+            background: #fff;
+            border: 2px solid var(--rog-cyan);
+            box-shadow: 0 0 10px var(--rog-cyan);
             transform: translateX(-50%);
-            box-shadow: 0 0 8px rgba(0, 240, 255, 0.8), 0 2px 4px rgba(0,0,0,0.5);
-            cursor: pointer;
-            transition: transform 0.1s;
+            cursor: grab;
         }
-        .cyber-slider-thumb:hover { transform: translateX(-50%) scale(1.15); }
 
-        /* 速度档位滑块 (慢 / 正常 / 快) */
+        /* 速度 3 档阶梯 */
+        .speed-step-track {
+            height: 6px;
+            background: #1e2533;
+            border-radius: 3px;
+            position: relative;
+            margin: 10px 8px 6px;
+            cursor: pointer;
+        }
+        .speed-tick-mark {
+            position: absolute;
+            top: -4px;
+            width: 4px;
+            height: 14px;
+            background: #465369;
+            transform: translateX(-50%);
+            border-radius: 1px;
+        }
+        .speed-thumb {
+            position: absolute;
+            top: -6px;
+            width: 18px;
+            height: 18px;
+            background: var(--rog-red);
+            border: 2px solid #fff;
+            border-radius: 50%;
+            box-shadow: 0 0 10px var(--rog-red-glow);
+            transform: translateX(-50%);
+            transition: left 0.15s ease-out;
+        }
         .speed-ticks-row {
             display: flex;
             justify-content: space-between;
             font-size: 11px;
             color: var(--text-secondary);
-            margin-top: 6px;
             padding: 0 2px;
-        }
-        .speed-step-track {
-            position: relative;
-            width: 100%;
-            height: 4px;
-            background: #252e3e;
-            border-radius: 2px;
-            display: flex;
-            align-items: center;
-            cursor: pointer;
-        }
-        .speed-tick-mark {
-            position: absolute;
-            width: 2px;
-            height: 10px;
-            background: #46556e;
-            transform: translateX(-50%);
-            top: -3px;
-        }
-        .speed-thumb {
-            position: absolute;
-            width: 14px;
-            height: 14px;
-            border-radius: 50%;
-            background: #ffffff;
-            border: 2px solid #334257;
-            transform: translateX(-50%);
-            box-shadow: 0 0 6px rgba(255,255,255,0.4);
-            cursor: pointer;
-            transition: left 0.15s ease;
+            font-weight: 600;
         }
 
-        /* 8 方向三角罗盘矩阵 (Direction Compass) */
+        /* 方向 8 维网格 */
         .direction-grid {
             display: grid;
             grid-template-columns: repeat(5, 1fr);
-            gap: 10px 8px;
-            justify-content: center;
-            align-items: center;
-            background: rgba(0, 0, 0, 0.2);
-            padding: 12px 10px;
-            border-radius: 4px;
-            border: 1px solid rgba(255, 255, 255, 0.04);
+            gap: 6px;
         }
         .dir-btn {
-            background: #151a23;
-            border: 1px solid #2d384b;
-            border-radius: 2px;
-            height: 28px;
+            background: #1a202c;
+            border: 1px solid #2e384b;
+            color: var(--text-secondary);
+            height: 34px;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            cursor: pointer;
-            color: #8c9bb0;
             transition: all 0.15s ease;
         }
-        .dir-btn:hover {
-            border-color: #4b5d7d;
-            color: #ffffff;
-            background: #1c2330;
-        }
-        .dir-btn.active {
-            border-color: var(--rog-red);
-            background: rgba(255, 25, 41, 0.15);
-            color: var(--rog-red);
-            box-shadow: 0 0 10px rgba(255, 25, 41, 0.4);
-        }
         .dir-btn svg { width: 14px; height: 14px; fill: currentColor; }
-
-        /* 隐藏的色彩拾取器 */
-        #hidden-color-picker {
-            position: absolute;
-            opacity: 0;
-            pointer-events: none;
-            width: 0;
-            height: 0;
+        .dir-btn:hover { background: #252e3f; color: #fff; }
+        .dir-btn.active {
+            background: rgba(255, 25, 41, 0.15);
+            border-color: var(--rog-red);
+            color: var(--rog-red);
+            box-shadow: 0 0 10px var(--rog-red-glow);
         }
 
-        /* 前台规则表格 */
+        /* ========================================================
+           6. Tab 2: 逐键独立涂装画板 (Per-Key Studio)
+           ======================================================== */
+        .per-key-panel {
+            display: grid;
+            grid-template-columns: 1fr 340px;
+            gap: 20px;
+            background-color: var(--bg-panel);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg);
+            padding: 24px 26px;
+        }
+        @media (max-width: 960px) {
+            .per-key-panel { grid-template-columns: 1fr; }
+        }
+
+        .studio-controls-box {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .studio-group-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+
+        .quick-select-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .chip-btn {
+            background: #191f2c;
+            border: 1px solid #2d384d;
+            color: var(--text-primary);
+            padding: 6px 12px;
+            font-size: 12px;
+            font-weight: 600;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .chip-btn:hover {
+            border-color: var(--rog-cyan);
+            color: var(--rog-cyan);
+            background: rgba(0, 240, 255, 0.05);
+        }
+
+        /* 官方电竞调色盘 */
+        .palette-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 8px;
+        }
+        .palette-swatch {
+            height: 36px;
+            border-radius: var(--radius-sm);
+            border: 2px solid transparent;
+            cursor: pointer;
+            transition: transform 0.1s ease, border-color 0.1s;
+            position: relative;
+        }
+        .palette-swatch:hover { transform: scale(1.08); }
+        .palette-swatch.active { border-color: #fff; box-shadow: 0 0 10px rgba(255,255,255,0.6); }
+
+        .perkey-actions-row {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .btn-studio {
+            flex: 1;
+            padding: 8px 12px;
+            border-radius: var(--radius-sm);
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s ease;
+        }
+        .btn-studio-apply {
+            background: linear-gradient(135deg, var(--rog-cyan-dark), #007799);
+            color: #fff;
+            box-shadow: 0 0 12px var(--rog-cyan-glow);
+        }
+        .btn-studio-apply:hover { transform: translateY(-1px); }
+        .btn-studio-clear {
+            background: #25161a;
+            border: 1px solid #5a2027;
+            color: #ff7b87;
+        }
+        .btn-studio-clear:hover { background: #381a20; }
+
+        /* ========================================================
+           7. Tab 3: 前台进程自适应规则设置
+           ======================================================== */
         .rules-table {
             width: 100%;
             border-collapse: collapse;
-            font-size: 13px;
+            font-size: 12px;
         }
         .rules-table th {
             text-align: left;
+            padding: 10px 14px;
             color: var(--text-secondary);
-            padding: 10px 12px;
-            border-bottom: 1px solid var(--border-subtle);
+            font-weight: 700;
+            border-bottom: 1px solid var(--border-card);
+            background: #141822;
         }
         .rules-table td {
-            padding: 12px;
-            border-bottom: 1px solid rgba(45, 52, 68, 0.4);
+            padding: 12px 14px;
+            border-bottom: 1px solid var(--border-subtle);
+            color: var(--text-primary);
         }
         .input-text {
-            background-color: #1a202c;
+            background: var(--bg-input);
             border: 1px solid #333e52;
+            color: #fff;
+            padding: 6px 10px;
             border-radius: var(--radius-sm);
-            color: var(--text-primary);
-            padding: 6px 12px;
-            font-size: 13px;
+            font-size: 12px;
             outline: none;
-            font-family: monospace;
-            font-weight: 700;
         }
-        .input-text:focus { border-color: var(--rog-cyan); }
+        .input-text:focus-visible { border-color: var(--rog-cyan); }
 
-        /* 全屏优雅降级游戏遮罩 */
-        #game-mode-overlay {
-            position: fixed;
-            inset: 0;
-            background: rgba(7, 9, 13, 0.94);
-            backdrop-filter: blur(20px);
+        .preset-rules-bar {
             display: flex;
-            flex-direction: column;
             align-items: center;
-            justify-content: center;
-            z-index: 9999;
+            gap: 8px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+
+        /* ========================================================
+           8. 现代化弹窗与 Toast (Native Dialog & Top-Layer Popover)
+           ======================================================== */
+        /* Top Layer Toast (persistent-toast-notifications) */
+        .toast-popover {
+            position: fixed;
+            inset: auto 24px 24px auto;
+            margin: 0;
+            border: 1px solid var(--border-card);
+            background: rgba(18, 23, 33, 0.95);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            color: #fff;
+            border-radius: var(--radius-md);
+            padding: 12px 20px;
+            box-shadow: 0 12px 36px rgba(0, 0, 0, 0.7), 0 0 20px var(--rog-red-glow);
+            translate: 0 20px;
             opacity: 0;
-            pointer-events: none;
-            transition: opacity 0.35s ease;
-        }
-        #game-mode-overlay.visible {
-            opacity: 1;
-            pointer-events: all;
-        }
-        .game-card {
-            background: #11151e;
-            border: 1px solid rgba(255, 25, 41, 0.4);
-            box-shadow: 0 0 50px rgba(255, 25, 41, 0.2);
-            border-radius: 14px;
-            padding: 40px 50px;
-            max-width: 540px;
-            text-align: center;
-        }
-        .game-icon { font-size: 44px; margin-bottom: 16px; display: inline-block; }
-        .game-card h2 { font-size: 20px; color: var(--rog-red); margin-bottom: 10px; font-weight: 800; }
-        .game-card p { font-size: 13px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 20px; }
-        .pulse-status {
-            display: inline-flex;
+            font-size: 13px;
+            font-weight: 600;
+            display: flex;
             align-items: center;
             gap: 10px;
-            padding: 6px 18px;
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 20px;
-            font-size: 12px;
-            color: #fff;
+            z-index: 100;
+            transition: display 0.3s, opacity 0.3s ease, translate 0.3s ease;
+            transition-behavior: allow-discrete;
         }
-        .pulse-ring {
-            width: 8px;
-            height: 8px;
-            background-color: #ffcc00;
-            border-radius: 50%;
-            box-shadow: 0 0 10px #ffcc00;
-            animation: pulse-ring 1.5s infinite;
+        @starting-style {
+            .toast-popover:is(:popover-open, .\:popover-open) {
+                translate: 0 20px;
+                opacity: 0;
+            }
         }
-        @keyframes pulse-ring {
-            0%, 100% { transform: scale(0.9); opacity: 1; }
-            50% { transform: scale(1.4); opacity: 0.4; }
+        .toast-popover:is(:popover-open, .\:popover-open) {
+            translate: 0 0;
+            opacity: 1;
         }
 
-        #toast {
-            position: fixed;
-            bottom: 28px;
-            right: 28px;
-            background: #18202d;
-            border: 1px solid var(--rog-red);
-            box-shadow: 0 4px 20px rgba(255, 25, 41, 0.3);
-            border-radius: var(--radius-sm);
-            padding: 12px 20px;
-            font-size: 13px;
+        /* 全屏游戏模式优雅降级原生 Dialog (Modern HTML5 <dialog>) */
+        .game-mode-dialog {
+            margin: auto;
+            border: 1px solid rgba(0, 240, 255, 0.4);
+            border-radius: var(--radius-lg);
+            background: rgba(13, 17, 24, 0.96);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            padding: 36px 48px;
             color: #fff;
-            transform: translateY(100px);
-            opacity: 0;
-            transition: all 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28);
-            z-index: 1000;
+            max-width: 520px;
+            box-shadow: 0 24px 80px rgba(0, 0, 0, 0.9), 0 0 50px rgba(0, 240, 255, 0.2);
+            text-align: center;
         }
-        #toast.show { transform: translateY(0); opacity: 1; }
+        .game-mode-dialog::backdrop {
+            background: rgba(5, 7, 11, 0.88);
+            backdrop-filter: blur(12px);
+        }
+        .game-dialog-icon { font-size: 48px; margin-bottom: 16px; }
+        .game-dialog-title { font-size: 20px; font-weight: 800; color: #fff; margin-bottom: 12px; }
+        .game-dialog-desc { font-size: 13px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 24px; }
+        .game-dialog-pulse {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            color: var(--rog-cyan);
+            background: rgba(0, 240, 255, 0.08);
+            padding: 6px 16px;
+            border-radius: 20px;
+            border: 1px solid rgba(0, 240, 255, 0.2);
+        }
+
+        /* 通用配置输入原生 Dialog */
+        .prompt-dialog {
+            margin: auto;
+            border: 1px solid var(--border-card);
+            border-radius: var(--radius-md);
+            background: var(--bg-card);
+            padding: 24px 28px;
+            color: #fff;
+            max-width: 400px;
+            width: 90%;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
+        }
+        .prompt-dialog::backdrop { background: rgba(0, 0, 0, 0.7); }
+        .prompt-dialog h3 { font-size: 15px; margin-bottom: 14px; }
+        .prompt-dialog input {
+            width: 100%;
+            box-sizing: border-box;
+            background: var(--bg-input);
+            border: 1px solid #38455c;
+            color: #fff;
+            padding: 8px 12px;
+            border-radius: 4px;
+            margin-bottom: 18px;
+            font-size: 13px;
+        }
+        .prompt-dialog-actions { display: flex; justify-content: flex-end; gap: 10px; }
     </style>
 </head>
 <body>
 
-<header>
-    <div class="header-left">
-        <div class="rog-logo" title="ROG GearLink">
-            <svg viewBox="0 0 24 24"><path d="M21.9 9.4L14 4.8 6.1 9.4l-.1 9.2 7.9 4.6 7.9-4.6.1-9.2zM14 6.8l5.8 3.4v6.8L14 20.4l-5.8-3.4v-6.8L14 6.8z"/></svg>
+    <!-- 顶部控制条 -->
+    <header>
+        <div class="header-left">
+            <div class="rog-brand-badge" title="Republic of Gamers">
+                <svg viewBox="0 0 24 24"><path d="M22.5 4.5l-6 6.5h-5l5-6.5h6zm-9 0l-7 8.5 7 8.5 7-8.5-7-8.5zm-8 4l-4 4.5 4 4.5V8.5z"/></svg>
+            </div>
+            <div class="brand-meta">
+                <h1>FALCHION ACE HFX <span class="tag-hfx">65% 磁轴</span></h1>
+                <p>硬件直连控制与自适应方案配置中心</p>
+            </div>
+
+            <!-- Profile 切换与管理器 -->
+            <div class="profile-toolbar">
+                <span class="profile-label">Profile</span>
+                <select id="profile-selector" class="profile-select" onchange="onProfileSelectChange(this.value)">
+                    <!-- 动态注入 profile 列表 -->
+                </select>
+                <button class="profile-btn" title="基于当前方案新建" onclick="promptNewProfile()">+ 新建</button>
+                <button class="profile-btn" title="克隆当前方案" onclick="promptCloneProfile()">复制</button>
+                <button class="profile-btn" title="设为开机默认方案" onclick="setDefaultProfile()">设为默认</button>
+                <button class="profile-btn" style="color: #ff6b6b;" title="删除当前方案" onclick="deleteCurrentProfile()">删除</button>
+            </div>
         </div>
-        <div class="brand-info">
-            <h1>奥创极速网页版 <span class="tag">ROG FALCHION ACE HFX</span></h1>
-            <p>ASUS GearLink 官方灯效设置中枢 · 127.0.0.1:19898</p>
+
+        <div class="header-right">
+            <div class="status-badge" id="status-badge">
+                <span class="status-dot"></span>
+                <span id="status-text">服务正常运转 (127.0.0.1:19898)</span>
+            </div>
+            <button class="btn-action-save" onclick="saveConfiguration()">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                保存并应用
+            </button>
         </div>
-    </div>
-    <div class="header-right">
-        <div class="status-badge" id="service-status">
-            <span class="status-dot"></span>
-            <span>硬件推流就绪 (25 FPS)</span>
-        </div>
-        <button class="btn-rog" onclick="saveConfiguration()">
-            💾 保存并应用到设备
+    </header>
+
+    <!-- 选项卡切换条 -->
+    <nav class="tab-bar">
+        <button class="tab-btn active" onclick="switchMainTab('lighting')">
+            <span>🎨 全局灯效调控</span>
         </button>
-    </div>
-</header>
+        <button class="tab-btn" onclick="switchMainTab('perkey')">
+            <span>🎯 逐键独立涂装 (Per-Key Studio)</span>
+        </button>
+        <button class="tab-btn" onclick="switchMainTab('rules')">
+            <span>⚡ 前台进程自适应规则</span>
+        </button>
+    </nav>
 
-<main>
-    <!-- ========================================================
-         1. 顶部舞台：符合 official 规范的 68 键全物理虚拟键盘
-         ======================================================== -->
-    <div class="stage-container">
-        <div class="stage-header">
-            <div class="stage-title">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="var(--rog-red)"><path d="M20 5H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm-9 3h2v2h-2V8zm0 3h2v2h-2v-2zM8 8h2v2H8V8zm0 3h2v2H8v-2zm-1 2H5v-2h2v2zm0-3H5V8h2v2zm8 7H9v-2h6v2zm1-4h-2v-2h2v2zm0-3h-2V8h2v2zm3 3h-2v-2h2v2zm0-3h-2V8h2v2z"/></svg>
-                实时灯效预览 · 68 键全物理矩阵同步
-            </div>
-            <div class="stage-fps-badge" id="stage-badge">
-                ● 预览时钟：60 FPS 硬件同步驱动
-            </div>
-        </div>
-
-        <!-- 按照用户明确指定的需求：具备 "device-keyboard-module__keyboard" 类名 -->
-        <div class="device-keyboard-module__keyboard" id="device-keyboard">
-            <div class="device-keyboard-module__keyboard_base-layer" id="keyboard-base-layer">
-                <!-- 5 排键盘布局由 JS 依据 calibrated_keymap.json 自动高精度生成 -->
-            </div>
-        </div>
-    </div>
-
-    <!-- 选项卡导航条 -->
-    <div class="tab-nav">
-        <button class="tab-btn active" onclick="switchMainTab('lighting')">灯光效果设置</button>
-        <button class="tab-btn" onclick="switchMainTab('rules')">前台自适应规则</button>
-    </div>
-
-    <!-- ========================================================
-         2. Tab 1: 完美复刻 ASUS GearLink 参考图片的灯效设置界面
-         ======================================================== -->
-    <div id="tab-lighting-content" class="gearlink-main-panel">
-        <!-- 左栏：基本效果选择网格 (参考图 1/2/3 左半部) -->
-        <div class="effects-left-section">
-            <div class="effects-top-bar">
-                <div class="cyber-switch on" id="master-light-switch" onclick="toggleMasterLight()">
-                    <span class="cyber-switch-text">ON</span>
-                    <div class="cyber-switch-thumb"></div>
+    <!-- 页面核心主体 -->
+    <main>
+        <!-- 虚拟键盘可视化舞台 -->
+        <section class="stage-container">
+            <div class="stage-header">
+                <div class="stage-title">
+                    <span id="stage-mode-label">ROG FALCHION ACE HFX 硬件同步仿真</span>
                 </div>
-                <div class="effects-section-title">基本效果</div>
-            </div>
-
-            <!-- 10 款基础灯效网格 -->
-            <div class="effects-grid" id="effects-grid">
-                <!-- 1. 恒亮 (Static) -->
-                <div class="effect-item" data-id="static" onclick="selectEffect('static')">
-                    <div class="effect-icon-wrapper">
-                        <svg viewBox="0 0 24 24" width="30" height="30" fill="currentColor">
-                            <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2.2"/>
-                            <circle cx="12" cy="12" r="3.5" fill="currentColor"/>
-                        </svg>
-                    </div>
-                    <span class="effect-label">恒亮</span>
-                </div>
-
-                <!-- 2. 呼吸 (Breathing) -->
-                <div class="effect-item" data-id="breathing" onclick="selectEffect('breathing')">
-                    <div class="effect-icon-wrapper">
-                        <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M2 12h5l2.5-6 4 12 3.5-6h5"/>
-                        </svg>
-                    </div>
-                    <span class="effect-label">呼吸</span>
-                </div>
-
-                <!-- 3. 彩色循环 (Color Cycle) -->
-                <div class="effect-item" data-id="color_cycle" onclick="selectEffect('color_cycle')">
-                    <div class="effect-icon-wrapper">
-                        <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
-                            <path d="M20.5 12A8.5 8.5 0 0 0 6 6l-2 2"/>
-                            <path d="M4 3v5h5"/>
-                            <path d="M3.5 12a8.5 8.5 0 0 0 14.5 6l2-2"/>
-                            <path d="M20 21v-5h-5"/>
-                        </svg>
-                    </div>
-                    <span class="effect-label">彩色循环</span>
-                </div>
-
-                <!-- 4. 触发 (Reactive) -->
-                <div class="effect-item" data-id="reactive" onclick="selectEffect('reactive')">
-                    <div class="effect-icon-wrapper">
-                        <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2">
-                            <ellipse cx="12" cy="8" rx="3.5" ry="5.5"/>
-                            <ellipse cx="12" cy="16" rx="3.5" ry="5.5"/>
-                            <ellipse cx="8" cy="12" rx="5.5" ry="3.5"/>
-                            <ellipse cx="16" cy="12" rx="5.5" ry="3.5"/>
-                        </svg>
-                    </div>
-                    <span class="effect-label">触发</span>
-                </div>
-
-                <!-- 5. 彩虹 (Rainbow) -->
-                <div class="effect-item active" data-id="wave" onclick="selectEffect('wave')">
-                    <div class="effect-icon-wrapper">
-                        <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
-                            <path d="M4 19a8 8 0 0 1 16 0"/>
-                            <path d="M7.5 19a4.5 4.5 0 0 1 9 0"/>
-                            <path d="M10.5 19a1.5 1.5 0 0 1 3 0"/>
-                        </svg>
-                    </div>
-                    <span class="effect-label">彩虹</span>
-                </div>
-
-                <!-- 6. 涟漪 (Ripple) -->
-                <div class="effect-item" data-id="ripple" onclick="selectEffect('ripple')">
-                    <div class="effect-icon-wrapper">
-                        <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="12" cy="12" r="2.5" fill="currentColor"/>
-                            <circle cx="12" cy="12" r="6"/>
-                            <circle cx="12" cy="12" r="9.5"/>
-                        </svg>
-                    </div>
-                    <span class="effect-label">涟漪</span>
-                </div>
-
-                <!-- 7. 星空 (Starry Night) -->
-                <div class="effect-item" data-id="starry_night" onclick="selectEffect('starry_night')">
-                    <div class="effect-icon-wrapper">
-                        <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M4 8V4h4"/>
-                            <path d="M20 8V4h-4"/>
-                            <path d="M4 16v4h4"/>
-                            <path d="M20 16v4h-4"/>
-                            <path d="M12 7l1.5 3.5L17 12l-3.5 1.5L12 17l-1.5-3.5L7 12l3.5-1.5z" fill="currentColor" stroke="none"/>
-                        </svg>
-                    </div>
-                    <span class="effect-label">星空</span>
-                </div>
-
-                <!-- 8. 流沙 (Quicksand) -->
-                <div class="effect-item" data-id="quicksand" onclick="selectEffect('quicksand')">
-                    <div class="effect-icon-wrapper">
-                        <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
-                            <path d="M3 8c2.5-2 5.5-2 8 0s5.5 2 8 0"/>
-                            <path d="M3 13c2.5-2 5.5-2 8 0s5.5 2 8 0"/>
-                            <path d="M3 18c2.5-2 5.5-2 8 0s5.5 2 8 0"/>
-                        </svg>
-                    </div>
-                    <span class="effect-label">流沙</span>
-                </div>
-
-                <!-- 9. 电流 (Current) -->
-                <div class="effect-item" data-id="current" onclick="selectEffect('current')">
-                    <div class="effect-icon-wrapper">
-                        <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M2 13h4l2.5-7 3.5 14 3-10 2.5 5 2-2h4"/>
-                        </svg>
-                    </div>
-                    <span class="effect-label">电流</span>
-                </div>
-
-                <!-- 10. 雨滴 (Raindrops) -->
-                <div class="effect-item" data-id="raindrop" onclick="selectEffect('raindrop')">
-                    <div class="effect-icon-wrapper">
-                        <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
-                            <path d="M7 4l-4 8"/>
-                            <path d="M12 4l-4 16"/>
-                            <path d="M17 4l-4 12"/>
-                            <path d="M22 6l-4 10"/>
-                        </svg>
-                    </div>
-                    <span class="effect-label">雨滴</span>
+                <div class="stage-badge-wrapper">
+                    <span class="stage-badge" id="stage-badge">● 60 FPS 硬件同步仿真时钟</span>
                 </div>
             </div>
-        </div>
 
-        <!-- 右栏：ASUS 赛博参数卡片 (参考图 1/2/3 右半部) -->
-        <div class="cyber-settings-card" id="cyber-settings-card">
-            <!-- 四角准星切角 -->
-            <div class="corner-bracket corner-tl"></div>
-            <div class="corner-bracket corner-tr"></div>
-            <div class="corner-bracket corner-bl"></div>
-            <div class="corner-bracket corner-br"></div>
+            <!-- 68 键 ANSI 65% 紧凑布局 -->
+            <div class="device-keyboard-module__keyboard">
+                <div class="device-keyboard-module__keyboard_base-layer" id="keyboard-base-layer">
+                    <!-- 由 buildVirtualKeyboard() 权威坐标渲染 -->
+                </div>
+            </div>
+        </section>
 
-            <!-- 1. 颜色设置区 (Color) -->
-            <div class="param-group" id="param-group-color">
-                <div class="param-title">颜色</div>
-
-                <!-- 样式 / 随机 单选 (参考图 3 星空效果) -->
-                <div class="color-radio-row" id="color-radio-row" style="display: none;">
-                    <label class="cyber-radio">
-                        <input type="radio" name="color-mode" value="style" checked onchange="onColorModeChange('style')">
-                        <span class="radio-dot"></span>
-                        <span>样式</span>
-                    </label>
-                    <label class="cyber-radio">
-                        <input type="radio" name="color-mode" value="random" onchange="onColorModeChange('random')">
-                        <span class="radio-dot"></span>
-                        <span>随机</span>
-                    </label>
+        <!-- Tab 1: 全局灯效控制中枢 -->
+        <section id="tab-lighting-content" class="gearlink-main-panel">
+            <!-- 左栏：效果网格 -->
+            <div class="effects-left-section">
+                <div class="effects-top-bar">
+                    <span class="effects-section-title">基础预设灯效</span>
+                    <div class="cyber-switch-container">
+                        <span>主灯效开关</span>
+                        <div class="cyber-switch on" id="master-light-switch" onclick="toggleMasterLight()">
+                            <span class="cyber-switch-text">ON</span>
+                            <div class="cyber-switch-thumb"></div>
+                        </div>
+                    </div>
                 </div>
 
-                <!-- 预设样式下拉菜单 (默认样式 ▼) -->
-                <div class="cyber-select-wrapper" id="preset-select-wrapper">
+                <div class="effects-grid" id="effects-grid">
+                    <!-- 1. 静态恒亮 -->
+                    <div class="effect-item active" data-id="static" onclick="selectEffect('static')">
+                        <div class="effect-icon-wrapper">
+                            <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="6"/><path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32l1.41 1.41M2 12h2m16 0h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+                        </div>
+                        <span class="effect-label">静态恒亮</span>
+                    </div>
+
+                    <!-- 2. 呼吸 -->
+                    <div class="effect-item" data-id="breathing" onclick="selectEffect('breathing')">
+                        <div class="effect-icon-wrapper">
+                            <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                        </div>
+                        <span class="effect-label">呼吸</span>
+                    </div>
+
+                    <!-- 3. 色彩循环 -->
+                    <div class="effect-item" data-id="color_cycle" onclick="selectEffect('color_cycle')">
+                        <div class="effect-icon-wrapper">
+                            <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+                        </div>
+                        <span class="effect-label">色彩循环</span>
+                    </div>
+
+                    <!-- 4. 彩虹波浪 -->
+                    <div class="effect-item" data-id="wave" onclick="selectEffect('wave')">
+                        <div class="effect-icon-wrapper">
+                            <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12c4-4 8 4 12 0s8 4 8 0M2 17c4-4 8 4 12 0s8 4 8 0"/></svg>
+                        </div>
+                        <span class="effect-label">彩虹波浪</span>
+                    </div>
+
+                    <!-- 5. 触发响应 -->
+                    <div class="effect-item" data-id="reactive" onclick="selectEffect('reactive')">
+                        <div class="effect-icon-wrapper">
+                            <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                        </div>
+                        <span class="effect-label">触发响应</span>
+                    </div>
+
+                    <!-- 6. 水波涟漪 -->
+                    <div class="effect-item" data-id="ripple" onclick="selectEffect('ripple')">
+                        <div class="effect-icon-wrapper">
+                            <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="10"/></svg>
+                        </div>
+                        <span class="effect-label">水波涟漪</span>
+                    </div>
+
+                    <!-- 7. 星空 -->
+                    <div class="effect-item" data-id="starry_night" onclick="selectEffect('starry_night')">
+                        <div class="effect-icon-wrapper">
+                            <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.4 7.4H22l-6 4.6 2.3 7-6.3-4.6L5.7 21l2.3-7-6-4.6h7.6z"/></svg>
+                        </div>
+                        <span class="effect-label">星空</span>
+                    </div>
+
+                    <!-- 8. 流沙 -->
+                    <div class="effect-item" data-id="quicksand" onclick="selectEffect('quicksand')">
+                        <div class="effect-icon-wrapper">
+                            <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 22h14M5 2h14m-2 20a7 7 0 0 0-5-6.7V8.7A7 7 0 0 0 17 2M7 22a7 7 0 0 1 5-6.7V8.7A7 7 0 0 1 7 2"/></svg>
+                        </div>
+                        <span class="effect-label">流沙</span>
+                    </div>
+
+                    <!-- 9. 电流 -->
+                    <div class="effect-item" data-id="current" onclick="selectEffect('current')">
+                        <div class="effect-icon-wrapper">
+                            <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 13h4l2.5-7 3.5 14 3-10 2.5 5 2-2h4"/></svg>
+                        </div>
+                        <span class="effect-label">电流</span>
+                    </div>
+
+                    <!-- 10. 雨滴 -->
+                    <div class="effect-item" data-id="raindrop" onclick="selectEffect('raindrop')">
+                        <div class="effect-icon-wrapper">
+                            <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 4l-4 8M12 4l-4 16M17 4l-4 12M22 6l-4 10"/></svg>
+                        </div>
+                        <span class="effect-label">雨滴</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右栏：赛博机能参数调控盒 -->
+            <div class="cyber-settings-card" id="cyber-settings-card">
+                <div class="corner-bracket corner-tl"></div>
+                <div class="corner-bracket corner-tr"></div>
+                <div class="corner-bracket corner-bl"></div>
+                <div class="corner-bracket corner-br"></div>
+
+                <!-- 颜色调控区 -->
+                <div class="param-group" id="param-group-color">
+                    <div class="param-title">色彩与色系</div>
+                    
+                    <!-- 星空随机开关 -->
+                    <div class="param-group" id="starry-mode-box" style="display: none;">
+                        <label style="display: flex; align-items: center; gap: 8px; font-size: 12px; cursor: pointer;">
+                            <input type="checkbox" id="starry-random-checkbox" onchange="onStarryRandomChange(this.checked)">
+                            <span>全光谱彩色繁星随机闪烁</span>
+                        </label>
+                    </div>
+
+                    <!-- 预设样式下拉菜单 -->
                     <select class="cyber-select" id="preset-theme-select" onchange="onPresetThemeChange(this.value)">
-                        <option value="default">默认样式</option>
+                        <option value="default">ROG 专属红黑</option>
                         <option value="rainbow">彩虹全谱</option>
-                        <option value="cyberpunk">赛博朋克</option>
+                        <option value="cyberpunk">赛博朋克霓虹</option>
                         <option value="aurora">极光之境</option>
                         <option value="lava">烈焰熔岩</option>
                         <option value="frost">冷艳冰霜</option>
-                        <option value="single_red">ROG 专属红</option>
                     </select>
-                    <span class="cyber-select-arrow">▼</span>
-                </div>
 
-                <!-- 多阶渐变条与加减按键 (参考图 1/3 核心特性) -->
-                <div class="gradient-editor-row" id="gradient-editor-row">
-                    <button class="grad-btn" title="删除当前选中的色标" onclick="removeSelectedStop()">−</button>
-                    <div class="gradient-track-container" id="gradient-track-container" onclick="onGradientTrackClick(event)">
-                        <div class="gradient-bar" id="gradient-bar"></div>
-                        <!-- 动态生成色标手柄 -->
-                    </div>
-                    <button class="grad-btn" title="增加新色标" onclick="addGradientStop()">+</button>
-                </div>
-            </div>
-
-            <!-- 2. 模拟灯效 (Analog Effect Toggle, 参考图 1) -->
-            <div class="analog-box" id="param-group-analog">
-                <div class="analog-header">
-                    <span style="font-size: 13px; font-weight: 700; color: #fff;">模拟灯效</span>
-                    <div class="cyber-switch" id="analog-switch" onclick="toggleAnalogSwitch()">
-                        <span class="cyber-switch-text">OFF</span>
-                        <div class="cyber-switch-thumb"></div>
+                    <!-- 多阶色标渐变条 -->
+                    <div class="gradient-editor-row" id="gradient-editor-row">
+                        <button class="grad-btn" title="删除当前选中的色标" onclick="removeSelectedStop()">−</button>
+                        <div class="gradient-track-container" id="gradient-track-container" onclick="onGradientTrackClick(event)">
+                            <div class="gradient-bar" id="gradient-bar"></div>
+                        </div>
+                        <button class="grad-btn" title="增加新色标" onclick="addGradientStop()">+</button>
                     </div>
                 </div>
-                <div class="analog-desc">
-                    开启此设置时，按下的按键及周围按键将依按压深浅显示不同亮度及范围的灯效。
+
+                <!-- 模拟灯效开关 (磁轴深浅触发展开) -->
+                <div class="analog-box" id="param-group-analog">
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <span style="font-size: 13px; font-weight: 700; color: #fff;">模拟灯效 (Analog)</span>
+                        <div class="cyber-switch" id="analog-switch" onclick="toggleAnalogSwitch()">
+                            <span class="cyber-switch-text">OFF</span>
+                            <div class="cyber-switch-thumb"></div>
+                        </div>
+                    </div>
+                    <div class="analog-desc">
+                        开启时，按压按键将依实体磁轴行程深浅呈现白炽增亮与渐进式余晖衰减。
+                    </div>
+                </div>
+
+                <!-- 亮度滑轨 -->
+                <div class="param-group" id="param-group-brightness">
+                    <div class="param-title">
+                        <span>LED 亮度</span>
+                        <span id="brightness-val-text" style="color: var(--rog-cyan); font-weight: 700;">100%</span>
+                    </div>
+                    <div class="cyber-slider-track" id="brightness-track" onmousedown="startDragBrightness(event)">
+                        <div class="cyber-slider-fill" id="brightness-fill" style="width: 100%;"></div>
+                        <div class="cyber-slider-thumb" id="brightness-thumb" style="left: 100%;"></div>
+                    </div>
+                </div>
+
+                <!-- 速度 3 档 -->
+                <div class="param-group" id="param-group-speed">
+                    <div class="param-title">动态速率</div>
+                    <div class="speed-step-track" id="speed-track" onmousedown="onSpeedTrackClick(event)">
+                        <div class="speed-tick-mark" style="left: 0%;"></div>
+                        <div class="speed-tick-mark" style="left: 50%;"></div>
+                        <div class="speed-tick-mark" style="left: 100%;"></div>
+                        <div class="speed-thumb" id="speed-thumb" style="left: 100%;"></div>
+                    </div>
+                    <div class="speed-ticks-row">
+                        <span>慢 (5.5s)</span>
+                        <span>正常 (3.2s)</span>
+                        <span>快 (1.6s)</span>
+                    </div>
+                </div>
+
+                <!-- 8 方向罗盘 -->
+                <div class="param-group" id="param-group-direction">
+                    <div class="param-title">波浪行进方向</div>
+                    <div class="direction-grid">
+                        <button class="dir-btn" data-dir="up" title="向上" onclick="setDirection('up')"><svg viewBox="0 0 24 24"><path d="M12 4l-8 8h16z"/></svg></button>
+                        <button class="dir-btn" data-dir="down" title="向下" onclick="setDirection('down')"><svg viewBox="0 0 24 24"><path d="M12 20l-8-8h16z"/></svg></button>
+                        <button class="dir-btn" data-dir="left" title="向左" onclick="setDirection('left')"><svg viewBox="0 0 24 24"><path d="M4 12l8-8v16z"/></svg></button>
+                        <button class="dir-btn" data-dir="right" title="向右" onclick="setDirection('right')"><svg viewBox="0 0 24 24"><path d="M20 12l-8-8v16z"/></svg></button>
+                        <button class="dir-btn" data-dir="diag_ur" title="右上" onclick="setDirection('diag_ur')"><svg viewBox="0 0 24 24"><path d="M6 18L18 6v12z"/></svg></button>
+                        
+                        <button class="dir-btn active" data-dir="diag_dl" title="左下" onclick="setDirection('diag_dl')"><svg viewBox="0 0 24 24"><path d="M6 6v12h12z"/></svg></button>
+                        <button class="dir-btn" data-dir="diag_ul" title="左上" onclick="setDirection('diag_ul')"><svg viewBox="0 0 24 24"><path d="M18 18L6 6h12z"/></svg></button>
+                        <button class="dir-btn" data-dir="diag_dr" title="右下" onclick="setDirection('diag_dr')"><svg viewBox="0 0 24 24"><path d="M6 6l12 12H6z"/></svg></button>
+                        <button class="dir-btn" data-dir="spread" title="中心往复扩散" onclick="setDirection('spread')"><svg viewBox="0 0 24 24"><path d="M4 12l5-5v10zm16 0l-5-5v10z"/></svg></button>
+                    </div>
+                </div>
+
+                <!-- 粗细滑块 -->
+                <div class="param-group" id="param-group-thickness">
+                    <div class="param-title">
+                        <span>波束粗细</span>
+                        <span id="thickness-val-text" style="color: var(--text-secondary);">1.0x</span>
+                    </div>
+                    <div class="cyber-slider-track" id="thickness-track" onmousedown="startDragThickness(event)">
+                        <div class="cyber-slider-fill" id="thickness-fill" style="width: 50%; background: #3c495e;"></div>
+                        <div class="cyber-slider-thumb" id="thickness-thumb" style="left: 50%;"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Tab 2: 逐键独立涂装画板 (Per-Key Studio) -->
+        <section id="tab-perkey-content" class="per-key-panel" style="display: none;">
+            <div class="effects-left-section">
+                <div class="effects-top-bar">
+                    <span class="effects-section-title">逐键定制区域 (点击上方按键即可选中)</span>
+                    <span style="font-size: 12px; color: var(--text-secondary);" id="selected-keys-counter">当前选中: 0 个按键</span>
+                </div>
+                
+                <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--border-card); border-radius: var(--radius-sm); padding: 16px; margin-bottom: 20px;">
+                    <div class="studio-group-title">⚡ 快速分组选择</div>
+                    <div class="quick-select-chips">
+                        <button class="chip-btn" onclick="selectKeyGroup('WASD')">WASD 竞技键</button>
+                        <button class="chip-btn" onclick="selectKeyGroup('ARROWS')">方向键 (▲▼◀▶)</button>
+                        <button class="chip-btn" onclick="selectKeyGroup('NUMBERS')">顶部数字行 (1-0)</button>
+                        <button class="chip-btn" onclick="selectKeyGroup('MODIFIERS')">功能修饰键 (Ctrl/Alt/Shift)</button>
+                        <button class="chip-btn" onclick="selectKeyGroup('ALL')">全选 68 键</button>
+                        <button class="chip-btn" style="border-color: #552028; color: #ff8894;" onclick="clearKeySelection()">清空选择</button>
+                    </div>
+                </div>
+
+                <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--border-card); border-radius: var(--radius-sm); padding: 16px;">
+                    <div class="studio-group-title">🎨 电竞战术调色盘 (点击直接涂刷选中键)</div>
+                    <div class="palette-grid">
+                        <div class="palette-swatch" style="background: #FF1929;" title="ROG 竞技红" onclick="applyColorToSelected('#FF1929')"></div>
+                        <div class="palette-swatch" style="background: #00F0FF;" title="霓虹青蓝" onclick="applyColorToSelected('#00F0FF')"></div>
+                        <div class="palette-swatch" style="background: #9D00FF;" title="暗夜电紫" onclick="applyColorToSelected('#9D00FF')"></div>
+                        <div class="palette-swatch" style="background: #39FF14;" title="生化荧绿" onclick="applyColorToSelected('#39FF14')"></div>
+                        <div class="palette-swatch" style="background: #FFB800;" title="耀金狂热" onclick="applyColorToSelected('#FFB800')"></div>
+                        <div class="palette-swatch" style="background: #00B4D8;" title="极地深冰" onclick="applyColorToSelected('#00B4D8')"></div>
+                        <div class="palette-swatch" style="background: #FF5500;" title="核融烈橙" onclick="applyColorToSelected('#FF5500')"></div>
+                        <div class="palette-swatch" style="background: #FFFFFF;" title="极昼纯白" onclick="applyColorToSelected('#FFFFFF')"></div>
+                        <div class="palette-swatch" style="background: #00E676;" title="全速苍翠" onclick="applyColorToSelected('#00E676')"></div>
+                        <div class="palette-swatch" style="background: #FF007F;" title="赛博粉红" onclick="applyColorToSelected('#FF007F')"></div>
+                    </div>
                 </div>
             </div>
 
-            <!-- 3. LED 亮度 (LED Brightness, 发光青色条) -->
-            <div class="param-group" id="param-group-brightness">
-                <div class="param-title">
-                    <span>LED 亮度</span>
-                    <span id="brightness-val-text" style="font-size: 11px; color: var(--rog-cyan); font-weight: 700;">100%</span>
+            <!-- 右侧调色盘拾色器与操作 -->
+            <div class="cyber-settings-card">
+                <div class="corner-bracket corner-tl"></div>
+                <div class="corner-bracket corner-tr"></div>
+                <div class="corner-bracket corner-bl"></div>
+                <div class="corner-bracket corner-br"></div>
+
+                <div class="param-title">自定义色彩拾取</div>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <input type="color" id="custom-studio-color" value="#00F0FF" style="width: 44px; height: 44px; border: none; border-radius: 4px; cursor: pointer; background: none;">
+                    <input type="text" id="custom-studio-hex" value="#00F0FF" class="input-text" style="flex: 1; font-family: monospace; font-weight: 700;" onchange="syncHexToColorPicker(this.value)">
                 </div>
-                <div class="cyber-slider-track" id="brightness-track" onmousedown="startDragBrightness(event)">
-                    <div class="cyber-slider-fill" id="brightness-fill" style="width: 100%;"></div>
-                    <div class="cyber-slider-thumb" id="brightness-thumb" style="left: 100%;"></div>
+
+                <div class="perkey-actions-row">
+                    <button class="btn-studio btn-studio-apply" onclick="applyCustomHexToSelected()">涂刷到所选按键</button>
+                    <button class="btn-studio btn-studio-clear" onclick="removeOverridesFromSelected()">清除按键覆写</button>
+                </div>
+
+                <div class="param-title" style="margin-top: 14px;">全局背景基底底色 (BG)</div>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <input type="color" id="custom-bg-color" value="#000000" style="width: 36px; height: 36px; border: none; border-radius: 4px; cursor: pointer; background: none;" onchange="onBgColorChange(this.value)">
+                    <span style="font-size: 12px; color: var(--text-secondary);">适用于无独立涂装时的未激活暗色背景</span>
                 </div>
             </div>
+        </section>
 
-            <!-- 4. 速度 (Speed, 慢 / 正常 / 快 3 档滑块, 参考图 2) -->
-            <div class="param-group" id="param-group-speed">
-                <div class="param-title">速度</div>
-                <div class="speed-step-track" id="speed-track" onmousedown="onSpeedTrackClick(event)">
-                    <div class="speed-tick-mark" style="left: 0%;"></div>
-                    <div class="speed-tick-mark" style="left: 50%;"></div>
-                    <div class="speed-tick-mark" style="left: 100%;"></div>
-                    <div class="speed-thumb" id="speed-thumb" style="left: 100%;"></div>
+        <!-- Tab 3: 前台规则设置 -->
+        <section id="tab-rules-content" class="gearlink-main-panel" style="display: none; grid-template-columns: 1fr;">
+            <div class="effects-left-section" style="padding: 10px;">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
+                    <h2 style="font-size: 16px; font-weight: 700; color: #fff;">前台程序联动与游戏抑制规则</h2>
+                    <button class="btn-action-save" style="padding: 5px 14px; font-size: 11px;" onclick="addRule()">+ 添加新规则</button>
                 </div>
-                <div class="speed-ticks-row">
-                    <span>慢</span>
-                    <span>正常</span>
-                    <span>快</span>
+
+                <div class="preset-rules-bar">
+                    <span style="font-size: 12px; color: var(--text-secondary);">快速添加常用规则:</span>
+                    <button class="chip-btn" onclick="quickAddPresetRule('cs2.exe', 'cs2_gamer', true)">+ CS2 (游戏抑制)</button>
+                    <button class="chip-btn" onclick="quickAddPresetRule('code.exe', 'coding', false)">+ VS Code</button>
+                    <button class="chip-btn" onclick="quickAddPresetRule('chrome.exe', 'cyberpunk', false)">+ Chrome</button>
+                    <button class="chip-btn" onclick="quickAddPresetRule('notepad.exe', 'office', false)">+ 记事本</button>
                 </div>
+
+                <table class="rules-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 220px;">程序文件名 (EXE)</th>
+                            <th style="width: 200px;">关联目标 Profile</th>
+                            <th>进入游戏模式 (自动暂停 WebUI)</th>
+                            <th style="width: 80px;">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="rules-tbody"></tbody>
+                </table>
             </div>
+        </section>
+    </main>
 
-            <!-- 5. 方向 (Direction 8 方向矩阵, 参考图 2) -->
-            <div class="param-group" id="param-group-direction">
-                <div class="param-title">方向</div>
-                <div class="direction-grid">
-                    <!-- 第一行: 上, 下, 左, 右, 右上 -->
-                    <button class="dir-btn" data-dir="up" title="向上" onclick="setDirection('up')">
-                        <svg viewBox="0 0 24 24"><path d="M12 4l-8 8h16z"/></svg>
-                    </button>
-                    <button class="dir-btn" data-dir="down" title="向下" onclick="setDirection('down')">
-                        <svg viewBox="0 0 24 24"><path d="M12 20l-8-8h16z"/></svg>
-                    </button>
-                    <button class="dir-btn" data-dir="left" title="向左" onclick="setDirection('left')">
-                        <svg viewBox="0 0 24 24"><path d="M4 12l8-8v16z"/></svg>
-                    </button>
-                    <button class="dir-btn" data-dir="right" title="向右" onclick="setDirection('right')">
-                        <svg viewBox="0 0 24 24"><path d="M20 12l-8-8v16z"/></svg>
-                    </button>
-                    <button class="dir-btn" data-dir="diag_ur" title="右上" onclick="setDirection('diag_ur')">
-                        <svg viewBox="0 0 24 24"><path d="M6 18L18 6v12z"/></svg>
-                    </button>
-
-                    <!-- 第二行: 左下(默认激活态), 左上, 右下, 往复扩散 -->
-                    <button class="dir-btn active" data-dir="diag_dl" title="左下" onclick="setDirection('diag_dl')">
-                        <svg viewBox="0 0 24 24"><path d="M6 6v12h12z"/></svg>
-                    </button>
-                    <button class="dir-btn" data-dir="diag_ul" title="左上" onclick="setDirection('diag_ul')">
-                        <svg viewBox="0 0 24 24"><path d="M18 18L6 6h12z"/></svg>
-                    </button>
-                    <button class="dir-btn" data-dir="diag_dr" title="右下" onclick="setDirection('diag_dr')">
-                        <svg viewBox="0 0 24 24"><path d="M6 6l12 12H6z"/></svg>
-                    </button>
-                    <button class="dir-btn" data-dir="spread" title="往复/扩散" onclick="setDirection('spread')">
-                        <svg viewBox="0 0 24 24"><path d="M4 12l5-5v10zm16 0l-5-5v10z"/></svg>
-                    </button>
-                </div>
-            </div>
-
-            <!-- 6. 粗细 (Thickness, 参考图 2) -->
-            <div class="param-group" id="param-group-thickness">
-                <div class="param-title">
-                    <span>粗细</span>
-                    <span id="thickness-val-text" style="font-size: 11px; color: var(--text-secondary);">1.0x</span>
-                </div>
-                <div class="cyber-slider-track" id="thickness-track" onmousedown="startDragThickness(event)">
-                    <div class="cyber-slider-fill" id="thickness-fill" style="width: 50%; background: #3c495e;"></div>
-                    <div class="cyber-slider-thumb" id="thickness-thumb" style="left: 50%;"></div>
-                </div>
-            </div>
-        </div>
+    <!-- Top-Layer Popover Toast (persistent-toast-notifications) -->
+    <div id="toast-popover" popover="manual" class="toast-popover" role="status" aria-live="polite">
+        <span id="toast-icon">✅</span>
+        <span id="toast-text">配置已成功保存并实时热重载！</span>
     </div>
 
-    <!-- ========================================================
-         3. Tab 2: 前台进程自适应规则设置
-         ======================================================== -->
-    <div id="tab-rules-content" class="gearlink-main-panel" style="display: none; grid-template-columns: 1fr;">
-        <div class="effects-left-section" style="padding: 10px;">
-            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px;">
-                <h2 style="font-size: 16px; font-weight: 700; color: #fff;">前台进程专属灯效绑定规则</h2>
-                <button class="btn-rog" onclick="addRule()">+ 添加新规则</button>
-            </div>
-            <table class="rules-table">
-                <thead>
-                    <tr>
-                        <th>程序文件名 (EXE)</th>
-                        <th>关联灯效方案</th>
-                        <th>进入游戏模式 (关闭WebUI)</th>
-                        <th>操作</th>
-                    </tr>
-                </thead>
-                <tbody id="rules-tbody"></tbody>
-            </table>
+    <!-- 全屏游戏模式优雅降级原生 Dialog (Modern HTML5 <dialog>) -->
+    <dialog id="game-mode-dialog" class="game-mode-dialog" aria-labelledby="game-dialog-title">
+        <div class="game-dialog-icon">🎮</div>
+        <div class="game-dialog-title" id="game-dialog-title">已进入竞技游戏 / 性能抑制模式</div>
+        <div class="game-dialog-desc">
+            检测到前台正在运行全屏竞技游戏（如 CS2）或标记了抑制标记的高性能程序。<br>
+            为保障键盘硬件极速响应、极低延迟与系统零占用，网页配置服务已被 daemon 自动暂停。
         </div>
-    </div>
-</main>
-
-<!-- 全屏游戏模式优雅降级遮罩 -->
-<div id="game-mode-overlay">
-    <div class="game-card">
-        <div class="game-icon">🎮</div>
-        <h2>已进入游戏 / 性能抑制模式</h2>
-        <p>检测到前台正在运行全屏游戏或标记了抑制标记的高性能程序。<br>为保障键盘硬件极速响应与系统零占用，配置服务已由守护进程自动暂停。</p>
-        <div class="pulse-status">
-            <span class="pulse-ring"></span>
+        <div class="game-dialog-pulse">
+            <span class="status-dot"></span>
             <span>切回桌面后界面将自动恢复...</span>
         </div>
-    </div>
-</div>
+    </dialog>
 
-<div id="toast"></div>
-<input type="color" id="hidden-color-picker" onchange="onColorPickerSelected(this.value)">
+    <!-- 通用弹窗 Dialog (新建/复制方案) -->
+    <dialog id="prompt-dialog" class="prompt-dialog">
+        <h3 id="prompt-dialog-title">新建方案</h3>
+        <input type="text" id="prompt-dialog-input" placeholder="输入方案英文标识名称 (如: my_game)">
+        <div class="prompt-dialog-actions">
+            <button class="chip-btn" onclick="closePromptDialog(false)">取消</button>
+            <button class="btn-action-save" style="padding: 5px 16px;" onclick="closePromptDialog(true)">确定</button>
+        </div>
+    </dialog>
 
-<script>
-// ========================================================
-// 4. 68 键完整物理布局矩阵 (权威 calibrated_keymap.json 标准)
-// ========================================================
-const KEYBOARD_LAYOUT = [
-    // Row 1 (15 keys, 16u)
-    [
-        { name: 'ESC', label: 'Esc', width: 1 },
-        { name: '1', label: '1', sub: '!', width: 1 },
-        { name: '2', label: '2', sub: '@', width: 1 },
-        { name: '3', label: '3', sub: '#', width: 1 },
-        { name: '4', label: '4', sub: '$', width: 1 },
-        { name: '5', label: '5', sub: '%', width: 1 },
-        { name: '6', label: '6', sub: '^', width: 1 },
-        { name: '7', label: '7', sub: '&', width: 1 },
-        { name: '8', label: '8', sub: '*', width: 1 },
-        { name: '9', label: '9', sub: '(', width: 1 },
-        { name: '0', label: '0', sub: ')', width: 1 },
-        { name: '-', label: '-', sub: '_', width: 1 },
-        { name: '=', label: '=', sub: '+', width: 1 },
-        { name: 'BACKSPACE', label: 'Backspace', width: 2 },
-        { name: 'INS', label: 'Ins', width: 1 }
-    ],
-    // Row 2 (15 keys, 16u)
-    [
-        { name: 'TAB', label: 'Tab', width: 1.5 },
-        { name: 'Q', label: 'Q', width: 1 },
-        { name: 'W', label: 'W', width: 1 },
-        { name: 'E', label: 'E', width: 1 },
-        { name: 'R', label: 'R', width: 1 },
-        { name: 'T', label: 'T', width: 1 },
-        { name: 'Y', label: 'Y', width: 1 },
-        { name: 'U', label: 'U', width: 1 },
-        { name: 'I', label: 'I', width: 1 },
-        { name: 'O', label: 'O', width: 1 },
-        { name: 'P', label: 'P', width: 1 },
-        { name: '[', label: '[', sub: '{', width: 1 },
-        { name: ']', label: ']', sub: '}', width: 1 },
-        { name: '\\', label: '\\', sub: '|', width: 1.5 },
-        { name: 'DEL', label: 'Del', width: 1 }
-    ],
-    // Row 3 (14 keys, 16u)
-    [
-        { name: 'CAPS', label: 'Caps', width: 1.75 },
-        { name: 'A', label: 'A', width: 1 },
-        { name: 'S', label: 'S', width: 1 },
-        { name: 'D', label: 'D', width: 1 },
-        { name: 'F', label: 'F', width: 1 },
-        { name: 'G', label: 'G', width: 1 },
-        { name: 'H', label: 'H', width: 1 },
-        { name: 'J', label: 'J', width: 1 },
-        { name: 'K', label: 'K', width: 1 },
-        { name: 'L', label: 'L', width: 1 },
-        { name: ';', label: ';', sub: ':', width: 1 },
-        { name: '\'', label: '\'', sub: '"', width: 1 },
-        { name: 'ENTER', label: 'Enter', width: 2.25 },
-        { name: 'PGUP', label: 'PgUp', width: 1 }
-    ],
-    // Row 4 (14 keys, 16u)
-    [
-        { name: 'L_SHIFT', label: 'Shift', width: 2.25 },
-        { name: 'Z', label: 'Z', width: 1 },
-        { name: 'X', label: 'X', width: 1 },
-        { name: 'C', label: 'C', width: 1 },
-        { name: 'V', label: 'V', width: 1 },
-        { name: 'B', label: 'B', width: 1 },
-        { name: 'N', label: 'N', width: 1 },
-        { name: 'M', label: 'M', width: 1 },
-        { name: ',', label: ',', sub: '<', width: 1 },
-        { name: '.', label: '.', sub: '>', width: 1 },
-        { name: '/', label: '/', sub: '?', width: 1 },
-        { name: 'R_SHIFT', label: 'Shift', width: 1.75 },
-        { name: 'UP', label: '▲', width: 1 },
-        { name: 'PGDN', label: 'PgDn', width: 1 }
-    ],
-    // Row 5 (10 keys, 16u)
-    [
-        { name: 'L_CTRL', label: 'Ctrl', width: 1.25 },
-        { name: 'L_WIN', label: 'Win', width: 1.25 },
-        { name: 'L_ALT', label: 'Alt', width: 1.25 },
-        { name: 'SPACE', label: 'Space', width: 6.25 },
-        { name: 'R_ALT', label: 'Alt', width: 1 },
-        { name: 'FN', label: 'Fn', width: 1 },
-        { name: 'COPILOT', label: 'Co', width: 1 },
-        { name: 'LEFT', label: '◀', width: 1 },
-        { name: 'DOWN', label: '▼', width: 1 },
-        { name: 'RIGHT', label: '▶', width: 1 }
-    ]
-];
+    <input type="color" id="hidden-color-picker" style="display:none;" onchange="onColorPickerSelected(this.value)">
 
-// ========================================================
-// 5. 前端全局状态模型与预设库
-// ========================================================
-const GRADIENT_PRESETS = {
-    default: [
-        { id: 1, pos: 0.15, color: '#FF1929' },
-        { id: 2, pos: 0.65, color: '#148AC4' },
-        { id: 3, pos: 0.85, color: '#E040FB' }
-    ],
-    rainbow: [
-        { id: 1, pos: 0.00, color: '#E040FB' },
-        { id: 2, pos: 0.16, color: '#0070F3' },
-        { id: 3, pos: 0.33, color: '#00F0FF' },
-        { id: 4, pos: 0.50, color: '#00E676' },
-        { id: 5, pos: 0.66, color: '#FFCC00' },
-        { id: 6, pos: 0.83, color: '#FF6600' },
-        { id: 7, pos: 1.00, color: '#FF1929' }
-    ],
-    cyberpunk: [
-        { id: 1, pos: 0.00, color: '#00F0FF' },
-        { id: 2, pos: 0.50, color: '#7928CA' },
-        { id: 3, pos: 1.00, color: '#FF0080' }
-    ],
-    aurora: [
-        { id: 1, pos: 0.00, color: '#00E676' },
-        { id: 2, pos: 0.50, color: '#00F0FF' },
-        { id: 3, pos: 1.00, color: '#0070F3' }
-    ],
-    lava: [
-        { id: 1, pos: 0.00, color: '#FFCC00' },
-        { id: 2, pos: 0.50, color: '#FF6600' },
-        { id: 3, pos: 1.00, color: '#FF1929' }
-    ],
-    frost: [
-        { id: 1, pos: 0.00, color: '#FFFFFF' },
-        { id: 2, pos: 0.50, color: '#80D8FF' },
-        { id: 3, pos: 1.00, color: '#0091EA' }
-    ],
-    single_red: [
-        { id: 1, pos: 0.00, color: '#FF1929' },
-        { id: 2, pos: 1.00, color: '#990014' }
-    ]
-};
+    <script>
+    // ========================================================
+    // 9. 权威 68 键 ANSI 65% 物理矩阵布局
+    // ========================================================
+    const KEYBOARD_LAYOUT = [
+        // Row 1 (15 keys, 16u)
+        [
+            { name: 'ESC', label: 'Esc', width: 1 },
+            { name: '1', label: '1', sub: '!', width: 1 },
+            { name: '2', label: '2', sub: '@', width: 1 },
+            { name: '3', label: '3', sub: '#', width: 1 },
+            { name: '4', label: '4', sub: '$', width: 1 },
+            { name: '5', label: '5', sub: '%', width: 1 },
+            { name: '6', label: '6', sub: '^', width: 1 },
+            { name: '7', label: '7', sub: '&', width: 1 },
+            { name: '8', label: '8', sub: '*', width: 1 },
+            { name: '9', label: '9', sub: '(', width: 1 },
+            { name: '0', label: '0', sub: ')', width: 1 },
+            { name: '-', label: '-', sub: '_', width: 1 },
+            { name: '=', label: '=', sub: '+', width: 1 },
+            { name: 'BACKSPACE', label: 'Backspace', width: 2 },
+            { name: 'INS', label: 'Ins', width: 1 }
+        ],
+        // Row 2 (15 keys, 16u)
+        [
+            { name: 'TAB', label: 'Tab', width: 1.5 },
+            { name: 'Q', label: 'Q', width: 1 },
+            { name: 'W', label: 'W', width: 1 },
+            { name: 'E', label: 'E', width: 1 },
+            { name: 'R', label: 'R', width: 1 },
+            { name: 'T', label: 'T', width: 1 },
+            { name: 'Y', label: 'Y', width: 1 },
+            { name: 'U', label: 'U', width: 1 },
+            { name: 'I', label: 'I', width: 1 },
+            { name: 'O', label: 'O', width: 1 },
+            { name: 'P', label: 'P', width: 1 },
+            { name: '[', label: '[', sub: '{', width: 1 },
+            { name: ']', label: ']', sub: '}', width: 1 },
+            { name: '\\', label: '\\', sub: '|', width: 1.5 },
+            { name: 'DEL', label: 'Del', width: 1 }
+        ],
+        // Row 3 (14 keys, 16u)
+        [
+            { name: 'CAPS', label: 'Caps', width: 1.75 },
+            { name: 'A', label: 'A', width: 1 },
+            { name: 'S', label: 'S', width: 1 },
+            { name: 'D', label: 'D', width: 1 },
+            { name: 'F', label: 'F', width: 1 },
+            { name: 'G', label: 'G', width: 1 },
+            { name: 'H', label: 'H', width: 1 },
+            { name: 'J', label: 'J', width: 1 },
+            { name: 'K', label: 'K', width: 1 },
+            { name: 'L', label: 'L', width: 1 },
+            { name: ';', label: ';', sub: ':', width: 1 },
+            { name: '\'', label: '\'', sub: '"', width: 1 },
+            { name: 'ENTER', label: 'Enter', width: 2.25 },
+            { name: 'PGUP', label: 'PgUp', width: 1 }
+        ],
+        // Row 4 (14 keys, 16u)
+        [
+            { name: 'L_SHIFT', label: 'Shift', width: 2.25 },
+            { name: 'Z', label: 'Z', width: 1 },
+            { name: 'X', label: 'X', width: 1 },
+            { name: 'C', label: 'C', width: 1 },
+            { name: 'V', label: 'V', width: 1 },
+            { name: 'B', label: 'B', width: 1 },
+            { name: 'N', label: 'N', width: 1 },
+            { name: 'M', label: 'M', width: 1 },
+            { name: ',', label: ',', sub: '<', width: 1 },
+            { name: '.', label: '.', sub: '>', width: 1 },
+            { name: '/', label: '/', sub: '?', width: 1 },
+            { name: 'R_SHIFT', label: 'Shift', width: 1.75 },
+            { name: 'UP', label: '▲', width: 1 },
+            { name: 'PGDN', label: 'PgDn', width: 1 }
+        ],
+        // Row 5 (10 keys, 16u)
+        [
+            { name: 'L_CTRL', label: 'Ctrl', width: 1.25 },
+            { name: 'L_WIN', label: 'Win', width: 1.25 },
+            { name: 'L_ALT', label: 'Alt', width: 1.25 },
+            { name: 'SPACE', label: 'Space', width: 6.25 },
+            { name: 'R_ALT', label: 'Alt', width: 1 },
+            { name: 'FN', label: 'Fn', width: 1 },
+            { name: 'COPILOT', label: 'Co', width: 1 },
+            { name: 'LEFT', label: '◀', width: 1 },
+            { name: 'DOWN', label: '▼', width: 1 },
+            { name: 'RIGHT', label: '▶', width: 1 }
+        ]
+    ];
 
-// 状态变量
-let currentConfig = null;
-let currentProfileName = 'desktop';
-let isMasterLightOn = true;
-let currentEffect = 'wave'; // 默认彩虹波浪
-let colorMode = 'style';    // style 或 random
-let currentPresetTheme = 'default';
-let gradientStops = JSON.parse(JSON.stringify(GRADIENT_PRESETS.default));
-let selectedStopId = 1;
-let isAnalogEnabled = false;
-let brightnessVal = 1.0;    // 0.0 ~ 1.0
-let speedIndex = 2;         // 0: 慢, 1: 正常, 2: 快 (默认快)
-let currentDirection = 'diag_dl'; // 默认左下 ◣
-let thicknessVal = 1.0;
+    // 色彩预设
+    const GRADIENT_PRESETS = {
+        default: [
+            { id: 1, pos: 0.15, color: '#FF1929' },
+            { id: 2, pos: 0.65, color: '#148AC4' },
+            { id: 3, pos: 0.85, color: '#E040FB' }
+        ],
+        rainbow: [
+            { id: 1, pos: 0.00, color: '#FF0000' },
+            { id: 2, pos: 0.20, color: '#FFA500' },
+            { id: 3, pos: 0.40, color: '#FFFF00' },
+            { id: 4, pos: 0.60, color: '#00FF00' },
+            { id: 5, pos: 0.80, color: '#00F0FF' },
+            { id: 6, pos: 1.00, color: '#9D00FF' }
+        ],
+        cyberpunk: [
+            { id: 1, pos: 0.10, color: '#00F0FF' },
+            { id: 2, pos: 0.50, color: '#FF007F' },
+            { id: 3, pos: 0.90, color: '#FFFF00' }
+        ],
+        aurora: [
+            { id: 1, pos: 0.20, color: '#00E676' },
+            { id: 2, pos: 0.55, color: '#00B4D8' },
+            { id: 3, pos: 0.85, color: '#7C4DFF' }
+        ],
+        lava: [
+            { id: 1, pos: 0.20, color: '#FF3D00' },
+            { id: 2, pos: 0.60, color: '#FF9100' },
+            { id: 3, pos: 0.90, color: '#DD2C00' }
+        ],
+        frost: [
+            { id: 1, pos: 0.25, color: '#E0F7FA' },
+            { id: 2, pos: 0.55, color: '#80DEEA' },
+            { id: 3, pos: 0.85, color: '#00ACC1' }
+        ]
+    };
 
-// 键盘元素引用与动画参数
-let keyElements = [];
-let reactiveDecays = {};
-let activeRipples = [];
-let lastUserKeystrokeTime = performance.now();
-let demoStepCounter = 0;
+    // 全局状态管理
+    let currentConfig = null;
+    let currentProfileName = 'desktop';
+    let currentTab = 'lighting'; // 'lighting' | 'perkey' | 'rules'
+    let currentEffect = 'static';
+    let isMasterLightOn = true;
+    let isAnalogEnabled = false;
+    let brightnessVal = 1.0;
+    let thicknessVal = 1.0;
+    let speedIndex = 2; // 0: 慢, 1: 正常, 2: 快
+    let currentDirection = 'diag_dl';
+    let gradientStops = JSON.parse(JSON.stringify(GRADIENT_PRESETS.default));
+    let selectedStopId = 1;
+    let isStarryRandom = false;
 
-// ========================================================
-// 6. 页面初始化
-// ========================================================
-window.addEventListener('DOMContentLoaded', () => {
-    buildVirtualKeyboard();
-    renderGradientStops();
-    updateCyberCardUI();
-    loadConfig();
-    startHeartbeat();
-    requestAnimationFrame(renderLightingLoop);
-});
+    // Per-Key Studio 状态
+    const selectedKeyNames = new Set();
+    let currentStudioColor = '#00F0FF';
+    let currentBgColor = '#000000';
 
-// 构建符合 ASUS 尺寸规格与 class 规范的虚拟键盘 DOM
-function buildVirtualKeyboard() {
-    const baseLayer = document.getElementById('keyboard-base-layer');
-    baseLayer.innerHTML = '';
-    keyElements = [];
+    // 仿真引擎运行时
+    let keyElements = [];
+    let reactiveDecays = {};
+    let analogDecays = {};
+    let activeRipples = [];
+    let isTabVisible = !document.hidden;
 
-    const unitWidth = 51.75;
-    const gap = 4;
+    // ========================================================
+    // 10. 虚拟键盘 DOM 构建
+    // ========================================================
+    function buildVirtualKeyboard() {
+        const baseLayer = document.getElementById('keyboard-base-layer');
+        baseLayer.innerHTML = '';
+        keyElements = [];
 
-    KEYBOARD_LAYOUT.forEach((rowKeys, rowIndex) => {
-        const rowDiv = document.createElement('div');
-        rowDiv.className = 'device-keyboard-module__keyboard-row';
+        const totalRowUnits = 16.0;
+        const keyGapPx = 4;
 
-        let colOffset = 0;
-        rowKeys.forEach((keyData) => {
-            const keyDiv = document.createElement('div');
-            keyDiv.className = 'device-keyboard-module__key';
-            keyDiv.setAttribute('data-key', keyData.name);
-            keyDiv.setAttribute('data-row', rowIndex);
-            keyDiv.setAttribute('data-col', colOffset);
+        KEYBOARD_LAYOUT.forEach((row, rowIdx) => {
+            const rowDiv = document.createElement('div');
+            rowDiv.className = 'device-keyboard-module__keyboard-row';
 
-            const calculatedWidth = (keyData.width * unitWidth) + ((keyData.width - 1) * gap);
-            keyDiv.style.width = calculatedWidth + 'px';
+            let currentColOffset = 0.0;
 
-            const labelSpan = document.createElement('span');
-            labelSpan.className = 'key-label';
-            labelSpan.textContent = keyData.label;
-            keyDiv.appendChild(labelSpan);
+            row.forEach(k => {
+                const keyWidthFraction = k.width / totalRowUnits;
+                const keyEl = document.createElement('div');
+                keyEl.className = 'device-keyboard-module__key';
+                keyEl.dataset.key = k.name;
+                keyEl.style.width = `calc(${keyWidthFraction * 100}% - ${keyGapPx}px)`;
 
-            if (keyData.sub) {
-                const subSpan = document.createElement('span');
-                subSpan.className = 'key-sublabel';
-                subSpan.textContent = keyData.sub;
-                keyDiv.appendChild(subSpan);
-            }
+                if (k.sub) {
+                    const subSpan = document.createElement('span');
+                    subSpan.className = 'key-sublabel';
+                    subSpan.textContent = k.sub;
+                    keyEl.appendChild(subSpan);
+                }
 
-            // 敲击或点击触发按键交互
-            keyDiv.onmousedown = (e) => {
-                e.preventDefault();
-                triggerKeyReactive(keyData.name, false);
-            };
-            keyDiv.onmouseup = () => releaseKeyReactive(keyData.name);
-            keyDiv.onmouseleave = () => releaseKeyReactive(keyData.name);
-            keyDiv.ontouchstart = (e) => {
-                e.preventDefault();
-                triggerKeyReactive(keyData.name, false);
-            };
-            keyDiv.ontouchend = () => releaseKeyReactive(keyData.name);
+                const labelSpan = document.createElement('span');
+                labelSpan.className = 'key-label';
+                labelSpan.textContent = k.label;
+                keyEl.appendChild(labelSpan);
 
-            rowDiv.appendChild(keyDiv);
-            keyElements.push({
-                el: keyDiv,
-                name: keyData.name,
-                row: rowIndex,
-                col: colOffset,
-                width: keyData.width
+                // 点击交互
+                keyEl.addEventListener('click', (e) => {
+                    if (currentTab === 'perkey') {
+                        toggleKeySelection(k.name);
+                    } else {
+                        triggerKeyReactive(k.name);
+                    }
+                });
+
+                rowDiv.appendChild(keyEl);
+
+                keyElements.push({
+                    name: k.name,
+                    col: currentColOffset,
+                    row: rowIdx,
+                    width: k.width,
+                    el: keyEl
+                });
+
+                currentColOffset += k.width;
             });
 
-            colOffset += keyData.width;
+            baseLayer.appendChild(rowDiv);
+        });
+    }
+
+    // ========================================================
+    // 11. Profile 方案管理
+    // ========================================================
+    function refreshProfileSelector() {
+        const sel = document.getElementById('profile-selector');
+        sel.innerHTML = '';
+        if (!currentConfig || !currentConfig.profiles) return;
+
+        const defaultProf = currentConfig.default_profile || 'desktop';
+
+        Object.keys(currentConfig.profiles).forEach(pname => {
+            const opt = document.createElement('option');
+            opt.value = pname;
+            opt.textContent = pname + (pname === defaultProf ? ' [默认]' : '');
+            if (pname === currentProfileName) opt.selected = true;
+            sel.appendChild(opt);
+        });
+    }
+
+    function onProfileSelectChange(pname) {
+        saveCurrentInputsToProfile(); // 切换前先留存
+        currentProfileName = pname;
+        loadProfileDataToUI(pname);
+    }
+
+    function loadProfileDataToUI(pname) {
+        if (!currentConfig || !currentConfig.profiles[pname]) return;
+        const prof = currentConfig.profiles[pname];
+
+        // 载入效果类型
+        selectEffect(prof.type || 'static', false);
+
+        // 模拟开关
+        isAnalogEnabled = (prof.analog === true);
+        setAnalogSwitchUI(isAnalogEnabled);
+
+        // 方向
+        if (prof.direction) setDirection(prof.direction);
+
+        // 速度
+        if (prof.period_ms) {
+            if (prof.period_ms > 4500) speedIndex = 0;
+            else if (prof.period_ms > 2400) speedIndex = 1;
+            else speedIndex = 2;
+            updateSpeedUI();
+        }
+
+        // 亮度
+        if (typeof prof.brightness === 'number') {
+            brightnessVal = prof.brightness;
+            updateBrightnessUI();
+        }
+
+        // 色彩
+        if (prof.color || prof.color1) {
+            const c1 = prof.color || prof.color1;
+            gradientStops[0].color = rgbToHex(c1);
+            if (prof.color2 && gradientStops.length > 1) {
+                gradientStops[1].color = rgbToHex(prof.color2);
+            }
+            renderGradientStops();
+        }
+
+        // 背景底色
+        if (prof.bg) {
+            currentBgColor = rgbToHex(prof.bg);
+            document.getElementById('custom-bg-color').value = currentBgColor;
+        }
+
+        // 逐键覆写小圆点标记
+        updateKeyOverrideBadges();
+    }
+
+    function updateKeyOverrideBadges() {
+        const prof = currentConfig?.profiles?.[currentProfileName];
+        const keysMap = prof?.keys || {};
+
+        keyElements.forEach(item => {
+            const hasOver = !!keysMap[item.name] || (keysMap['WASD'] && ['W','A','S','D'].includes(item.name)) || (keysMap['ARROWS'] && ['UP','DOWN','LEFT','RIGHT'].includes(item.name));
+            if (hasOver) item.el.classList.add('has-override');
+            else item.el.classList.remove('has-override');
+        });
+    }
+
+    let promptCallback = null;
+    function openPromptDialog(title, defaultVal, callback) {
+        document.getElementById('prompt-dialog-title').textContent = title;
+        const inp = document.getElementById('prompt-dialog-input');
+        inp.value = defaultVal;
+        promptCallback = callback;
+        document.getElementById('prompt-dialog').showModal();
+        inp.focus();
+    }
+    function closePromptDialog(confirmed) {
+        const dlg = document.getElementById('prompt-dialog');
+        const val = document.getElementById('prompt-dialog-input').value.trim();
+        dlg.close();
+        if (confirmed && promptCallback) {
+            promptCallback(val);
+        }
+        promptCallback = null;
+    }
+
+    function promptNewProfile() {
+        openPromptDialog('新建方案 (基于默认模版)', 'custom_mode', (name) => {
+            if (!name) return;
+            if (currentConfig.profiles[name]) {
+                showToast('❌ 方案名已存在');
+                return;
+            }
+            currentConfig.profiles[name] = {
+                type: 'static',
+                color: [0, 240, 255],
+                period_ms: 2500,
+                brightness: 1.0,
+                keys: {}
+            };
+            currentProfileName = name;
+            refreshProfileSelector();
+            loadProfileDataToUI(name);
+            showToast('✅ 成功新建方案: ' + name);
+        });
+    }
+
+    function promptCloneProfile() {
+        openPromptDialog('复制方案: ' + currentProfileName, currentProfileName + '_copy', (name) => {
+            if (!name) return;
+            if (currentConfig.profiles[name]) {
+                showToast('❌ 方案名已存在');
+                return;
+            }
+            saveCurrentInputsToProfile();
+            currentConfig.profiles[name] = JSON.parse(JSON.stringify(currentConfig.profiles[currentProfileName]));
+            currentProfileName = name;
+            refreshProfileSelector();
+            loadProfileDataToUI(name);
+            showToast('✅ 成功克隆方案: ' + name);
+        });
+    }
+
+    function setDefaultProfile() {
+        if (!currentConfig) return;
+        currentConfig.default_profile = currentProfileName;
+        refreshProfileSelector();
+        showToast('⭐ 已将 ' + currentProfileName + ' 设为系统开机默认方案');
+    }
+
+    function deleteCurrentProfile() {
+        if (Object.keys(currentConfig.profiles).length <= 1) {
+            showToast('⚠️ 至少需保留一个方案');
+            return;
+        }
+        const name = currentProfileName;
+        delete currentConfig.profiles[name];
+        if (currentConfig.default_profile === name) {
+            currentConfig.default_profile = Object.keys(currentConfig.profiles)[0];
+        }
+        currentProfileName = Object.keys(currentConfig.profiles)[0];
+        refreshProfileSelector();
+        loadProfileDataToUI(currentProfileName);
+        showToast('🗑️ 已删除方案: ' + name);
+    }
+
+    // ========================================================
+    // 12. 全局效果与机能参数控制
+    // ========================================================
+    function selectEffect(effId, saveFirst = true) {
+        if (saveFirst) saveCurrentInputsToProfile();
+        currentEffect = effId;
+
+        document.querySelectorAll('.effect-item').forEach(item => {
+            if (item.dataset.id === effId) item.classList.add('active');
+            else item.classList.remove('active');
         });
 
-        baseLayer.appendChild(rowDiv);
-    });
-}
+        // 动态展示特定控件
+        const analogBox = document.getElementById('param-group-analog');
+        const dirBox = document.getElementById('param-group-direction');
+        const thicknessBox = document.getElementById('param-group-thickness');
+        const starryBox = document.getElementById('starry-mode-box');
 
-// ========================================================
-// 7. 灯效选择与界面自适应调控
-// ========================================================
-function selectEffect(effId) {
-    currentEffect = effId;
+        analogBox.style.display = (effId === 'static') ? 'flex' : 'none';
+        dirBox.style.display = (effId === 'wave' || effId === 'quicksand') ? 'flex' : 'none';
+        thicknessBox.style.display = (effId === 'wave' || effId === 'current') ? 'flex' : 'none';
+        starryBox.style.display = (effId === 'starry_night') ? 'flex' : 'none';
+    }
 
-    // 更新左侧列表状态
-    document.querySelectorAll('.effect-item').forEach(el => {
-        el.classList.remove('active', 'active-cyan');
-        if (el.getAttribute('data-id') === effId) {
-            if (effId === 'starry_night') {
-                el.classList.add('active-cyan'); // 星空使用青色高亮 (参考图 3)
-            } else {
-                el.classList.add('active');      // 其他使用经典 ROG 红 (参考图 1)
-            }
-        }
-    });
-
-    updateCyberCardUI();
-    saveCurrentInputsToProfile();
-
-    if (effId === 'reactive' || effId === 'ripple') {
-        lastUserKeystrokeTime = performance.now() - 1500;
-        const badge = document.getElementById('stage-badge');
-        if (badge) {
-            badge.innerHTML = '● <b>按键响应就绪</b>：敲击键盘任意键或点击虚拟键帽激荡光晕与涟漪！';
-            badge.style.color = 'var(--rog-cyan)';
+    function toggleMasterLight() {
+        isMasterLightOn = !isMasterLightOn;
+        const sw = document.getElementById('master-light-switch');
+        if (isMasterLightOn) {
+            sw.classList.add('on');
+            sw.querySelector('.cyber-switch-text').textContent = 'ON';
+        } else {
+            sw.classList.remove('on');
+            sw.querySelector('.cyber-switch-text').textContent = 'OFF';
         }
     }
-}
 
-// 依据选中的灯效动态调整右侧参数卡片项的可见性
-function updateCyberCardUI() {
-    const isRainbow = (currentEffect === 'wave');
-    const isStarry = (currentEffect === 'starry_night');
-    const isQuicksand = (currentEffect === 'quicksand');
-    const isCurrent = (currentEffect === 'current');
-    const isRaindrop = (currentEffect === 'raindrop');
-    const isStatic = (currentEffect === 'static');
-    const isBreathing = (currentEffect === 'breathing');
-    const isReactive = (currentEffect === 'reactive' || currentEffect === 'ripple');
-
-    // 1. 颜色模式 (样式 / 随机) 仅在 星空 / 流沙 模式下展示
-    document.getElementById('color-radio-row').style.display = (isStarry || isQuicksand) ? 'flex' : 'none';
-
-    // 2. 模拟灯效组件 (仅在 彩虹 / 触发 / 涟漪 模式可见)
-    document.getElementById('param-group-analog').style.display = (isRainbow || isReactive) ? 'flex' : 'none';
-
-    // 3. 方向选择罗盘 (仅在 彩虹 / 流沙 / 电流 模式可见)
-    document.getElementById('param-group-direction').style.display = (isRainbow || isQuicksand || isCurrent) ? 'flex' : 'none';
-
-    // 4. 粗细调节 (仅在 彩虹 / 电流 模式可见)
-    document.getElementById('param-group-thickness').style.display = (isRainbow || isCurrent) ? 'flex' : 'none';
-
-    // 5. 速度调节 (恒亮无速度，其余均有)
-    document.getElementById('param-group-speed').style.display = (isStatic) ? 'none' : 'flex';
-}
-
-// ========================================================
-// 8. 赛博控件交互 (拨码开关、色标条、罗盘、滑条)
-// ========================================================
-function toggleMasterLight() {
-    isMasterLightOn = !isMasterLightOn;
-    const sw = document.getElementById('master-light-switch');
-    if (isMasterLightOn) {
-        sw.classList.add('on');
-        sw.querySelector('.cyber-switch-text').textContent = 'ON';
-    } else {
-        sw.classList.remove('on');
-        sw.querySelector('.cyber-switch-text').textContent = 'OFF';
+    function toggleAnalogSwitch() {
+        isAnalogEnabled = !isAnalogEnabled;
+        setAnalogSwitchUI(isAnalogEnabled);
     }
-}
 
-function toggleAnalogSwitch() {
-    isAnalogEnabled = !isAnalogEnabled;
-    const sw = document.getElementById('analog-switch');
-    if (isAnalogEnabled) {
-        sw.classList.add('on');
-        sw.querySelector('.cyber-switch-text').textContent = 'ON';
-    } else {
-        sw.classList.remove('on');
-        sw.querySelector('.cyber-switch-text').textContent = 'OFF';
+    function setAnalogSwitchUI(on) {
+        const sw = document.getElementById('analog-switch');
+        if (on) {
+            sw.classList.add('on');
+            sw.querySelector('.cyber-switch-text').textContent = 'ON';
+        } else {
+            sw.classList.remove('on');
+            sw.querySelector('.cyber-switch-text').textContent = 'OFF';
+        }
     }
-}
 
-// 方向控制
-function setDirection(dir) {
-    currentDirection = dir;
-    document.querySelectorAll('.dir-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.getAttribute('data-dir') === dir);
-    });
-    saveCurrentInputsToProfile();
-}
-
-// 速度档位点击 (慢 0, 正常 1, 快 2)
-function onSpeedTrackClick(e) {
-    const track = document.getElementById('speed-track');
-    const rect = track.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
-    const ratio = Math.max(0, Math.min(1, clickX / rect.width));
-
-    if (ratio < 0.33) {
-        speedIndex = 0; // 慢
-    } else if (ratio < 0.66) {
-        speedIndex = 1; // 正常
-    } else {
-        speedIndex = 2; // 快
+    function setDirection(dir) {
+        currentDirection = dir;
+        document.querySelectorAll('.dir-btn').forEach(btn => {
+            if (btn.dataset.dir === dir) btn.classList.add('active');
+            else btn.classList.remove('active');
+        });
     }
-    updateSpeedUI();
-    saveCurrentInputsToProfile();
-}
 
-function updateSpeedUI() {
-    const percent = speedIndex === 0 ? 0 : (speedIndex === 1 ? 50 : 100);
-    document.getElementById('speed-thumb').style.left = percent + '%';
-}
+    function onSpeedTrackClick(e) {
+        const rect = e.currentTarget.getBoundingClientRect();
+        const ratio = (e.clientX - rect.left) / rect.width;
+        if (ratio < 0.33) speedIndex = 0;
+        else if (ratio < 0.67) speedIndex = 1;
+        else speedIndex = 2;
+        updateSpeedUI();
+    }
 
-// LED 亮度拖拽
-function startDragBrightness(e) {
-    updateBrightnessFromEvent(e);
-    const onMouseMove = (ev) => updateBrightnessFromEvent(ev);
-    const onMouseUp = () => {
-        window.removeEventListener('mousemove', onMouseMove);
-        window.removeEventListener('mouseup', onMouseUp);
-        saveCurrentInputsToProfile();
-    };
-    window.addEventListener('mousemove', onMouseMove);
-    window.addEventListener('mouseup', onMouseUp);
-}
+    function updateSpeedUI() {
+        const thumb = document.getElementById('speed-thumb');
+        const pct = speedIndex === 0 ? 0 : (speedIndex === 1 ? 50 : 100);
+        thumb.style.left = pct + '%';
+    }
 
-function updateBrightnessFromEvent(e) {
-    const track = document.getElementById('brightness-track');
-    const rect = track.getBoundingClientRect();
-    let ratio = (e.clientX - rect.left) / rect.width;
-    ratio = Math.max(0.05, Math.min(1.0, ratio));
-    brightnessVal = ratio;
-    const pct = Math.round(ratio * 100);
-    document.getElementById('brightness-fill').style.width = pct + '%';
-    document.getElementById('brightness-thumb').style.left = pct + '%';
-    document.getElementById('brightness-val-text').textContent = pct + '%';
-}
+    function startDragBrightness(e) {
+        updateBrightnessFromEvent(e);
+        const onMove = (ev) => updateBrightnessFromEvent(ev);
+        const onUp = () => {
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+        };
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+    }
 
-// 粗细拖拽
-function startDragThickness(e) {
-    updateThicknessFromEvent(e);
-    const onMouseMove = (ev) => updateThicknessFromEvent(ev);
-    const onMouseUp = () => {
-        window.removeEventListener('mousemove', onMouseMove);
-        window.removeEventListener('mouseup', onMouseUp);
-    };
-    window.addEventListener('mousemove', onMouseMove);
-    window.addEventListener('mouseup', onMouseUp);
-}
+    function updateBrightnessFromEvent(e) {
+        const track = document.getElementById('brightness-track');
+        const rect = track.getBoundingClientRect();
+        let ratio = (e.clientX - rect.left) / rect.width;
+        ratio = Math.max(0.05, Math.min(1.0, ratio));
+        brightnessVal = ratio;
+        updateBrightnessUI();
+    }
 
-function updateThicknessFromEvent(e) {
-    const track = document.getElementById('thickness-track');
-    const rect = track.getBoundingClientRect();
-    let ratio = (e.clientX - rect.left) / rect.width;
-    ratio = Math.max(0.2, Math.min(2.0, ratio * 2.0));
-    thicknessVal = ratio;
-    const pct = Math.round((ratio / 2.0) * 100);
-    document.getElementById('thickness-fill').style.width = pct + '%';
-    document.getElementById('thickness-thumb').style.left = pct + '%';
-    document.getElementById('thickness-val-text').textContent = ratio.toFixed(1) + 'x';
-}
+    function updateBrightnessUI() {
+        const pct = Math.round(brightnessVal * 100);
+        document.getElementById('brightness-val-text').textContent = pct + '%';
+        document.getElementById('brightness-fill').style.width = pct + '%';
+        document.getElementById('brightness-thumb').style.left = pct + '%';
+    }
 
-// 颜色模式切换 (样式 / 随机)
-function onColorModeChange(mode) {
-    colorMode = mode;
-    document.getElementById('preset-select-wrapper').style.opacity = (mode === 'random') ? '0.4' : '1';
-    document.getElementById('gradient-editor-row').style.opacity = (mode === 'random') ? '0.4' : '1';
-    saveCurrentInputsToProfile();
-}
+    function startDragThickness(e) {
+        updateThicknessFromEvent(e);
+        const onMove = (ev) => updateThicknessFromEvent(ev);
+        const onUp = () => {
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+        };
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+    }
 
-// 预设主题切换
-function onPresetThemeChange(val) {
-    currentPresetTheme = val;
-    if (GRADIENT_PRESETS[val]) {
-        gradientStops = JSON.parse(JSON.stringify(GRADIENT_PRESETS[val]));
+    function updateThicknessFromEvent(e) {
+        const track = document.getElementById('thickness-track');
+        const rect = track.getBoundingClientRect();
+        let ratio = (e.clientX - rect.left) / rect.width;
+        ratio = Math.max(0.1, Math.min(1.0, ratio));
+        thicknessVal = 0.5 + ratio * 1.5; // 0.5x ~ 2.0x
+        document.getElementById('thickness-val-text').textContent = thicknessVal.toFixed(1) + 'x';
+        document.getElementById('thickness-fill').style.width = (ratio * 100) + '%';
+        document.getElementById('thickness-thumb').style.left = (ratio * 100) + '%';
+    }
+
+    function onStarryRandomChange(checked) {
+        isStarryRandom = checked;
+    }
+
+    // 渐变色标系统
+    function onPresetThemeChange(val) {
+        if (GRADIENT_PRESETS[val]) {
+            gradientStops = JSON.parse(JSON.stringify(GRADIENT_PRESETS[val]));
+            selectedStopId = gradientStops[0].id;
+            renderGradientStops();
+        }
+    }
+
+    function renderGradientStops() {
+        const bar = document.getElementById('gradient-bar');
+        const container = document.getElementById('gradient-track-container');
+
+        gradientStops.sort((a, b) => a.pos - b.pos);
+
+        const cssParts = gradientStops.map(s => `${s.color} ${Math.round(s.pos * 100)}%`);
+        bar.style.background = `linear-gradient(to right, ${cssParts.join(', ')})`;
+
+        container.querySelectorAll('.gradient-stop-pin').forEach(el => el.remove());
+
+        gradientStops.forEach(stop => {
+            const pin = document.createElement('div');
+            pin.className = 'gradient-stop-pin' + (stop.id === selectedStopId ? ' selected' : '');
+            pin.style.left = (stop.pos * 100) + '%';
+
+            const head = document.createElement('div');
+            head.className = 'stop-color-head';
+            head.style.backgroundColor = stop.color;
+            pin.appendChild(head);
+
+            const ptr = document.createElement('div');
+            ptr.className = 'stop-pointer';
+            pin.appendChild(ptr);
+
+            pin.addEventListener('mousedown', (e) => {
+                e.stopPropagation();
+                selectedStopId = stop.id;
+                renderGradientStops();
+                startDragStopPin(e, stop);
+            });
+
+            pin.addEventListener('dblclick', (e) => {
+                e.stopPropagation();
+                selectedStopId = stop.id;
+                const picker = document.getElementById('hidden-color-picker');
+                picker.value = stop.color;
+                picker.click();
+            });
+
+            container.appendChild(pin);
+        });
+    }
+
+    function onGradientTrackClick(e) {
+        const rect = e.currentTarget.getBoundingClientRect();
+        const pos = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+        const color = sampleGradientColor(pos);
+        const newId = Date.now();
+        gradientStops.push({ id: newId, pos, color });
+        selectedStopId = newId;
+        renderGradientStops();
+    }
+
+    function addGradientStop() {
+        const newId = Date.now();
+        gradientStops.push({ id: newId, pos: 0.5, color: '#00F0FF' });
+        selectedStopId = newId;
+        renderGradientStops();
+    }
+
+    function removeSelectedStop() {
+        if (gradientStops.length <= 1) {
+            showToast('⚠️ 至少保留一个基准色标');
+            return;
+        }
+        gradientStops = gradientStops.filter(s => s.id !== selectedStopId);
         selectedStopId = gradientStops[0].id;
         renderGradientStops();
-        saveCurrentInputsToProfile();
     }
-}
 
-// ========================================================
-// 9. 多阶渐变色标编辑器核心逻辑
-// ========================================================
-function renderGradientStops() {
-    const container = document.getElementById('gradient-track-container');
-    // 保留渐变条，清理已存在的手柄
-    container.querySelectorAll('.gradient-stop-pin').forEach(pin => pin.remove());
+    function startDragStopPin(e, stop) {
+        const container = document.getElementById('gradient-track-container');
+        const rect = container.getBoundingClientRect();
 
-    gradientStops.sort((a, b) => a.pos - b.pos);
-
-    // 构造 linear-gradient CSS 字符串
-    const stopsCss = gradientStops.map(s => `${s.color} ${(s.pos * 100).toFixed(1)}%`).join(', ');
-    document.getElementById('gradient-bar').style.background = `linear-gradient(to right, ${stopsCss})`;
-
-    gradientStops.forEach(stop => {
-        const pin = document.createElement('div');
-        pin.className = 'gradient-stop-pin' + (stop.id === selectedStopId ? ' selected' : '');
-        pin.style.left = (stop.pos * 100) + '%';
-        pin.style.backgroundColor = stop.color;
-        pin.title = `双击更改颜色 (当前位置: ${Math.round(stop.pos * 100)}%)`;
-
-        // 单击选中
-        pin.onmousedown = (e) => {
-            e.stopPropagation();
-            selectedStopId = stop.id;
+        const onMove = (ev) => {
+            let pos = (ev.clientX - rect.left) / rect.width;
+            stop.pos = Math.max(0, Math.min(1, pos));
             renderGradientStops();
-            startDragStopPin(e, stop);
         };
-
-        // 双击调用系统拾色器
-        pin.ondblclick = (e) => {
-            e.stopPropagation();
-            selectedStopId = stop.id;
-            const picker = document.getElementById('hidden-color-picker');
-            picker.value = stop.color;
-            picker.click();
+        const onUp = () => {
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
         };
-
-        container.appendChild(pin);
-    });
-}
-
-function onGradientTrackClick(e) {
-    const track = document.getElementById('gradient-bar');
-    const rect = track.getBoundingClientRect();
-    const pos = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-
-    // 计算点击处在当前渐变下的插值色彩
-    const sampledColor = sampleGradientColor(pos);
-    const newId = Date.now();
-    gradientStops.push({
-        id: newId,
-        pos: pos,
-        color: sampledColor
-    });
-    selectedStopId = newId;
-    renderGradientStops();
-    saveCurrentInputsToProfile();
-}
-
-function addGradientStop() {
-    let nextPos = 0.5;
-    const newId = Date.now();
-    gradientStops.push({
-        id: newId,
-        pos: nextPos,
-        color: sampleGradientColor(nextPos)
-    });
-    selectedStopId = newId;
-    renderGradientStops();
-    saveCurrentInputsToProfile();
-}
-
-function removeSelectedStop() {
-    if (gradientStops.length <= 2) {
-        showToast('⚠️ 渐变色条最少保留 2 个色标！');
-        return;
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
     }
-    gradientStops = gradientStops.filter(s => s.id !== selectedStopId);
-    selectedStopId = gradientStops[0].id;
-    renderGradientStops();
-    saveCurrentInputsToProfile();
-}
 
-function startDragStopPin(e, stop) {
-    const track = document.getElementById('gradient-bar');
-    const rect = track.getBoundingClientRect();
-
-    const onMouseMove = (ev) => {
-        let newPos = (ev.clientX - rect.left) / rect.width;
-        newPos = Math.max(0, Math.min(1, newPos));
-        stop.pos = newPos;
-        renderGradientStops();
-    };
-
-    const onMouseUp = () => {
-        window.removeEventListener('mousemove', onMouseMove);
-        window.removeEventListener('mouseup', onMouseUp);
-        saveCurrentInputsToProfile();
-    };
-
-    window.addEventListener('mousemove', onMouseMove);
-    window.addEventListener('mouseup', onMouseUp);
-}
-
-function onColorPickerSelected(hex) {
-    const curStop = gradientStops.find(s => s.id === selectedStopId);
-    if (curStop) {
-        curStop.color = hex.toUpperCase();
-        renderGradientStops();
-        saveCurrentInputsToProfile();
-    }
-}
-
-// 从当前多阶色标插值获取任意位置的颜色 [r, g, b]
-function sampleGradientColor(ratio) {
-    if (gradientStops.length === 0) return '#FF1929';
-    if (gradientStops.length === 1) return gradientStops[0].color;
-
-    const r = Math.max(0, Math.min(1, ratio));
-    if (r <= gradientStops[0].pos) return gradientStops[0].color;
-    if (r >= gradientStops[gradientStops.length - 1].pos) return gradientStops[gradientStops.length - 1].color;
-
-    for (let i = 0; i < gradientStops.length - 1; ++i) {
-        const s1 = gradientStops[i];
-        const s2 = gradientStops[i + 1];
-        if (r >= s1.pos && r <= s2.pos) {
-            const range = s2.pos - s1.pos || 0.001;
-            const t = (r - s1.pos) / range;
-            const c1 = hexToRgb(s1.color);
-            const c2 = hexToRgb(s2.color);
-            const red = Math.round(c1[0] + (c2[0] - c1[0]) * t);
-            const grn = Math.round(c1[1] + (c2[1] - c1[1]) * t);
-            const blu = Math.round(c1[2] + (c2[2] - c1[2]) * t);
-            return rgbToHex([red, grn, blu]);
-        }
-    }
-    return gradientStops[0].color;
-}
-
-// ========================================================
-// 10. 60 FPS 虚拟键盘灯效渲染引擎 (支持 8 方向与多阶色彩)
-// ========================================================
-function getPeriodMsFromSpeed() {
-    if (speedIndex === 0) return 5500; // 慢
-    if (speedIndex === 1) return 3200; // 正常
-    return 1600;                       // 快
-}
-
-// 8 方向单位向量
-const DIR_VECTORS = {
-    'up':      { x:  0.0, y: -1.0 },
-    'down':    { x:  0.0, y:  1.0 },
-    'left':    { x: -1.0, y:  0.0 },
-    'right':   { x:  1.0, y:  0.0 },
-    'diag_ur': { x:  0.707, y: -0.707 },
-    'diag_dl': { x: -0.707, y:  0.707 },
-    'diag_ul': { x: -0.707, y: -0.707 },
-    'diag_dr': { x:  0.707, y:  0.707 },
-    'spread':  { x:  0.0, y:  0.0 } // 往复中心扩散
-};
-
-function renderLightingLoop(timestamp) {
-    const t = timestamp || 0;
-    const period = getPeriodMsFromSpeed();
-
-    // 自动演练展示响应模式
-    if (currentEffect === 'reactive' || currentEffect === 'ripple') {
-        if (t - lastUserKeystrokeTime > 2000) {
-            const demoList = ['W', 'A', 'S', 'D', 'SPACE', 'Q', 'E', 'R', 'ENTER'];
-            if (t - lastUserKeystrokeTime > 2000 + demoStepCounter * 1400) {
-                const demoKey = demoList[demoStepCounter % demoList.length];
-                demoStepCounter++;
-                triggerKeyReactive(demoKey, false);
-                setTimeout(() => releaseKeyReactive(demoKey), 160);
-            }
+    function onColorPickerSelected(hex) {
+        const stop = gradientStops.find(s => s.id === selectedStopId);
+        if (stop) {
+            stop.color = hex;
+            renderGradientStops();
         }
     }
 
-    const dirVec = DIR_VECTORS[currentDirection] || DIR_VECTORS['right'];
-
-    keyElements.forEach(item => {
-        let r = 0, g = 0, b = 0;
-
-        if (!isMasterLightOn) {
-            // 开关关闭，全黑
-            r = 0; g = 0; b = 0;
-        } else if (currentEffect === 'static') {
-            // 恒亮模式：取第一个色标颜色
-            const col = hexToRgb(gradientStops[0].color);
-            r = col[0]; g = col[1]; b = col[2];
-        } else if (currentEffect === 'breathing') {
-            // 呼吸模式：正弦循环渐隐
-            const phase = (t % period) / period;
-            const factor = 0.5 - 0.5 * Math.cos(2.0 * Math.PI * phase);
-            const col1 = hexToRgb(gradientStops[0].color);
-            const col2 = hexToRgb(gradientStops.length > 1 ? gradientStops[1].color : '#000000');
-            r = col1[0] * factor + col2[0] * (1.0 - factor);
-            g = col1[1] * factor + col2[1] * (1.0 - factor);
-            b = col1[2] * factor + col2[2] * (1.0 - factor);
-        } else if (currentEffect === 'color_cycle') {
-            // 全彩谱循环
-            const hue = ((t % period) / period) * 360.0;
-            [r, g, b] = hsvToRgb(hue, 1.0, 1.0);
-        } else if (currentEffect === 'wave') {
-            // 彩虹波浪：支持 8 方向向量投影计算！
-            let proj = 0.0;
-            if (currentDirection === 'spread') {
-                const centerCol = 8.0;
-                const centerRow = 2.0;
-                const dx = (item.col - centerCol);
-                const dy = (item.row - centerRow) * 2.0;
-                proj = Math.sqrt(dx * dx + dy * dy) / 10.0;
-            } else {
-                // 投影在指定方向上的比例 (0.0 ~ 1.0)
-                const normX = item.col / 16.0;
-                const normY = item.row / 4.0;
-                proj = (normX * dirVec.x + normY * dirVec.y) * thicknessVal;
-            }
-
-            const phase = (t % period) / period;
-            const ratio = ((proj - phase + 100.0) % 1.0);
-            const hexColor = sampleGradientColor(ratio);
-            const col = hexToRgb(hexColor);
-            r = col[0]; g = col[1]; b = col[2];
-        } else if (currentEffect === 'starry_night') {
-            // 星空：繁星微光随机闪烁 (参考图 3)
-            if (colorMode === 'random') {
-                const seed = (item.col * 19 + item.row * 37) % 360;
-                const starPhase = ((t + seed * 40) % 2200) / 2200;
-                const starGlow = Math.max(0, Math.sin(starPhase * Math.PI) * 1.5 - 0.5);
-                [r, g, b] = hsvToRgb(seed, 1.0, starGlow);
-            } else {
-                const seed = (item.col * 17 + item.row * 31) % 100;
-                const starPhase = ((t + seed * 50) % 2000) / 2000;
-                const starGlow = Math.max(0, Math.sin(starPhase * Math.PI) * 1.5 - 0.5);
-                const col = hexToRgb(sampleGradientColor(seed / 100.0));
-                r = col[0] * starGlow;
-                g = col[1] * starGlow;
-                b = col[2] * starGlow;
-            }
-        } else if (currentEffect === 'quicksand') {
-            // 流沙模式
-            const phase = (t % period) / period;
-            const wave = Math.sin((item.col * 0.4 * dirVec.x + item.row * 0.8 * dirVec.y) + (phase * 2 * Math.PI));
-            const factor = wave * 0.5 + 0.5;
-            const col = hexToRgb(sampleGradientColor(factor));
-            r = col[0]; g = col[1]; b = col[2];
-        } else if (currentEffect === 'current') {
-            // 电流模式：电光雷鸣
-            const phase = (t % (period / 2)) / (period / 2);
-            const isPulse = (Math.abs(item.col - (phase * 16.0)) < 1.8 * thicknessVal);
-            if (isPulse) {
-                r = 255; g = 255; b = 255; // 核心白炽
-            } else {
-                const col = hexToRgb(gradientStops[0].color);
-                r = col[0] * 0.15;
-                g = col[1] * 0.15;
-                b = col[2] * 0.15;
-            }
-        } else if (currentEffect === 'raindrop') {
-            // 雨滴淅沥
-            const seed = (item.col * 23 + item.row * 47) % 80;
-            const dropPhase = ((t + seed * 80) % 2800) / 2800;
-            const dropGlow = Math.pow(Math.max(0, 1.0 - dropPhase * 4), 2);
-            const col = hexToRgb(gradientStops[0].color);
-            r = col[0] * (0.15 + 0.85 * dropGlow);
-            g = col[1] * (0.15 + 0.85 * dropGlow);
-            b = col[2] * (0.15 + 0.85 * dropGlow);
-        } else if (currentEffect === 'reactive' || currentEffect === 'ripple') {
-            // 触发与水波涟漪
-            let totalGlow = 0.0;
-            const decay = reactiveDecays[item.name] || 0;
-            if (decay > 0) {
-                totalGlow += decay;
-                reactiveDecays[item.name] = Math.max(0, decay - 0.025);
-            }
-
-            const keyCenterCol = item.col + item.width / 2.0;
-            const keyRow = item.row;
-
-            for (const rip of activeRipples) {
-                const currentRadius = (t - rip.startTime) * rip.speed;
-                if (currentRadius <= rip.maxRadius) {
-                    const dx = keyCenterCol - rip.col;
-                    const dy = (keyRow - rip.row) * 2.2;
-                    const dist = Math.sqrt(dx * dx + dy * dy);
-                    const diff = Math.abs(dist - currentRadius);
-                    if (diff < 1.8) {
-                        const waveFactor = (1.0 - diff / 1.8) * (1.0 - currentRadius / rip.maxRadius);
-                        totalGlow += waveFactor * (isAnalogEnabled ? 1.4 : 0.95);
-                    }
-                }
-            }
-
-            const baseCol = hexToRgb(gradientStops[0].color);
-            if (totalGlow > 0.01) {
-                const factor = Math.min(1.0, totalGlow);
-                r = baseCol[0] * factor;
-                g = baseCol[1] * factor;
-                b = baseCol[2] * factor;
-
-                if (totalGlow > 0.8) {
-                    const peak = Math.min(1.0, (totalGlow - 0.8) * 1.5);
-                    r += (255 - r) * peak;
-                    g += (255 - g) * peak;
-                    b += (255 - b) * peak;
-                }
-            } else {
-                r = 6; g = 10; b = 18;
+    function sampleGradientColor(ratio) {
+        if (gradientStops.length === 0) return '#FF1929';
+        if (gradientStops.length === 1) return gradientStops[0].color;
+        const norm = Math.max(0, Math.min(1, ratio));
+        for (let i = 0; i < gradientStops.length - 1; i++) {
+            const s1 = gradientStops[i];
+            const s2 = gradientStops[i + 1];
+            if (norm >= s1.pos && norm <= s2.pos) {
+                const range = s2.pos - s1.pos;
+                const factor = range > 0.0001 ? (norm - s1.pos) / range : 0;
+                const c1 = hexToRgb(s1.color);
+                const c2 = hexToRgb(s2.color);
+                return rgbToHex([
+                    c1[0] + factor * (c2[0] - c1[0]),
+                    c1[1] + factor * (c2[1] - c1[1]),
+                    c1[2] + factor * (c2[2] - c1[2])
+                ]);
             }
         }
+        return gradientStops[gradientStops.length - 1].color;
+    }
 
-        // 应用亮度权重
-        r = Math.min(255, Math.floor(r * brightnessVal));
-        g = Math.min(255, Math.floor(g * brightnessVal));
-        b = Math.min(255, Math.floor(b * brightnessVal));
-
-        // 动态注入样式与背光光晕
-        const keyEl = item.el;
-        keyEl.style.backgroundColor = `rgb(${r}, ${g}, ${b})`;
-
-        const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
-        if (luminance > 45) {
-            keyEl.style.color = '#fff';
-            keyEl.style.boxShadow = `0 0 16px rgba(${r}, ${g}, ${b}, 0.8), inset 0 0 5px rgba(255,255,255,0.45)`;
-            keyEl.style.borderColor = `rgba(${Math.min(255, r + 50)}, ${Math.min(255, g + 50)}, ${Math.min(255, b + 50)}, 0.95)`;
+    // ========================================================
+    // 13. Tab 2: 逐键独立涂装画板 (Per-Key Studio)
+    // ========================================================
+    function toggleKeySelection(keyName) {
+        if (selectedKeyNames.has(keyName)) {
+            selectedKeyNames.delete(keyName);
         } else {
-            keyEl.style.color = 'var(--text-primary)';
-            keyEl.style.boxShadow = `inset 0 -2px 0 rgba(0,0,0,0.5), 0 2px 4px rgba(0,0,0,0.3)`;
-            keyEl.style.borderColor = '#28303f';
+            selectedKeyNames.add(keyName);
         }
+        updateSelectionUI();
+    }
+
+    function updateSelectionUI() {
+        keyElements.forEach(item => {
+            if (selectedKeyNames.has(item.name)) {
+                item.el.classList.add('key-selected');
+            } else {
+                item.el.classList.remove('key-selected');
+            }
+        });
+        document.getElementById('selected-keys-counter').textContent = `当前选中: ${selectedKeyNames.size} 个按键`;
+    }
+
+    function selectKeyGroup(group) {
+        if (group === 'WASD') {
+            ['W', 'A', 'S', 'D'].forEach(k => selectedKeyNames.add(k));
+        } else if (group === 'ARROWS') {
+            ['UP', 'DOWN', 'LEFT', 'RIGHT'].forEach(k => selectedKeyNames.add(k));
+        } else if (group === 'NUMBERS') {
+            ['1','2','3','4','5','6','7','8','9','0','-','='].forEach(k => selectedKeyNames.add(k));
+        } else if (group === 'MODIFIERS') {
+            ['L_CTRL','L_WIN','L_ALT','SPACE','R_ALT','FN','COPILOT','L_SHIFT','R_SHIFT','CAPS','TAB','ENTER'].forEach(k => selectedKeyNames.add(k));
+        } else if (group === 'ALL') {
+            keyElements.forEach(k => selectedKeyNames.add(k.name));
+        }
+        updateSelectionUI();
+    }
+
+    function clearKeySelection() {
+        selectedKeyNames.clear();
+        updateSelectionUI();
+    }
+
+    function syncHexToColorPicker(hex) {
+        if (/^#[0-9A-F]{6}$/i.test(hex)) {
+            currentStudioColor = hex;
+            document.getElementById('custom-studio-color').value = hex;
+        }
+    }
+
+    document.getElementById('custom-studio-color').addEventListener('input', (e) => {
+        currentStudioColor = e.target.value;
+        document.getElementById('custom-studio-hex').value = e.target.value.toUpperCase();
     });
 
-    activeRipples = activeRipples.filter(rip => (t - rip.startTime) * rip.speed <= rip.maxRadius);
-    requestAnimationFrame(renderLightingLoop);
-}
+    function applyCustomHexToSelected() {
+        applyColorToSelected(currentStudioColor);
+    }
 
-// 按键物理响应触发
-function triggerKeyReactive(keyName, fromPhysical = false) {
-    reactiveDecays[keyName] = isAnalogEnabled ? 1.8 : 1.4;
-    lastUserKeystrokeTime = performance.now();
+    function applyColorToSelected(hex) {
+        if (selectedKeyNames.size === 0) {
+            showToast('⚠️ 请先在虚拟键盘上点击或框选按键');
+            return;
+        }
+        const prof = currentConfig.profiles[currentProfileName];
+        if (!prof.keys) prof.keys = {};
 
-    const targetKey = keyElements.find(k => k.name === keyName);
-    if (targetKey) {
-        targetKey.el.classList.add('key-pressed');
-
-        activeRipples.push({
-            col: targetKey.col + targetKey.width / 2.0,
-            row: targetKey.row,
-            startTime: performance.now(),
-            maxRadius: isAnalogEnabled ? 24.0 : 18.0,
-            speed: 0.016,
-            color: hexToRgb(gradientStops[0].color)
+        const rgb = hexToRgb(hex);
+        selectedKeyNames.forEach(kname => {
+            prof.keys[kname] = rgb;
         });
 
-        if (activeRipples.length > 10) activeRipples.shift();
+        updateKeyOverrideBadges();
+        showToast(`🎨 已将色彩应用至 ${selectedKeyNames.size} 个选中按键`);
     }
 
-    if (fromPhysical) {
-        const badge = document.getElementById('stage-badge');
-        if (badge) {
-            badge.textContent = `● 捕获实体按键: ${keyName} (已激发光晕与涟漪)`;
+    function removeOverridesFromSelected() {
+        if (selectedKeyNames.size === 0) {
+            showToast('⚠️ 请先选择要清除覆写的按键');
+            return;
+        }
+        const prof = currentConfig.profiles[currentProfileName];
+        if (prof.keys) {
+            selectedKeyNames.forEach(kname => {
+                delete prof.keys[kname];
+            });
+        }
+        updateKeyOverrideBadges();
+        showToast(`🗑️ 已清除 ${selectedKeyNames.size} 个按键的独立覆写`);
+    }
+
+    function onBgColorChange(hex) {
+        currentBgColor = hex;
+        const prof = currentConfig.profiles[currentProfileName];
+        prof.bg = hexToRgb(hex);
+    }
+
+    // ========================================================
+    // 14. 现代化 60 FPS 灯效仿真引擎 (支持后台休眠节能)
+    // ========================================================
+    const DIR_VECTORS = {
+        'up':      { x:  0.0, y: -1.0 },
+        'down':    { x:  0.0, y:  1.0 },
+        'left':    { x: -1.0, y:  0.0 },
+        'right':   { x:  1.0, y:  0.0 },
+        'diag_ur': { x:  0.707, y: -0.707 },
+        'diag_dl': { x: -0.707, y:  0.707 },
+        'diag_ul': { x: -0.707, y: -0.707 },
+        'diag_dr': { x:  0.707, y:  0.707 },
+        'spread':  { x:  0.0, y:  0.0 }
+    };
+
+    function getPeriodMs() {
+        if (speedIndex === 0) return 5500;
+        if (speedIndex === 1) return 3200;
+        return 1600;
+    }
+
+    function renderLightingLoop(timestamp) {
+        // 核心节能优化：标签页不可见时彻底断开渲染请求
+        if (!isTabVisible) return;
+
+        const t = timestamp || 0;
+        const period = getPeriodMs();
+        const dirVec = DIR_VECTORS[currentDirection] || DIR_VECTORS['right'];
+        const prof = currentConfig?.profiles?.[currentProfileName];
+        const keysOverride = prof?.keys || {};
+
+        keyElements.forEach(item => {
+            let r = 0, g = 0, b = 0;
+
+            // 优先检测逐键涂装覆写
+            let hasKeyOverride = false;
+            let overrideColor = null;
+
+            if (keysOverride[item.name]) {
+                overrideColor = keysOverride[item.name];
+                hasKeyOverride = true;
+            } else if (keysOverride['WASD'] && ['W','A','S','D'].includes(item.name)) {
+                overrideColor = keysOverride['WASD'];
+                hasKeyOverride = true;
+            } else if (keysOverride['ARROWS'] && ['UP','DOWN','LEFT','RIGHT'].includes(item.name)) {
+                overrideColor = keysOverride['ARROWS'];
+                hasKeyOverride = true;
+            }
+
+            if (currentTab === 'perkey') {
+                // 逐键工作台模式：清晰展示已覆写颜色与未覆写基底底色
+                if (hasKeyOverride && overrideColor) {
+                    r = overrideColor[0]; g = overrideColor[1]; b = overrideColor[2];
+                } else {
+                    const bgRgb = hexToRgb(currentBgColor);
+                    r = bgRgb[0]; g = bgRgb[1]; b = bgRgb[2];
+                }
+            } else if (!isMasterLightOn) {
+                r = 0; g = 0; b = 0;
+            } else if (hasKeyOverride && overrideColor) {
+                // 方案中配置了覆写颜色的按键，始终保持固定高亮
+                r = overrideColor[0]; g = overrideColor[1]; b = overrideColor[2];
+            } else if (currentEffect === 'static') {
+                const col = hexToRgb(gradientStops[0].color);
+                r = col[0]; g = col[1]; b = col[2];
+                if (isAnalogEnabled) {
+                    const extra = analogDecays[item.name] || 0;
+                    if (extra > 0) {
+                        analogDecays[item.name] = Math.max(0, extra - 0.035);
+                        r = Math.min(255, r + extra * (255 - r));
+                        g = Math.min(255, g + extra * (255 - g));
+                        b = Math.min(255, b + extra * (255 - b));
+                    }
+                }
+            } else if (currentEffect === 'breathing') {
+                const phase = (t % period) / period;
+                const factor = 0.5 - 0.5 * Math.cos(2.0 * Math.PI * phase);
+                const col1 = hexToRgb(gradientStops[0].color);
+                const col2 = hexToRgb(gradientStops.length > 1 ? gradientStops[1].color : '#000000');
+                r = col1[0] * factor + col2[0] * (1.0 - factor);
+                g = col1[1] * factor + col2[1] * (1.0 - factor);
+                b = col1[2] * factor + col2[2] * (1.0 - factor);
+            } else if (currentEffect === 'color_cycle') {
+                const hue = ((t % period) / period) * 360.0;
+                [r, g, b] = hsvToRgb(hue, 1.0, 1.0);
+            } else if (currentEffect === 'wave') {
+                let proj = 0.0;
+                if (currentDirection === 'spread') {
+                    const dx = item.col - 8.0;
+                    const dy = (item.row - 2.0) * 2.0;
+                    proj = Math.sqrt(dx * dx + dy * dy) / 10.0;
+                } else {
+                    const normX = item.col / 16.0;
+                    const normY = item.row / 4.0;
+                    proj = (normX * dirVec.x + normY * dirVec.y) * thicknessVal;
+                }
+                const phase = (t % period) / period;
+                const ratio = ((proj - phase + 100.0) % 1.0);
+                const col = hexToRgb(sampleGradientColor(ratio));
+                r = col[0]; g = col[1]; b = col[2];
+            } else if (currentEffect === 'starry_night') {
+                if (isStarryRandom) {
+                    const seed = (item.col * 19 + item.row * 37) % 360;
+                    const starPhase = ((t + seed * 40) % 2200) / 2200;
+                    const starGlow = Math.max(0, Math.sin(starPhase * Math.PI) * 1.5 - 0.5);
+                    [r, g, b] = hsvToRgb(seed, 1.0, starGlow);
+                } else {
+                    const seed = (item.col * 17 + item.row * 31) % 100;
+                    const starPhase = ((t + seed * 50) % 2000) / 2000;
+                    const starGlow = Math.max(0, Math.sin(starPhase * Math.PI) * 1.5 - 0.5);
+                    const col = hexToRgb(sampleGradientColor(seed / 100.0));
+                    r = col[0] * starGlow; g = col[1] * starGlow; b = col[2] * starGlow;
+                }
+            } else if (currentEffect === 'quicksand') {
+                const phase = (t % period) / period;
+                const wave = Math.sin((item.col * 0.4 * dirVec.x + item.row * 0.8 * dirVec.y) + (phase * 2 * Math.PI));
+                const factor = wave * 0.5 + 0.5;
+                const col = hexToRgb(sampleGradientColor(factor));
+                r = col[0]; g = col[1]; b = col[2];
+            } else if (currentEffect === 'current') {
+                const phase = (t % (period / 2)) / (period / 2);
+                const isPulse = (Math.abs(item.col - (phase * 16.0)) < 1.8 * thicknessVal);
+                if (isPulse) {
+                    r = 255; g = 255; b = 255;
+                } else {
+                    const col = hexToRgb(gradientStops[0].color);
+                    r = col[0] * 0.15; g = col[1] * 0.15; b = col[2] * 0.15;
+                }
+            } else if (currentEffect === 'raindrop') {
+                const seed = (item.col * 23 + item.row * 47) % 80;
+                const dropPhase = ((t + seed * 80) % 2800) / 2800;
+                const dropGlow = Math.pow(Math.max(0, 1.0 - dropPhase * 4), 2);
+                const col = hexToRgb(gradientStops[0].color);
+                r = col[0] * (0.15 + 0.85 * dropGlow);
+                g = col[1] * (0.15 + 0.85 * dropGlow);
+                b = col[2] * (0.15 + 0.85 * dropGlow);
+            } else if (currentEffect === 'reactive' || currentEffect === 'ripple') {
+                let totalGlow = 0.0;
+                const decay = reactiveDecays[item.name] || 0;
+                if (decay > 0) {
+                    totalGlow += decay;
+                    reactiveDecays[item.name] = Math.max(0, decay - 0.025);
+                }
+
+                const keyCenterCol = item.col + item.width / 2.0;
+                const keyRow = item.row;
+
+                for (const rip of activeRipples) {
+                    const currentRadius = (t - rip.startTime) * rip.speed;
+                    if (currentRadius <= rip.maxRadius) {
+                        const dx = keyCenterCol - rip.col;
+                        const dy = (keyRow - rip.row) * 2.2;
+                        const dist = Math.sqrt(dx * dx + dy * dy);
+                        const diff = Math.abs(dist - currentRadius);
+                        if (diff < 1.8) {
+                            const waveFactor = (1.0 - diff / 1.8) * (1.0 - currentRadius / rip.maxRadius);
+                            totalGlow += waveFactor * 0.95;
+                        }
+                    }
+                }
+
+                const baseCol = hexToRgb(gradientStops[0].color);
+                if (totalGlow > 0.01) {
+                    const factor = Math.min(1.0, totalGlow);
+                    r = baseCol[0] * factor;
+                    g = baseCol[1] * factor;
+                    b = baseCol[2] * factor;
+                    if (totalGlow > 0.8) {
+                        const peak = Math.min(1.0, (totalGlow - 0.8) * 1.5);
+                        r += (255 - r) * peak; g += (255 - g) * peak; b += (255 - b) * peak;
+                    }
+                } else {
+                    r = 8; g = 12; b = 18;
+                }
+            }
+
+            // 亮度加权
+            r = Math.min(255, Math.floor(r * brightnessVal));
+            g = Math.min(255, Math.floor(g * brightnessVal));
+            b = Math.min(255, Math.floor(b * brightnessVal));
+
+            const keyEl = item.el;
+            keyEl.style.backgroundColor = `rgb(${r}, ${g}, ${b})`;
+
+            const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+            if (lum > 40) {
+                keyEl.style.color = '#fff';
+                keyEl.style.boxShadow = `0 0 16px rgba(${r}, ${g}, ${b}, 0.75), inset 0 0 4px rgba(255,255,255,0.4)`;
+                keyEl.style.borderColor = `rgba(${Math.min(255, r + 50)}, ${Math.min(255, g + 50)}, ${Math.min(255, b + 50)}, 0.9)`;
+            } else {
+                keyEl.style.color = 'var(--text-primary)';
+                keyEl.style.boxShadow = `inset 0 -2px 0 rgba(0,0,0,0.5), 0 2px 4px rgba(0,0,0,0.3)`;
+                keyEl.style.borderColor = '#252d3c';
+            }
+        });
+
+        activeRipples = activeRipples.filter(rip => (t - rip.startTime) * rip.speed <= rip.maxRadius);
+        requestAnimationFrame(renderLightingLoop);
+    }
+
+    // 按键物理敲击与涟漪激发
+    function triggerKeyReactive(keyName, fromPhysical = false) {
+        reactiveDecays[keyName] = 1.4;
+        analogDecays[keyName] = 1.0;
+
+        const targetKey = keyElements.find(k => k.name === keyName);
+        if (targetKey) {
+            targetKey.el.classList.add('key-pressed');
+
+            activeRipples.push({
+                col: targetKey.col + targetKey.width / 2.0,
+                row: targetKey.row,
+                startTime: performance.now(),
+                maxRadius: 18.0,
+                speed: 0.016
+            });
+            if (activeRipples.length > 12) activeRipples.shift();
+        }
+
+        if (fromPhysical) {
+            const badge = document.getElementById('stage-badge');
+            badge.textContent = `● 捕获物理敲击: ${keyName} (激发光晕与涟漪)`;
             badge.style.color = 'var(--rog-cyan)';
             setTimeout(() => {
-                badge.textContent = '● 预览时钟：60 FPS 硬件同步驱动';
+                badge.textContent = '● 60 FPS 硬件同步仿真时钟';
+                badge.style.color = 'var(--rog-cyan)';
             }, 1200);
         }
     }
-}
 
-function releaseKeyReactive(keyName) {
-    const targetKey = keyElements.find(k => k.name === keyName);
-    if (targetKey) {
-        targetKey.el.classList.remove('key-pressed');
+    function releaseKeyReactive(keyName) {
+        const targetKey = keyElements.find(k => k.name === keyName);
+        if (targetKey) targetKey.el.classList.remove('key-pressed');
     }
-}
 
-// 物理键盘监听
-const CODE_TO_KEY_MAP = {
-    'Escape': 'ESC', 'Digit1': '1', 'Digit2': '2', 'Digit3': '3', 'Digit4': '4', 'Digit5': '5',
-    'Digit6': '6', 'Digit7': '7', 'Digit8': '8', 'Digit9': '9', 'Digit0': '0',
-    'Minus': '-', 'Equal': '=', 'Backspace': 'BACKSPACE', 'Insert': 'INS',
-    'Tab': 'TAB', 'KeyQ': 'Q', 'KeyW': 'W', 'KeyE': 'E', 'KeyR': 'R', 'KeyT': 'T',
-    'KeyY': 'Y', 'KeyU': 'U', 'KeyI': 'I', 'KeyO': 'O', 'KeyP': 'P',
-    'BracketLeft': '[', 'BracketRight': ']', 'Backslash': '\\', 'Delete': 'DEL',
-    'CapsLock': 'CAPS', 'KeyA': 'A', 'KeyS': 'S', 'KeyD': 'D', 'KeyF': 'F', 'KeyG': 'G',
-    'KeyH': 'H', 'KeyJ': 'J', 'KeyK': 'K', 'KeyL': 'L', 'Semicolon': ';', 'Quote': '\'',
-    'Enter': 'ENTER', 'PageUp': 'PGUP', 'ShiftLeft': 'L_SHIFT',
-    'KeyZ': 'Z', 'KeyX': 'X', 'KeyC': 'C', 'KeyV': 'V', 'KeyB': 'B', 'KeyN': 'N',
-    'KeyM': 'M', 'Comma': ',', 'Period': '.', 'Slash': '/', 'ShiftRight': 'R_SHIFT',
-    'ArrowUp': 'UP', 'PageDown': 'PGDN', 'ControlLeft': 'L_CTRL', 'MetaLeft': 'L_WIN',
-    'AltLeft': 'L_ALT', 'Space': 'SPACE', 'AltRight': 'R_ALT', 'ControlRight': 'R_CTRL',
-    'ArrowLeft': 'LEFT', 'ArrowDown': 'DOWN', 'ArrowRight': 'RIGHT'
-};
+    // 实体键盘映射
+    const CODE_TO_KEY_MAP = {
+        'Escape': 'ESC', 'Digit1': '1', 'Digit2': '2', 'Digit3': '3', 'Digit4': '4', 'Digit5': '5',
+        'Digit6': '6', 'Digit7': '7', 'Digit8': '8', 'Digit9': '9', 'Digit0': '0',
+        'Minus': '-', 'Equal': '=', 'Backspace': 'BACKSPACE', 'Insert': 'INS',
+        'Tab': 'TAB', 'KeyQ': 'Q', 'KeyW': 'W', 'KeyE': 'E', 'KeyR': 'R', 'KeyT': 'T',
+        'KeyY': 'Y', 'KeyU': 'U', 'KeyI': 'I', 'KeyO': 'O', 'KeyP': 'P',
+        'BracketLeft': '[', 'BracketRight': ']', 'Backslash': '\\', 'Delete': 'DEL',
+        'CapsLock': 'CAPS', 'KeyA': 'A', 'KeyS': 'S', 'KeyD': 'D', 'KeyF': 'F', 'KeyG': 'G',
+        'KeyH': 'H', 'KeyJ': 'J', 'KeyK': 'K', 'KeyL': 'L', 'Semicolon': ';', 'Quote': '\'',
+        'Enter': 'ENTER', 'PageUp': 'PGUP', 'ShiftLeft': 'L_SHIFT',
+        'KeyZ': 'Z', 'KeyX': 'X', 'KeyC': 'C', 'KeyV': 'V', 'KeyB': 'B', 'KeyN': 'N',
+        'KeyM': 'M', 'Comma': ',', 'Period': '.', 'Slash': '/', 'ShiftRight': 'R_SHIFT',
+        'ArrowUp': 'UP', 'PageDown': 'PGDN', 'ControlLeft': 'L_CTRL', 'MetaLeft': 'L_WIN',
+        'AltLeft': 'L_ALT', 'Space': 'SPACE', 'AltRight': 'R_ALT', 'ControlRight': 'R_CTRL',
+        'ArrowLeft': 'LEFT', 'ArrowDown': 'DOWN', 'ArrowRight': 'RIGHT'
+    };
 
-window.addEventListener('keydown', (e) => {
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
-    const keyName = CODE_TO_KEY_MAP[e.code] || (e.key ? e.key.toUpperCase() : null);
-    if (keyName) triggerKeyReactive(keyName, true);
-});
-
-window.addEventListener('keyup', (e) => {
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
-    const keyName = CODE_TO_KEY_MAP[e.code] || (e.key ? e.key.toUpperCase() : null);
-    if (keyName) releaseKeyReactive(keyName);
-});
-
-// ========================================================
-// 11. 配置加载、同步与持久化保存 (打通后端 daemon)
-// ========================================================
-async function loadConfig() {
-    try {
-        const res = await fetch('/api/config');
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        currentConfig = await res.json();
-
-        currentProfileName = currentConfig.default_profile || 'desktop';
-        if (currentConfig.profiles && currentConfig.profiles[currentProfileName]) {
-            const prof = currentConfig.profiles[currentProfileName];
-            if (prof.type) {
-                selectEffect(prof.type);
-            }
-            if (prof.color) {
-                gradientStops[0].color = rgbToHex(prof.color);
-                renderGradientStops();
-            }
-            if (prof.period_ms) {
-                if (prof.period_ms > 4500) speedIndex = 0;
-                else if (prof.period_ms > 2400) speedIndex = 1;
-                else speedIndex = 2;
-                updateSpeedUI();
-            }
-            if (prof.direction) {
-                setDirection(prof.direction);
-            }
-        }
-        renderRulesTab();
-    } catch (e) {
-        console.warn('获取配置失败:', e);
-    }
-}
-
-function saveCurrentInputsToProfile() {
-    if (!currentConfig || !currentConfig.profiles[currentProfileName]) return;
-    const prof = currentConfig.profiles[currentProfileName];
-
-    prof.type = currentEffect;
-    prof.direction = currentDirection;
-    prof.speed_index = speedIndex;
-    prof.period_ms = getPeriodMsFromSpeed();
-    prof.brightness = brightnessVal;
-    prof.analog = isAnalogEnabled;
-
-    // 映射主要颜色给 C++ 效果引擎
-    if (gradientStops.length > 0) {
-        prof.color = hexToRgb(gradientStops[0].color);
-        prof.color1 = hexToRgb(gradientStops[0].color);
-    }
-    if (gradientStops.length > 1) {
-        prof.color2 = hexToRgb(gradientStops[1].color);
-    }
-}
-
-async function saveConfiguration() {
-    saveCurrentInputsToProfile();
-    try {
-        const res = await fetch('/api/config', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(currentConfig)
-        });
-        const ret = await res.json();
-        if (res.ok) {
-            showToast('✅ ' + (ret.message || '配置已成功保存，daemon 已自动热重载！'));
-        } else {
-            showToast('❌ 保存失败: ' + (ret.message || '未知错误'));
-        }
-    } catch (e) {
-        showToast('❌ 请求失败: ' + e.message);
-    }
-}
-
-// 选项卡切换
-function switchMainTab(tab) {
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    if (tab === 'lighting') {
-        document.querySelector('.tab-btn:nth-child(1)').classList.add('active');
-        document.getElementById('tab-lighting-content').style.display = 'grid';
-        document.getElementById('tab-rules-content').style.display = 'none';
-    } else {
-        document.querySelector('.tab-btn:nth-child(2)').classList.add('active');
-        document.getElementById('tab-lighting-content').style.display = 'none';
-        document.getElementById('tab-rules-content').style.display = 'grid';
-        renderRulesTab();
-    }
-}
-
-// 前台规则渲染与编辑
-function renderRulesTab() {
-    const tbody = document.getElementById('rules-tbody');
-    tbody.innerHTML = '';
-    if (!currentConfig || !currentConfig.rules) return;
-
-    currentConfig.rules.forEach((rule, idx) => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-            <td><input type="text" class="input-text" style="width: 200px;" value="${rule.process || ''}" onchange="currentConfig.rules[${idx}].process = this.value.trim().toLowerCase()"></td>
-            <td><input type="text" class="input-text" style="width: 180px;" value="${rule.profile || ''}" onchange="currentConfig.rules[${idx}].profile = this.value.trim()"></td>
-            <td>
-                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                    <input type="checkbox" ${rule.suppress_web_ui ? 'checked' : ''} onchange="currentConfig.rules[${idx}].suppress_web_ui = this.checked">
-                    <span style="font-size: 12px; color: var(--text-secondary);">🎮 游戏模式自动关停网页服务</span>
-                </label>
-            </td>
-            <td><button class="btn-rog" style="padding: 4px 10px; font-size: 11px; background: #441118;" onclick="deleteRule(${idx})">删除</button></td>
-        `;
-        tbody.appendChild(tr);
+    window.addEventListener('keydown', (e) => {
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+        const kname = CODE_TO_KEY_MAP[e.code] || (e.key ? e.key.toUpperCase() : null);
+        if (kname) triggerKeyReactive(kname, true);
     });
-}
 
-function addRule() {
-    if (!currentConfig.rules) currentConfig.rules = [];
-    currentConfig.rules.push({ process: '', profile: 'desktop', suppress_web_ui: false });
-    renderRulesTab();
-}
+    window.addEventListener('keyup', (e) => {
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+        const kname = CODE_TO_KEY_MAP[e.code] || (e.key ? e.key.toUpperCase() : null);
+        if (kname) releaseKeyReactive(kname);
+    });
 
-function deleteRule(idx) {
-    currentConfig.rules.splice(idx, 1);
-    renderRulesTab();
-}
+    // 监听窗口可见性 (efficient-background-processing 规范)
+    document.addEventListener('visibilitychange', () => {
+        isTabVisible = !document.hidden;
+        if (isTabVisible) {
+            requestAnimationFrame(renderLightingLoop);
+        }
+    });
 
-// 心跳检测与游戏降级
-let consecutiveFails = 0;
-let isConnected = true;
+    // ========================================================
+    // 15. Tab 切换与前台规则编辑
+    // ========================================================
+    function switchMainTab(tab) {
+        currentTab = tab;
+        document.querySelectorAll('.tab-btn').forEach((btn, idx) => {
+            const tabs = ['lighting', 'perkey', 'rules'];
+            if (tabs[idx] === tab) btn.classList.add('active');
+            else btn.classList.remove('active');
+        });
 
-function startHeartbeat() {
-    setInterval(async () => {
+        document.getElementById('tab-lighting-content').style.display = (tab === 'lighting') ? 'grid' : 'none';
+        document.getElementById('tab-perkey-content').style.display = (tab === 'perkey') ? 'grid' : 'none';
+        document.getElementById('tab-rules-content').style.display = (tab === 'rules') ? 'grid' : 'none';
+
+        const stageLabel = document.getElementById('stage-mode-label');
+        if (tab === 'perkey') {
+            stageLabel.textContent = '🎯 逐键涂装模式 (点击键帽进行点选/框选色彩赋予)';
+        } else {
+            stageLabel.textContent = 'ROG FALCHION ACE HFX 硬件同步仿真';
+            clearKeySelection();
+        }
+
+        if (tab === 'rules') renderRulesTab();
+    }
+
+    function renderRulesTab() {
+        const tbody = document.getElementById('rules-tbody');
+        tbody.innerHTML = '';
+        if (!currentConfig || !currentConfig.rules) return;
+
+        const profileOptions = Object.keys(currentConfig.profiles || {}).map(p => `<option value="${p}">${p}</option>`).join('');
+
+        currentConfig.rules.forEach((rule, idx) => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td><input type="text" class="input-text" style="width: 180px;" value="${rule.process || ''}" onchange="currentConfig.rules[${idx}].process = this.value.trim().toLowerCase()"></td>
+                <td>
+                    <select class="cyber-select" style="width: 180px;" onchange="currentConfig.rules[${idx}].profile = this.value">
+                        ${profileOptions}
+                    </select>
+                </td>
+                <td>
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" ${rule.suppress_web_ui ? 'checked' : ''} onchange="currentConfig.rules[${idx}].suppress_web_ui = this.checked">
+                        <span style="font-size: 12px; color: var(--text-secondary);">🎮 全屏游戏时自动暂停网页服务</span>
+                    </label>
+                </td>
+                <td><button class="chip-btn" style="border-color: #661822; color: #ff8894; padding: 4px 8px;" onclick="deleteRule(${idx})">删除</button></td>
+            `;
+            const sel = tr.querySelector('select');
+            sel.value = rule.profile || 'desktop';
+            tbody.appendChild(tr);
+        });
+    }
+
+    function addRule() {
+        if (!currentConfig.rules) currentConfig.rules = [];
+        currentConfig.rules.push({ process: '', profile: currentProfileName, suppress_web_ui: false });
+        renderRulesTab();
+    }
+
+    function deleteRule(idx) {
+        currentConfig.rules.splice(idx, 1);
+        renderRulesTab();
+    }
+
+    function quickAddPresetRule(proc, prof, suppress) {
+        if (!currentConfig.rules) currentConfig.rules = [];
+        if (currentConfig.rules.some(r => r.process === proc)) {
+            showToast('⚠️ 规则中已存在 ' + proc);
+            return;
+        }
+        currentConfig.rules.push({ process: proc, profile: prof, suppress_web_ui: suppress });
+        renderRulesTab();
+        showToast('✅ 已添加联动规则: ' + proc);
+    }
+
+    // ========================================================
+    // 16. 数据保存、同步与心跳优雅降级
+    // ========================================================
+    function saveCurrentInputsToProfile() {
+        if (!currentConfig || !currentConfig.profiles[currentProfileName]) return;
+        const prof = currentConfig.profiles[currentProfileName];
+
+        prof.type = currentEffect;
+        prof.direction = currentDirection;
+        prof.speed_index = speedIndex;
+        prof.period_ms = getPeriodMs();
+        prof.brightness = brightnessVal;
+        prof.analog = (currentEffect === 'static') ? isAnalogEnabled : false;
+
+        if (gradientStops.length > 0) {
+            prof.color = hexToRgb(gradientStops[0].color);
+            prof.color1 = hexToRgb(gradientStops[0].color);
+        }
+        if (gradientStops.length > 1) {
+            prof.color2 = hexToRgb(gradientStops[1].color);
+        }
+    }
+
+    async function saveConfiguration() {
+        saveCurrentInputsToProfile();
         try {
-            const res = await fetch('/api/status', { cache: 'no-store' });
+            const res = await fetch('/api/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(currentConfig)
+            });
+            const ret = await res.json();
             if (res.ok) {
-                consecutiveFails = 0;
-                if (!isConnected) {
-                    isConnected = true;
-                    document.getElementById('game-mode-overlay').classList.remove('visible');
-                    loadConfig();
-                }
+                showToast('✅ ' + (ret.message || '配置已成功保存，daemon 已自动热重载！'));
             } else {
-                handleDisconnect();
+                showToast('❌ 保存失败: ' + (ret.message || '未知错误'));
             }
         } catch (e) {
-            handleDisconnect();
+            showToast('❌ 保存请求失败: ' + e.message);
         }
-    }, 1500);
-}
-
-function handleDisconnect() {
-    consecutiveFails++;
-    if (consecutiveFails >= 2 && isConnected) {
-        isConnected = false;
-        document.getElementById('game-mode-overlay').classList.add('visible');
     }
-}
 
-function showToast(msg) {
-    const t = document.getElementById('toast');
-    t.textContent = msg;
-    t.classList.add('show');
-    setTimeout(() => t.classList.remove('show'), 3500);
-}
+    async function loadConfig() {
+        try {
+            const res = await fetch('/api/config');
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            currentConfig = await res.json();
 
-// 色彩转换工具函数
-function rgbToHex(rgb) {
-    if (!rgb || rgb.length < 3) return '#000000';
-    return '#' + rgb.slice(0, 3).map(x => Math.max(0, Math.min(255, Math.floor(x))).toString(16).padStart(2, '0')).join('').toUpperCase();
-}
+            currentProfileName = currentConfig.default_profile || Object.keys(currentConfig.profiles || {})[0] || 'desktop';
+            refreshProfileSelector();
+            loadProfileDataToUI(currentProfileName);
+            renderRulesTab();
+        } catch (e) {
+            console.warn('获取配置失败:', e);
+        }
+    }
 
-function hexToRgb(hex) {
-    let clean = hex.replace('#', '');
-    if (clean.length === 3) clean = clean.split('').map(c => c + c).join('');
-    const num = parseInt(clean, 16);
-    return [(num >> 16) & 255, (num >> 8) & 255, num & 255];
-}
+    // 心跳轮询与游戏模式优雅降级
+    let consecutiveFails = 0;
+    let isConnected = true;
 
-function hsvToRgb(h, s, v) {
-    let c = v * s;
-    let x = c * (1 - Math.abs(((h / 60) % 2) - 1));
-    let m = v - c;
-    let r1 = 0, g1 = 0, b1 = 0;
-    if (h >= 0 && h < 60) { r1 = c; g1 = x; b1 = 0; }
-    else if (h >= 60 && h < 120) { r1 = x; g1 = c; b1 = 0; }
-    else if (h >= 120 && h < 180) { r1 = 0; g1 = c; b1 = x; }
-    else if (h >= 180 && h < 240) { r1 = 0; g1 = x; b1 = c; }
-    else if (h >= 240 && h < 300) { r1 = x; g1 = 0; b1 = c; }
-    else if (h >= 300 && h < 360) { r1 = c; g1 = 0; b1 = x; }
-    return [Math.round((r1 + m) * 255), Math.round((g1 + m) * 255), Math.round((b1 + m) * 255)];
-}
-</script>
+    function startHeartbeat() {
+        setInterval(async () => {
+            try {
+                const res = await fetch('/api/status', { cache: 'no-store' });
+                if (res.ok) {
+                    consecutiveFails = 0;
+                    if (!isConnected) {
+                        isConnected = true;
+                        document.getElementById('game-mode-dialog').close();
+                        loadConfig();
+                    }
+                } else {
+                    handleDisconnect();
+                }
+            } catch (e) {
+                handleDisconnect();
+            }
+        }, 1500);
+    }
 
+    function handleDisconnect() {
+        consecutiveFails++;
+        if (consecutiveFails >= 2 && isConnected) {
+            isConnected = false;
+            document.getElementById('game-mode-dialog').showModal();
+        }
+    }
+
+    // 现代化 Top Layer Popover Toast
+    function showToast(msg) {
+        const pop = document.getElementById('toast-popover');
+        const txt = document.getElementById('toast-text');
+        txt.textContent = msg;
+
+        try {
+            pop.showPopover();
+            setTimeout(() => {
+                try { pop.hidePopover(); } catch(e){}
+            }, 3500);
+        } catch (e) {
+            // 回退
+            pop.style.display = 'block';
+            setTimeout(() => { pop.style.display = 'none'; }, 3500);
+        }
+    }
+
+    // 色彩转换工具函数
+    function rgbToHex(rgb) {
+        if (!rgb || rgb.length < 3) return '#000000';
+        return '#' + rgb.slice(0, 3).map(x => Math.max(0, Math.min(255, Math.floor(x))).toString(16).padStart(2, '0')).join('').toUpperCase();
+    }
+
+    function hexToRgb(hex) {
+        let clean = hex.replace('#', '');
+        if (clean.length === 3) clean = clean.split('').map(c => c + c).join('');
+        const num = parseInt(clean, 16);
+        return [(num >> 16) & 255, (num >> 8) & 255, num & 255];
+    }
+
+    function hsvToRgb(h, s, v) {
+        let c = v * s;
+        let x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+        let m = v - c;
+        let r1 = 0, g1 = 0, b1 = 0;
+        if (h >= 0 && h < 60) { r1 = c; g1 = x; b1 = 0; }
+        else if (h >= 60 && h < 120) { r1 = x; g1 = c; b1 = 0; }
+        else if (h >= 120 && h < 180) { r1 = 0; g1 = c; b1 = x; }
+        else if (h >= 180 && h < 240) { r1 = 0; g1 = x; b1 = c; }
+        else if (h >= 240 && h < 300) { r1 = x; g1 = 0; b1 = c; }
+        else if (h >= 300 && h < 360) { r1 = c; g1 = 0; b1 = x; }
+        return [Math.round((r1 + m) * 255), Math.round((g1 + m) * 255), Math.round((b1 + m) * 255)];
+    }
+
+    // 初始化入口
+    window.addEventListener('DOMContentLoaded', async () => {
+        buildVirtualKeyboard();
+        renderGradientStops();
+        await loadConfig();
+        requestAnimationFrame(renderLightingLoop);
+        startHeartbeat();
+    });
+    </script>
 </body>
 </html>

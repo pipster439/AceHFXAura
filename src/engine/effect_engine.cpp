@@ -3,15 +3,16 @@
 namespace aura {
 
 EffectEngine::EffectEngine()
-    : active_profile_(nullptr),
-      start_time_(std::chrono::steady_clock::now()) {}
+    : start_time_(std::chrono::steady_clock::now()) {}
 
-void EffectEngine::SetActiveProfile(const Profile* profile) {
-    active_profile_.store(profile, std::memory_order_release);
+void EffectEngine::SetActiveProfile(std::shared_ptr<const Profile> profile) {
+    std::lock_guard<std::mutex> lock(profile_mutex_);
+    active_profile_ = std::move(profile);
 }
 
-const Profile* EffectEngine::GetActiveProfile() const {
-    return active_profile_.load(std::memory_order_acquire);
+std::shared_ptr<const Profile> EffectEngine::GetActiveProfileCopy() const {
+    std::lock_guard<std::mutex> lock(profile_mutex_);
+    return active_profile_;
 }
 
 uint64_t EffectEngine::GetElapsedMs() const {
@@ -20,7 +21,10 @@ uint64_t EffectEngine::GetElapsedMs() const {
 }
 
 void EffectEngine::Tick(FrameBuffer& out_frame, const Keymap& keymap) {
-    const Profile* profile = GetActiveProfile();
+    // Copy the shared_ptr under the lock, then render without holding it:
+    // the profile stays alive for the whole render even if a hot reload swaps
+    // the active profile concurrently.
+    std::shared_ptr<const Profile> profile = GetActiveProfileCopy();
     uint64_t elapsed_ms = GetElapsedMs();
 
     if (profile) {

@@ -2,10 +2,10 @@
 <Project>
   <ProjectOutputs>
     <ProjectOutput>
-      <FullPath>G:\Aura\build\x64\Release\ZERO_CHECK</FullPath>
+      <FullPath>C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\build\x64\Release\ZERO_CHECK</FullPath>
     </ProjectOutput>
     <ProjectOutput>
-      <FullPath>G:\Aura\build\Release\aura_web_ui.exe</FullPath>
+      <FullPath>C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\build\Release\aura_web_ui.exe</FullPath>
     </ProjectOutput>
   </ProjectOutputs>
   <ContentFiles />
