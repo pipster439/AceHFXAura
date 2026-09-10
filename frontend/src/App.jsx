@@ -198,12 +198,12 @@ export default function App() {
     bgColor
   ]);
 
-  // 保存到后端并设为当前活跃默认方案
+  // 保存当前方案配置到后端（沿用当前已生效的 default_profile，不覆盖默认方案）
   const handleSave = async () => {
     syncCurrentStateToConfig();
     const toSave = {
       ...config,
-      default_profile: currentProfileName
+      default_profile: config?.default_profile || currentProfileName
     };
     setConfig(toSave);
     setIsSaving(true);
@@ -215,7 +215,12 @@ export default function App() {
       });
       const data = await res.json();
       if (res.ok) {
-        showToast(`方案 [${currentProfileName}] 已保存并立即生效到物理键盘！`);
+        const isDefault = toSave.default_profile === currentProfileName;
+        showToast(
+          isDefault
+            ? `方案 [${currentProfileName}] 已保存并立即生效到物理键盘！`
+            : `方案 [${currentProfileName}] 已保存（当前默认方案仍为 [${toSave.default_profile}]）`
+        );
       } else {
         showToast(data.message || '保存失败', 'error');
       }
