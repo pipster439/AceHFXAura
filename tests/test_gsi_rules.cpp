@@ -3,6 +3,7 @@
 #include <thread>
 #include <chrono>
 #include <memory>
+#include <filesystem>
 #include "test_util.h"
 #include "config/rule_engine.h"
 #include "gsi/gsi_adapter.h"
@@ -384,6 +385,159 @@ int main() {
               "最坏情况 128 键寻址表长未超 MAX_HARDWARE_STREAM_KEYS(144)");
         CHECK(aura::HARDWARE_STREAM_BUFFER_SIZE == 432,
               "HARDWARE_STREAM_BUFFER_SIZE == 432 字节 (144 * 3 字节缓冲容量)");
+    }
+
+    // 10. [R12 配置引用完整性与未知效果类型强校验护栏]
+    std::cout << "\n[测试 10] 验证配置引用完整性校验与未知效果类型拦截 (R12 护栏)...\n";
+    {
+        // 10.1 未知效果类型校验 (如 "type": "breathig")
+        const std::string tmp_unknown_type = (std::filesystem::temp_directory_path() / "test_cfg_unknown_type.json").string();
+        {
+            std::ofstream ofs(tmp_unknown_type);
+            ofs << R"json({
+                "default_profile": "desktop",
+                "profiles": {
+                    "desktop": { "type": "breathig", "period_ms": 1000 }
+                }
+            })json";
+        }
+        aura::RuleEngine engine_bad_type;
+        bool res_bad_type = engine_bad_type.LoadConfig(tmp_unknown_type);
+        CHECK(!res_bad_type, "配置包含未知效果类型 (type: 'breathig') 时 LoadConfig 坚决拒绝并返回 false");
+        std::filesystem::remove(tmp_unknown_type);
+
+        // 10.2 rules 引用不存在的 profile
+        const std::string tmp_missing_rule_prof = (std::filesystem::temp_directory_path() / "test_cfg_missing_rule_prof.json").string();
+        {
+            std::ofstream ofs(tmp_missing_rule_prof);
+            ofs << R"json({
+                "default_profile": "desktop",
+                "rules": [
+                    { "process": "code.exe", "profile": "nonexistent_profile" }
+                ],
+                "profiles": {
+                    "desktop": { "type": "static", "color": [0, 80, 200] }
+                }
+            })json";
+        }
+        aura::RuleEngine engine_bad_rule;
+        bool res_bad_rule = engine_bad_rule.LoadConfig(tmp_missing_rule_prof);
+        CHECK(!res_bad_rule, "rules 引用未定义方案 (profile: 'nonexistent_profile') 时 LoadConfig 坚决拒绝并返回 false");
+        std::filesystem::remove(tmp_missing_rule_prof);
+
+        // 10.3 gsi_bindings 引用不存在的 profile
+        const std::string tmp_missing_gsi_prof = (std::filesystem::temp_directory_path() / "test_cfg_missing_gsi_prof.json").string();
+        {
+            std::ofstream ofs(tmp_missing_gsi_prof);
+            ofs << R"json({
+                "default_profile": "desktop",
+                "gsi_bindings": [
+                    { "field": "player_state.health", "operator": "<", "value": 20, "profile": "unreal_gsi_profile" }
+                ],
+                "profiles": {
+                    "desktop": { "type": "static", "color": [0, 80, 200] }
+                }
+            })json";
+        }
+        aura::RuleEngine engine_bad_gsi;
+        bool res_bad_gsi = engine_bad_gsi.LoadConfig(tmp_missing_gsi_prof);
+        CHECK(!res_bad_gsi, "gsi_bindings 引用未定义方案时 LoadConfig 坚决拒绝并返回 false");
+        std::filesystem::remove(tmp_missing_gsi_prof);
+
+        // 10.4 default_profile 引用不存在的 profile
+        const std::string tmp_missing_default = (std::filesystem::temp_directory_path() / "test_cfg_missing_default.json").string();
+        {
+            std::ofstream ofs(tmp_missing_default);
+            ofs << R"json({
+                "default_profile": "ghost_desktop",
+                "profiles": {
+                    "desktop": { "type": "static", "color": [0, 80, 200] }
+                }
+            })json";
+        }
+        aura::RuleEngine engine_bad_def;
+        bool res_bad_def = engine_bad_def.LoadConfig(tmp_missing_default);
+        CHECK(!res_bad_def, "default_profile 引用未定义方案时 LoadConfig 坚决拒绝并返回 false");
+        std::filesystem::remove(tmp_missing_default);
+
+        // 10.5 coding 方案存在性与配置完整性验证
+        CHECK(rule_engine.HasProfile("coding"), "测试配置中包含合法的 coding 方案 (HasProfile == true)");
+        auto coding_prof = rule_engine.MatchProfile("code.exe");
+        CHECK(coding_prof != nullptr && coding_prof->name == "coding", "code.exe 精准匹配 coding 方案");
+        CHECK(coding_prof->key_overrides.size() >= 3, "coding 方案包含 ESC/ENTER/TAB 等按键重写覆盖");
+    }
+
+    // 11. [R12b 热重载失败 mtime 同步与旧配置保留护栏]
+    std::cout << "\n[测试 11] 验证热重载 CheckAndReload 失败时 mtime 同步与旧配置保留 (R12b 护栏)...\n";
+    {
+        const std::string tmp_reload_cfg = (std::filesystem::temp_directory_path() / "test_cfg_reload.json").string();
+        {
+            std::ofstream ofs(tmp_reload_cfg);
+            ofs << R"json({
+                "default_profile": "prof_initial",
+                "rules": [
+                    { "process": "demo.exe", "profile": "prof_initial" }
+                ],
+                "profiles": {
+                    "prof_initial": { "type": "static", "color": [10, 20, 30] }
+                }
+            })json";
+        }
+        aura::RuleEngine reload_engine;
+        CHECK(reload_engine.LoadConfig(tmp_reload_cfg), "初始合法配置加载成功");
+        auto initial_prof = reload_engine.MatchProfile("demo.exe");
+        CHECK(initial_prof != nullptr && initial_prof->name == "prof_initial", "初始规则匹配生效");
+
+        // 此时未修改文件，CheckAndReload 应返回 false
+        CHECK(!reload_engine.CheckAndReload(), "文件未变动时 CheckAndReload 返回 false");
+
+        // 修改为非法配置（引用破坏）
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        {
+            std::ofstream ofs(tmp_reload_cfg);
+            ofs << R"json({
+                "default_profile": "prof_initial",
+                "rules": [
+                    { "process": "demo.exe", "profile": "nonexistent_profile" }
+                ],
+                "profiles": {
+                    "prof_initial": { "type": "static", "color": [10, 20, 30] }
+                }
+            })json";
+        }
+        // 第一次调用 CheckAndReload: 检测到 mtime 改变，尝试重载失败并更新 last_write_time_
+        bool reload_res1 = reload_engine.CheckAndReload();
+        CHECK(!reload_res1, "热重载遇到非法引用配置返回 false");
+
+        // 关键校验 1：旧配置未被破坏，依然保持有效
+        auto preserved_prof = reload_engine.MatchProfile("demo.exe");
+        CHECK(preserved_prof != nullptr && preserved_prof->name == "prof_initial",
+              "热重载失败后旧配置完整保留 (demo.exe 仍匹配 prof_initial)");
+
+        // 关键校验 2 (R12b 防刷屏核心)：再次调用 CheckAndReload，不应再尝试重载（直接返回 false）
+        bool reload_res2 = reload_engine.CheckAndReload();
+        CHECK(!reload_res2, "文件 mtime 未再变动时，CheckAndReload 绝不再重复重载 (防每秒刷屏)");
+
+        // 修正文件为新的有效配置，验证 mtime 再次变更后能够成功重载
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        {
+            std::ofstream ofs(tmp_reload_cfg);
+            ofs << R"json({
+                "default_profile": "prof_v2",
+                "rules": [
+                    { "process": "demo.exe", "profile": "prof_v2" }
+                ],
+                "profiles": {
+                    "prof_v2": { "type": "breathing", "period_ms": 2000 }
+                }
+            })json";
+        }
+        bool reload_res3 = reload_engine.CheckAndReload();
+        CHECK(reload_res3, "修复配置文件后，mtime 变化触发重载成功");
+        auto v2_prof = reload_engine.MatchProfile("demo.exe");
+        CHECK(v2_prof != nullptr && v2_prof->name == "prof_v2", "重载后新配置 prof_v2 生效");
+
+        std::filesystem::remove(tmp_reload_cfg);
     }
 
     std::cout << "\n=========================================================\n";

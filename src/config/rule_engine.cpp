@@ -17,15 +17,24 @@ std::string RuleEngine::ToLower(const std::string& s) {
     return res;
 }
 
-FILETIME RuleEngine::GetConfigFileTime() const {
+FILETIME RuleEngine::GetConfigFileTime(const std::string& path) {
     FILETIME ft{0, 0};
-    if (config_path_.empty()) return ft;
+    if (path.empty()) return ft;
 
     WIN32_FILE_ATTRIBUTE_DATA fad{};
-    if (GetFileAttributesExA(config_path_.c_str(), GetFileExInfoStandard, &fad)) {
+    if (GetFileAttributesExA(path.c_str(), GetFileExInfoStandard, &fad)) {
         ft = fad.ftLastWriteTime;
     }
     return ft;
+}
+
+FILETIME RuleEngine::GetConfigFileTime() const {
+    std::string path;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        path = config_path_;
+    }
+    return GetConfigFileTime(path);
 }
 
 RuleEngine::RuleEngine() : default_profile_name_("desktop") {}
@@ -42,6 +51,7 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
         file >> j;
 
         std::string def_name = j.value("default_profile", "desktop");
+        bool valid = true;
 
         std::vector<RuleEntry> new_rules;
         if (j.contains("rules") && j["rules"].is_array()) {
@@ -50,9 +60,17 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
                 re.process_name = ToLower(item.value("process", ""));
                 re.profile_name = item.value("profile", "");
                 re.suppress_web_ui = item.value("suppress_web_ui", false);
-                if (!re.process_name.empty() && !re.profile_name.empty()) {
-                    new_rules.push_back(re);
+                if (re.process_name.empty()) {
+                    LOG_ERROR("进程规则缺少有效的 process 字段: " << item.dump());
+                    valid = false;
+                    continue;
                 }
+                if (re.profile_name.empty()) {
+                    LOG_ERROR("进程规则 (进程: '" << re.process_name << "') 缺少有效的 profile 字段");
+                    valid = false;
+                    continue;
+                }
+                new_rules.push_back(re);
             }
         }
 
@@ -66,14 +84,25 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
                     b.target_value = item["value"];
                 }
                 b.profile_name = item.value("profile", "");
-                if (!b.field.empty() && !b.profile_name.empty()) {
-                    new_gsi_bindings.push_back(b);
+                if (b.field.empty()) {
+                    LOG_ERROR("GSI 绑定规则缺少有效的 field 字段: " << item.dump());
+                    valid = false;
+                    continue;
                 }
+                if (b.profile_name.empty()) {
+                    LOG_ERROR("GSI 绑定规则 (字段: '" << b.field << "') 缺少有效的 profile 字段");
+                    valid = false;
+                    continue;
+                }
+                new_gsi_bindings.push_back(b);
             }
         }
 
         std::unordered_map<std::string, std::shared_ptr<Profile>> new_profiles;
-        if (j.contains("profiles") && j["profiles"].is_object()) {
+        if (!j.contains("profiles") || !j["profiles"].is_object() || j["profiles"].empty()) {
+            LOG_ERROR("配置文件缺少有效的 'profiles' 节点或 profiles 为空: " << config_path);
+            valid = false;
+        } else {
             for (auto& [pname, pval] : j["profiles"].items()) {
                 auto prof = std::make_shared<Profile>();
                 prof->name = pname;
@@ -176,8 +205,11 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
                     }
                     uint64_t period = pval.value("period_ms", 2500);
                     prof->base_effect = std::make_shared<RaindropEffect>(col, period);
+                } else {
+                    LOG_ERROR("方案 '" << pname << "' 配置了未知的效果类型: '" << type 
+                              << "' (支持的有效类型: static, breathing, color_cycle, wave, custom_keymap, reactive, ripple, starry_night, quicksand, current, raindrop)");
+                    valid = false;
                 }
-
 
                 // Parse key overrides
                 if (pval.contains("keys") && pval["keys"].is_object()) {
@@ -195,6 +227,44 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
             }
         }
 
+        // 2. 默认方案完整性校验
+        if (new_profiles.find(def_name) == new_profiles.end()) {
+            LOG_ERROR("默认方案 default_profile '" << def_name 
+                      << "' 未在 profiles 中定义，请检查拼写或在 profiles 中添加该方案定义");
+            valid = false;
+        }
+
+        // 3. 规则 (rules) 方案引用完整性校验
+        for (const auto& rule : new_rules) {
+            if (new_profiles.find(rule.profile_name) == new_profiles.end()) {
+                LOG_ERROR("进程规则 (进程: '" << rule.process_name 
+                          << "') 引用了未定义的方案: '" << rule.profile_name 
+                          << "'，请在 profiles 中定义方案 '" << rule.profile_name 
+                          << "' 或修正该规则中的 profile 字段");
+                valid = false;
+            }
+        }
+
+        // 4. GSI 绑定 (gsi_bindings) 方案引用完整性校验
+        for (const auto& binding : new_gsi_bindings) {
+            if (new_profiles.find(binding.profile_name) == new_profiles.end()) {
+                LOG_ERROR("GSI 绑定规则 (条件: " << binding.field << " " << binding.op 
+                          << ") 引用了未定义的方案: '" << binding.profile_name 
+                          << "'，请在 profiles 中定义方案 '" << binding.profile_name 
+                          << "' 或修正该绑定中的 profile 字段");
+                valid = false;
+            }
+        }
+
+        if (!valid) {
+            return false;
+        }
+
+        const size_t rules_count = new_rules.size();
+        const size_t bindings_count = new_gsi_bindings.size();
+        const size_t profiles_count = new_profiles.size();
+        FILETIME file_ft = GetConfigFileTime(config_path);
+
         // Apply under lock
         {
             std::lock_guard<std::mutex> lock(mutex_);
@@ -203,13 +273,13 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
             rules_ = std::move(new_rules);
             gsi_bindings_ = std::move(new_gsi_bindings);
             profiles_ = std::move(new_profiles);
-            last_write_time_ = GetConfigFileTime();
+            last_write_time_ = file_ft;
         }
 
         LOG_INFO("成功加载配置文件: " << config_path << " (默认方案: " << def_name 
-                 << ", 规则数: " << rules_.size() 
-                 << ", GSI绑定数: " << gsi_bindings_.size() 
-                 << ", Profile数: " << profiles_.size() << ")");
+                 << ", 规则数: " << rules_count 
+                 << ", GSI绑定数: " << bindings_count 
+                 << ", Profile数: " << profiles_count << ")");
         return true;
     } catch (const std::exception& e) {
         LOG_ERROR("解析配置文件异常: " << e.what());
@@ -218,14 +288,30 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
 }
 
 bool RuleEngine::CheckAndReload() {
-    FILETIME current_ft = GetConfigFileTime();
+    std::string path;
+    FILETIME last_ft{0, 0};
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        path = config_path_;
+        last_ft = last_write_time_;
+    }
+    if (path.empty()) return false;
+
+    FILETIME current_ft = GetConfigFileTime(path);
     if (current_ft.dwLowDateTime == 0 && current_ft.dwHighDateTime == 0) {
         return false;
     }
 
-    if (CompareFileTime(&current_ft, &last_write_time_) != 0) {
-        LOG_INFO("检测到配置文件已修改，正在执行热重载...");
-        return LoadConfig(config_path_);
+    if (CompareFileTime(&current_ft, &last_ft) != 0) {
+        LOG_INFO("检测到配置文件已修改，正在执行热重载: " << path);
+        if (LoadConfig(path)) {
+            return true;
+        } else {
+            std::lock_guard<std::mutex> lock(mutex_);
+            last_write_time_ = current_ft;
+            LOG_WARN("配置文件热重载失败，保留既有有效配置；文件再次修改前将暂停重试");
+            return false;
+        }
     }
 
     return false;
@@ -305,6 +391,11 @@ bool RuleEngine::ShouldSuppressWebUi(const std::string& process_name) {
 
     // Default policy: unmapped (desktop / unknown) => false (do not suppress)
     return false;
+}
+
+bool RuleEngine::HasProfile(const std::string& name) const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return profiles_.find(name) != profiles_.end();
 }
 
 } // namespace aura

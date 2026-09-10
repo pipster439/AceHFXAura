@@ -43,20 +43,17 @@ public:
     // 3. Otherwise, matches process_name against normal rules, then default_profile.
     std::shared_ptr<const Profile> MatchProfile(const std::string& process_name, const GsiState* gsi_state = nullptr);
 
-    // Overload for backwards compatibility
-    std::shared_ptr<const Profile> MatchProfile(const std::string& process_name) {
-        return MatchProfile(process_name, nullptr);
-    }
-
     // Checks if the matched rule requests suppressing the web UI service
     bool ShouldSuppressWebUi(const std::string& process_name);
 
     const std::string& GetDefaultProfileName() const { return default_profile_name_; }
     const std::string& GetConfigPath() const { return config_path_; }
     const std::vector<GsiBinding>& GetGsiBindings() const { return gsi_bindings_; }
+    bool HasProfile(const std::string& name) const;
 
 private:
     static std::string ToLower(const std::string& s);
+    static FILETIME GetConfigFileTime(const std::string& path);
     FILETIME GetConfigFileTime() const;
 
     std::string config_path_;
