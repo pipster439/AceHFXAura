@@ -141,6 +141,8 @@ bool AuraAdapter::ConnectHardwareInternal() {
 
     PFN_CreateLedDevice fn_create_dev = reinterpret_cast<PFN_CreateLedDevice>(hal_vtable[VTABLE_HAL_CREATE_LED_DEVICE]);
     LONG create_res = fn_create_dev(pHal_, &vec);
+    // 华硕 HAL 调用返回值留档，显式标记避免 /W4 C4189 警告
+    (void)create_res;
 
     // Memory safety validation
     if (vec.first != dev_storage || vec.last < vec.first || vec.last > vec.end) {

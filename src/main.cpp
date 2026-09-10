@@ -96,6 +96,8 @@ int main(int argc, char* argv[]) {
     // 1. 预先设置 DLL 搜索路径并加载华硕 HAL (必须在创建驱动实例前完成，确保其依赖项正常解析)
     SetDllDirectoryW(L"C:\\Program Files\\ASUS\\Aac_Keyboard");
     HMODULE hHalPreload = LoadLibraryW(L"C:\\Program Files\\ASUS\\Aac_Keyboard\\AacKbHal_x64.dll");
+    // 预加载句柄在进程生命周期内常驻以保全依赖，显式标记避免 /W4 C4189 警告
+    (void)hHalPreload;
 
     // 2. 解析命令行参数
     bool dry_run = false;

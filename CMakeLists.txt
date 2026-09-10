@@ -1,14 +1,43 @@
 cmake_minimum_required(VERSION 3.20)
 project(aura_project LANGUAGES CXX)
 
+# CMAKE_BUILD_TYPE 未设时显式设置默认值
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose the type of build." FORCE)
+endif()
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# AddressSanitizer 选项（仅 MSVC Debug 下启用）
+option(AURA_ENABLE_ASAN "Enable AddressSanitizer (MSVC Debug build only)" OFF)
+if (AURA_ENABLE_ASAN)
+    if (MSVC)
+        message(STATUS "AddressSanitizer enabled for MSVC Debug builds")
+        add_compile_options($<$<CONFIG:Debug>:/fsanitize=address>)
+        add_link_options($<$<CONFIG:Debug>:/INCREMENTAL:NO>)
+    endif()
+endif()
+
 add_definitions(-DWIN32_LEAN_AND_MEAN -DNOMINMAX)
+
+if (MSVC)
+    add_compile_options(
+        /utf-8
+        /W4
+        /external:W0
+        /external:anglebrackets
+        "/external:I${CMAKE_CURRENT_SOURCE_DIR}/include/third_party"
+        $<$<CONFIG:Release>:/O2>
+    )
+endif()
 
 include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+include_directories(SYSTEM
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/third_party
 )
 
 # 1. 核心守护进程 (aura_daemon)
@@ -44,7 +73,7 @@ set(DAEMON_HEADERS
 add_executable(aura_daemon ${DAEMON_SOURCES} ${DAEMON_HEADERS})
 
 if (MSVC)
-    target_compile_options(aura_daemon PRIVATE /utf-8 /W3 $<$<CONFIG:Release>:/O2>)
+    target_compile_options(aura_daemon PRIVATE /permissive-)
 endif()
 
 target_link_libraries(aura_daemon PRIVATE
@@ -57,7 +86,6 @@ target_link_libraries(aura_daemon PRIVATE
 )
 
 add_executable(test_com test_com.cpp)
-target_compile_options(test_com PRIVATE /utf-8 /W3 $<$<CONFIG:Release>:/O2>)
 target_link_libraries(test_com PRIVATE ole32 oleaut32)
 
 # 2. 轻量网页配置服务 (aura_web_ui)
@@ -73,10 +101,6 @@ set(WEB_HEADERS
 )
 
 add_executable(aura_web_ui ${WEB_SOURCES} ${WEB_HEADERS})
-
-if (MSVC)
-    target_compile_options(aura_web_ui PRIVATE /utf-8 /W3 $<$<CONFIG:Release>:/O2>)
-endif()
 
 target_link_libraries(aura_web_ui PRIVATE
     ws2_32
@@ -94,10 +118,6 @@ add_executable(test_gsi_rules
     src/web/web_server.cpp
 )
 
-if (MSVC)
-    target_compile_options(test_gsi_rules PRIVATE /utf-8 /W3 $<$<CONFIG:Release>:/O2>)
-endif()
-
 target_link_libraries(test_gsi_rules PRIVATE
     ws2_32
     crypt32
@@ -106,9 +126,6 @@ target_link_libraries(test_gsi_rules PRIVATE
 
 # 4. 诊断测试: test_diag_hook (手动交互式诊断工具，不注册到 CTest)
 add_executable(test_diag_hook tests/test_diag_hook.cpp)
-if (MSVC)
-    target_compile_options(test_diag_hook PRIVATE /utf-8 /W3 $<$<CONFIG:Release>:/O2>)
-endif()
 target_link_libraries(test_diag_hook PRIVATE user32)
 
 # 5. CTest 测试体系集成
