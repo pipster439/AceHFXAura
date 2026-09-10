@@ -56,7 +56,7 @@ private:
 
     bool dry_run_ = false;
     AdapterState state_ = AdapterState::Uninitialized;
-    bool com_initialized_ = false;
+    // 契约：COM 生命周期由调用方（如 main 中的 ComScope）管理，AuraAdapter 不自行初始化或反初始化 COM
 
     HMODULE hHalMod_ = nullptr;
     IClassFactory* pFactory_ = nullptr;

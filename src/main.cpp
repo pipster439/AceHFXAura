@@ -10,6 +10,8 @@
 
 #include <iostream>
 #include <string>
+#include <sstream>
+#include <iomanip>
 #include <cctype>
 #include <vector>
 #include <memory>
@@ -51,18 +53,50 @@ void PrintUsage() {
               << "=========================================================\n";
 }
 
+// RAII 守卫管理 COM 生命周期：确保与 CoInitializeEx 成对释放，并在提前返回时自动清理
+struct ComScope {
+    HRESULT hr;
+    explicit ComScope() : hr(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED)) {}
+    ~ComScope() {
+        if (SUCCEEDED(hr)) {
+            CoUninitialize();
+        }
+    }
+    bool ok() const { return SUCCEEDED(hr); }
+
+    ComScope(const ComScope&) = delete;
+    ComScope& operator=(const ComScope&) = delete;
+    ComScope(ComScope&&) = delete;
+    ComScope& operator=(ComScope&&) = delete;
+};
+
 } // namespace
 
 int main(int argc, char* argv[]) {
-    // 0. 预先设置 DLL 搜索路径并加载华硕 HAL (必须在 COM 初始化前完成，确保其依赖项正常解析)
+    // 0. 初始化 COM 单线程套间 (RAII 守卫置于 main 顶部，先于所有局部对象声明以保证 LIFO 逆序析构)
+    ComScope com;
+
+    // 初始化日志系统
+    aura::Logger::Instance().Init("aura_daemon.log");
+
+    // 检查 COM 初始化结果 (含 RPC_E_CHANGED_MODE 模式冲突处理)
+    if (!com.ok()) {
+        std::ostringstream hr_oss;
+        hr_oss << "0x" << std::hex << std::uppercase << static_cast<unsigned long>(com.hr);
+        if (com.hr == RPC_E_CHANGED_MODE) {
+            LOG_ERROR("FATAL: COM 初始化失败: 当前线程已被初始化为与 STA 不兼容的并发模式 (RPC_E_CHANGED_MODE, " 
+                      + hr_oss.str() + ")，守护进程无法继续运行。");
+        } else {
+            LOG_ERROR("FATAL: COM 初始化失败 (错误码: " + hr_oss.str() + ")，守护进程无法继续运行。");
+        }
+        return 1;
+    }
+
+    // 1. 预先设置 DLL 搜索路径并加载华硕 HAL (必须在创建驱动实例前完成，确保其依赖项正常解析)
     SetDllDirectoryW(L"C:\\Program Files\\ASUS\\Aac_Keyboard");
     HMODULE hHalPreload = LoadLibraryW(L"C:\\Program Files\\ASUS\\Aac_Keyboard\\AacKbHal_x64.dll");
 
-    // 1. 初始化 COM 单线程套间与日志
-    CoInitialize(NULL);
-    aura::Logger::Instance().Init("aura_daemon.log");
-
-    // 1. 解析命令行参数
+    // 2. 解析命令行参数
     bool dry_run = false;
     int test_init_count = 0;
     double test_stability_minutes = 0.0;

@@ -10,7 +10,6 @@ namespace aura {
 AuraAdapter::AuraAdapter(bool dry_run)
     : dry_run_(dry_run),
       state_(AdapterState::Uninitialized),
-      com_initialized_(false),
       hHalMod_(nullptr),
       pFactory_(nullptr),
       pHal_(nullptr),
@@ -79,6 +78,7 @@ bool AuraAdapter::BuildPaddedHardwareTable(const Keymap* keymap) {
 }
 
 bool AuraAdapter::Initialize(const Keymap* keymap) {
+    LOG_INFO("AuraAdapter::Initialize: 前置契约——调用方已完成 COM 初始化");
     keymap_ = keymap;
     if (!BuildPaddedHardwareTable(keymap_)) {
         // 表长超上界：必须以失败告终，不能用可能越界的表去驱动硬件
@@ -380,11 +380,6 @@ void AuraAdapter::Shutdown() {
     }
 
     ReleaseHardwareInternal();
-
-    if (com_initialized_) {
-        CoUninitialize();
-        com_initialized_ = false;
-    }
 
     state_ = AdapterState::Uninitialized;
     LOG_INFO("[+] AuraAdapter 已安全关闭并释放所有 COM 资源");
