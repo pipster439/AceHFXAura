@@ -115,7 +115,10 @@ void CALLBACK ForegroundMonitor::WinEventProc(
     if (!g_monitor_instance) return;
 
     std::string proc_name = GetProcessNameFromHwnd(hwnd);
-    g_monitor_instance->current_process_name_ = proc_name;
+    {
+        std::lock_guard<std::mutex> lock(g_monitor_instance->name_mutex_);
+        g_monitor_instance->current_process_name_ = proc_name;
+    }
 
     if (g_monitor_instance->callback_) {
         g_monitor_instance->callback_(proc_name, hwnd);
@@ -125,9 +128,9 @@ void CALLBACK ForegroundMonitor::WinEventProc(
 void ForegroundMonitor::MonitorThreadProc() {
     thread_id_ = GetCurrentThreadId();
 
-    // Ensure thread has a message queue
+    // Ensure thread has a complete input message queue
     MSG msg;
-    PeekMessage(&msg, NULL, WM_USER, WM_USER, PM_NOREMOVE);
+    PeekMessage(&msg, NULL, 0, 0, PM_NOREMOVE);
 
     hook_handle_ = SetWinEventHook(
         EVENT_SYSTEM_FOREGROUND,
@@ -150,7 +153,10 @@ void ForegroundMonitor::MonitorThreadProc() {
     // Initial check for currently active foreground window
     HWND initial_fg = GetForegroundWindow();
     std::string proc = initial_fg ? GetProcessNameFromHwnd(initial_fg) : "";
-    current_process_name_ = proc;
+    {
+        std::lock_guard<std::mutex> lock(name_mutex_);
+        current_process_name_ = proc;
+    }
     if (callback_) {
         callback_(proc, initial_fg);
     }
@@ -162,6 +168,9 @@ void ForegroundMonitor::MonitorThreadProc() {
         GetModuleHandle(NULL),
         0
     );
+    if (!kb_hook) {
+        kb_hook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboardProc, NULL, 0);
+    }
     if (kb_hook) {
         LOG_INFO("全局物理按键监听钩子 (WH_KEYBOARD_LL) 注册成功");
     } else {
@@ -209,6 +218,7 @@ void ForegroundMonitor::Stop() {
 }
 
 std::string ForegroundMonitor::GetCurrentProcessName() const {
+    std::lock_guard<std::mutex> lock(name_mutex_);
     return current_process_name_;
 }
 

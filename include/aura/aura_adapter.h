@@ -5,6 +5,8 @@
 #include <string>
 #include <memory>
 #include <chrono>
+#include <windows.h>
+#include <objbase.h>
 
 namespace aura {
 
@@ -48,7 +50,9 @@ private:
     bool ConnectHardwareInternal();
     void ReleaseHardwareInternal();
     LONG CallSetSingleSafe(void* pDev, void* buffer);
-    void BuildPaddedHardwareTable(const Keymap* keymap);
+    // 构建隔离寻址表。返回 false 表示表长超过 MAX_HARDWARE_STREAM_KEYS 上界
+    // （调用方必须据此失败，绝不能用可能越界的表去驱动硬件）。
+    bool BuildPaddedHardwareTable(const Keymap* keymap);
 
     bool dry_run_ = false;
     AdapterState state_ = AdapterState::Uninitialized;

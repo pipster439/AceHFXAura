@@ -23,7 +23,7 @@ AuraAdapter::~AuraAdapter() {
     Shutdown();
 }
 
-void AuraAdapter::BuildPaddedHardwareTable(const Keymap* keymap) {
+bool AuraAdapter::BuildPaddedHardwareTable(const Keymap* keymap) {
     std::vector<uint8_t> calibrated_ids;
     if (keymap) {
         for (const auto& [name, info] : keymap->GetAllKeys()) {
@@ -60,13 +60,31 @@ void AuraAdapter::BuildPaddedHardwareTable(const Keymap* keymap) {
         padded_hardware_table_.push_back(kid);
     }
 
+    // 上界校验：这是防止 PushFrame 与驱动表写入越界的关键闸门。
+    // 原实现直接按表长写入 216 字节的 stream_buffer_，68 键时恰好占满、零余量，
+    // 只要键位表出现第 69 个唯一 led_id 就会越界 3 字节。
+    if (padded_hardware_table_.size() > MAX_HARDWARE_STREAM_KEYS) {
+        LOG_ERROR("FATAL: 隔离寻址表条目 " + std::to_string(padded_hardware_table_.size()) +
+                  " 超过安全上界 " + std::to_string(MAX_HARDWARE_STREAM_KEYS) +
+                  "（原始键位数 " + std::to_string(calibrated_ids.size()) + "）。"
+                  "拒绝继续，避免越界写坏推流缓冲与驱动对象内存。");
+        padded_hardware_table_.clear();
+        return false;
+    }
+
     LOG_INFO("构建安全隔离硬件寻址表完成: 总条目 " + std::to_string(padded_hardware_table_.size()) + 
-             " (含 68 物理键位 + USB 64字节边界隔离槽)");
+             " (含 " + std::to_string(calibrated_ids.size()) + 
+             " 物理键位 + USB 64字节边界隔离槽；安全上界 " + std::to_string(MAX_HARDWARE_STREAM_KEYS) + ")");
+    return true;
 }
 
 bool AuraAdapter::Initialize(const Keymap* keymap) {
     keymap_ = keymap;
-    BuildPaddedHardwareTable(keymap_);
+    if (!BuildPaddedHardwareTable(keymap_)) {
+        // 表长超上界：必须以失败告终，不能用可能越界的表去驱动硬件
+        state_ = AdapterState::Error;
+        return false;
+    }
 
     if (dry_run_) {
         LOG_INFO("[Dry-Run] AuraAdapter 初始化完成 (虚拟硬件模式，不挂载实际 DLL)");
@@ -153,12 +171,27 @@ bool AuraAdapter::ConnectHardwareInternal() {
 
     // 2. 挂载安全隔离硬件寻址表
     if (padded_hardware_table_.empty()) {
-        BuildPaddedHardwareTable(keymap_);
+        if (!BuildPaddedHardwareTable(keymap_)) {
+            ReleaseHardwareInternal();
+            state_ = AdapterState::Error;
+            return false;
+        }
     }
 
-    *reinterpret_cast<DWORD*>(reinterpret_cast<uint8_t*>(pDev_) + 0x6C) = static_cast<DWORD>(padded_hardware_table_.size());
+    // 上界保护：底层闭源 COM 组件为设备预留的真实缓冲区长度不可知，
+    // 故以上界校验替代"盲目信任表长"，避免把表写穿对象内部内存。
+    const size_t table_entries = padded_hardware_table_.size();
+    if (table_entries > MAX_HARDWARE_STREAM_KEYS) {
+        LOG_ERROR("FATAL: 硬件寻址表条目 " + std::to_string(table_entries) +
+                  " 超过安全上界 " + std::to_string(MAX_HARDWARE_STREAM_KEYS) + "，拒绝写入驱动");
+        ReleaseHardwareInternal();
+        state_ = AdapterState::Error;
+        return false;
+    }
+
+    *reinterpret_cast<DWORD*>(reinterpret_cast<uint8_t*>(pDev_) + 0x6C) = static_cast<DWORD>(table_entries);
     uint8_t* led_table = reinterpret_cast<uint8_t*>(pDev_) + 0x74;
-    for (size_t i = 0; i < padded_hardware_table_.size(); ++i) {
+    for (size_t i = 0; i < table_entries; ++i) {
         led_table[i] = padded_hardware_table_[i];
     }
 
@@ -219,6 +252,14 @@ bool AuraAdapter::PushFrame(const FrameBuffer& frame) {
     }
 
     // Translate frame buffer (indexed by led_id) to hardware stream buffer (padded isolated slots)
+    // 纵深防御：正常路径下 BuildPaddedHardwareTable 已拒绝超长表，此处再兜一次，
+    // 确保 stream_buffer_ 的索引永远落在 sizeof(stream_buffer_) 之内。
+    if (padded_hardware_table_.size() * RGB_CHANNELS > sizeof(stream_buffer_)) {
+        LOG_ERROR("FATAL: 硬件寻址表长度 " + std::to_string(padded_hardware_table_.size()) +
+                  " 超出推流缓冲区容量 " + std::to_string(sizeof(stream_buffer_) / RGB_CHANNELS) +
+                  " 槽，已丢弃本帧以避免越界写");
+        return false;
+    }
     std::memset(stream_buffer_, 0, sizeof(stream_buffer_));
     for (size_t i = 0; i < padded_hardware_table_.size(); ++i) {
         uint8_t lid = padded_hardware_table_[i];

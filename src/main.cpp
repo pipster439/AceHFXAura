@@ -4,6 +4,7 @@
 #include "config/rule_engine.h"
 #include "engine/effect_engine.h"
 #include "supervisor/web_supervisor.h"
+#include "gsi/gsi_adapter.h"
 #include "utils/logger.h"
 #include "utils/system_info.h"
 
@@ -16,6 +17,7 @@
 #include <atomic>
 #include <fstream>
 #include <windows.h>
+#include <objbase.h>
 
 namespace {
 
@@ -152,39 +154,41 @@ int main(int argc, char* argv[]) {
         adapter.ForceReset();
     }
 
-    // 9. 构建效果引擎
+    // 9. 启动 CS2 GSI 适配器 (严格监听 127.0.0.1:19897)
+    // 核心线程隔离纪律：网络 I/O 线程仅在内存中维护 GsiState 键值字典，严禁直接触碰 COM/HAL
+    aura::GsiAdapter gsi_adapter;
+    if (!gsi_adapter.Start(19897)) {
+        LOG_WARN("CS2 GSI 适配器监听 127.0.0.1:19897 失败 (可能端口已被占用)");
+    } else {
+        LOG_INFO("[+] CS2 GSI 接收服务已启动，监听 http://127.0.0.1:19897/");
+    }
+
+    // 10. 构建效果引擎
     aura::EffectEngine effect_engine;
-    std::shared_ptr<const aura::Profile> initial_profile = rule_engine.MatchProfile("");
+    std::shared_ptr<const aura::Profile> initial_profile = rule_engine.MatchProfile("", &gsi_adapter.GetState());
+    std::string current_active_profile_name = initial_profile ? initial_profile->name : "(None)";
     effect_engine.SetActiveProfile(initial_profile);
 
-    // 10. 启动网页配置服务后台监护器 (默认桌面状态自动拉起，由独立工线程异步监护)
+    // 11. 启动网页配置服务后台监护器 (默认桌面状态自动拉起，由独立工线程异步监护)
     aura::WebUiSupervisor web_supervisor;
     web_supervisor.StartSupervisor(config_path, 19898);
 
-    // 11. 启动前台窗口监控线程 (WinEventHook 专属消息线程)
+    // 12. 启动前台窗口监控线程 (WinEventHook 专属消息线程)
+    // 线程纪律：WinEventHook 回调运行在监控线程，只做【最小化通知】——把前台进程名写入
+    // GsiState（该写入已由 GsiState::mutex_ 保护）。回调内【不】做规则匹配、不切换方案、
+    // 不触碰效果引擎与网页监护器，也【不】读写任何主循环的局部变量，从而消除跨线程数据竞争。
+    // 所有决策统一收敛到主循环单点执行（见下方 25FPS 循环）。
     aura::ForegroundMonitor monitor;
-    std::string last_proc_name = "__UNSET__";
 
-    monitor.SetCallback([&rule_engine, &effect_engine, &web_supervisor, &last_proc_name](const std::string& proc_name, HWND /*hwnd*/) {
-        if (proc_name == last_proc_name) return;
-        last_proc_name = proc_name;
-
-        std::shared_ptr<const aura::Profile> matched = rule_engine.MatchProfile(proc_name);
-        effect_engine.SetActiveProfile(matched);
-
-        bool suppress = rule_engine.ShouldSuppressWebUi(proc_name);
-        web_supervisor.SetSuppressed(suppress);
-
-        std::string prof_name = matched ? matched->name : "(None)";
-        LOG_INFO("前台窗口切换 -> 进程: [" + (proc_name.empty() ? "桌面/未知" : proc_name) + 
-                 "] => 匹配灯效方案: [" + prof_name + "]" + (suppress ? " (网页服务已抑制)" : ""));
+    monitor.SetCallback([&gsi_adapter](const std::string& proc_name, HWND /*hwnd*/) {
+        gsi_adapter.GetState().SetForegroundProcess(proc_name);
     });
 
     if (!monitor.Start()) {
         LOG_ERROR("启动前台窗口监控失败");
     }
 
-    // 12. 主循环：25 FPS (40ms) 定时时钟推流与配置热重载
+    // 13. 主循环：25 FPS (40ms) 定时时钟推流与配置热重载
     LOG_INFO("[+] ROG FALCHION ACE HFX 守护进程正在运行中 (按 Ctrl+C 优雅退出)...");
 
     aura::FrameBuffer frame_buf;
@@ -198,8 +202,38 @@ int main(int argc, char* argv[]) {
     uint64_t total_frames = 0;
     uint64_t frames_since_stat = 0;
     uint64_t current_minute = 0;
+    // 主循环独占：上次已按【前台进程名】处理过的值，用于驱动网页服务抑制状态
+    // （仅主循环访问，故无需加锁；这正是 R2 把决策单点化后获得的简化）
+    std::string last_proc_seen = "__UNSET__";
 
     while (g_running.load(std::memory_order_acquire)) {
+        // 主线程统一评估当前前台进程与 GSI 状态驱动的灯效方案
+        // (严格遵循主线程独占 COM/HAL 纪律，绝不在网络线程执行硬件调用)
+        std::string cur_proc = monitor.GetCurrentProcessName();
+        gsi_adapter.GetState().SetForegroundProcess(cur_proc);
+        std::shared_ptr<const aura::Profile> matched = rule_engine.MatchProfile(cur_proc, &gsi_adapter.GetState());
+        std::string prof_name = matched ? matched->name : "(None)";
+        if (prof_name != current_active_profile_name) {
+            current_active_profile_name = prof_name;
+            effect_engine.SetActiveProfile(matched);
+            LOG_INFO("灯效方案动态切换 -> [" + prof_name + "] (前台: " + 
+                     (cur_proc.empty() ? "桌面/未知" : cur_proc) + 
+                     (gsi_adapter.GetState().IsActive() ? ", GSI在线" : "") + ")");
+        }
+
+        // 网页服务抑制状态：必须按【前台进程名】变化来更新，不能挂在【方案名】变化上。
+        // 原因：不同进程可能映射到同一个方案（例如 code.exe 与 devenv.exe 都 → coding），
+        // 此时方案名不变；若只在方案切换时更新，就会漏掉 suppress_web_ui 标记的变化，
+        // 导致该开的服务没开、该停的没停。
+        // SetSuppressed 内部为原子交换，且仅在值真正变化时才 notify，重复调用无副作用。
+        if (cur_proc != last_proc_seen) {
+            last_proc_seen = cur_proc;
+            bool suppress = rule_engine.ShouldSuppressWebUi(cur_proc);
+            web_supervisor.SetSuppressed(suppress);
+            LOG_INFO("前台进程变更 -> [" + (cur_proc.empty() ? "桌面/未知" : cur_proc) + "]" +
+                     (suppress ? " (网页服务已抑制)" : ""));
+        }
+
         // 零分配计算当前帧
         effect_engine.Tick(frame_buf, keymap);
 
@@ -216,15 +250,15 @@ int main(int argc, char* argv[]) {
         // 每秒 (25 帧) 检查一次配置文件热重载
         if (total_frames % TARGET_FPS == 0) {
             if (rule_engine.CheckAndReload()) {
-                std::string cur_proc = monitor.GetCurrentProcessName();
-                std::shared_ptr<const aura::Profile> matched = rule_engine.MatchProfile(cur_proc);
-                effect_engine.SetActiveProfile(matched);
+                std::string cur_proc_now = monitor.GetCurrentProcessName();
+                std::shared_ptr<const aura::Profile> reload_matched = rule_engine.MatchProfile(cur_proc_now, &gsi_adapter.GetState());
+                current_active_profile_name = reload_matched ? reload_matched->name : "(None)";
+                effect_engine.SetActiveProfile(reload_matched);
 
-                bool suppress = rule_engine.ShouldSuppressWebUi(cur_proc);
+                bool suppress = rule_engine.ShouldSuppressWebUi(cur_proc_now);
                 web_supervisor.SetSuppressed(suppress);
 
-                std::string prof_name = matched ? matched->name : "(None)";
-                LOG_INFO("配置热重载生效，当前活跃方案更新为: [" + prof_name + "]" + 
+                LOG_INFO("配置热重载生效，当前活跃方案更新为: [" + current_active_profile_name + "]" + 
                          (suppress ? " (网页服务已抑制)" : ""));
             }
         }
@@ -271,9 +305,12 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    // 13. 优雅停机与资源回收
+    // 14. 优雅停机与资源回收
     LOG_INFO("正在停止网页配置服务监护器...");
     web_supervisor.Shutdown();
+
+    LOG_INFO("正在停止 CS2 GSI 接收服务...");
+    gsi_adapter.Stop();
 
     LOG_INFO("正在停止前台监控线程...");
     monitor.Stop();

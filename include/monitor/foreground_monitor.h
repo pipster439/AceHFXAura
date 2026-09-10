@@ -5,6 +5,7 @@
 #include <functional>
 #include <thread>
 #include <atomic>
+#include <mutex>
 
 namespace aura {
 
@@ -42,7 +43,10 @@ private:
     DWORD thread_id_;
     HWINEVENTHOOK hook_handle_;
 
-    mutable std::atomic<const char*> cached_proc_name_; // lightweight readout
+    // current_process_name_ 由监控线程（WinEventProc / MonitorThreadProc）写入、
+    // 由主线程经 GetCurrentProcessName() 读取，故必须加锁保护。
+    // （此前这里声明过一个从未被使用的 atomic<const char*> 缓存字段，已删除。）
+    mutable std::mutex name_mutex_;
     std::string current_process_name_;
 };
 

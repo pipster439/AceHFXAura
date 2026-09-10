@@ -24,10 +24,45 @@ constexpr size_t RGB_CHANNELS = 3;
 constexpr size_t FRAME_BUFFER_SIZE = TOTAL_LEDS * RGB_CHANNELS; // 384 bytes
 
 // Padded hardware streaming parameters:
-// 68 physical keys padded so that no physical key lands on the 15th slot of any 64-byte USB HID report
+// 68 physical keys padded so that no physical key lands on the 15th slot of any 64-byte USB HID report.
+// HARDWARE_STREAM_KEYS 是【隔离规则】的语义常量：每 15 槽最多放 14 个物理键。
+// 68 键时按规则算出的实际表长恰为 72（+4 个 0xFF 隔离槽），与之相等。
 constexpr size_t HARDWARE_STREAM_KEYS = 72;
-constexpr size_t HARDWARE_STREAM_BUFFER_SIZE = HARDWARE_STREAM_KEYS * RGB_CHANNELS; // 216 bytes
 constexpr uint8_t DUMMY_PADDING_LED_ID = 0xFF;
+
+// 缓冲区容量必须与"隔离规则"【解耦】：容量只是本地存储上界，而实际发送长度由设备对象的
+// +0x6C 字段（= 表长）决定，两者不是同一个量。
+// 表长推导（按 size % 15 == 14 时先插一个隔离槽的规则逐点计算，已用脚本验证）：
+//    68 键 ->  72  (+4 隔离槽；恰好占满旧的 216 字节缓冲，零余量)
+//    69 键 ->  73  (会越界 3 字节 —— 这正是原实现潜伏的隐患)
+//   127 键 -> 136
+//   128 键 -> 137  (+9 隔离槽，411 字节；TOTAL_LEDS 场景下的最坏情况)
+// 故上界取 144（余量 7 槽）。BuildPaddedHardwareTable / PushFrame / 驱动表写入
+// 三处都会以此上界做运行期校验，超限即报错拒绝，而不是静默越界。
+constexpr size_t MAX_HARDWARE_STREAM_KEYS = 144;
+constexpr size_t HARDWARE_STREAM_BUFFER_SIZE = MAX_HARDWARE_STREAM_KEYS * RGB_CHANNELS; // 432 bytes
+
+// 按隔离规则计算 N 个物理键时的表长（与 BuildPaddedHardwareTable 的插入规则严格一致）。
+// 编译期即可求值，用于把"容量是否足够"从运行期猜测变成编译期证明。
+constexpr size_t PaddedTableLength(size_t physical_keys) {
+    size_t entries = 0;
+    for (size_t i = 0; i < physical_keys; ++i) {
+        if (entries % 15 == 14) {
+            ++entries;   // 插入 0xFF 隔离槽
+        }
+        ++entries;
+    }
+    return entries;
+}
+
+// 关键不变量：BuildPaddedHardwareTable 只收 led_id ∈ [0, TOTAL_LEDS) 且去重，
+// 因此表长的最坏情况就是 PaddedTableLength(TOTAL_LEDS) = 137（已由脚本逐点验证）。
+// 这个静态断言把"缓冲区必定够用"钉死在编译期——若将来有人改小容量或改大 TOTAL_LEDS，
+// 会直接编译失败，而不是留到运行期越界。
+static_assert(PaddedTableLength(TOTAL_LEDS) <= MAX_HARDWARE_STREAM_KEYS,
+              "HARDWARE_STREAM_BUFFER_SIZE 容量不足：隔离规则下的最坏表长已超出上界");
+static_assert(PaddedTableLength(68) == 72,
+              "隔离规则或 HARDWARE_STREAM_KEYS 被改动，请同步复核 USB 64 字节边界隔离假设");
 
 // Memory safety structure for CreateLedDevice
 // Emulates MSVC std::vector<void*> ABI layout (first, last, end)
