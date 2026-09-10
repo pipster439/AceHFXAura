@@ -46,9 +46,18 @@ public:
     // Checks if the matched rule requests suppressing the web UI service
     bool ShouldSuppressWebUi(const std::string& process_name);
 
-    const std::string& GetDefaultProfileName() const { return default_profile_name_; }
-    const std::string& GetConfigPath() const { return config_path_; }
-    const std::vector<GsiBinding>& GetGsiBindings() const { return gsi_bindings_; }
+    std::string GetDefaultProfileName() const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return default_profile_name_;
+    }
+    std::string GetConfigPath() const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return config_path_;
+    }
+    std::vector<GsiBinding> GetGsiBindings() const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return gsi_bindings_;
+    }
     bool HasProfile(const std::string& name) const;
 
 private:

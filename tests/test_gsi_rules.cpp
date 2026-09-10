@@ -540,6 +540,139 @@ int main() {
         std::filesystem::remove(tmp_reload_cfg);
     }
 
+    // 12. [R12b 初始启动加载失败后的自愈热重载闭环测试]
+    std::cout << "\n[测试 12] 验证初始启动加载失败时的 mtime 追踪与自愈热重载闭环 (R12b 护栏)...\n";
+    {
+        const std::string tmp_heal_cfg = (std::filesystem::temp_directory_path() / "test_cfg_heal.json").string();
+        // 初始写入包含未定义方案的非法配置
+        {
+            std::ofstream ofs(tmp_heal_cfg);
+            ofs << R"json({
+                "default_profile": "desktop",
+                "rules": [
+                    { "process": "heal.exe", "profile": "broken_profile" }
+                ],
+                "profiles": {
+                    "desktop": { "type": "static", "color": [10, 20, 30] }
+                }
+            })json";
+        }
+        aura::RuleEngine heal_engine;
+        bool init_ok = heal_engine.LoadConfig(tmp_heal_cfg);
+        CHECK(!init_ok, "初始配置存在引用破坏时 LoadConfig 拒绝并返回 false");
+        CHECK(heal_engine.GetConfigPath() == tmp_heal_cfg, "LoadConfig 失败后依然安全绑定 config_path_ 用于后续热重载自愈");
+
+        // 文件未修改前，CheckAndReload 应静默返回 false，不刷屏
+        CHECK(!heal_engine.CheckAndReload(), "初始非法配置未修改时 CheckAndReload 静默返回 false (防刷屏)");
+
+        // 修复配置文件
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        {
+            std::ofstream ofs(tmp_heal_cfg);
+            ofs << R"json({
+                "default_profile": "desktop",
+                "rules": [
+                    { "process": "heal.exe", "profile": "desktop" }
+                ],
+                "profiles": {
+                    "desktop": { "type": "breathing", "period_ms": 1500 }
+                }
+            })json";
+        }
+        bool heal_res = heal_engine.CheckAndReload();
+        CHECK(heal_res, "配置文件修复后，CheckAndReload 成功自愈重载生效");
+        auto healed_prof = heal_engine.MatchProfile("heal.exe");
+        CHECK(healed_prof != nullptr && healed_prof->name == "desktop", "自愈后 heal.exe 正确匹配 desktop 方案");
+
+        std::filesystem::remove(tmp_heal_cfg);
+    }
+
+    // 13. [R8 宽字符 / 非 ASCII 路径热重载与属性查询]
+    std::cout << "\n[测试 13] 验证非 ASCII / 宽字符 / UTF-8 路径热重载与文件时间支持 (R8 护栏)...\n";
+    {
+        std::filesystem::path unicode_dir = std::filesystem::temp_directory_path() / "aura_test_测试_键盘配置";
+        std::error_code ec;
+        std::filesystem::create_directories(unicode_dir, ec);
+        std::filesystem::path unicode_cfg = unicode_dir / "config_unicode.json";
+        std::string unicode_cfg_str = unicode_cfg.string();
+
+        {
+            std::ofstream ofs(unicode_cfg);
+            ofs << R"json({
+                "default_profile": "desktop",
+                "profiles": {
+                    "desktop": { "type": "static", "color": [5, 15, 25] }
+                }
+            })json";
+        }
+
+        aura::RuleEngine unicode_engine;
+        bool u_loaded = unicode_engine.LoadConfig(unicode_cfg_str);
+        CHECK(u_loaded, "非 ASCII / 宽字符路径配置文件成功加载");
+        CHECK(!unicode_engine.CheckAndReload(), "非 ASCII 路径文件未修改时 CheckAndReload 返回 false");
+
+        // 修改非 ASCII 路径下的文件
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        {
+            std::ofstream ofs(unicode_cfg);
+            ofs << R"json({
+                "default_profile": "desktop",
+                "profiles": {
+                    "desktop": { "type": "color_cycle", "period_ms": 3000 }
+                }
+            })json";
+        }
+        bool u_reloaded = unicode_engine.CheckAndReload();
+        CHECK(u_reloaded, "非 ASCII 路径文件修改后 CheckAndReload 成功检测并重载");
+
+        std::filesystem::remove_all(unicode_dir, ec);
+    }
+
+    // 14. [畸形根节点与非法结构类型强校验护栏]
+    std::cout << "\n[测试 14] 验证畸形根节点与非法数据类型拦截 (健壮性护栏)...\n";
+    {
+        // 14.1 根节点为数组
+        const std::string tmp_arr_root = (std::filesystem::temp_directory_path() / "test_cfg_arr_root.json").string();
+        {
+            std::ofstream ofs(tmp_arr_root);
+            ofs << R"json([{"default_profile": "desktop"}])json";
+        }
+        aura::RuleEngine engine_arr;
+        CHECK(!engine_arr.LoadConfig(tmp_arr_root), "JSON 根节点为数组时 LoadConfig 拦截并返回 false");
+        std::filesystem::remove(tmp_arr_root);
+
+        // 14.2 rules 字段非数组
+        const std::string tmp_bad_rules = (std::filesystem::temp_directory_path() / "test_cfg_bad_rules.json").string();
+        {
+            std::ofstream ofs(tmp_bad_rules);
+            ofs << R"json({
+                "default_profile": "desktop",
+                "rules": "not_an_array",
+                "profiles": {
+                    "desktop": { "type": "static" }
+                }
+            })json";
+        }
+        aura::RuleEngine engine_bad_rules;
+        CHECK(!engine_bad_rules.LoadConfig(tmp_bad_rules), "rules 字段非数组时 LoadConfig 拦截并返回 false");
+        std::filesystem::remove(tmp_bad_rules);
+
+        // 14.3 profiles 内方案非对象
+        const std::string tmp_bad_prof_obj = (std::filesystem::temp_directory_path() / "test_cfg_bad_prof_obj.json").string();
+        {
+            std::ofstream ofs(tmp_bad_prof_obj);
+            ofs << R"json({
+                "default_profile": "desktop",
+                "profiles": {
+                    "desktop": 12345
+                }
+            })json";
+        }
+        aura::RuleEngine engine_bad_prof_obj;
+        CHECK(!engine_bad_prof_obj.LoadConfig(tmp_bad_prof_obj), "profiles 中方案非对象时 LoadConfig 拦截并返回 false");
+        std::filesystem::remove(tmp_bad_prof_obj);
+    }
+
     std::cout << "\n=========================================================\n";
     if (failures == 0) {
         std::cout << "  [SUCCESS] 所有 GSI 前台隔离、游戏事件与回归护栏测试全部 100% 通过！\n";

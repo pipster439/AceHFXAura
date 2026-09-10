@@ -6,6 +6,7 @@
 #include <fstream>
 #include <algorithm>
 #include <cctype>
+#include <filesystem>
 
 namespace aura {
 
@@ -21,8 +22,9 @@ FILETIME RuleEngine::GetConfigFileTime(const std::string& path) {
     FILETIME ft{0, 0};
     if (path.empty()) return ft;
 
+    std::filesystem::path fs_path(path);
     WIN32_FILE_ATTRIBUTE_DATA fad{};
-    if (GetFileAttributesExA(path.c_str(), GetFileExInfoStandard, &fad)) {
+    if (GetFileAttributesExW(fs_path.c_str(), GetFileExInfoStandard, &fad)) {
         ft = fad.ftLastWriteTime;
     }
     return ft;
@@ -40,9 +42,22 @@ FILETIME RuleEngine::GetConfigFileTime() const {
 RuleEngine::RuleEngine() : default_profile_name_("desktop") {}
 
 bool RuleEngine::LoadConfig(const std::string& config_path) {
-    std::ifstream file(config_path);
+    std::filesystem::path fs_path(config_path);
+    std::ifstream file(fs_path);
+
+    FILETIME file_ft = GetConfigFileTime(config_path);
+
+    auto record_failure_ft = [&]() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (config_path_.empty() || config_path_ == config_path) {
+            config_path_ = config_path;
+            last_write_time_ = file_ft;
+        }
+    };
+
     if (!file.is_open()) {
         LOG_ERROR("无法打开配置文件: " << config_path);
+        record_failure_ft();
         return false;
     }
 
@@ -50,51 +65,86 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
         nlohmann::json j;
         file >> j;
 
-        std::string def_name = j.value("default_profile", "desktop");
+        if (!j.is_object()) {
+            LOG_ERROR("配置文件格式错误：根节点必须为 JSON 对象: " << config_path);
+            record_failure_ft();
+            return false;
+        }
+
+        std::string def_name = "desktop";
         bool valid = true;
 
+        if (j.contains("default_profile")) {
+            if (j["default_profile"].is_string()) {
+                def_name = j["default_profile"].get<std::string>();
+            } else {
+                LOG_ERROR("默认方案字段 'default_profile' 必须为字符串: " << config_path);
+                valid = false;
+            }
+        }
+
         std::vector<RuleEntry> new_rules;
-        if (j.contains("rules") && j["rules"].is_array()) {
-            for (auto& item : j["rules"]) {
-                RuleEntry re;
-                re.process_name = ToLower(item.value("process", ""));
-                re.profile_name = item.value("profile", "");
-                re.suppress_web_ui = item.value("suppress_web_ui", false);
-                if (re.process_name.empty()) {
-                    LOG_ERROR("进程规则缺少有效的 process 字段: " << item.dump());
-                    valid = false;
-                    continue;
+        if (j.contains("rules")) {
+            if (!j["rules"].is_array()) {
+                LOG_ERROR("配置文件中 'rules' 字段必须为数组: " << config_path);
+                valid = false;
+            } else {
+                for (auto& item : j["rules"]) {
+                    if (!item.is_object()) {
+                        LOG_ERROR("进程规则项必须为 JSON 对象: " << item.dump());
+                        valid = false;
+                        continue;
+                    }
+                    RuleEntry re;
+                    re.process_name = ToLower(item.value("process", ""));
+                    re.profile_name = item.value("profile", "");
+                    re.suppress_web_ui = item.value("suppress_web_ui", false);
+                    if (re.process_name.empty()) {
+                        LOG_ERROR("进程规则缺少有效的 process 字段: " << item.dump());
+                        valid = false;
+                        continue;
+                    }
+                    if (re.profile_name.empty()) {
+                        LOG_ERROR("进程规则 (进程: '" << re.process_name << "') 缺少有效的 profile 字段");
+                        valid = false;
+                        continue;
+                    }
+                    new_rules.push_back(re);
                 }
-                if (re.profile_name.empty()) {
-                    LOG_ERROR("进程规则 (进程: '" << re.process_name << "') 缺少有效的 profile 字段");
-                    valid = false;
-                    continue;
-                }
-                new_rules.push_back(re);
             }
         }
 
         std::vector<GsiBinding> new_gsi_bindings;
-        if (j.contains("gsi_bindings") && j["gsi_bindings"].is_array()) {
-            for (auto& item : j["gsi_bindings"]) {
-                GsiBinding b;
-                b.field = item.value("field", "");
-                b.op = item.value("operator", "==");
-                if (item.contains("value")) {
-                    b.target_value = item["value"];
+        if (j.contains("gsi_bindings")) {
+            if (!j["gsi_bindings"].is_array()) {
+                LOG_ERROR("配置文件中 'gsi_bindings' 字段必须为数组: " << config_path);
+                valid = false;
+            } else {
+                for (auto& item : j["gsi_bindings"]) {
+                    if (!item.is_object()) {
+                        LOG_ERROR("GSI 绑定规则项必须为 JSON 对象: " << item.dump());
+                        valid = false;
+                        continue;
+                    }
+                    GsiBinding b;
+                    b.field = item.value("field", "");
+                    b.op = item.value("operator", "==");
+                    if (item.contains("value")) {
+                        b.target_value = item["value"];
+                    }
+                    b.profile_name = item.value("profile", "");
+                    if (b.field.empty()) {
+                        LOG_ERROR("GSI 绑定规则缺少有效的 field 字段: " << item.dump());
+                        valid = false;
+                        continue;
+                    }
+                    if (b.profile_name.empty()) {
+                        LOG_ERROR("GSI 绑定规则 (字段: '" << b.field << "') 缺少有效的 profile 字段");
+                        valid = false;
+                        continue;
+                    }
+                    new_gsi_bindings.push_back(b);
                 }
-                b.profile_name = item.value("profile", "");
-                if (b.field.empty()) {
-                    LOG_ERROR("GSI 绑定规则缺少有效的 field 字段: " << item.dump());
-                    valid = false;
-                    continue;
-                }
-                if (b.profile_name.empty()) {
-                    LOG_ERROR("GSI 绑定规则 (字段: '" << b.field << "') 缺少有效的 profile 字段");
-                    valid = false;
-                    continue;
-                }
-                new_gsi_bindings.push_back(b);
             }
         }
 
@@ -104,6 +154,11 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
             valid = false;
         } else {
             for (auto& [pname, pval] : j["profiles"].items()) {
+                if (!pval.is_object()) {
+                    LOG_ERROR("方案 '" << pname << "' 必须为 JSON 对象");
+                    valid = false;
+                    continue;
+                }
                 auto prof = std::make_shared<Profile>();
                 prof->name = pname;
 
@@ -214,7 +269,8 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
                 // Parse key overrides
                 if (pval.contains("keys") && pval["keys"].is_object()) {
                     for (auto& [kspec, kval] : pval["keys"].items()) {
-                        if (kval.is_array() && kval.size() >= 3) {
+                        if (kval.is_array() && kval.size() >= 3 &&
+                            kval[0].is_number() && kval[1].is_number() && kval[2].is_number()) {
                             KeyOverride ko;
                             ko.key_spec = kspec;
                             ko.color = ColorRGB(kval[0], kval[1], kval[2]);
@@ -257,13 +313,13 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
         }
 
         if (!valid) {
+            record_failure_ft();
             return false;
         }
 
         const size_t rules_count = new_rules.size();
         const size_t bindings_count = new_gsi_bindings.size();
         const size_t profiles_count = new_profiles.size();
-        FILETIME file_ft = GetConfigFileTime(config_path);
 
         // Apply under lock
         {
@@ -283,6 +339,7 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
         return true;
     } catch (const std::exception& e) {
         LOG_ERROR("解析配置文件异常: " << e.what());
+        record_failure_ft();
         return false;
     }
 }
