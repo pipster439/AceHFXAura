@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 #include <memory>
 #include <atomic>
 #include <mutex>
@@ -24,6 +25,9 @@ private:
     std::string LoadHtmlContent() const;
     bool ReadConfigFile(std::string& out_json_str) const;
     bool WriteConfigFile(const std::string& json_str) const;
+
+    std::vector<std::string> DetectCs2CfgPaths() const;
+    static std::string GetGsiCfgTemplate();
 
     std::string config_path_{"config.json"};
     int port_{19898};

@@ -1,4 +1,5 @@
 #include <windows.h>
+#include <objbase.h>
 #include <iostream>
 
 struct alignas(void*) FakeVector {

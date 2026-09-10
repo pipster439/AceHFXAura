@@ -1,5 +1,6 @@
 #include "config/rule_engine.h"
 #include "engine/builtin_effects.h"
+#include "gsi/gsi_adapter.h"
 #include "third_party/json.hpp"
 #include "utils/logger.h"
 #include <fstream>
@@ -51,6 +52,22 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
                 re.suppress_web_ui = item.value("suppress_web_ui", false);
                 if (!re.process_name.empty() && !re.profile_name.empty()) {
                     new_rules.push_back(re);
+                }
+            }
+        }
+
+        std::vector<GsiBinding> new_gsi_bindings;
+        if (j.contains("gsi_bindings") && j["gsi_bindings"].is_array()) {
+            for (auto& item : j["gsi_bindings"]) {
+                GsiBinding b;
+                b.field = item.value("field", "");
+                b.op = item.value("operator", "==");
+                if (item.contains("value")) {
+                    b.target_value = item["value"];
+                }
+                b.profile_name = item.value("profile", "");
+                if (!b.field.empty() && !b.profile_name.empty()) {
+                    new_gsi_bindings.push_back(b);
                 }
             }
         }
@@ -184,12 +201,15 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
             config_path_ = config_path;
             default_profile_name_ = def_name;
             rules_ = std::move(new_rules);
+            gsi_bindings_ = std::move(new_gsi_bindings);
             profiles_ = std::move(new_profiles);
             last_write_time_ = GetConfigFileTime();
         }
 
         LOG_INFO("成功加载配置文件: " << config_path << " (默认方案: " << def_name 
-                 << ", 规则数: " << rules_.size() << ", Profile数: " << profiles_.size() << ")");
+                 << ", 规则数: " << rules_.size() 
+                 << ", GSI绑定数: " << gsi_bindings_.size() 
+                 << ", Profile数: " << profiles_.size() << ")");
         return true;
     } catch (const std::exception& e) {
         LOG_ERROR("解析配置文件异常: " << e.what());
@@ -211,11 +231,25 @@ bool RuleEngine::CheckAndReload() {
     return false;
 }
 
-std::shared_ptr<const Profile> RuleEngine::MatchProfile(const std::string& process_name) {
+std::shared_ptr<const Profile> RuleEngine::MatchProfile(const std::string& process_name, const GsiState* gsi_state) {
     std::lock_guard<std::mutex> lock(mutex_);
 
     std::string lower_proc = ToLower(process_name);
+    bool is_cs2 = (lower_proc == "cs2.exe" || lower_proc == "cs2" || lower_proc == "csgo.exe" || lower_proc == "csgo");
 
+    // 1. 如果当前处于 CS2 游戏中，优先按优先级顺序评估 GSI 绑定 (靠前优先)
+    if (is_cs2 && gsi_state != nullptr && gsi_state->IsActive()) {
+        for (const auto& binding : gsi_bindings_) {
+            if (gsi_state->Evaluate(binding.field, binding.op, binding.target_value)) {
+                auto it = profiles_.find(binding.profile_name);
+                if (it != profiles_.end()) {
+                    return it->second;
+                }
+            }
+        }
+    }
+
+    // 2. 匹配具体的前台进程规则
     if (!lower_proc.empty()) {
         for (const auto& rule : rules_) {
             if (rule.process_name == lower_proc) {
@@ -237,7 +271,7 @@ std::shared_ptr<const Profile> RuleEngine::MatchProfile(const std::string& proce
         }
     }
 
-    // Fallback to default profile
+    // 3. Fallback to default profile (前台不是 cs2.exe 时，GSI 绑定绝不生效)
     auto def_it = profiles_.find(default_profile_name_);
     if (def_it != profiles_.end()) {
         return def_it->second;

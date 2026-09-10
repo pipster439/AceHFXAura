@@ -118,6 +118,92 @@ void WebServer::SetupRoutes() {
             res.set_content(err.dump(), "application/json; charset=utf-8");
         }
     });
+
+    // 代理获取当前 GSI 状态 (转发至 daemon 127.0.0.1:19897)
+    svr_.Get("/api/gsi/current", [](const httplib::Request&, httplib::Response& res) {
+        httplib::Client cli("127.0.0.1", 19897);
+        cli.set_connection_timeout(0, 300000); // 300ms
+        cli.set_read_timeout(0, 500000); // 500ms
+        auto cli_res = cli.Get("/api/gsi/current");
+        if (cli_res && cli_res->status == 200) {
+            res.set_content(cli_res->body, "application/json; charset=utf-8");
+        } else {
+            nlohmann::json j = {
+                {"connected", false},
+                {"daemon_running", false},
+                {"message", "无法连接至 daemon GSI 适配器 (127.0.0.1:19897)，请确认 aura_daemon 是否正在运行"},
+                {"data", nlohmann::json::object()}
+            };
+            res.set_content(j.dump(), "application/json; charset=utf-8");
+        }
+    });
+
+    // 获取 CS2 GSI 配置文件模板及检测到的安装路径
+    svr_.Get("/api/gsi/cfg", [this](const httplib::Request&, httplib::Response& res) {
+        std::vector<std::string> paths = DetectCs2CfgPaths();
+        std::string detected = paths.empty() ? "" : paths[0];
+
+        bool installed = false;
+        if (!detected.empty()) {
+            std::filesystem::path cfg_file = std::filesystem::path(detected) / "gamestate_integration_aura.cfg";
+            installed = std::filesystem::exists(cfg_file);
+        }
+
+        nlohmann::json j = {
+            {"filename", "gamestate_integration_aura.cfg"},
+            {"content", GetGsiCfgTemplate()},
+            {"detected_path", detected},
+            {"all_paths", paths},
+            {"installed", installed}
+        };
+        res.set_content(j.dump(2), "application/json; charset=utf-8");
+    });
+
+    // 安装 GSI 配置文件到 CS2 目录 (带用户明确确认与路径校验，绝不静默写入)
+    svr_.Post("/api/gsi/install-cfg", [this](const httplib::Request& req, httplib::Response& res) {
+        try {
+            auto j = nlohmann::json::parse(req.body);
+            std::string target_dir = j.value("target_dir", "");
+            if (target_dir.empty()) {
+                auto paths = DetectCs2CfgPaths();
+                if (!paths.empty()) target_dir = paths[0];
+            }
+
+            if (target_dir.empty()) {
+                res.status = 400;
+                res.set_content("{\"status\":\"error\",\"message\":\"未指定且未能自动检测到 CS2 cfg 目录\"}", "application/json; charset=utf-8");
+                return;
+            }
+
+            std::filesystem::path p(target_dir);
+            if (!std::filesystem::exists(p) || !std::filesystem::is_directory(p)) {
+                res.status = 400;
+                res.set_content("{\"status\":\"error\",\"message\":\"目标路径不存在或不是有效目录: " + target_dir + "\"}", "application/json; charset=utf-8");
+                return;
+            }
+
+            std::filesystem::path file_path = p / "gamestate_integration_aura.cfg";
+            std::ofstream out(file_path, std::ios::trunc | std::ios::binary);
+            if (!out.is_open()) {
+                res.status = 500;
+                res.set_content("{\"status\":\"error\",\"message\":\"无法向目标文件写入数据，请检查文件写权限\"}", "application/json; charset=utf-8");
+                return;
+            }
+
+            out << GetGsiCfgTemplate();
+            out.flush();
+
+            nlohmann::json resp = {
+                {"status", "ok"},
+                {"message", "成功安装 gamestate_integration_aura.cfg 到 CS2 目录！启动 CS2 即可开始接收实时游戏数据。"},
+                {"path", file_path.string()}
+            };
+            res.set_content(resp.dump(), "application/json; charset=utf-8");
+        } catch (const std::exception& e) {
+            res.status = 500;
+            res.set_content(std::string("{\"status\":\"error\",\"message\":") + nlohmann::json(e.what()).dump() + "}", "application/json; charset=utf-8");
+        }
+    });
 }
 
 bool WebServer::Start() {
@@ -184,6 +270,99 @@ bool WebServer::WriteConfigFile(const std::string& json_str) const {
     }
 
     return true;
+}
+
+std::string WebServer::GetGsiCfgTemplate() {
+    return R"rawcfg("Aura CS2 GSI Integration"
+{
+    "uri" "http://127.0.0.1:19897/"
+    "timeout" "5.0"
+    "buffer"  "0.1"
+    "throttle" "0.1"
+    "heartbeat" "1.0"
+    "data"
+    {
+        "provider"              "1"
+        "map"                   "1"
+        "round"                 "1"
+        "player_id"             "1"
+        "player_state"          "1"
+        "player_weapons"        "1"
+        "player_match_stats"    "1"
+        "map_round_wins"        "1"
+        "bomb"                  "1"
+        "phase_countdowns"      "1"
+        "allplayers_id"         "1"
+        "allplayers_state"      "1"
+        "allplayers_match_stats" "1"
+        "allplayers_weapons"    "1"
+        "allplayers_position"   "1"
+        "allgrenades"           "1"
+        "player_position"       "1"
+    }
+}
+)rawcfg";
+}
+
+std::vector<std::string> WebServer::DetectCs2CfgPaths() const {
+    std::vector<std::string> result;
+
+    // 常见可能盘符路径优先扫描
+    const std::vector<std::string> prefixes = {
+        "D:\\SteamLibrary",
+        "C:\\Program Files (x86)\\Steam",
+        "C:\\SteamLibrary",
+        "E:\\SteamLibrary",
+        "F:\\SteamLibrary",
+        "G:\\SteamLibrary",
+        "C:\\Steam",
+        "D:\\Steam",
+        "E:\\Steam"
+    };
+
+    for (const auto& pre : prefixes) {
+        std::filesystem::path p = std::filesystem::path(pre) / "steamapps" / "common" / "Counter-Strike Global Offensive" / "game" / "csgo" / "cfg";
+        if (std::filesystem::exists(p) && std::filesystem::is_directory(p)) {
+            result.push_back(p.string());
+        }
+    }
+
+    // 解析 Steam libraryfolders.vdf
+    std::filesystem::path vdf_path = "C:\\Program Files (x86)\\Steam\\steamapps\\libraryfolders.vdf";
+    if (std::filesystem::exists(vdf_path)) {
+        std::ifstream f(vdf_path);
+        std::string line;
+        while (std::getline(f, line)) {
+            size_t p_pos = line.find("\"path\"");
+            if (p_pos != std::string::npos) {
+                size_t first_quote = line.find('\"', p_pos + 6);
+                if (first_quote != std::string::npos) {
+                    size_t second_quote = line.find('\"', first_quote + 1);
+                    if (second_quote != std::string::npos) {
+                        std::string base_path = line.substr(first_quote + 1, second_quote - first_quote - 1);
+                        std::string clean_path;
+                        for (size_t i = 0; i < base_path.size(); ++i) {
+                            if (base_path[i] == '\\' && i + 1 < base_path.size() && base_path[i + 1] == '\\') {
+                                clean_path += '\\';
+                                ++i;
+                            } else {
+                                clean_path += base_path[i];
+                            }
+                        }
+                        std::filesystem::path cs2_cfg = std::filesystem::path(clean_path) / "steamapps" / "common" / "Counter-Strike Global Offensive" / "game" / "csgo" / "cfg";
+                        if (std::filesystem::exists(cs2_cfg) && std::filesystem::is_directory(cs2_cfg)) {
+                            std::string s = cs2_cfg.string();
+                            if (std::find(result.begin(), result.end(), s) == result.end()) {
+                                result.push_back(s);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    return result;
 }
 
 } // namespace aura
