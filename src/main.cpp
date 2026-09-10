@@ -19,6 +19,7 @@
 #include <thread>
 #include <atomic>
 #include <fstream>
+#include <filesystem>
 #include <windows.h>
 #include <objbase.h>
 
@@ -223,7 +224,7 @@ int main(int argc, char* argv[]) {
 
     // 11. 启动网页配置服务后台监护器 (默认桌面状态自动拉起，由独立工线程异步监护)
     aura::WebUiSupervisor web_supervisor;
-    web_supervisor.StartSupervisor(config_path, 19898);
+    web_supervisor.StartSupervisor(std::filesystem::path(config_path), 19898);
 
     // 12. 启动前台窗口监控线程 (WinEventHook 专属消息线程)
     // 线程纪律：WinEventHook 回调运行在监控线程，只做【最小化通知】——把前台进程名写入

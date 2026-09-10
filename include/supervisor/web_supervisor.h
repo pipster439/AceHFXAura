@@ -7,6 +7,7 @@
 #include <condition_variable>
 #include <atomic>
 #include <chrono>
+#include <filesystem>
 
 namespace aura {
 
@@ -20,7 +21,7 @@ public:
     WebUiSupervisor& operator=(const WebUiSupervisor&) = delete;
 
     // 启动监护器后台工线程（主线程零阻塞）
-    void StartSupervisor(const std::string& config_path = "config.json", int port = 19898);
+    void StartSupervisor(const std::filesystem::path& config_path = "config.json", int port = 19898);
 
     // 停止监护器并安全回收子进程与工线程
     void Shutdown();
@@ -35,9 +36,9 @@ private:
     void WorkerLoop();
     bool StartChildProcess();
     void StopChildProcess();
-    std::string FindExecutablePath() const;
+    std::wstring FindExecutablePath() const;
 
-    std::string config_path_{"config.json"};
+    std::wstring config_path_{L"config.json"};
     int port_{19898};
 
     // 状态与同步

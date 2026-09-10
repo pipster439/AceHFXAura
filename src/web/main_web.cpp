@@ -1,9 +1,11 @@
 #include "web/web_server.h"
 #include <windows.h>
+#include <shellapi.h>
 #include <iostream>
 #include <string>
 #include <thread>
 #include <atomic>
+#include <filesystem>
 
 namespace {
 
@@ -22,21 +24,21 @@ BOOL WINAPI ConsoleCtrlHandler(DWORD signal) {
 
 } // namespace
 
-int main(int argc, char* argv[]) {
+int wmain(int argc, wchar_t* argv[]) {
     // 强制 UTF-8 控制台编码
     SetConsoleOutputCP(CP_UTF8);
 
     int port = 19898;
-    std::string config_path = "config.json";
-    std::string shutdown_event_name;
+    std::filesystem::path config_path = L"config.json";
+    std::wstring shutdown_event_name;
 
     for (int i = 1; i < argc; ++i) {
-        std::string arg = argv[i];
-        if (arg == "--port" && i + 1 < argc) {
+        std::wstring arg = argv[i];
+        if (arg == L"--port" && i + 1 < argc) {
             port = std::stoi(argv[++i]);
-        } else if (arg == "--config" && i + 1 < argc) {
+        } else if (arg == L"--config" && i + 1 < argc) {
             config_path = argv[++i];
-        } else if (arg == "--shutdown-event" && i + 1 < argc) {
+        } else if (arg == L"--shutdown-event" && i + 1 < argc) {
             shutdown_event_name = argv[++i];
         }
     }
@@ -53,7 +55,7 @@ int main(int argc, char* argv[]) {
 
     if (!shutdown_event_name.empty()) {
         shutdown_listener = std::thread([&server, shutdown_event_name, &listener_running]() {
-            HANDLE hEvent = OpenEventA(SYNCHRONIZE, FALSE, shutdown_event_name.c_str());
+            HANDLE hEvent = OpenEventW(SYNCHRONIZE, FALSE, shutdown_event_name.c_str());
             if (hEvent) {
                 while (listener_running.load(std::memory_order_relaxed)) {
                     DWORD res = WaitForSingleObject(hEvent, 200);
@@ -71,7 +73,7 @@ int main(int argc, char* argv[]) {
     std::cout << "=========================================================\n"
               << " ROG FALCHION ACE HFX - 轻量网页配置服务\n"
               << " 监听地址: http://127.0.0.1:" << port << "\n"
-              << " 配置文件: " << config_path << "\n"
+              << " 配置文件: " << config_path.u8string() << "\n"
               << "=========================================================" << std::endl;
 
     bool ok = server.Start();

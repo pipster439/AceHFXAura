@@ -26,8 +26,8 @@ WebUiSupervisor::~WebUiSupervisor() {
     }
 }
 
-void WebUiSupervisor::StartSupervisor(const std::string& config_path, int port) {
-    config_path_ = config_path;
+void WebUiSupervisor::StartSupervisor(const std::filesystem::path& config_path, int port) {
+    config_path_ = config_path.wstring();
     port_ = port;
     stop_requested_.store(false, std::memory_order_release);
 
@@ -61,28 +61,28 @@ void WebUiSupervisor::SetSuppressed(bool suppressed) {
     }
 }
 
-std::string WebUiSupervisor::FindExecutablePath() const {
+std::wstring WebUiSupervisor::FindExecutablePath() const {
     wchar_t mod_path[MAX_PATH];
     if (GetModuleFileNameW(nullptr, mod_path, MAX_PATH)) {
         std::filesystem::path current_exe(mod_path);
         auto candidate = current_exe.parent_path() / "aura_web_ui.exe";
         if (std::filesystem::exists(candidate)) {
-            return candidate.string();
+            return candidate.wstring();
         }
         auto candidate_build = current_exe.parent_path() / "Release" / "aura_web_ui.exe";
         if (std::filesystem::exists(candidate_build)) {
-            return candidate_build.string();
+            return candidate_build.wstring();
         }
     }
 
-    if (std::filesystem::exists("aura_web_ui.exe")) {
-        return "aura_web_ui.exe";
+    if (std::filesystem::exists(L"aura_web_ui.exe")) {
+        return L"aura_web_ui.exe";
     }
-    if (std::filesystem::exists("build/Release/aura_web_ui.exe")) {
-        return "build/Release/aura_web_ui.exe";
+    if (std::filesystem::exists(L"build/Release/aura_web_ui.exe")) {
+        return L"build/Release/aura_web_ui.exe";
     }
 
-    return "aura_web_ui.exe";
+    return L"aura_web_ui.exe";
 }
 
 bool WebUiSupervisor::StartChildProcess() {
@@ -99,10 +99,10 @@ bool WebUiSupervisor::StartChildProcess() {
         LOG_INFO("[WebUI 监护] 退出静默退避期，尝试重新启动网页服务...");
     }
 
-    std::string exe_path = FindExecutablePath();
+    std::wstring exe_path = FindExecutablePath();
     if (!std::filesystem::exists(exe_path)) {
         consecutive_failures_++;
-        LOG_ERROR("[WebUI 监护] 未找到网页服务可执行文件: " + exe_path);
+        LOG_ERROR("[WebUI 监护] 未找到网页服务可执行文件: " + std::filesystem::path(exe_path).u8string());
         if (consecutive_failures_ >= 3) {
             in_backoff_ = true;
             backoff_until_ = std::chrono::steady_clock::now() + std::chrono::seconds(30);
@@ -113,13 +113,11 @@ bool WebUiSupervisor::StartChildProcess() {
 
     // 创建命名 Shutdown Event，用于"先礼后兵"平滑通知
     seq_++;
-    std::string event_name = "Local\\Aura_Web_UI_Shutdown_" + std::to_string(GetCurrentProcessId()) + "_" + std::to_string(seq_);
-    hShutdownEvent_ = CreateEventA(nullptr, TRUE, FALSE, event_name.c_str());
+    std::wstring event_name = L"Local\\Aura_Web_UI_Shutdown_" + std::to_wstring(GetCurrentProcessId()) + L"_" + std::to_wstring(seq_);
+    hShutdownEvent_ = CreateEventW(nullptr, TRUE, FALSE, event_name.c_str());
 
-    std::string cmdline = "\"" + exe_path + "\" --port " + std::to_string(port_) + 
-                          " --config \"" + config_path_ + "\" --shutdown-event \"" + event_name + "\"";
-
-    std::wstring wcmdline(cmdline.begin(), cmdline.end());
+    std::wstring wcmdline = L"\"" + exe_path + L"\" --port " + std::to_wstring(port_) + 
+                          L" --config \"" + config_path_ + L"\" --shutdown-event \"" + event_name + L"\"";
 
     STARTUPINFOW si{};
     si.cb = sizeof(si);
@@ -144,7 +142,7 @@ bool WebUiSupervisor::StartChildProcess() {
     if (!ok) {
         DWORD err = GetLastError();
         consecutive_failures_++;
-        LOG_ERROR("[WebUI 监护] CreateProcessW 失败: 0x" + std::to_string(err) + " (命令: " + cmdline + ")");
+        LOG_ERROR("[WebUI 监护] CreateProcessW 失败: 0x" + std::to_string(err) + " (命令: " + std::filesystem::path(wcmdline).u8string() + ")");
 
         if (hShutdownEvent_) {
             CloseHandle(hShutdownEvent_);

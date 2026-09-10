@@ -229,7 +229,7 @@ bool ValidateWriteRequest(const httplib::Request& req, httplib::Response& res) {
 
 } // namespace
 
-WebServer::WebServer(const std::string& config_path, int port)
+WebServer::WebServer(const std::filesystem::path& config_path, int port)
     : config_path_(config_path), port_(port) {
     SetupRoutes();
 }
@@ -363,20 +363,25 @@ void WebServer::SetupRoutes() {
 
     // 获取 CS2 GSI 配置文件模板及检测到的安装路径
     svr_.Get("/api/gsi/cfg", [this](const httplib::Request&, httplib::Response& res) {
-        std::vector<std::string> paths = DetectCs2CfgPaths();
-        std::string detected = paths.empty() ? "" : paths[0];
+        std::vector<std::filesystem::path> paths = DetectCs2CfgPaths();
+        std::string detected_utf8 = paths.empty() ? "" : paths[0].u8string();
+        std::vector<std::string> paths_utf8;
+        paths_utf8.reserve(paths.size());
+        for (const auto& p : paths) {
+            paths_utf8.push_back(p.u8string());
+        }
 
         bool installed = false;
-        if (!detected.empty()) {
-            std::filesystem::path cfg_file = std::filesystem::path(detected) / "gamestate_integration_aura.cfg";
+        if (!paths.empty()) {
+            std::filesystem::path cfg_file = paths[0] / "gamestate_integration_aura.cfg";
             installed = std::filesystem::exists(cfg_file);
         }
 
         nlohmann::json j = {
             {"filename", "gamestate_integration_aura.cfg"},
             {"content", GetGsiCfgTemplate()},
-            {"detected_path", detected},
-            {"all_paths", paths},
+            {"detected_path", detected_utf8},
+            {"all_paths", paths_utf8},
             {"installed", installed}
         };
         res.set_content(j.dump(2), "application/json; charset=utf-8");
@@ -391,17 +396,17 @@ void WebServer::SetupRoutes() {
             auto j = nlohmann::json::parse(req.body);
             std::string target_dir = j.value("target_dir", "");
             auto detected_paths = DetectCs2CfgPaths();
-            if (target_dir.empty()) {
-                if (!detected_paths.empty()) target_dir = detected_paths[0];
-            }
-
-            if (target_dir.empty()) {
+            std::filesystem::path p;
+            if (!target_dir.empty()) {
+                p = std::filesystem::u8path(target_dir);
+            } else if (!detected_paths.empty()) {
+                p = detected_paths[0];
+            } else {
                 res.status = 400;
                 res.set_content(R"json({"status":"error","message":"未指定且未能自动检测到 CS2 cfg 目录"})json", "application/json; charset=utf-8");
                 return;
             }
 
-            std::filesystem::path p(target_dir);
             std::error_code ec;
             if (!std::filesystem::exists(p, ec) || !std::filesystem::is_directory(p, ec)) {
                 res.status = 400;
@@ -412,8 +417,7 @@ void WebServer::SetupRoutes() {
             // 第 4 层：install-cfg 的 target_dir 白名单校验
             // 允许值 = DetectCs2CfgPaths() 结果 ∪ 目录内已存在 gamestate_integration_*.cfg 的目录
             bool is_allowed = false;
-            for (const auto& dp_str : detected_paths) {
-                std::filesystem::path dp(dp_str);
+            for (const auto& dp : detected_paths) {
                 std::error_code eq_ec;
                 if ((std::filesystem::equivalent(p, dp, eq_ec) && !eq_ec) ||
                     (p.lexically_normal() == dp.lexically_normal())) {
@@ -428,9 +432,9 @@ void WebServer::SetupRoutes() {
                     if (ec) break;
                     std::error_code file_ec;
                     if (entry.is_regular_file(file_ec)) {
-                        std::string filename = entry.path().filename().string();
-                        const std::string prefix = "gamestate_integration_";
-                        const std::string suffix = ".cfg";
+                        std::wstring filename = entry.path().filename().wstring();
+                        const std::wstring prefix = L"gamestate_integration_";
+                        const std::wstring suffix = L".cfg";
                         if (filename.size() >= prefix.size() + suffix.size() &&
                             filename.compare(0, prefix.size(), prefix) == 0 &&
                             filename.compare(filename.size() - suffix.size(), suffix.size(), suffix) == 0) {
@@ -461,7 +465,7 @@ void WebServer::SetupRoutes() {
             nlohmann::json resp = {
                 {"status", "ok"},
                 {"message", "成功安装 gamestate_integration_aura.cfg 到 CS2 目录！启动 CS2 即可开始接收实时游戏数据。"},
-                {"path", file_path.string()}
+                {"path", file_path.u8string()}
             };
             res.set_content(resp.dump(), "application/json; charset=utf-8");
         } catch (const std::exception& e) {
@@ -520,7 +524,7 @@ bool WebServer::ReadConfigFile(std::string& out_json_str) const {
 bool WebServer::WriteConfigFile(const std::string& json_str) const {
     std::lock_guard<std::mutex> lock(file_mutex_);
     // 原子写入：先写入临时文件，再原子替换覆盖
-    std::string tmp_path = config_path_ + ".tmp";
+    std::filesystem::path tmp_path = config_path_.wstring() + L".tmp";
     {
         std::ofstream f(tmp_path, std::ios::binary | std::ios::trunc);
         if (!f.is_open()) {
@@ -530,12 +534,18 @@ bool WebServer::WriteConfigFile(const std::string& json_str) const {
         f.flush();
     }
 
-    // Windows MoveFileEx 原子替换
-    if (!MoveFileExA(tmp_path.c_str(), config_path_.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
-        // 若 MoveFileEx 失败则尝试常规写入
+    // Windows MoveFileExW 原子替换（支持非 ASCII 路径）
+    if (!MoveFileExW(tmp_path.c_str(), config_path_.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+        // 若 MoveFileExW 失败则尝试常规写入并清理临时文件
         std::ofstream f(config_path_, std::ios::binary | std::ios::trunc);
-        if (!f.is_open()) return false;
+        if (!f.is_open()) {
+            std::error_code ec;
+            std::filesystem::remove(tmp_path, ec);
+            return false;
+        }
         f.write(json_str.data(), json_str.size());
+        std::error_code ec;
+        std::filesystem::remove(tmp_path, ec);
     }
 
     return true;
@@ -573,31 +583,31 @@ std::string WebServer::GetGsiCfgTemplate() {
 )rawcfg";
 }
 
-std::vector<std::string> WebServer::DetectCs2CfgPaths() const {
-    std::vector<std::string> result;
+std::vector<std::filesystem::path> WebServer::DetectCs2CfgPaths() const {
+    std::vector<std::filesystem::path> result;
 
     // 常见可能盘符路径优先扫描
-    const std::vector<std::string> prefixes = {
-        "D:\\SteamLibrary",
-        "C:\\Program Files (x86)\\Steam",
-        "C:\\SteamLibrary",
-        "E:\\SteamLibrary",
-        "F:\\SteamLibrary",
-        "G:\\SteamLibrary",
-        "C:\\Steam",
-        "D:\\Steam",
-        "E:\\Steam"
+    const std::vector<std::filesystem::path> prefixes = {
+        L"D:\\SteamLibrary",
+        L"C:\\Program Files (x86)\\Steam",
+        L"C:\\SteamLibrary",
+        L"E:\\SteamLibrary",
+        L"F:\\SteamLibrary",
+        L"G:\\SteamLibrary",
+        L"C:\\Steam",
+        L"D:\\Steam",
+        L"E:\\Steam"
     };
 
     for (const auto& pre : prefixes) {
-        std::filesystem::path p = std::filesystem::path(pre) / "steamapps" / "common" / "Counter-Strike Global Offensive" / "game" / "csgo" / "cfg";
+        std::filesystem::path p = pre / "steamapps" / "common" / "Counter-Strike Global Offensive" / "game" / "csgo" / "cfg";
         if (std::filesystem::exists(p) && std::filesystem::is_directory(p)) {
-            result.push_back(p.string());
+            result.push_back(p);
         }
     }
 
     // 解析 Steam libraryfolders.vdf
-    std::filesystem::path vdf_path = "C:\\Program Files (x86)\\Steam\\steamapps\\libraryfolders.vdf";
+    std::filesystem::path vdf_path = L"C:\\Program Files (x86)\\Steam\\steamapps\\libraryfolders.vdf";
     if (std::filesystem::exists(vdf_path)) {
         std::ifstream f(vdf_path);
         std::string line;
@@ -618,11 +628,10 @@ std::vector<std::string> WebServer::DetectCs2CfgPaths() const {
                                 clean_path += base_path[i];
                             }
                         }
-                        std::filesystem::path cs2_cfg = std::filesystem::path(clean_path) / "steamapps" / "common" / "Counter-Strike Global Offensive" / "game" / "csgo" / "cfg";
+                        std::filesystem::path cs2_cfg = std::filesystem::u8path(clean_path) / "steamapps" / "common" / "Counter-Strike Global Offensive" / "game" / "csgo" / "cfg";
                         if (std::filesystem::exists(cs2_cfg) && std::filesystem::is_directory(cs2_cfg)) {
-                            std::string s = cs2_cfg.string();
-                            if (std::find(result.begin(), result.end(), s) == result.end()) {
-                                result.push_back(s);
+                            if (std::find(result.begin(), result.end(), cs2_cfg) == result.end()) {
+                                result.push_back(cs2_cfg);
                             }
                         }
                     }
