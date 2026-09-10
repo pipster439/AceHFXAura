@@ -4,6 +4,8 @@
 #include <iostream>
 #include <chrono>
 #include <filesystem>
+#include <cctype>
+#include <algorithm>
 
 namespace aura {
 
@@ -30,6 +32,201 @@ const char* EMBEDDED_FALLBACK_HTML = R"rawhtml(<!DOCTYPE html>
 </body>
 </html>)rawhtml";
 
+// 纯词法检查 Web 子路径安全性（零磁盘 I/O）
+bool IsSafeWebSubpath(const std::string& subpath) {
+    if (subpath.empty()) {
+        return false;
+    }
+
+    // 3. 含控制字符（含 %00 解码出的内嵌 NUL，以及 ASCII < 0x20 或 0x7F）
+    for (char c : subpath) {
+        unsigned char uc = static_cast<unsigned char>(c);
+        if (uc < 0x20 || uc == 0x7F) {
+            return false;
+        }
+    }
+
+    // 2. 含盘符（:），防止 C:/Windows/win.ini 等绝对路径与 NTFS 数据流
+    if (subpath.find(':') != std::string::npos) {
+        return false;
+    }
+
+    // 2. 是绝对路径 / 根路径 / 以 UNC 前缀开头
+    if (subpath.front() == '/' || subpath.front() == '\\') {
+        return false;
+    }
+
+    // 1. 按 '/' 与 '\' 双分隔符切分组件，拒绝包含 ".." 的上跳请求
+    size_t start = 0;
+    while (start < subpath.size()) {
+        size_t end = subpath.find_first_of("/\\", start);
+        std::string component;
+        if (end == std::string::npos) {
+            component = subpath.substr(start);
+            start = subpath.size();
+        } else {
+            component = subpath.substr(start, end - start);
+            start = end + 1;
+        }
+        if (component == "..") {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+// 校验 Host 头部是否属于允许的本地白名单 {127.0.0.1, localhost, [::1]}
+bool IsAllowedHost(const std::string& host_header) {
+    if (host_header.empty()) {
+        return false;
+    }
+    size_t first = host_header.find_first_not_of(" \t\r\n");
+    if (first == std::string::npos) return false;
+    size_t last = host_header.find_last_not_of(" \t\r\n");
+    std::string trimmed = host_header.substr(first, last - first + 1);
+
+    std::string host_part;
+    if (trimmed.front() == '[') {
+        // IPv6 字面量，如 [::1] 或 [::1]:19898
+        size_t close_bracket = trimmed.find(']');
+        if (close_bracket == std::string::npos) {
+            return false;
+        }
+        host_part = trimmed.substr(0, close_bracket + 1);
+        std::string rest = trimmed.substr(close_bracket + 1);
+        if (!rest.empty()) {
+            if (rest.front() != ':') return false;
+            std::string port_part = rest.substr(1);
+            if (port_part.empty()) return false;
+            for (char c : port_part) {
+                if (!std::isdigit(static_cast<unsigned char>(c))) return false;
+            }
+        }
+    } else {
+        size_t colon_pos = trimmed.find(':');
+        if (colon_pos != std::string::npos) {
+            host_part = trimmed.substr(0, colon_pos);
+            std::string port_part = trimmed.substr(colon_pos + 1);
+            if (port_part.empty()) return false;
+            for (char c : port_part) {
+                if (!std::isdigit(static_cast<unsigned char>(c))) return false;
+            }
+        } else {
+            host_part = trimmed;
+        }
+    }
+
+    for (char& c : host_part) {
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
+
+    return (host_part == "127.0.0.1" || host_part == "localhost" || host_part == "[::1]");
+}
+
+// 检查 Content-Type 是否为 application/json
+bool IsJsonContentType(const std::string& content_type) {
+    if (content_type.empty()) {
+        return false;
+    }
+    size_t semicolon = content_type.find(';');
+    std::string media_type = (semicolon != std::string::npos) ? content_type.substr(0, semicolon) : content_type;
+
+    size_t first = media_type.find_first_not_of(" \t\r\n");
+    if (first == std::string::npos) return false;
+    size_t last = media_type.find_last_not_of(" \t\r\n");
+    media_type = media_type.substr(first, last - first + 1);
+
+    for (char& c : media_type) {
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
+    return media_type == "application/json";
+}
+
+// 检查 URL (Origin 或 Referer) 中的 Host 是否在白名单中
+bool IsAllowedOriginOrRefererUrl(const std::string& raw_url) {
+    size_t first = raw_url.find_first_not_of(" \t\r\n");
+    if (first == std::string::npos) return false;
+    size_t last = raw_url.find_last_not_of(" \t\r\n");
+    std::string url = raw_url.substr(first, last - first + 1);
+
+    if (url.empty() || url == "null") {
+        return false;
+    }
+    size_t scheme_end = url.find("://");
+    if (scheme_end == std::string::npos) {
+        return false;
+    }
+
+    std::string scheme = url.substr(0, scheme_end);
+    for (char& c : scheme) {
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
+    if (scheme != "http" && scheme != "https") {
+        return false;
+    }
+
+    size_t host_start = scheme_end + 3;
+    size_t auth_end = url.find_first_of("/?#", host_start);
+    std::string authority = (auth_end == std::string::npos)
+        ? url.substr(host_start)
+        : url.substr(host_start, auth_end - host_start);
+
+    if (authority.empty() || authority.find('@') != std::string::npos) {
+        return false;
+    }
+    return IsAllowedHost(authority);
+}
+
+// 校验 Origin 与 Referer 来源合法性
+bool ValidateOriginAndReferer(const httplib::Request& req) {
+    bool has_origin = req.has_header("Origin");
+    if (has_origin) {
+        std::string origin = req.get_header_value("Origin");
+        // 显式拒绝字面量 "null"（沙箱 iframe / data: / file: 场景）以及非法 Origin
+        if (origin == "null" || origin.empty() || !IsAllowedOriginOrRefererUrl(origin)) {
+            return false;
+        }
+    }
+
+    bool has_referer = req.has_header("Referer");
+    if (has_referer) {
+        std::string referer = req.get_header_value("Referer");
+        if (referer.empty() || !IsAllowedOriginOrRefererUrl(referer)) {
+            return false;
+        }
+    }
+
+    // 两者皆空或均合法才放行（支持本地 curl/脚本）
+    return true;
+}
+
+// 写接口通用前置校验（第 1/2/3 层纵深防御）
+bool ValidateWriteRequest(const httplib::Request& req, httplib::Response& res) {
+    // 1. Host 头校验（防御性复核，防 DNS 重绑定）
+    if (!IsAllowedHost(req.get_header_value("Host"))) {
+        res.status = 403;
+        res.set_content(R"json({"status":"error","message":"非法的 Host 请求头"})json", "application/json; charset=utf-8");
+        return false;
+    }
+
+    // 2. 强制 Content-Type: application/json
+    if (!IsJsonContentType(req.get_header_value("Content-Type"))) {
+        res.status = 415;
+        res.set_content(R"json({"status":"error","message":"请求头 Content-Type 必须为 application/json"})json", "application/json; charset=utf-8");
+        return false;
+    }
+
+    // 3. Origin/Referer 来源校验
+    if (!ValidateOriginAndReferer(req)) {
+        res.status = 403;
+        res.set_content(R"json({"status":"error","message":"非法的 Origin 或 Referer 来源"})json", "application/json; charset=utf-8");
+        return false;
+    }
+
+    return true;
+}
+
 } // namespace
 
 WebServer::WebServer(const std::string& config_path, int port)
@@ -46,8 +243,18 @@ void WebServer::SetupRoutes() {
     svr_.set_payload_max_length(256 * 1024);
     svr_.set_error_handler([](const httplib::Request& /*req*/, httplib::Response& res) {
         if (res.status == 413) {
-            res.set_content(R"({"status":"error","error":"Payload Too Large","message":"请求体超过 256KB 上限"})", "application/json; charset=utf-8");
+            res.set_content(R"json({"status":"error","error":"Payload Too Large","message":"请求体超过 256KB 上限"})json", "application/json; charset=utf-8");
         }
+    });
+
+    // 第 1 层：Host 头全局校验（防 DNS 重绑定），所有路由生效
+    svr_.set_pre_routing_handler([](const httplib::Request& req, httplib::Response& res) {
+        if (!IsAllowedHost(req.get_header_value("Host"))) {
+            res.status = 403;
+            res.set_content(R"json({"status":"error","message":"非法的 Host 请求头"})json", "application/json; charset=utf-8");
+            return httplib::Server::HandlerResponse::Handled;
+        }
+        return httplib::Server::HandlerResponse::Unhandled;
     });
 
     // 根路径提供前端页面
@@ -55,11 +262,16 @@ void WebServer::SetupRoutes() {
         res.set_content(LoadHtmlContent(), "text/html; charset=utf-8");
     });
 
-    // 静态资源兜底 (支持外部 css/js/ico 等)
+    // 静态资源兜底 (支持外部 css/js/ico 等，带 R6 词法路径穿越校验)
     svr_.Get("/web/(.*)", [](const httplib::Request& req, httplib::Response& res) {
         std::string subpath = req.matches[1];
+        if (!IsSafeWebSubpath(subpath)) {
+            res.status = 404;
+            return;
+        }
+        std::error_code ec;
         std::filesystem::path p = std::filesystem::path("web") / subpath;
-        if (std::filesystem::exists(p) && !std::filesystem::is_directory(p)) {
+        if (std::filesystem::exists(p, ec) && !std::filesystem::is_directory(p, ec)) {
             std::ifstream f(p, std::ios::binary);
             if (f.is_open()) {
                 std::string content((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
@@ -94,28 +306,31 @@ void WebServer::SetupRoutes() {
             res.set_content(json_str, "application/json; charset=utf-8");
         } else {
             res.status = 500;
-            res.set_content("{\"status\":\"error\",\"message\":\"无法读取配置文件\"}", "application/json; charset=utf-8");
+            res.set_content(R"json({"status":"error","message":"无法读取配置文件"})json", "application/json; charset=utf-8");
         }
     });
 
-    // 保存更新配置文件
+    // 保存更新配置文件 (受 R7 写接口防御保护)
     svr_.Post("/api/config", [this](const httplib::Request& req, httplib::Response& res) {
+        if (!ValidateWriteRequest(req, res)) {
+            return;
+        }
         try {
             // 校验 JSON 格式合法性
             auto j = nlohmann::json::parse(req.body);
             if (!j.is_object() || !j.contains("profiles") || !j.contains("rules")) {
                 res.status = 400;
-                res.set_content("{\"status\":\"error\",\"message\":\"配置数据缺少 profiles 或 rules 核心字段\"}", "application/json; charset=utf-8");
+                res.set_content(R"json({"status":"error","message":"配置数据缺少 profiles 或 rules 核心字段"})json", "application/json; charset=utf-8");
                 return;
             }
 
             // 格式化输出 (保持 2 格缩进)
             std::string formatted = j.dump(2);
             if (WriteConfigFile(formatted)) {
-                res.set_content("{\"status\":\"ok\",\"message\":\"配置已保存，daemon 已通过热重载自动生效\"}", "application/json; charset=utf-8");
+                res.set_content(R"json({"status":"ok","message":"配置已保存，daemon 已通过热重载自动生效"})json", "application/json; charset=utf-8");
             } else {
                 res.status = 500;
-                res.set_content("{\"status\":\"error\",\"message\":\"写入配置文件失败\"}", "application/json; charset=utf-8");
+                res.set_content(R"json({"status":"error","message":"写入配置文件失败"})json", "application/json; charset=utf-8");
             }
         } catch (const std::exception& e) {
             res.status = 400;
@@ -167,26 +382,68 @@ void WebServer::SetupRoutes() {
         res.set_content(j.dump(2), "application/json; charset=utf-8");
     });
 
-    // 安装 GSI 配置文件到 CS2 目录 (带用户明确确认与路径校验，绝不静默写入)
+    // 安装 GSI 配置文件到 CS2 目录 (带用户明确确认与路径校验，受 R7 四层纵深防御保护)
     svr_.Post("/api/gsi/install-cfg", [this](const httplib::Request& req, httplib::Response& res) {
+        if (!ValidateWriteRequest(req, res)) {
+            return;
+        }
         try {
             auto j = nlohmann::json::parse(req.body);
             std::string target_dir = j.value("target_dir", "");
+            auto detected_paths = DetectCs2CfgPaths();
             if (target_dir.empty()) {
-                auto paths = DetectCs2CfgPaths();
-                if (!paths.empty()) target_dir = paths[0];
+                if (!detected_paths.empty()) target_dir = detected_paths[0];
             }
 
             if (target_dir.empty()) {
                 res.status = 400;
-                res.set_content("{\"status\":\"error\",\"message\":\"未指定且未能自动检测到 CS2 cfg 目录\"}", "application/json; charset=utf-8");
+                res.set_content(R"json({"status":"error","message":"未指定且未能自动检测到 CS2 cfg 目录"})json", "application/json; charset=utf-8");
                 return;
             }
 
             std::filesystem::path p(target_dir);
-            if (!std::filesystem::exists(p) || !std::filesystem::is_directory(p)) {
+            std::error_code ec;
+            if (!std::filesystem::exists(p, ec) || !std::filesystem::is_directory(p, ec)) {
                 res.status = 400;
-                res.set_content("{\"status\":\"error\",\"message\":\"目标路径不存在或不是有效目录: " + target_dir + "\"}", "application/json; charset=utf-8");
+                res.set_content(R"json({"status":"error","message":"目标路径不存在或不是有效目录"})json", "application/json; charset=utf-8");
+                return;
+            }
+
+            // 第 4 层：install-cfg 的 target_dir 白名单校验
+            // 允许值 = DetectCs2CfgPaths() 结果 ∪ 目录内已存在 gamestate_integration_*.cfg 的目录
+            bool is_allowed = false;
+            for (const auto& dp_str : detected_paths) {
+                std::filesystem::path dp(dp_str);
+                std::error_code eq_ec;
+                if ((std::filesystem::equivalent(p, dp, eq_ec) && !eq_ec) ||
+                    (p.lexically_normal() == dp.lexically_normal())) {
+                    is_allowed = true;
+                    break;
+                }
+            }
+
+            if (!is_allowed) {
+                // 检查目录内是否已存在 gamestate_integration_*.cfg 文件（兼容自定义 Steam 库）
+                for (const auto& entry : std::filesystem::directory_iterator(p, ec)) {
+                    if (ec) break;
+                    std::error_code file_ec;
+                    if (entry.is_regular_file(file_ec)) {
+                        std::string filename = entry.path().filename().string();
+                        const std::string prefix = "gamestate_integration_";
+                        const std::string suffix = ".cfg";
+                        if (filename.size() >= prefix.size() + suffix.size() &&
+                            filename.compare(0, prefix.size(), prefix) == 0 &&
+                            filename.compare(filename.size() - suffix.size(), suffix.size(), suffix) == 0) {
+                            is_allowed = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (!is_allowed) {
+                res.status = 400;
+                res.set_content(R"json({"status":"error","message":"目标目录不在允许的 CS2 cfg 白名单中"})json", "application/json; charset=utf-8");
                 return;
             }
 
@@ -194,7 +451,7 @@ void WebServer::SetupRoutes() {
             std::ofstream out(file_path, std::ios::trunc | std::ios::binary);
             if (!out.is_open()) {
                 res.status = 500;
-                res.set_content("{\"status\":\"error\",\"message\":\"无法向目标文件写入数据，请检查文件写权限\"}", "application/json; charset=utf-8");
+                res.set_content(R"json({"status":"error","message":"无法向目标文件写入数据，请检查文件写权限"})json", "application/json; charset=utf-8");
                 return;
             }
 
@@ -208,8 +465,12 @@ void WebServer::SetupRoutes() {
             };
             res.set_content(resp.dump(), "application/json; charset=utf-8");
         } catch (const std::exception& e) {
-            res.status = 500;
-            res.set_content(std::string("{\"status\":\"error\",\"message\":") + nlohmann::json(e.what()).dump() + "}", "application/json; charset=utf-8");
+            res.status = 400;
+            nlohmann::json err = {
+                {"status", "error"},
+                {"message", std::string("请求处理失败: ") + e.what()}
+            };
+            res.set_content(err.dump(), "application/json; charset=utf-8");
         }
     });
 }
