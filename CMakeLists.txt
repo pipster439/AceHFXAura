@@ -4,6 +4,8 @@ project(aura_project LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+add_definitions(-DWIN32_LEAN_AND_MEAN -DNOMINMAX)
+
 include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/src
@@ -19,6 +21,7 @@ set(DAEMON_SOURCES
     src/engine/effect_engine.cpp
     src/engine/builtin_effects.cpp
     src/supervisor/web_supervisor.cpp
+    src/gsi/gsi_adapter.cpp
 )
 
 set(DAEMON_HEADERS
@@ -31,8 +34,10 @@ set(DAEMON_HEADERS
     include/engine/builtin_effects.h
     include/engine/effect_engine.h
     include/supervisor/web_supervisor.h
+    include/gsi/gsi_adapter.h
     include/utils/logger.h
     include/utils/system_info.h
+    include/third_party/httplib.h
     include/third_party/json.hpp
 )
 
@@ -47,6 +52,8 @@ target_link_libraries(aura_daemon PRIVATE
     oleaut32
     user32
     psapi
+    ws2_32
+    crypt32
 )
 
 add_executable(test_com test_com.cpp)
@@ -76,3 +83,30 @@ target_link_libraries(aura_web_ui PRIVATE
     crypt32
     user32
 )
+
+# 3. 单元测试: test_gsi_rules
+add_executable(test_gsi_rules
+    tests/test_gsi_rules.cpp
+    src/config/rule_engine.cpp
+    src/engine/builtin_effects.cpp
+    src/gsi/gsi_adapter.cpp
+    src/aura/keymap.cpp
+)
+
+if (MSVC)
+    target_compile_options(test_gsi_rules PRIVATE /utf-8 /W3 /O2)
+endif()
+
+target_link_libraries(test_gsi_rules PRIVATE
+    ws2_32
+    crypt32
+    user32
+)
+
+# 4. 诊断测试: test_diag_hook
+add_executable(test_diag_hook tests/test_diag_hook.cpp)
+if (MSVC)
+    target_compile_options(test_diag_hook PRIVATE /utf-8 /W3 /O2)
+endif()
+target_link_libraries(test_diag_hook PRIVATE user32)
+
