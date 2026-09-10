@@ -922,7 +922,37 @@ int main() {
               frame_51.buffer[other_id * 3 + 2] == 10,
               "低亮度 (51) 下基础底色等比缩放至 (20, 40, 10)");
 
-        // 15.2 RuleEngine 对 brightness (0.0-1.0 浮点 / 0-255 整数) 解析与越界钳制
+        // 极低亮度 1 (最低非零下界，验证 255 通道截断保全为 1)
+        prof.brightness = 1;
+        aura::KeyOverride ko_white;
+        ko_white.key_spec = "ESC";
+        ko_white.color = aura::ColorRGB(255, 255, 255);
+        prof.key_overrides.clear();
+        prof.key_overrides.push_back(ko_white);
+        aura::FrameBuffer frame_1;
+        prof.Render(0, frame_1, keymap);
+        CHECK(frame_1.buffer[esc_id * 3 + 0] == 1 &&
+              frame_1.buffer[esc_id * 3 + 1] == 1 &&
+              frame_1.buffer[esc_id * 3 + 2] == 1,
+              "极低亮度 (1) 下白色 (255,255,255) 缩放截断为 (1, 1, 1)");
+
+        // base_effect 为 nullptr 场景：背景全黑，仅 key_overrides 参与亮度缩放
+        aura::Profile prof_no_base;
+        prof_no_base.name = "no_base";
+        prof_no_base.brightness = 128;
+        prof_no_base.key_overrides.push_back(ko); // ESC -> (200, 100, 40)
+        aura::FrameBuffer frame_no_base;
+        prof_no_base.Render(0, frame_no_base, keymap);
+        CHECK(frame_no_base.buffer[esc_id * 3 + 0] == 100 &&
+              frame_no_base.buffer[esc_id * 3 + 1] == 50 &&
+              frame_no_base.buffer[esc_id * 3 + 2] == 20,
+              "无 base_effect 方案在半亮度下 ESC 依然正确缩放至 (100, 50, 20)");
+        CHECK(frame_no_base.buffer[other_id * 3 + 0] == 0 &&
+              frame_no_base.buffer[other_id * 3 + 1] == 0 &&
+              frame_no_base.buffer[other_id * 3 + 2] == 0,
+              "无 base_effect 方案其余未覆盖键位保持全黑 (0, 0, 0)");
+
+        // 15.2 RuleEngine 对 brightness (0.0-1.0 浮点 / 0-255 整数) 解析、浮点抖动与越界钳制
         const std::string tmp_bright_cfg = (std::filesystem::temp_directory_path() / "test_cfg_brightness.json").string();
         {
             std::ofstream ofs(tmp_bright_cfg);
@@ -933,13 +963,18 @@ int main() {
                     "p_float_1": { "type": "static", "brightness": 1.0 },
                     "p_float_0": { "type": "static", "brightness": 0.0 },
                     "p_float_half": { "type": "static", "brightness": 0.5 },
+                    "p_float_jitter": { "type": "static", "brightness": 1.0000000000000002 },
+                    "p_float_jitter2": { "type": "static", "brightness": 1.0001 },
                     "p_int_1": { "type": "static", "brightness": 1 },
                     "p_int_128": { "type": "static", "brightness": 128 },
                     "p_int_255": { "type": "static", "brightness": 255 },
                     "p_int_50": { "type": "static", "brightness": 50 },
                     "p_neg": { "type": "static", "brightness": -0.8 },
                     "p_over": { "type": "static", "brightness": 500 },
-                    "p_bad_type": { "type": "static", "brightness": "high" }
+                    "p_bad_type": { "type": "static", "brightness": "high" },
+                    "p_bool_true": { "type": "static", "brightness": true },
+                    "p_bool_false": { "type": "static", "brightness": false },
+                    "p_null": { "type": "static", "brightness": null }
                 }
             })json";
         }
@@ -957,6 +992,12 @@ int main() {
 
         auto p_fhalf = bright_engine.GetProfile("p_float_half");
         CHECK(p_fhalf != nullptr && p_fhalf->brightness == 128, "浮点 0.5 解析为 128");
+
+        auto p_fjitter = bright_engine.GetProfile("p_float_jitter");
+        CHECK(p_fjitter != nullptr && p_fjitter->brightness == 255, "浮点微小抖动 (1.0000000000000002) 解析为 255");
+
+        auto p_fjitter2 = bright_engine.GetProfile("p_float_jitter2");
+        CHECK(p_fjitter2 != nullptr && p_fjitter2->brightness == 255, "浮点微小抖动 (1.0001) 钳制为 255");
 
         auto p_i1 = bright_engine.GetProfile("p_int_1");
         CHECK(p_i1 != nullptr && p_i1->brightness == 255, "整数 1 (来自前端 1.0 序列化) 解析为 255");
@@ -979,9 +1020,45 @@ int main() {
         auto p_bad = bright_engine.GetProfile("p_bad_type");
         CHECK(p_bad != nullptr && p_bad->brightness == 255, "非法字符串亮度 (\"high\") 回退默认 255");
 
+        auto p_btrue = bright_engine.GetProfile("p_bool_true");
+        CHECK(p_btrue != nullptr && p_btrue->brightness == 255, "布尔真亮度 (true) 回退默认 255");
+
+        auto p_bfalse = bright_engine.GetProfile("p_bool_false");
+        CHECK(p_bfalse != nullptr && p_bfalse->brightness == 255, "布尔假亮度 (false) 回退默认 255");
+
+        auto p_null = bright_engine.GetProfile("p_null");
+        CHECK(p_null != nullptr && p_null->brightness == 255, "空值亮度 (null) 回退默认 255");
+
         std::filesystem::remove(tmp_bright_cfg);
 
-        // 15.3 RuleEngine 对 speed_index 档位映射与 period_ms 优先级验证
+        // 15.3 非有限浮点数 (NaN / Infinity) 安全防御验证
+        {
+            nlohmann::json mem_cfg = {
+                {"default_profile", "p_nan"},
+                {"profiles", {
+                    {"p_nan", {{"type", "static"}, {"brightness", std::numeric_limits<double>::quiet_NaN()}}},
+                    {"p_inf", {{"type", "static"}, {"brightness", std::numeric_limits<double>::infinity()}}},
+                    {"p_speed_nan", {{"type", "breathing"}, {"speed_index", std::numeric_limits<double>::quiet_NaN()}}}
+                }}
+            };
+            const std::string tmp_nan_cfg = (std::filesystem::temp_directory_path() / "test_cfg_nan.json").string();
+            {
+                std::ofstream ofs(tmp_nan_cfg);
+                ofs << mem_cfg.dump();
+            }
+            aura::RuleEngine nan_engine;
+            CHECK(nan_engine.LoadConfig(tmp_nan_cfg), "成功加载包含 NaN/Inf 的配置文件");
+            auto prof_nan = nan_engine.GetProfile("p_nan");
+            CHECK(prof_nan != nullptr && prof_nan->brightness == 255, "NaN 亮度安全回退默认 255");
+            auto prof_inf = nan_engine.GetProfile("p_inf");
+            CHECK(prof_inf != nullptr && prof_inf->brightness == 255, "Infinity 亮度安全回退默认 255");
+            auto prof_snan = nan_engine.GetProfile("p_speed_nan");
+            auto b_snan = prof_snan ? std::dynamic_pointer_cast<aura::BreathingEffect>(prof_snan->base_effect) : nullptr;
+            CHECK(b_snan != nullptr && b_snan->GetPeriodMs() == 3000, "NaN speed_index 安全回退默认 3000ms");
+            std::filesystem::remove(tmp_nan_cfg);
+        }
+
+        // 15.4 RuleEngine 对 speed_index 档位映射与 period_ms 优先级验证
         const std::string tmp_speed_cfg = (std::filesystem::temp_directory_path() / "test_cfg_speed.json").string();
         {
             std::ofstream ofs(tmp_speed_cfg);
@@ -991,8 +1068,11 @@ int main() {
                     "p_speed_0": { "type": "breathing", "speed_index": 0 },
                     "p_speed_1": { "type": "breathing", "speed_index": 1 },
                     "p_speed_2": { "type": "breathing", "speed_index": 2 },
+                    "p_speed_float": { "type": "breathing", "speed_index": 1.0 },
                     "p_override": { "type": "breathing", "speed_index": 0, "period_ms": 2200 },
-                    "p_bad_speed": { "type": "breathing", "speed_index": 99 }
+                    "p_bad_speed": { "type": "breathing", "speed_index": 99 },
+                    "p_speed_bool": { "type": "breathing", "speed_index": true },
+                    "p_speed_null": { "type": "breathing", "speed_index": null }
                 }
             })json";
         }
@@ -1011,6 +1091,10 @@ int main() {
         auto b_s2 = prof_s2 ? std::dynamic_pointer_cast<aura::BreathingEffect>(prof_s2->base_effect) : nullptr;
         CHECK(b_s2 != nullptr && b_s2->GetPeriodMs() == 1600, "speed_index 2 映射为 1600ms (快速)");
 
+        auto prof_sfloat = speed_engine.GetProfile("p_speed_float");
+        auto b_sfloat = prof_sfloat ? std::dynamic_pointer_cast<aura::BreathingEffect>(prof_sfloat->base_effect) : nullptr;
+        CHECK(b_sfloat != nullptr && b_sfloat->GetPeriodMs() == 3200, "浮点 speed_index (1.0) 映射为 3200ms (标准)");
+
         auto prof_sover = speed_engine.GetProfile("p_override");
         auto b_sover = prof_sover ? std::dynamic_pointer_cast<aura::BreathingEffect>(prof_sover->base_effect) : nullptr;
         CHECK(b_sover != nullptr && b_sover->GetPeriodMs() == 2200, "同时存在时 period_ms 优先于 speed_index (2200ms)");
@@ -1018,6 +1102,14 @@ int main() {
         auto prof_sbad = speed_engine.GetProfile("p_bad_speed");
         auto b_sbad = prof_sbad ? std::dynamic_pointer_cast<aura::BreathingEffect>(prof_sbad->base_effect) : nullptr;
         CHECK(b_sbad != nullptr && b_sbad->GetPeriodMs() == 3000, "非法 speed_index (99) 回退默认 3000ms");
+
+        auto prof_sbool = speed_engine.GetProfile("p_speed_bool");
+        auto b_sbool = prof_sbool ? std::dynamic_pointer_cast<aura::BreathingEffect>(prof_sbool->base_effect) : nullptr;
+        CHECK(b_sbool != nullptr && b_sbool->GetPeriodMs() == 3000, "布尔 speed_index (true) 回退默认 3000ms");
+
+        auto prof_snull = speed_engine.GetProfile("p_speed_null");
+        auto b_snull = prof_snull ? std::dynamic_pointer_cast<aura::BreathingEffect>(prof_snull->base_effect) : nullptr;
+        CHECK(b_snull != nullptr && b_snull->GetPeriodMs() == 3000, "空值 speed_index (null) 回退默认 3000ms");
 
         std::filesystem::remove(tmp_speed_cfg);
     }

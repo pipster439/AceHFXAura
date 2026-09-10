@@ -54,17 +54,17 @@ export default function App() {
 
     if (profileData.direction) setCurrentDirection(profileData.direction);
 
-    if (typeof profileData.brightness === 'number') {
+    if (typeof profileData.brightness === 'number' && Number.isFinite(profileData.brightness)) {
       const b = profileData.brightness > 1.0 ? profileData.brightness / 255.0 : profileData.brightness;
       setBrightnessVal(Math.max(0, Math.min(1.0, b)));
     } else {
       setBrightnessVal(1.0);
     }
 
-    if (typeof profileData.speed_index === 'number') {
+    if (typeof profileData.speed_index === 'number' && Number.isFinite(profileData.speed_index)) {
       const idx = Math.round(profileData.speed_index);
       setSpeedIndex(Math.max(0, Math.min(2, idx)));
-    } else if (profileData.period_ms) {
+    } else if (profileData.period_ms && Number.isFinite(profileData.period_ms)) {
       if (profileData.period_ms > 4500) setSpeedIndex(0);
       else if (profileData.period_ms > 2400) setSpeedIndex(1);
       else setSpeedIndex(2);
@@ -373,7 +373,7 @@ export default function App() {
       color: [15, 23, 42],
       brightness: 1.0,
       speed_index: 1,
-      period_ms: 2500,
+      period_ms: 3200,
       keys: {}
     };
     const nextConfig = {

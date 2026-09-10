@@ -37,7 +37,13 @@ uint64_t ParseAndClampPeriod(const std::string& pname, const nlohmann::json& pva
     if (pval.contains("speed_index")) {
         const auto& sval = pval["speed_index"];
         if (sval.is_number()) {
-            int s = static_cast<int>(std::round(sval.get<double>()));
+            double sv = sval.get<double>();
+            if (!std::isfinite(sv)) {
+                LOG_WARN("方案 '" << pname << "' 的 speed_index 非有限数值 (" << sval.dump()
+                         << ")，已使用默认周期 " << def_period);
+                return def_period;
+            }
+            int s = static_cast<int>(std::round(sv));
             if (s == 0) return 5500;
             if (s == 1) return 3200;
             if (s == 2) return 1600;
@@ -63,12 +69,19 @@ uint8_t ParseBrightness(const std::string& pname, const nlohmann::json& pval) {
         return 255;
     }
     double v = bval.get<double>();
+    if (!std::isfinite(v)) {
+        LOG_WARN("方案 '" << pname << "' 的 brightness 字段非有限数值 (" << bval.dump()
+                 << ")，已使用默认值 255");
+        return 255;
+    }
     if (v < 0.0) {
         LOG_WARN("方案 '" << pname << "' 的 brightness 小于 0 (" << v << ")，已被钳制为 0");
         return 0;
     }
-    if (v <= 1.0) {
-        return static_cast<uint8_t>(std::clamp(static_cast<int>(std::round(v * 255.0)), 0, 255));
+    // 浮点比例 0.0–1.0 (容忍浮点计算与序列化微小抖动至 1.0001)
+    if (v <= 1.0001) {
+        double clamped_ratio = std::clamp(v, 0.0, 1.0);
+        return static_cast<uint8_t>(std::clamp(static_cast<int>(std::round(clamped_ratio * 255.0)), 0, 255));
     }
     if (v > 255.0) {
         LOG_WARN("方案 '" << pname << "' 的 brightness 超过 255 (" << v << ")，已被钳制为 255");
