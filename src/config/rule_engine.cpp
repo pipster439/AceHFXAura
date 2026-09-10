@@ -10,6 +10,33 @@
 
 namespace aura {
 
+namespace {
+
+uint64_t ParseAndClampPeriod(const std::string& pname, const nlohmann::json& pval, uint64_t def_period) {
+    if (!pval.contains("period_ms")) {
+        return def_period;
+    }
+    const auto& period_val = pval["period_ms"];
+    if (period_val.is_number_unsigned()) {
+        uint64_t u = period_val.get<uint64_t>();
+        if (u < 33) {
+            uint64_t clamped = ClampPeriod(u, def_period, 33);
+            LOG_WARN("方案 '" << pname << "' 的 period_ms 非法 (" << period_val.dump()
+                     << ")，已被钳制为 " << clamped);
+            return clamped;
+        }
+        return u;
+    }
+
+    // 非无符号整数：有符号负整数或非整型（如浮点数、字符串、布尔、对象等）
+    uint64_t clamped = ClampPeriod(0, def_period, 33);
+    LOG_WARN("方案 '" << pname << "' 的 period_ms 非法 (" << period_val.dump()
+             << ")，已被钳制为 " << clamped);
+    return clamped;
+}
+
+} // namespace
+
 std::string RuleEngine::ToLower(const std::string& s) {
     std::string res = s;
     std::transform(res.begin(), res.end(), res.begin(), [](unsigned char c) {
@@ -173,7 +200,7 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
                 } else if (type == "breathing") {
                     ColorRGB c1(0, 100, 255);
                     ColorRGB c2(0, 10, 50);
-                    uint64_t period = pval.value("period_ms", 3000);
+                    uint64_t period = ParseAndClampPeriod(pname, pval, 3000);
                     if (pval.contains("color1") && pval["color1"].is_array() && pval["color1"].size() >= 3) {
                         c1 = ColorRGB(pval["color1"][0], pval["color1"][1], pval["color1"][2]);
                     }
@@ -182,10 +209,10 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
                     }
                     prof->base_effect = std::make_shared<BreathingEffect>(c1, c2, period);
                 } else if (type == "color_cycle") {
-                    uint64_t period = pval.value("period_ms", 3500);
+                    uint64_t period = ParseAndClampPeriod(pname, pval, 3500);
                     prof->base_effect = std::make_shared<ColorCycleEffect>(period);
                 } else if (type == "wave") {
-                    uint64_t period = pval.value("period_ms", 3500);
+                    uint64_t period = ParseAndClampPeriod(pname, pval, 3500);
                     std::string dir = pval.value("direction", "diag_dl");
                     prof->base_effect = std::make_shared<WaveEffect>(period, dir);
                 } else if (type == "custom_keymap") {
@@ -197,7 +224,7 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
                 } else if (type == "reactive") {
                     ColorRGB bg(0, 5, 15);
                     ColorRGB c1(255, 25, 41);
-                    uint64_t period = pval.value("period_ms", 2500);
+                    uint64_t period = ParseAndClampPeriod(pname, pval, 2500);
                     if (pval.contains("bg") && pval["bg"].is_array() && pval["bg"].size() >= 3) {
                         bg = ColorRGB(pval["bg"][0], pval["bg"][1], pval["bg"][2]);
                     }
@@ -210,7 +237,7 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
                 } else if (type == "ripple") {
                     ColorRGB bg(0, 5, 15);
                     ColorRGB c1(0, 240, 255);
-                    uint64_t period = pval.value("period_ms", 2500);
+                    uint64_t period = ParseAndClampPeriod(pname, pval, 2500);
                     if (pval.contains("bg") && pval["bg"].is_array() && pval["bg"].size() >= 3) {
                         bg = ColorRGB(pval["bg"][0], pval["bg"][1], pval["bg"][2]);
                     }
@@ -228,12 +255,12 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
                         col = ColorRGB(pval["color1"][0], pval["color1"][1], pval["color1"][2]);
                     }
                     bool random_colors = pval.value("random_colors", false);
-                    uint64_t period = pval.value("period_ms", 2500);
+                    uint64_t period = ParseAndClampPeriod(pname, pval, 2500);
                     prof->base_effect = std::make_shared<StarryNightEffect>(col, random_colors, period);
                 } else if (type == "quicksand") {
                     ColorRGB c1(255, 25, 41);
                     ColorRGB c2(20, 138, 196);
-                    uint64_t period = pval.value("period_ms", 3500);
+                    uint64_t period = ParseAndClampPeriod(pname, pval, 3500);
                     std::string dir = pval.value("direction", "diag_dl");
                     if (pval.contains("color1") && pval["color1"].is_array() && pval["color1"].size() >= 3) {
                         c1 = ColorRGB(pval["color1"][0], pval["color1"][1], pval["color1"][2]);
@@ -249,7 +276,7 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
                     } else if (pval.contains("color1") && pval["color1"].is_array() && pval["color1"].size() >= 3) {
                         col = ColorRGB(pval["color1"][0], pval["color1"][1], pval["color1"][2]);
                     }
-                    uint64_t period = pval.value("period_ms", 2000);
+                    uint64_t period = ParseAndClampPeriod(pname, pval, 2000);
                     prof->base_effect = std::make_shared<CurrentEffect>(col, period);
                 } else if (type == "raindrop") {
                     ColorRGB col(0, 240, 255);
@@ -258,7 +285,7 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
                     } else if (pval.contains("color1") && pval["color1"].is_array() && pval["color1"].size() >= 3) {
                         col = ColorRGB(pval["color1"][0], pval["color1"][1], pval["color1"][2]);
                     }
-                    uint64_t period = pval.value("period_ms", 2500);
+                    uint64_t period = ParseAndClampPeriod(pname, pval, 2500);
                     prof->base_effect = std::make_shared<RaindropEffect>(col, period);
                 } else {
                     LOG_ERROR("方案 '" << pname << "' 配置了未知的效果类型: '" << type 

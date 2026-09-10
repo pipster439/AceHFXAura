@@ -8,6 +8,14 @@
 
 namespace aura {
 
+// 通用灯效刷新周期钳制函数 (下界取 33ms ≈ 30FPS，低于此无物理意义)
+inline constexpr uint64_t ClampPeriod(uint64_t v, uint64_t def, uint64_t min = 33) {
+    if (v == 0) {
+        return def < min ? min : def;
+    }
+    return v < min ? min : v;
+}
+
 // 1. 纯静态单色 (支持模拟按压触发增亮)
 class StaticEffect : public Effect {
 public:
@@ -26,9 +34,10 @@ private:
 class BreathingEffect : public Effect {
 public:
     BreathingEffect(const ColorRGB& c1, const ColorRGB& c2, uint64_t period_ms = 3000)
-        : c1_(c1), c2_(c2), period_ms_(period_ms > 0 ? period_ms : 3000) {}
+        : c1_(c1), c2_(c2), period_ms_(ClampPeriod(period_ms, 3000)) {}
 
     void Render(uint64_t elapsed_ms, FrameBuffer& out_frame, const Keymap& keymap) override;
+    uint64_t GetPeriodMs() const { return period_ms_; }
 
 private:
     ColorRGB c1_;
@@ -40,9 +49,10 @@ private:
 class ColorCycleEffect : public Effect {
 public:
     explicit ColorCycleEffect(uint64_t period_ms = 3500)
-        : period_ms_(period_ms > 0 ? period_ms : 3500) {}
+        : period_ms_(ClampPeriod(period_ms, 3500)) {}
 
     void Render(uint64_t elapsed_ms, FrameBuffer& out_frame, const Keymap& keymap) override;
+    uint64_t GetPeriodMs() const { return period_ms_; }
 
 private:
     uint64_t period_ms_;
@@ -52,9 +62,10 @@ private:
 class WaveEffect : public Effect {
 public:
     explicit WaveEffect(uint64_t period_ms = 3500, const std::string& direction = "diag_dl")
-        : period_ms_(period_ms > 0 ? period_ms : 3500), direction_(direction) {}
+        : period_ms_(ClampPeriod(period_ms, 3500)), direction_(direction) {}
 
     void Render(uint64_t elapsed_ms, FrameBuffer& out_frame, const Keymap& keymap) override;
+    uint64_t GetPeriodMs() const { return period_ms_; }
 
 private:
     uint64_t period_ms_;
@@ -65,9 +76,10 @@ private:
 class ReactiveEffect : public Effect {
 public:
     ReactiveEffect(const ColorRGB& base_color, const ColorRGB& trigger_color, uint64_t speed_ms = 2500)
-        : base_color_(base_color), trigger_color_(trigger_color), speed_ms_(speed_ms > 0 ? speed_ms : 2500) {}
+        : base_color_(base_color), trigger_color_(trigger_color), speed_ms_(ClampPeriod(speed_ms, 2500)) {}
 
     void Render(uint64_t elapsed_ms, FrameBuffer& out_frame, const Keymap& keymap) override;
+    uint64_t GetSpeedMs() const { return speed_ms_; }
 
 private:
     ColorRGB base_color_;
@@ -80,9 +92,10 @@ private:
 class RippleEffect : public Effect {
 public:
     RippleEffect(const ColorRGB& base_color, const ColorRGB& trigger_color, uint64_t speed_ms = 2500)
-        : base_color_(base_color), trigger_color_(trigger_color), speed_ms_(speed_ms > 0 ? speed_ms : 2500) {}
+        : base_color_(base_color), trigger_color_(trigger_color), speed_ms_(ClampPeriod(speed_ms, 2500)) {}
 
     void Render(uint64_t elapsed_ms, FrameBuffer& out_frame, const Keymap& keymap) override;
+    uint64_t GetSpeedMs() const { return speed_ms_; }
 
 private:
     ColorRGB base_color_;
@@ -101,9 +114,10 @@ private:
 class StarryNightEffect : public Effect {
 public:
     StarryNightEffect(const ColorRGB& color, bool random_colors = false, uint64_t period_ms = 2500)
-        : color_(color), random_colors_(random_colors), period_ms_(period_ms > 0 ? period_ms : 2500) {}
+        : color_(color), random_colors_(random_colors), period_ms_(ClampPeriod(period_ms, 2500)) {}
 
     void Render(uint64_t elapsed_ms, FrameBuffer& out_frame, const Keymap& keymap) override;
+    uint64_t GetPeriodMs() const { return period_ms_; }
 
 private:
     ColorRGB color_;
@@ -115,9 +129,10 @@ private:
 class QuicksandEffect : public Effect {
 public:
     QuicksandEffect(const ColorRGB& c1, const ColorRGB& c2, uint64_t period_ms = 3500, const std::string& direction = "diag_dl")
-        : c1_(c1), c2_(c2), period_ms_(period_ms > 0 ? period_ms : 3500), direction_(direction) {}
+        : c1_(c1), c2_(c2), period_ms_(ClampPeriod(period_ms, 3500)), direction_(direction) {}
 
     void Render(uint64_t elapsed_ms, FrameBuffer& out_frame, const Keymap& keymap) override;
+    uint64_t GetPeriodMs() const { return period_ms_; }
 
 private:
     ColorRGB c1_;
@@ -130,9 +145,10 @@ private:
 class CurrentEffect : public Effect {
 public:
     explicit CurrentEffect(const ColorRGB& color, uint64_t period_ms = 2000)
-        : color_(color), period_ms_(period_ms > 0 ? period_ms : 2000) {}
+        : color_(color), period_ms_(ClampPeriod(period_ms, 2000)) {}
 
     void Render(uint64_t elapsed_ms, FrameBuffer& out_frame, const Keymap& keymap) override;
+    uint64_t GetPeriodMs() const { return period_ms_; }
 
 private:
     ColorRGB color_;
@@ -143,9 +159,10 @@ private:
 class RaindropEffect : public Effect {
 public:
     explicit RaindropEffect(const ColorRGB& color, uint64_t period_ms = 2500)
-        : color_(color), period_ms_(period_ms > 0 ? period_ms : 2500) {}
+        : color_(color), period_ms_(ClampPeriod(period_ms, 2500)) {}
 
     void Render(uint64_t elapsed_ms, FrameBuffer& out_frame, const Keymap& keymap) override;
+    uint64_t GetPeriodMs() const { return period_ms_; }
 
 private:
     ColorRGB color_;

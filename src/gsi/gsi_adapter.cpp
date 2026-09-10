@@ -700,7 +700,7 @@ void GsiAdapter::SetupRoutes() {
     svr_.set_payload_max_length(256 * 1024);
     svr_.set_error_handler([](const httplib::Request& /*req*/, httplib::Response& res) {
         if (res.status == 413) {
-            res.set_content(R"({"status":"error","error":"Payload Too Large","message":"请求体超过 256KB 上限"})", "application/json; charset=utf-8");
+            res.set_content(R"json({"status":"error","error":"Payload Too Large","message":"请求体超过 256KB 上限"})json", "application/json; charset=utf-8");
         }
     });
 

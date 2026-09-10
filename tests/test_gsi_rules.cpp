@@ -4,6 +4,7 @@
 #include <chrono>
 #include <memory>
 #include <filesystem>
+#include <limits>
 #include "test_util.h"
 #include "config/rule_engine.h"
 #include "gsi/gsi_adapter.h"
@@ -332,9 +333,20 @@ int main() {
         }
     }
 
-    // 8. [R16 参数下界校验护栏]
-    std::cout << "\n[测试 8] 验证灯效引擎极小周期 period_ms=1 真实渲染有效性 (R16 护栏)...\n";
+    // 8. [R16 参数下界校验与 CurrentEffect 除零防范护栏]
+    std::cout << "\n[测试 8] 验证参数下界校验 ClampPeriod 与 CurrentEffect 除零防范 (R16 护栏)...\n";
     {
+        // 8.1 单元验证 ClampPeriod 纯逻辑
+        CHECK(aura::ClampPeriod(0, 3000, 33) == 3000, "ClampPeriod(0, 3000) 缺省/0 走预设值 3000");
+        CHECK(aura::ClampPeriod(1, 3000, 33) == 33, "ClampPeriod(1, 3000) 极小值 1 钳制为下界 33ms");
+        CHECK(aura::ClampPeriod(2, 3000, 33) == 33, "ClampPeriod(2, 3000) 极小值 2 钳制为下界 33ms");
+        CHECK(aura::ClampPeriod(32, 3000, 33) == 33, "ClampPeriod(32, 3000) 边界值 32 钳制为下界 33ms");
+        CHECK(aura::ClampPeriod(33, 3000, 33) == 33, "ClampPeriod(33, 3000) 恰等于下界 33 保持 33ms");
+        CHECK(aura::ClampPeriod(500, 3000, 33) == 500, "ClampPeriod(500, 3000) 合法值 500 保持 500ms");
+        CHECK(aura::ClampPeriod(0, 10, 33) == 33, "ClampPeriod(0, 10) 当缺省值小于下界时安全兜底至 33ms");
+        CHECK(aura::ClampPeriod(std::numeric_limits<uint64_t>::max(), 3000, 33) == std::numeric_limits<uint64_t>::max(),
+              "ClampPeriod(UINT64_MAX, ...) 保持 UINT64_MAX");
+
         // 加载权威键位表 fixture，确保渲染循环能够真实遍历 68 个物理键位
         aura::Keymap km;
         std::string keymap_path = "tests/fixtures/calibrated_keymap.json";
@@ -350,17 +362,19 @@ int main() {
 
         aura::FrameBuffer fb;
 
-        // 验证 BreathingEffect 在 period_ms=1 极小周期下渲染正确性
+        // 8.2 验证 BreathingEffect 在 period_ms=1 极小周期下渲染正确性
         aura::BreathingEffect breath(aura::ColorRGB(255, 0, 0), aura::ColorRGB(0, 0, 0), 1);
+        CHECK(breath.GetPeriodMs() == 33, "BreathingEffect(..., 1) 构造钳制周期为 33ms");
         breath.Render(0, fb, km);
         // 在 elapsed_ms=0 时，呼吸光效相位为 0，首键 RGB 应为预设的主色 (255, 0, 0)
         CHECK(fb.buffer[0] == 255 && fb.buffer[1] == 0 && fb.buffer[2] == 0,
               "BreathingEffect 在 period_ms=1 渲染首帧首键通道为预期主色 (255,0,0)");
         breath.Render(1, fb, km);
 
-        // 验证 WaveEffect 在 period_ms=1 极小周期下遍历 68 键渲染正确性
+        // 8.3 验证 WaveEffect 在 period_ms=1 极小周期下遍历 68 键渲染正确性
         fb.Fill(0, 0, 0);
         aura::WaveEffect wave(1, "diag_dl");
+        CHECK(wave.GetPeriodMs() == 33, "WaveEffect(1, ...) 构造钳制周期为 33ms");
         wave.Render(0, fb, km);
         wave.Render(1, fb, km);
 
@@ -373,6 +387,163 @@ int main() {
             }
         }
         CHECK(wave_has_color, "WaveEffect 在 period_ms=1 且包含 68 键位时成功生成有效波浪色彩");
+
+        // 8.4 专项验证 CurrentEffect 除零防范与双保险 (period_ms 为 0/1/2/33 全系列)
+        const aura::ColorRGB cur_color(0, 240, 255);
+        // (A) period_ms = 0: 构造走默认值 2000ms
+        {
+            fb.Fill(0, 0, 0);
+            aura::CurrentEffect cur0(cur_color, 0);
+            CHECK(cur0.GetPeriodMs() == 2000, "CurrentEffect(..., 0) 构造解析为默认值 2000ms");
+            cur0.Render(0, fb, km);
+            cur0.Render(1, fb, km);
+            cur0.Render(500, fb, km);
+            cur0.Render(1000, fb, km);
+            bool has_light = false;
+            for (size_t i = 0; i < aura::FRAME_BUFFER_SIZE; ++i) {
+                if (fb.buffer[i] > 0) { has_light = true; break; }
+            }
+            CHECK(has_light, "CurrentEffect 在 period_ms=0 时渲染产生有效光效输出");
+        }
+
+        // (B) period_ms = 1: 历史致命除零点 (1/2=0 取模崩溃)，构造钳制为 33ms + half 双保险
+        {
+            fb.Fill(0, 0, 0);
+            aura::CurrentEffect cur1(cur_color, 1);
+            CHECK(cur1.GetPeriodMs() == 33, "CurrentEffect(..., 1) 构造钳制为 33ms");
+            cur1.Render(0, fb, km);
+            cur1.Render(1, fb, km);
+            cur1.Render(16, fb, km);
+            cur1.Render(33, fb, km);
+            bool cur1_ok = false;
+            for (size_t i = 0; i < aura::FRAME_BUFFER_SIZE; ++i) {
+                if (fb.buffer[i] > 0) { cur1_ok = true; break; }
+            }
+            CHECK(cur1_ok, "CurrentEffect 在 period_ms=1 历史除零点安全运行并产生电流脉冲");
+        }
+
+        // (C) period_ms = 2: 临界值 (2/2=1)，构造钳制为 33ms
+        {
+            fb.Fill(0, 0, 0);
+            aura::CurrentEffect cur2(cur_color, 2);
+            CHECK(cur2.GetPeriodMs() == 33, "CurrentEffect(..., 2) 构造钳制为 33ms");
+            cur2.Render(0, fb, km);
+            cur2.Render(1, fb, km);
+            cur2.Render(2, fb, km);
+            cur2.Render(33, fb, km);
+            bool cur2_ok = false;
+            for (size_t i = 0; i < aura::FRAME_BUFFER_SIZE; ++i) {
+                if (fb.buffer[i] > 0) { cur2_ok = true; break; }
+            }
+            CHECK(cur2_ok, "CurrentEffect 在 period_ms=2 边界安全运行并产生电流脉冲");
+        }
+
+        // (D) period_ms = 33: 物理下界边界
+        {
+            fb.Fill(0, 0, 0);
+            aura::CurrentEffect cur33(cur_color, 33);
+            CHECK(cur33.GetPeriodMs() == 33, "CurrentEffect(..., 33) 恰等于下界保持 33ms");
+            cur33.Render(0, fb, km);
+            cur33.Render(16, fb, km);
+            cur33.Render(33, fb, km);
+            bool cur33_ok = false;
+            for (size_t i = 0; i < aura::FRAME_BUFFER_SIZE; ++i) {
+                if (fb.buffer[i] > 0) { cur33_ok = true; break; }
+            }
+            CHECK(cur33_ok, "CurrentEffect 在 period_ms=33 下界边界安全运行并产生电流脉冲");
+        }
+
+        // 8.5 其它内置效果全周期覆盖验证 (ColorCycle, StarryNight, Quicksand, Raindrop, Reactive, Ripple)
+        {
+            aura::ColorCycleEffect cc(1);
+            CHECK(cc.GetPeriodMs() == 33, "ColorCycleEffect(1) 钳制为 33ms");
+            cc.Render(0, fb, km);
+
+            aura::StarryNightEffect sn(cur_color, false, 2);
+            CHECK(sn.GetPeriodMs() == 33, "StarryNightEffect(..., 2) 钳制为 33ms");
+            sn.Render(0, fb, km);
+
+            aura::QuicksandEffect qs(aura::ColorRGB(255, 0, 0), aura::ColorRGB(0, 0, 255), 0);
+            CHECK(qs.GetPeriodMs() == 3500, "QuicksandEffect(..., 0) 走默认 3500ms");
+            qs.Render(0, fb, km);
+
+            aura::RaindropEffect rd(cur_color, 1);
+            CHECK(rd.GetPeriodMs() == 33, "RaindropEffect(1) 钳制为 33ms");
+            rd.Render(0, fb, km);
+
+            aura::ReactiveEffect re(aura::ColorRGB(0, 0, 0), cur_color, 1);
+            CHECK(re.GetSpeedMs() == 33, "ReactiveEffect(1) 钳制为 33ms");
+            re.Render(0, fb, km);
+
+            aura::RippleEffect rip(aura::ColorRGB(0, 0, 0), cur_color, 2);
+            CHECK(rip.GetSpeedMs() == 33, "RippleEffect(2) 钳制为 33ms");
+            rip.Render(0, fb, km);
+        }
+
+        // 8.6 RuleEngine::LoadConfig 对 period_ms 0/1/2/33 及非法值的解析校验 (报错哲学统一)
+        const std::string tmp_period_cfg = (std::filesystem::temp_directory_path() / "test_cfg_period_clamp.json").string();
+        {
+            std::ofstream ofs(tmp_period_cfg);
+            ofs << R"json({
+                "default_profile": "prof_normal",
+                "rules": [
+                    { "process": "p0.exe", "profile": "prof_zero" },
+                    { "process": "p1.exe", "profile": "prof_one" },
+                    { "process": "p2.exe", "profile": "prof_two" },
+                    { "process": "p33.exe", "profile": "prof_thirtythree" },
+                    { "process": "pneg.exe", "profile": "prof_negative" },
+                    { "process": "pstr.exe", "profile": "prof_string" },
+                    { "process": "phuge.exe", "profile": "prof_huge" },
+                    { "process": "pfloat.exe", "profile": "prof_float" },
+                    { "process": "pnull.exe", "profile": "prof_null" },
+                    { "process": "pbool.exe", "profile": "prof_bool" }
+                ],
+                "profiles": {
+                    "prof_normal": { "type": "static", "color": [10, 20, 30] },
+                    "prof_zero": { "type": "breathing", "period_ms": 0 },
+                    "prof_one": { "type": "current", "period_ms": 1, "color": [0, 240, 255] },
+                    "prof_two": { "type": "current", "period_ms": 2, "color": [0, 240, 255] },
+                    "prof_thirtythree": { "type": "current", "period_ms": 33, "color": [0, 240, 255] },
+                    "prof_negative": { "type": "wave", "period_ms": -100 },
+                    "prof_string": { "type": "color_cycle", "period_ms": "fast" },
+                    "prof_huge": { "type": "wave", "period_ms": 10000000000000000000 },
+                    "prof_float": { "type": "color_cycle", "period_ms": 100.5 },
+                    "prof_null": { "type": "breathing", "period_ms": null },
+                    "prof_bool": { "type": "raindrop", "period_ms": true }
+                }
+            })json";
+        }
+
+        aura::RuleEngine period_engine;
+        bool p_loaded = period_engine.LoadConfig(tmp_period_cfg);
+        CHECK(p_loaded, "LoadConfig 解析含非法/极小/超大/非整型 period_ms 配置不拒绝启动并成功加载");
+
+        // 验证各方案均能匹配并且安全渲染
+        auto match_and_render = [&](const std::string& proc, const std::string& expect_prof) {
+            auto prof = period_engine.MatchProfile(proc);
+            CHECK(prof != nullptr && prof->name == expect_prof,
+                  "进程 " + proc + " 成功匹配方案: " + expect_prof);
+            if (prof && prof->base_effect) {
+                aura::FrameBuffer test_fb;
+                prof->Render(0, test_fb, km);
+                prof->Render(1, test_fb, km);
+                prof->Render(16, test_fb, km);
+                prof->Render(33, test_fb, km);
+            }
+        };
+
+        match_and_render("p0.exe", "prof_zero");
+        match_and_render("p1.exe", "prof_one");
+        match_and_render("p2.exe", "prof_two");
+        match_and_render("p33.exe", "prof_thirtythree");
+        match_and_render("pneg.exe", "prof_negative");
+        match_and_render("pstr.exe", "prof_string");
+        match_and_render("phuge.exe", "prof_huge");
+        match_and_render("pfloat.exe", "prof_float");
+        match_and_render("pnull.exe", "prof_null");
+        match_and_render("pbool.exe", "prof_bool");
+
+        std::filesystem::remove(tmp_period_cfg);
     }
 
     // 9. [R3 硬件推流寻址表边界与容量证明]

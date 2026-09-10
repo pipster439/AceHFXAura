@@ -247,7 +247,8 @@ void QuicksandEffect::Render(uint64_t elapsed_ms, FrameBuffer& out_frame, const 
 
 // 9. 电流涌动
 void CurrentEffect::Render(uint64_t elapsed_ms, FrameBuffer& out_frame, const Keymap& keymap) {
-    double time_phase = static_cast<double>(elapsed_ms % (period_ms_ / 2)) / static_cast<double>(period_ms_ / 2);
+    const uint64_t half = period_ms_ / 2 ? period_ms_ / 2 : 1;
+    double time_phase = static_cast<double>(elapsed_ms % half) / static_cast<double>(half);
     double pulse_col = time_phase * 16.0;
 
     for (const auto& [name, info] : keymap.GetAllKeys()) {
