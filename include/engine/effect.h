@@ -23,6 +23,7 @@ struct Profile {
     std::string name;
     std::shared_ptr<Effect> base_effect;
     std::vector<KeyOverride> key_overrides;
+    uint8_t brightness = 255;
 
     void Render(uint64_t elapsed_ms, FrameBuffer& out_frame, const Keymap& keymap) const {
         if (base_effect) {
@@ -38,6 +39,17 @@ struct Profile {
                 for (int id : led_ids) {
                     out_frame.SetKey(id, ko.color);
                 }
+            }
+        }
+
+        // Apply uniform brightness scaling
+        if (brightness == 0) {
+            out_frame.Clear();
+        } else if (brightness < 255) {
+            for (size_t i = 0; i < FRAME_BUFFER_SIZE; ++i) {
+                out_frame.buffer[i] = static_cast<uint8_t>(
+                    (static_cast<uint32_t>(out_frame.buffer[i]) * brightness) / 255
+                );
             }
         }
     }

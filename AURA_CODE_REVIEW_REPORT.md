@@ -353,4 +353,45 @@
 
 ---
 
-*报告依据对 `G:\Aura` 当前工作树（HEAD = `55555de`，工作树含未提交的 `build/` 产物变更）的静态阅读与交叉核对生成。所有位置标注对应审查时的文件行号。涉及硬件行为的判断（如 COM 内部偏移容量、底层扩容行为）基于代码与 `AGENT.md` 记录，未经真机验证，标注为"潜在"。*
+## 十、D2 版本库治理与一个新发现的严重问题：**提交历史与工作树相位不一致**
+
+> 本节记录 R17（`.gitignore` + 源码纳管）的实施与验证结果。验收标准是"全新 clone 后可直接构建"——正是这条标准暴露了一个比原 #63/#65 更严重的问题。
+
+### 10.1 新发现（严重）：HEAD 是 Phase 2，工作树是 Phase 3 —— 提交历史上**无法构建**
+
+- **事实**：原报告只指出"`include/gsi`、`src/gsi`、`tests`、`frontend` 未被跟踪"。实测进一步确认：**已被跟踪的 `CMakeLists.txt` 也是 Phase 2 版本** —— 缺少 `add_definitions(-DWIN32_LEAN_AND_MEAN -DNOMINMAX)`、不含 `src/gsi/gsi_adapter.cpp`、缺少 `ws2_32`/`crypt32` 链接项，两个测试目标根本不存在；`include/config/rule_engine.h` 的 GSI 感知 `MatchProfile(process, gsi_state)` 重载在 HEAD 中也**不存在**（HEAD 出现 0 次，工作树 1 次）。
+- **后果**：即使把未跟踪源码全部纳入跟踪，**全新 clone 仍然构建失败**。实测错误演化：**102 个错误**（全部落在 Windows SDK `ws2def.h`：`sockaddr` 重定义 —— 根因是缺 `WIN32_LEAN_AND_MEAN` 时 `windows.h` 先拉入旧 `winsock.h`、随后 `winsock2.h` 冲突）→ 提交 CMakeLists 后降为 **20 个**（`error C2660: MatchProfile 函数不接受 2 个参数`）→ 补齐 Phase 3 源码后 **0 个**。
+- **性质**：这不是"漏跟踪文件"的细枝末节，而是**仓库在 HEAD 上自相矛盾**（源码与其构建定义相位不一致），任何新人 clone 都无法复现该项目。
+- **处置**：提交 4 个 commit 后，全新 clone 已可复现构建（见 10.2）。
+
+### 10.2 处置与验证（已全部实测）
+
+新增 4 个提交（未改写历史，未使用 `--force`）：
+
+| commit | 内容 |
+| :--- | :--- |
+| `ce232a3` | `fix(daemon)`：批次 A —— R1/R2/R3（9 文件，+1363/−40） |
+| `468dfcd` | `chore(repo)`：补 `.gitignore`，解除 **115 项**产物跟踪，纳管 27 项源码与文档 |
+| `b00e4e5` | `build`：提交 Phase 3 构建定义（HEAD 仍是 Phase 2） |
+| `7dac58a` | `build`：补齐 Phase 3 源码（rule_engine、web_server、test_com） |
+
+**验收证据（全新 clone，路径 `G:\Aura-clone-verify3`）**
+
+| 检查项 | 结果 |
+| :--- | :--- |
+| clone 文件数 | 109（不含 `node_modules` / `build/` / `__pycache__`） |
+| 关键源码齐备 | `src/gsi/gsi_adapter.cpp`、`include/gsi/gsi_adapter.h`、`tests/`、`frontend/src/`、`test_cs2_gsi.py`、`include/third_party/json.hpp` **全部 ✓** |
+| 未误带产物 | `build/`、`node_modules`、`frontend/node_modules`、`__pycache__` **均不存在 ✓** |
+| `git ls-files` 中 `*.exe` / `*.pyc` / `build/` | **均为 0 ✓** |
+| **全新 clone `cmake` 配置** | **exit 0** |
+| **全新 clone 构建** | **exit 0，0 error / 0 warning**，产出全部 5 个可执行文件（`aura_daemon` / `aura_web_ui` / `test_com` / `test_diag_hook` / `test_gsi_rules`） |
+| clone 内 `test_gsi_rules` | 退出码 `0x00000000`，**24 PASS / 0 FAIL** |
+| 主工作树 `git status` 余项 | 由 40+ 条 `build/` 噪声降至 **4 项**（且均为用户既有未提交内容，非本次改动） |
+
+### 10.3 有意保留、未纳入提交的内容
+
+`README.md`、`config.json`、`config.example.json`、`web/index.html` 仍留在工作树**未提交**。理由：它们不影响构建，且 `config.json` 属用户运行期状态、`web/index.html` 属前端构建产物，是否冻结应由用户决定。**注意**：这意味着 HEAD 上的 `config.json` 仍是不含 `gsi_bindings` 的旧版，`web/index.html` 也是旧版 UI；若希望 clone 出的运行时行为与当前一致，需要另行提交这三项 + README。
+
+---
+
+*报告依据对 `G:\Aura` 工作树的静态阅读与交叉核对生成（初审时 HEAD = `55555de`；批次 A 与版本库治理后 HEAD = `7dac58a`）。所有位置标注对应审查时的文件行号。涉及硬件行为的判断（如 COM 内部偏移容量、底层扩容行为）基于代码与 `AGENT.md` 记录，未经真机验证，标注为"潜在"。*

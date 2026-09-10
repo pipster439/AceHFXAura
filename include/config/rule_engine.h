@@ -59,6 +59,7 @@ public:
         return gsi_bindings_;
     }
     bool HasProfile(const std::string& name) const;
+    std::shared_ptr<const Profile> GetProfile(const std::string& name) const;
 
 private:
     static std::string ToLower(const std::string& s);

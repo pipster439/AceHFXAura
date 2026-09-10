@@ -1,0 +1,31 @@
+你是 Aura 仓库（G:/Aura）的修复执行者，接手批次 B 之后的剩余任务（批次 C / D / E）。
+
+## 第一步：建立上下文（按顺序完整阅读，不要跳过）
+
+1. `G:/Aura/HANDOVER.md` —— 交接文档：项目架构红线、当前状态（HEAD = 1aa6ab9）、逐项执行卡片、构建与自验环境、关键编码陷阱。**第 6 节"关键编码陷阱"必须逐条记住，尤其是 raw string 规则。**
+2. `G:/Aura/REMEDIATION_PLAN.md` —— 修复方案总纲。每个 R 项动手前，重读它的对应章节（含问题定位、经交叉验证的改法、验收标准），严格按方案实施，不要自由发挥。
+
+## 你的工作循环（每项 R 依此执行）
+
+1. **读方案**：REMEDIATION_PLAN.md 对应章节 + 涉及的源文件通读。
+2. **改码**：按方案最小化改动；只改该项需要的文件；禁改 `include/third_party/`；注释与日志用中文。
+3. **构建**：按 HANDOVER.md §5.1（剥代理变量、仓库外构建目录 G:/Aura-build-verify），必须 0 error / 0 warning。
+4. **回归**：按 §5.2 跑 test_gsi_rules，必须 24 PASS / 0 FAIL（R13 完成后以 ctest 为准）。
+5. **自验**：按该 R 项在 REMEDIATION_PLAN.md 里的验收标准逐条验证（运行期验收注意 §5.3/§5.4：禁代理 + terminate 后等真退出再动文件）。
+6. **提交**：git commit，message 写清改动内容、验证证据、已知瑕疵。
+7. **汇报**：每个文件改了什么、验收结果、与方案的偏离及理由。
+
+## 执行顺序（HANDOVER.md §3）
+
+R13（测试体系，最先）→ R12 + R12b → R14 → R16 → R20（单独 commit）→ R21 → R22。
+
+## 硬性约束（绝不违反）
+
+1. **raw string**：所有 JSON/字符串字面量用 `R"json({...})json"` 显式定界符形式，禁止 `R"({...})"`（内容含 `)"` 子串时编译器误判终止符，曾引发 80 个雪崩语法错误）。每次写完自检 `grep -cE 'R"\([^a-zA-Z_)]' <文件>` 应为 0，并在汇报中给出统计。
+2. **不要动已完成的批次 A/B 代码**：R1–R11 的全部修复（EvaluateLocked、快照谓词、缓冲上界、set_payload_max_length、四层鉴权、ComScope、日志轮转、--log-level、宽字符全家桶）必须完整保留。
+3. **工作树里 5 个用户未提交文件**（AURA_CODE_REVIEW_REPORT.md、README.md、config.example.json、config.json、web/index.html）：R12/R14 会碰 config.json 与 web/index.html，改完先问用户再提交；其余 3 个不要动。
+4. **遇到决策点就停**：R15（等 D1：brightness 实现还是移除）、R18（等 D3：cfg 怎么补）、R19（等用户拔键盘）——这些项到了就向用户提问，不要擅自选方案。
+5. **构建/测试不过就不提交**：0 error / 0 warning / 24 PASS / 0 FAIL 是硬门槛。
+6. 前端改动（R14/R15）必须 `cd frontend && npm run build` 重建 web/index.html 后才算完成。
+
+现在从 R13（测试体系修复）开始。先读 REMEDIATION_PLAN.md 的 R13 章节和 tests/test_gsi_rules.cpp 现状，然后按工作循环执行。

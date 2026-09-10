@@ -4,7 +4,7 @@
     {
       "process": "cs2.exe",
       "profile": "cs2_gamer",
-      "suppress_web_ui": true
+      "suppress_web_ui": false
     },
     {
       "process": "code.exe",
@@ -23,12 +23,38 @@
       "profile": "cyberpunk"
     }
   ],
+  "gsi_bindings": [
+    {
+      "field": "player_state.health",
+      "operator": "<",
+      "value": 20,
+      "profile": "danger_red"
+    },
+    {
+      "field": "round.bomb",
+      "operator": "==",
+      "value": "planted",
+      "profile": "bomb_pulse"
+    }
+  ],
   "profiles": {
     "desktop": {
       "type": "breathing",
       "color1": [0, 80, 200],
       "color2": [0, 10, 40],
       "period_ms": 3500
+    },
+    "danger_red": {
+      "type": "breathing",
+      "color1": [255, 0, 0],
+      "color2": [60, 0, 0],
+      "period_ms": 600
+    },
+    "bomb_pulse": {
+      "type": "breathing",
+      "color1": [255, 80, 0],
+      "color2": [20, 0, 0],
+      "period_ms": 500
     },
     "cs2_gamer": {
       "type": "custom_keymap",

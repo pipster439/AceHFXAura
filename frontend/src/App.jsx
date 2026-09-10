@@ -55,10 +55,16 @@ export default function App() {
     if (profileData.direction) setCurrentDirection(profileData.direction);
 
     if (typeof profileData.brightness === 'number') {
-      setBrightnessVal(profileData.brightness);
+      const b = profileData.brightness > 1.0 ? profileData.brightness / 255.0 : profileData.brightness;
+      setBrightnessVal(Math.max(0, Math.min(1.0, b)));
+    } else {
+      setBrightnessVal(1.0);
     }
 
-    if (profileData.period_ms) {
+    if (typeof profileData.speed_index === 'number') {
+      const idx = Math.round(profileData.speed_index);
+      setSpeedIndex(Math.max(0, Math.min(2, idx)));
+    } else if (profileData.period_ms) {
       if (profileData.period_ms > 4500) setSpeedIndex(0);
       else if (profileData.period_ms > 2400) setSpeedIndex(1);
       else setSpeedIndex(2);
@@ -164,10 +170,12 @@ export default function App() {
     if (activeTab === 'perkey') {
       prof.type = 'custom_keymap';
       prof.bg = hexToRgb(bgColor);
+      prof.brightness = brightnessVal;
     } else {
       prof.type = currentEffect;
       prof.analog = currentEffect === 'static' ? isAnalogEnabled : false;
       prof.brightness = brightnessVal;
+      prof.speed_index = speedIndex;
       prof.direction = currentDirection;
       prof.period_ms = speedIndex === 0 ? 5500 : speedIndex === 1 ? 3200 : 1600;
 
@@ -364,6 +372,7 @@ export default function App() {
       type: 'static',
       color: [15, 23, 42],
       brightness: 1.0,
+      speed_index: 1,
       period_ms: 2500,
       keys: {}
     };

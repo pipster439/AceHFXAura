@@ -5,6 +5,7 @@
 #include "utils/logger.h"
 #include <fstream>
 #include <algorithm>
+#include <cmath>
 #include <cctype>
 #include <filesystem>
 
@@ -13,26 +14,67 @@ namespace aura {
 namespace {
 
 uint64_t ParseAndClampPeriod(const std::string& pname, const nlohmann::json& pval, uint64_t def_period) {
-    if (!pval.contains("period_ms")) {
-        return def_period;
-    }
-    const auto& period_val = pval["period_ms"];
-    if (period_val.is_number_unsigned()) {
-        uint64_t u = period_val.get<uint64_t>();
-        if (u < 33) {
-            uint64_t clamped = ClampPeriod(u, def_period, 33);
-            LOG_WARN("方案 '" << pname << "' 的 period_ms 非法 (" << period_val.dump()
-                     << ")，已被钳制为 " << clamped);
-            return clamped;
+    if (pval.contains("period_ms")) {
+        const auto& period_val = pval["period_ms"];
+        if (period_val.is_number_unsigned()) {
+            uint64_t u = period_val.get<uint64_t>();
+            if (u < 33) {
+                uint64_t clamped = ClampPeriod(u, def_period, 33);
+                LOG_WARN("方案 '" << pname << "' 的 period_ms 非法 (" << period_val.dump()
+                         << ")，已被钳制为 " << clamped);
+                return clamped;
+            }
+            return u;
         }
-        return u;
+
+        // 非无符号整数：有符号负整数或非整型（如浮点数、字符串、布尔、对象等）
+        uint64_t clamped = ClampPeriod(0, def_period, 33);
+        LOG_WARN("方案 '" << pname << "' 的 period_ms 非法 (" << period_val.dump()
+                 << ")，已被钳制为 " << clamped);
+        return clamped;
     }
 
-    // 非无符号整数：有符号负整数或非整型（如浮点数、字符串、布尔、对象等）
-    uint64_t clamped = ClampPeriod(0, def_period, 33);
-    LOG_WARN("方案 '" << pname << "' 的 period_ms 非法 (" << period_val.dump()
-             << ")，已被钳制为 " << clamped);
-    return clamped;
+    if (pval.contains("speed_index")) {
+        const auto& sval = pval["speed_index"];
+        if (sval.is_number()) {
+            int s = static_cast<int>(std::round(sval.get<double>()));
+            if (s == 0) return 5500;
+            if (s == 1) return 3200;
+            if (s == 2) return 1600;
+            LOG_WARN("方案 '" << pname << "' 的 speed_index 非法 (" << sval.dump()
+                     << ")，已使用默认周期 " << def_period);
+        } else {
+            LOG_WARN("方案 '" << pname << "' 的 speed_index 类型非法 (" << sval.dump()
+                     << ")，已使用默认周期 " << def_period);
+        }
+    }
+
+    return def_period;
+}
+
+uint8_t ParseBrightness(const std::string& pname, const nlohmann::json& pval) {
+    if (!pval.contains("brightness")) {
+        return 255;
+    }
+    const auto& bval = pval["brightness"];
+    if (!bval.is_number()) {
+        LOG_WARN("方案 '" << pname << "' 的 brightness 字段类型非法 (" << bval.dump()
+                 << ")，已使用默认值 255");
+        return 255;
+    }
+    double v = bval.get<double>();
+    if (v < 0.0) {
+        LOG_WARN("方案 '" << pname << "' 的 brightness 小于 0 (" << v << ")，已被钳制为 0");
+        return 0;
+    }
+    if (v <= 1.0) {
+        return static_cast<uint8_t>(std::clamp(static_cast<int>(std::round(v * 255.0)), 0, 255));
+    }
+    if (v > 255.0) {
+        LOG_WARN("方案 '" << pname << "' 的 brightness 超过 255 (" << v << ")，已被钳制为 255");
+        return 255;
+    }
+    return static_cast<uint8_t>(std::clamp(static_cast<int>(std::round(v)), 0, 255));
 }
 
 } // namespace
@@ -188,6 +230,7 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
                 }
                 auto prof = std::make_shared<Profile>();
                 prof->name = pname;
+                prof->brightness = ParseBrightness(pname, pval);
 
                 std::string type = pval.value("type", "static");
                 if (type == "static") {
@@ -480,6 +523,15 @@ bool RuleEngine::ShouldSuppressWebUi(const std::string& process_name) {
 bool RuleEngine::HasProfile(const std::string& name) const {
     std::lock_guard<std::mutex> lock(mutex_);
     return profiles_.find(name) != profiles_.end();
+}
+
+std::shared_ptr<const Profile> RuleEngine::GetProfile(const std::string& name) const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto it = profiles_.find(name);
+    if (it != profiles_.end()) {
+        return it->second;
+    }
+    return nullptr;
 }
 
 } // namespace aura
