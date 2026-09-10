@@ -1,0 +1,52 @@
+# ============================================================
+# Aura — Git 忽略规则
+# 原则：只跟踪【源码 / 配置 / 文档 / 运行期必需的静态资源】，
+#       不跟踪任何可再生成的构建产物与本地运行痕迹。
+# 注意：web/index.html 是前端构建产物，但它是 WebUI 运行期必需的页面
+#       （由 frontend/ + vite-plugin-singlefile 生成，输出目录即 ../web），
+#       故【故意保留跟踪】，不在此忽略。
+# ============================================================
+
+# ---- CMake / MSVC 构建产物 ----
+build/
+out/
+*.exe
+*.dll
+*.lib
+*.exp
+*.pdb
+*.ilk
+*.obj
+*.tlog
+*.lastbuildstate
+*.recipe
+*.bin
+*.vcxproj
+*.vcxproj.filters
+*.sln
+*.slnx
+
+# ---- Python ----
+__pycache__/
+*.pyc
+*.pyo
+
+# ---- 运行期痕迹（daemon 每次运行都会重写）----
+*.log
+aura_daemon.log*
+.daemon_running
+hw_test_config.json
+smoke_test_config.json
+
+# ---- 前端 ----
+node_modules/
+frontend/node_modules/
+frontend/dist/
+
+# ---- 本地备份 / 临时文件 ----
+*.bak
+*.orig
+*.tmp
+
+# ---- Agent 本地状态（记忆、技能缓存，非项目源码）----
+.workbuddy/

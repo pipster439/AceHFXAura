@@ -1,5 +1,0 @@
-C:/Users/ROG/WorkBuddy/Worktrees/Aura/main-0d4cb138/build/CMakeFiles/aura_daemon.dir
-C:/Users/ROG/WorkBuddy/Worktrees/Aura/main-0d4cb138/build/CMakeFiles/test_com.dir
-C:/Users/ROG/WorkBuddy/Worktrees/Aura/main-0d4cb138/build/CMakeFiles/aura_web_ui.dir
-C:/Users/ROG/WorkBuddy/Worktrees/Aura/main-0d4cb138/build/CMakeFiles/ALL_BUILD.dir
-C:/Users/ROG/WorkBuddy/Worktrees/Aura/main-0d4cb138/build/CMakeFiles/ZERO_CHECK.dir

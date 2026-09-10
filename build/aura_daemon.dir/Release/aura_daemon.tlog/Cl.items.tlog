@@ -1,8 +1,0 @@
-C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\src\main.cpp;C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\build\aura_daemon.dir\Release\main.obj
-C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\src\aura\aura_adapter.cpp;C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\build\aura_daemon.dir\Release\aura_adapter.obj
-C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\src\aura\keymap.cpp;C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\build\aura_daemon.dir\Release\keymap.obj
-C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\src\monitor\foreground_monitor.cpp;C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\build\aura_daemon.dir\Release\foreground_monitor.obj
-C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\src\config\rule_engine.cpp;C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\build\aura_daemon.dir\Release\rule_engine.obj
-C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\src\engine\effect_engine.cpp;C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\build\aura_daemon.dir\Release\effect_engine.obj
-C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\src\engine\builtin_effects.cpp;C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\build\aura_daemon.dir\Release\builtin_effects.obj
-C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\src\supervisor\web_supervisor.cpp;C:\Users\ROG\WorkBuddy\Worktrees\Aura\main-0d4cb138\build\aura_daemon.dir\Release\web_supervisor.obj
