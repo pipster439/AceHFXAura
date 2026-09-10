@@ -237,13 +237,14 @@ void WebUiSupervisor::WorkerLoop() {
             }
         }
 
+        const bool s_prev = target_suppressed_.load(std::memory_order_acquire);
+        const bool r_prev = is_running_.load(std::memory_order_acquire);
         std::unique_lock<std::mutex> lock(cv_mutex_);
-        // 睡眠等待下一次前台状态变更，或 1.5 秒超时用于探针轮检
+        // 睡眠等待下一次前台状态变更（快照比对消除忙等），或 1.5 秒超时用于探针轮检
         cv_.wait_for(lock, std::chrono::milliseconds(1500), [&]() {
             if (stop_requested_.load(std::memory_order_acquire)) return true;
-            bool s = target_suppressed_.load(std::memory_order_acquire);
-            bool r = is_running_.load(std::memory_order_acquire);
-            return (s && r) || (!s && !r);
+            return target_suppressed_.load(std::memory_order_acquire) != s_prev
+                || is_running_.load(std::memory_order_acquire) != r_prev;
         });
     }
 

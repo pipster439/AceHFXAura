@@ -10,6 +10,7 @@
 
 #include <iostream>
 #include <string>
+#include <cctype>
 #include <vector>
 #include <memory>
 #include <chrono>
@@ -45,6 +46,7 @@ void PrintUsage() {
               << "  --test-stability <分钟>   持续以 25 FPS 推流指定时长进行稳定性硬性验收\n"
               << "  --config <文件路径>       指定配置文件路径 (默认: config.json)\n"
               << "  --keymap <文件路径>       指定权威键位表文件路径 (默认: calibrated_keymap.json)\n"
+              << "  --log-level <级别>        设置日志级别 (debug|info|warn|error，默认: info)\n"
               << "  --help                    显示本帮助信息\n"
               << "=========================================================\n";
 }
@@ -79,6 +81,22 @@ int main(int argc, char* argv[]) {
             config_path = argv[++i];
         } else if (arg == "--keymap" && i + 1 < argc) {
             keymap_path = argv[++i];
+        } else if (arg == "--log-level" && i + 1 < argc) {
+            std::string level_str = argv[++i];
+            for (auto& c : level_str) {
+                c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            }
+            if (level_str == "debug") {
+                aura::Logger::Instance().SetLogLevel(aura::LogLevel::Debug);
+            } else if (level_str == "info") {
+                aura::Logger::Instance().SetLogLevel(aura::LogLevel::Info);
+            } else if (level_str == "warn" || level_str == "warning") {
+                aura::Logger::Instance().SetLogLevel(aura::LogLevel::Warn);
+            } else if (level_str == "error") {
+                aura::Logger::Instance().SetLogLevel(aura::LogLevel::Error);
+            } else {
+                std::cerr << "未知的日志级别: " << level_str << " (支持: debug, info, warn, error)\n";
+            }
         } else if (arg == "--help" || arg == "-h") {
             PrintUsage();
             return 0;

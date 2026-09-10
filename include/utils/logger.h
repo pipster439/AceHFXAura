@@ -7,6 +7,7 @@
 #include <chrono>
 #include <iomanip>
 #include <fstream>
+#include <cstdio>
 #include <windows.h>
 
 namespace aura {
@@ -32,6 +33,7 @@ public:
         SetConsoleCP(CP_UTF8);
         
         if (!log_file_path.empty()) {
+            log_file_path_ = log_file_path;
             file_stream_.open(log_file_path, std::ios::app);
         }
     }
@@ -55,11 +57,13 @@ public:
         std::cout.flush();
 
         if (file_stream_.is_open()) {
+            RotateLogIfNeeded();
             file_stream_ << out;
             file_stream_.flush();
         }
     }
 
+    // 必须在启动工作线程前调用（单线程初始化阶段）
     void SetLogLevel(LogLevel level) {
         current_level_ = level;
     }
@@ -76,6 +80,26 @@ private:
         }
     }
 
+    // 日志轮转：close -> 删最旧 -> .2->.3, .1->.2, log->.1 -> 重开
+    void RotateLogIfNeeded() {
+        if (!file_stream_.is_open() || log_file_path_.empty()) return;
+        auto pos = file_stream_.tellp();
+        if (pos < 0 || static_cast<size_t>(pos) < max_bytes_) return;
+
+        file_stream_.close();
+
+        std::string log3 = log_file_path_ + ".3";
+        std::string log2 = log_file_path_ + ".2";
+        std::string log1 = log_file_path_ + ".1";
+
+        std::remove(log3.c_str());
+        std::rename(log2.c_str(), log3.c_str());
+        std::rename(log1.c_str(), log2.c_str());
+        std::rename(log_file_path_.c_str(), log1.c_str());
+
+        file_stream_.open(log_file_path_, std::ios::app);
+    }
+
     const char* LevelToString(LogLevel level) {
         switch (level) {
             case LogLevel::Debug: return "[DEBUG]";
@@ -89,6 +113,9 @@ private:
     std::mutex mutex_;
     LogLevel current_level_;
     std::ofstream file_stream_;
+    std::string log_file_path_;
+    size_t max_bytes_{8 * 1024 * 1024}; // 默认 8MB
+    size_t rotate_keep_{3};             // 默认保留 3 份历史日志
 };
 
 #define LOG_DEBUG(msg) do { if (aura::Logger::Instance().ShouldLog(aura::LogLevel::Debug)) { std::ostringstream _oss; _oss << msg; aura::Logger::Instance().Log(aura::LogLevel::Debug, _oss.str()); } } while(0)

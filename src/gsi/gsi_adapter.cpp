@@ -696,6 +696,14 @@ GsiAdapter::~GsiAdapter() {
 }
 
 void GsiAdapter::SetupRoutes() {
+    // 限制请求体上限为 256KB，防止超大 payload 引发内存拒绝服务 (DoS)
+    svr_.set_payload_max_length(256 * 1024);
+    svr_.set_error_handler([](const httplib::Request& /*req*/, httplib::Response& res) {
+        if (res.status == 413) {
+            res.set_content(R"({"status":"error","error":"Payload Too Large","message":"请求体超过 256KB 上限"})", "application/json; charset=utf-8");
+        }
+    });
+
     // 处理来自 CS2 的 GSI POST Payload
     auto gsi_post_handler = [this](const httplib::Request& req, httplib::Response& res) {
         try {
