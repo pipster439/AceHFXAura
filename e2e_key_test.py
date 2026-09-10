@@ -28,9 +28,28 @@ import sys
 import time
 from ctypes import wintypes
 
+# 引入 tools/py 共享模块
+_TOOLS_PY = os.path.abspath(os.path.join(os.path.dirname(__file__), "tools", "py"))
+if _TOOLS_PY not in sys.path:
+    sys.path.insert(0, _TOOLS_PY)
+
+import aura_hal
+from aura_hal import (
+    find_calibrated_keymap_path,
+    load_calibrated_keymap,
+    get_calibrated_led_map,
+    get_calibrated_name_map,
+)
+
 ROOT = os.path.dirname(os.path.abspath(__file__))
-DAEMON = os.path.join(ROOT, "build", "Release", "aura_daemon.exe")
-KEYMAP = os.path.join(ROOT, "calibrated_keymap.json")
+_candidate_daemons = [
+    os.environ.get("AURA_DAEMON_PATH", ""),
+    os.path.join("G:/Aura-build-verify", "Release", "aura_daemon.exe"),
+    os.path.join(ROOT, "build", "Release", "aura_daemon.exe"),
+    os.path.join(ROOT, "aura_daemon.exe"),
+]
+DAEMON = next((d for d in _candidate_daemons if d and os.path.exists(d)), os.path.join(ROOT, "build", "Release", "aura_daemon.exe"))
+KEYMAP = find_calibrated_keymap_path()
 TMP_CFG = os.path.join(ROOT, "e2e_test_config.json")
 
 # ---------------- Win32 SendInput ----------------
@@ -101,12 +120,11 @@ def restore_focus(console):
         _user32.ShowWindow(console, 9)  # SW_RESTORE
 
 
-# ---------------- 键位映射 ----------------
-with open(KEYMAP, encoding="utf-8") as f:
-    _km = json.load(f)
-KEYS = _km["keys"]
-LED_TO_NAME = {int(v["led_id"]): k for k, v in KEYS.items() if "led_id" in v}
-NAME_TO_LED = {k: int(v["led_id"]) for k, v in KEYS.items() if "led_id" in v}
+# ---------------- 键位映射 (基于 tools.py.aura_hal 权威标定) ----------------
+_km = load_calibrated_keymap(KEYMAP)
+KEYS = _km.get("keys", {})
+LED_TO_NAME = get_calibrated_name_map(KEYMAP)
+NAME_TO_LED = get_calibrated_led_map(KEYMAP)
 
 VK = {
     "A": 0x41, "J": 0x4A, "Z": 0x5A, "SPACE": 0x20,
@@ -125,7 +143,7 @@ def write_config(effect: dict):
 def start_daemon():
     p = subprocess.Popen(
         [DAEMON, "--dry-run", "--config", TMP_CFG, "--keymap", KEYMAP],
-        cwd=os.path.join(ROOT, "build", "Release"),
+        cwd=ROOT,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         text=True, encoding="utf-8", errors="replace",
         creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,

@@ -133,4 +133,10 @@ enable_testing()
 add_test(NAME gsi_rules COMMAND test_gsi_rules)
 set_tests_properties(gsi_rules PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures")
 
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if (Python3_Interpreter_FOUND)
+    add_test(NAME aura_hal_py COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_aura_hal.py")
+    set_tests_properties(aura_hal_py PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
+endif()
+
 

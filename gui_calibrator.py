@@ -22,26 +22,19 @@ import threading
 import tkinter as tk
 from tkinter import ttk, messagebox
 
-ole32 = ctypes.oledll.ole32
+# 引入 tools/py 共享基础模块
+_TOOLS_PY = os.path.abspath(os.path.join(os.path.dirname(__file__), "tools", "py"))
+if _TOOLS_PY not in sys.path:
+    sys.path.insert(0, _TOOLS_PY)
 
-class GUID(ctypes.Structure):
-    _fields_ = [
-        ('Data1', wintypes.DWORD),
-        ('Data2', wintypes.WORD),
-        ('Data3', wintypes.WORD),
-        ('Data4', wintypes.BYTE * 8)
-    ]
-
-def to_guid(s):
-    g = GUID()
-    ole32.CLSIDFromString(ctypes.c_wchar_p(s), ctypes.byref(g))
-    return g
-
-CLSID_ClaymoreHal = '{AE9DB4C8-4F2A-4756-9B11-2F6D78C61F1A}'
-IID_IAsusAacLedDeviceHal = '{F2C8D5B4-3854-4325-8A4F-FD7C5072E3BA}'
-
-class StdVector(ctypes.Structure):
-    _fields_ = [("first", ctypes.c_void_p), ("last", ctypes.c_void_p), ("end", ctypes.c_void_p)]
+import aura_hal
+from aura_hal import (
+    AuraHal,
+    AuraHalDevice,
+    TOTAL_LEDS,
+    RGB_CHANNELS,
+    find_calibrated_keymap_path,
+)
 
 # -------------------------------------------------------------------------
 # ROG FALCHION ACE HFX 65% 标准物理键盘布局几何规格定义
@@ -133,7 +126,7 @@ GUI_LAYOUT = [
     ]
 ]
 
-CALIBRATION_FILE = r"g:\Aura\calibrated_keymap.json"
+CALIBRATION_FILE = find_calibrated_keymap_path()
 
 ROW_DESCRIPTIONS = {
     1: "第 1 排 (顶部数字与功能区)",
@@ -144,69 +137,48 @@ ROW_DESCRIPTIONS = {
 }
 
 class KeyboardLightingEngine:
-    def __init__(self):
-        ole32.CoInitialize(None)
-        self.pHal = ctypes.c_void_p()
-        hr = ole32.CoCreateInstance(
-            ctypes.byref(to_guid(CLSID_ClaymoreHal)),
-            None,
-            1,
-            ctypes.byref(to_guid(IID_IAsusAacLedDeviceHal)),
-            ctypes.byref(self.pHal)
-        )
-        if hr != 0:
-            raise RuntimeError(f"初始化 HAL 驱动失败 (0x{hr:X})")
-            
-        self.hal_vtable = ctypes.cast(
-            ctypes.cast(self.pHal.value, ctypes.POINTER(ctypes.c_void_p))[0],
-            ctypes.POINTER(ctypes.c_void_p)
-        )
-        ctypes.WINFUNCTYPE(wintypes.LONG, ctypes.c_void_p)(self.hal_vtable[4])(self.pHal.value)
-        
-        self.device_storage = (ctypes.c_void_p * 16)()
-        vec = StdVector(
-            ctypes.addressof(self.device_storage),
-            ctypes.addressof(self.device_storage),
-            ctypes.addressof(self.device_storage) + 16 * 8
-        )
-        ctypes.WINFUNCTYPE(wintypes.LONG, ctypes.c_void_p, ctypes.POINTER(StdVector))(self.hal_vtable[5])(
-            self.pHal.value, ctypes.byref(vec)
-        )
-        
-        self.pDev = self.device_storage[0]
-        self.dev_vtable = ctypes.cast(
-            ctypes.cast(self.pDev, ctypes.POINTER(ctypes.c_void_p))[0],
-            ctypes.POINTER(ctypes.c_void_p)
-        )
-        
-        self.TOTAL_LEDS = 128
-        ctypes.cast(self.pDev + 0x6C, ctypes.POINTER(wintypes.DWORD))[0] = self.TOTAL_LEDS
-        led_id_table = ctypes.cast(self.pDev + 0x74, ctypes.POINTER(ctypes.c_ubyte))
-        for i in range(self.TOTAL_LEDS):
-            led_id_table[i] = i
-            
-        self.rgb_buf = (ctypes.c_ubyte * (self.TOTAL_LEDS * 3))()
-        self.fn_set_single = ctypes.WINFUNCTYPE(wintypes.LONG, ctypes.c_void_p, ctypes.c_void_p)(self.dev_vtable[19])
-        
+    def __init__(self, dry_run: bool = False):
+        self.dry_run = dry_run
+        self.TOTAL_LEDS = TOTAL_LEDS
+        self.rgb_buf = (ctypes.c_ubyte * (self.TOTAL_LEDS * RGB_CHANNELS))()
         self.running = True
         self.lock = threading.Lock()
+
+        self.hal: Optional[AuraHal] = None
+        self.device: Optional[AuraHalDevice] = None
+        self.pDev = 0
+
+        if not self.dry_run:
+            self.hal = AuraHal()
+            self.hal.access()
+            devices = self.hal.create_led_devices()
+            if not devices:
+                self.hal.release()
+                raise RuntimeError("未检测到已连接的 ROG FALCHION ACE HFX 硬件设备！")
+            self.device = devices[0]
+            self.pDev = self.device.pDev
+
+            # 校准工具需要探测所有 0~127 硬件引脚，配置全量直通寻址表 [0..127]
+            self.device.configure_hardware_table(list(range(self.TOTAL_LEDS)))
+
         self.thread = threading.Thread(target=self._stream_worker, daemon=True)
         self.thread.start()
 
     def _stream_worker(self):
         while self.running:
             with self.lock:
-                self.fn_set_single(self.pDev, ctypes.byref(self.rgb_buf))
+                if self.device:
+                    self.device.set_led_direct(self.rgb_buf)
             time.sleep(0.04)
 
     def set_single_key(self, led_id, r=0, g=220, b=255):
         with self.lock:
-            for i in range(self.TOTAL_LEDS * 3):
+            for i in range(self.TOTAL_LEDS * RGB_CHANNELS):
                 self.rgb_buf[i] = 0
             if 0 <= led_id < self.TOTAL_LEDS:
-                self.rgb_buf[led_id * 3 + 0] = r
-                self.rgb_buf[led_id * 3 + 1] = g
-                self.rgb_buf[led_id * 3 + 2] = b
+                self.rgb_buf[led_id * RGB_CHANNELS + 0] = r
+                self.rgb_buf[led_id * RGB_CHANNELS + 1] = g
+                self.rgb_buf[led_id * RGB_CHANNELS + 2] = b
 
     def flash_feedback(self, led_id, r, g, b, duration=0.15):
         def _flash():
@@ -217,21 +189,26 @@ class KeyboardLightingEngine:
     def fill_all(self, r, g, b):
         with self.lock:
             for i in range(self.TOTAL_LEDS):
-                self.rgb_buf[i * 3 + 0] = r
-                self.rgb_buf[i * 3 + 1] = g
-                self.rgb_buf[i * 3 + 2] = b
+                self.rgb_buf[i * RGB_CHANNELS + 0] = r
+                self.rgb_buf[i * RGB_CHANNELS + 1] = g
+                self.rgb_buf[i * RGB_CHANNELS + 2] = b
 
     def clear(self):
         with self.lock:
-            for i in range(self.TOTAL_LEDS * 3):
+            for i in range(self.TOTAL_LEDS * RGB_CHANNELS):
                 self.rgb_buf[i] = 0
 
     def close(self):
         self.running = False
         time.sleep(0.06)
         self.clear()
-        self.fn_set_single(self.pDev, ctypes.byref(self.rgb_buf))
-        ole32.CoUninitialize()
+        if self.device:
+            self.device.set_led_direct(self.rgb_buf)
+            self.device.release()
+            self.device = None
+        if self.hal:
+            self.hal.release()
+            self.hal = None
 
 def load_calibrated_map():
     if os.path.exists(CALIBRATION_FILE):
@@ -355,7 +332,11 @@ class KeyboardCalibratorGUI:
         self.root.configure(bg="#1E1E24")
 
         # 初始化驱动
-        self.engine = KeyboardLightingEngine()
+        try:
+            self.engine = KeyboardLightingEngine()
+        except Exception as e:
+            messagebox.showwarning("硬件连接提示", f"未检测到物理设备或 HAL 初始化异常:\n{e}\n\n已切入离线/模拟模式供查看及编辑校准数据。")
+            self.engine = KeyboardLightingEngine(dry_run=True)
 
         # 状态数据
         self.current_id = 1
