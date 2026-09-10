@@ -44,7 +44,7 @@ set(DAEMON_HEADERS
 add_executable(aura_daemon ${DAEMON_SOURCES} ${DAEMON_HEADERS})
 
 if (MSVC)
-    target_compile_options(aura_daemon PRIVATE /utf-8 /W3 /O2)
+    target_compile_options(aura_daemon PRIVATE /utf-8 /W3 $<$<CONFIG:Release>:/O2>)
 endif()
 
 target_link_libraries(aura_daemon PRIVATE
@@ -57,7 +57,7 @@ target_link_libraries(aura_daemon PRIVATE
 )
 
 add_executable(test_com test_com.cpp)
-target_compile_options(test_com PRIVATE /utf-8 /W3 /O2)
+target_compile_options(test_com PRIVATE /utf-8 /W3 $<$<CONFIG:Release>:/O2>)
 target_link_libraries(test_com PRIVATE ole32 oleaut32)
 
 # 2. 轻量网页配置服务 (aura_web_ui)
@@ -75,7 +75,7 @@ set(WEB_HEADERS
 add_executable(aura_web_ui ${WEB_SOURCES} ${WEB_HEADERS})
 
 if (MSVC)
-    target_compile_options(aura_web_ui PRIVATE /utf-8 /W3 /O2)
+    target_compile_options(aura_web_ui PRIVATE /utf-8 /W3 $<$<CONFIG:Release>:/O2>)
 endif()
 
 target_link_libraries(aura_web_ui PRIVATE
@@ -91,10 +91,11 @@ add_executable(test_gsi_rules
     src/engine/builtin_effects.cpp
     src/gsi/gsi_adapter.cpp
     src/aura/keymap.cpp
+    src/web/web_server.cpp
 )
 
 if (MSVC)
-    target_compile_options(test_gsi_rules PRIVATE /utf-8 /W3 /O2)
+    target_compile_options(test_gsi_rules PRIVATE /utf-8 /W3 $<$<CONFIG:Release>:/O2>)
 endif()
 
 target_link_libraries(test_gsi_rules PRIVATE
@@ -103,10 +104,16 @@ target_link_libraries(test_gsi_rules PRIVATE
     user32
 )
 
-# 4. 诊断测试: test_diag_hook
+# 4. 诊断测试: test_diag_hook (手动交互式诊断工具，不注册到 CTest)
 add_executable(test_diag_hook tests/test_diag_hook.cpp)
 if (MSVC)
-    target_compile_options(test_diag_hook PRIVATE /utf-8 /W3 /O2)
+    target_compile_options(test_diag_hook PRIVATE /utf-8 /W3 $<$<CONFIG:Release>:/O2>)
 endif()
 target_link_libraries(test_diag_hook PRIVATE user32)
+
+# 5. CTest 测试体系集成
+enable_testing()
+add_test(NAME gsi_rules COMMAND test_gsi_rules)
+set_tests_properties(gsi_rules PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures")
+
 
