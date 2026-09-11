@@ -482,7 +482,17 @@ Phase 2 已完成，作为里程碑记录。
 - **R12/R12b/R14/R16 配置与前端闭环**：配置引用完整性校验与未知方案显式报错；热重载防刷屏（mtime 抑制）；前端 `handleSave` 默认方案解耦；效果周期下界钳制（`ClampPeriod >= 33ms`）杜绝除零崩溃。
 - **R13/R20/R21 测试与工具链治理**：引入自实现 `CHECK` 宏消除 MSVC `NDEBUG` 吞断言缺陷，接入 CTest 自动化测试；MSVC `/W4` 警告全清、第三方头 `/external:W0` 隔离、ASan 动态插桩；Python 工具链统一抽取 `aura_hal.py` 硬件驱动层，消除 5 组 LED ID 硬件映射冲突。
 - **R22 文档合并与单一事实来源体系治理**：5 份早期探索与阶段性报告归档至 `docs/archive/` 并建立清晰索引；新建 `docs/README.md` 确立分层规范与单一事实来源总导航；锁定 `calibrated_keymap.json` 为 68 键硬件 LED ID 全工程唯一权威事实来源。
+- **R18 本机 CS2 GSI 配置闭环**：备份原配置文件为 `.bak`，并补齐 `"bomb" "1"` 字段，实现游戏状态机 C4 炸弹状态完整捕获。
+- **GSI 适配器生命周期与核心容灾加固**：
+  - `GsiAdapter` 引入 `std::unique_ptr<httplib::Server>` 管理实例，杜绝绑定冲突后 `is_decommisioned` 状态污染导致无法重试；
+  - 引入 `svr_->wait_until_ready()` 同步等待就绪，彻底消除 `Start()` 与 `Stop()` 之间的时序死锁与线程阻塞；
+  - Windows 下设置 `SO_EXCLUSIVEADDRUSE` 确保端口占用同步拦截；
+  - `AuraAdapter` 硬件重连引入 1.5s~60s 指数退避算法，防硬件离线时 COM 接口高频空转；
+  - `ForegroundMonitor` 运行状态与线程 ID 全面原子化（`std::atomic<bool>` / `std::atomic<DWORD>`），消除并发读写竞态；
+  - `main.cpp` 命令行参数全面加固（正数与有限数边界校验、异常防爆保护与使用提示）；
+  - 测试套件扩充至 18 项专项测试，CTest 全量通过。
 
 ### 15.3 状态
 Phase 3（CS2 GSI 适配器与架构加固治理）已全量高标准交付，构建 0 error / 0 warning，自动化测试套件（CTest / test_gsi_rules）全 PASS。
+
 
