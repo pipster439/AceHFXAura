@@ -20,6 +20,7 @@
 """
 import json
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -96,10 +97,11 @@ def main():
 
         hw_ok = "成功获取硬件控制权" in out
         hook_ok = "WH_KEYBOARD_LL) 注册成功" in out
-        dev_count = "device_count"  # 占位
+        m = re.search(r'检测到设备数量:\s*(\d+)', out)
+        dev_count = int(m.group(1)) if m else 0
         bad = [pat for pat in BAD_PATTERNS if pat in out]
 
-        ok = hw_ok and hook_ok and not bad
+        ok = hw_ok and hook_ok and (dev_count > 0) and not bad
         msgs = []
         msgs.append("硬件就绪" if hw_ok else "硬件未就绪")
         msgs.append("钩子OK" if hook_ok else "钩子未注册")

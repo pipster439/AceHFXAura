@@ -126,7 +126,7 @@ void CALLBACK ForegroundMonitor::WinEventProc(
 }
 
 void ForegroundMonitor::MonitorThreadProc() {
-    thread_id_ = GetCurrentThreadId();
+    thread_id_.store(GetCurrentThreadId(), std::memory_order_release);
 
     // Ensure thread has a complete input message queue
     MSG msg;
@@ -144,7 +144,7 @@ void ForegroundMonitor::MonitorThreadProc() {
 
     if (!hook_handle_) {
         LOG_ERROR("SetWinEventHook 注册失败: 0x" + std::to_string(GetLastError()));
-        running_ = false;
+        running_.store(false, std::memory_order_release);
         return;
     }
 
@@ -196,25 +196,24 @@ void ForegroundMonitor::MonitorThreadProc() {
 }
 
 bool ForegroundMonitor::Start() {
-    if (running_) return true;
+    if (running_.load(std::memory_order_acquire)) return true;
 
-    running_ = true;
+    running_.store(true, std::memory_order_release);
     thread_ = std::thread(&ForegroundMonitor::MonitorThreadProc, this);
     return true;
 }
 
 void ForegroundMonitor::Stop() {
-    if (!running_) return;
-
-    running_ = false;
-    if (thread_id_ != 0) {
-        PostThreadMessage(thread_id_, WM_QUIT, 0, 0);
+    bool was_running = running_.exchange(false, std::memory_order_acq_rel);
+    DWORD tid = thread_id_.load(std::memory_order_acquire);
+    if (was_running && tid != 0) {
+        PostThreadMessage(tid, WM_QUIT, 0, 0);
     }
 
     if (thread_.joinable()) {
         thread_.join();
     }
-    thread_id_ = 0;
+    thread_id_.store(0, std::memory_order_release);
 }
 
 std::string ForegroundMonitor::GetCurrentProcessName() const {

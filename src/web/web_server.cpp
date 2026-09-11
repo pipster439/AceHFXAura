@@ -492,15 +492,24 @@ void WebServer::Stop() {
 }
 
 std::string WebServer::LoadHtmlContent() const {
-    // 优先从本地文件系统加载最新的 index.html，方便前端热调试
+    // 优先从本地文件系统加载最新的 index.html，方便前端热调试与非预期 CWD 启动
     std::vector<std::filesystem::path> candidates = {
         "web/index.html",
         "../web/index.html",
         "../../web/index.html"
     };
 
+    wchar_t mod_path[MAX_PATH];
+    if (GetModuleFileNameW(nullptr, mod_path, MAX_PATH)) {
+        std::filesystem::path exe_dir = std::filesystem::path(mod_path).parent_path();
+        candidates.push_back(exe_dir / "web" / "index.html");
+        candidates.push_back(exe_dir / ".." / "web" / "index.html");
+        candidates.push_back(exe_dir / ".." / ".." / "web" / "index.html");
+    }
+
+    std::error_code ec;
     for (const auto& p : candidates) {
-        if (std::filesystem::exists(p)) {
+        if (std::filesystem::exists(p, ec) && !std::filesystem::is_directory(p, ec)) {
             std::ifstream f(p, std::ios::binary);
             if (f.is_open()) {
                 return std::string((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());

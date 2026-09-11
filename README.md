@@ -209,7 +209,7 @@ aura_web_ui.exe --port 19898 --config config.json
 ### 1. WebUiSupervisor 自动化 5 项集成测试
 执行独立的综合回归测试，实测数据如下：
 - **SetSuppressed 调用开销**: **3 ~ 4 微秒**（完全零阻塞主推流时钟）。
-- **平滑关闭耗时**: **1 毫秒**（命名 Event 触发 `server.Stop()` 平滑收割）。
+- **平滑关闭耗时**: **14 毫秒**（命名 Event 触发 `server.Stop()` 平滑收割）。
 - **端口快速复用**: 连续 3 轮高速频繁切屏（Suppress / Resume），`SO_REUSEADDR` 生效，0 碰撞，全部恢复 200 OK。
 - **内核级孤儿防护**: 父进程退出时，操作系统内核立即自动收割 `aura_web_ui.exe`，进程表中 0 残留。
 

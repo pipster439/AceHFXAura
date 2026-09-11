@@ -39,9 +39,9 @@ private:
 
     ForegroundCallback callback_;
     std::thread thread_;
-    std::atomic<bool> running_;
-    DWORD thread_id_;
-    HWINEVENTHOOK hook_handle_;
+    std::atomic<bool> running_{false};
+    std::atomic<DWORD> thread_id_{0};
+    HWINEVENTHOOK hook_handle_{nullptr};
 
     // current_process_name_ 由监控线程（WinEventProc / MonitorThreadProc）写入、
     // 由主线程经 GetCurrentProcessName() 读取，故必须加锁保护。

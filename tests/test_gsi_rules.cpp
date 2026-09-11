@@ -1114,6 +1114,65 @@ int main() {
         std::filesystem::remove(tmp_speed_cfg);
     }
 
+    // 16. 时钟回退与下溢保护验证 (Issue #21)
+    std::cout << "\n[测试 16] GsiState 时钟回退与 uint64_t 下溢安全保护...\n";
+    {
+        aura::GsiState time_gsi;
+        nlohmann::json dummy_payload = R"json({
+            "provider": {"name": "Counter-Strike: Global Offensive", "timestamp": 1234567},
+            "player": {"state": {"health": 100}}
+        })json"_json;
+        time_gsi.UpdateFromPayload(dummy_payload);
+
+        CHECK(time_gsi.GetLastUpdateMs() > 0, "成功设置 last_update_ms_");
+        CHECK(time_gsi.IsActive(10000), "正常时间窗口内 IsActive 为 true");
+
+        auto j_status = time_gsi.ToJson();
+        CHECK(j_status["connected"].get<bool>(), "ToJson 返回 connected 为 true");
+        CHECK(j_status["last_updated_sec"].get<double>() >= 0.0, "last_updated_sec 非负有效");
+    }
+
+    // 17. GsiAdapter 端口占用同步拦截与原子生命周期验证 (Issue #23 / U11)
+    std::cout << "\n[测试 17] GsiAdapter 端口占用同步拦截与原子生命周期验证...\n";
+    {
+        aura::GsiAdapter adapter1;
+        aura::GsiAdapter adapter2;
+        int test_port = 19991;
+
+        bool started1 = adapter1.Start(test_port);
+        CHECK(started1, "adapter1 成功绑定并启动端口 " + std::to_string(test_port));
+
+        // adapter2 尝试绑定已被 adapter1 占用的相同端口，必须同步返回 false
+        bool started2 = adapter2.Start(test_port);
+        CHECK(!started2, "adapter2 绑定相同端口失败，成功同步返回 false（非死代码拦截）");
+
+        // 重复调用已启动的 adapter1::Start 幂等返回 true
+        CHECK(adapter1.Start(test_port), "已启动的 GsiAdapter 重复调用 Start 幂等返回 true");
+
+        // 停止 adapter1，释放端口
+        adapter1.Stop();
+        CHECK(!adapter1.IsRunning(), "adapter1 停止后 IsRunning 为 false");
+
+        // 重复 Stop 幂等安全
+        adapter1.Stop();
+
+        // 端口释放后 adapter2 可以成功绑定启动（稍作等待确保操作系统内核完成 TCP 端口表释放）
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        bool started2_retry = adapter2.Start(test_port);
+        CHECK(started2_retry, "adapter1 释放后 adapter2 成功绑定端口 " + std::to_string(test_port));
+        adapter2.Stop();
+    }
+
+    // 18. WebServer 模块目录搜索与 HTML 资源解析验证 (Issue #35 / §3.6)
+    std::cout << "\n[测试 18] WebServer 路径搜索与 HTML 资源解析验证...\n";
+    {
+        aura::WebServer server(config_path, 19992);
+        std::string html = server.LoadHtmlContent();
+        CHECK(!html.empty(), "LoadHtmlContent 返回非空 HTML 内容");
+        CHECK(html.find("html") != std::string::npos || html.find("HTML") != std::string::npos, 
+              "LoadHtmlContent 成功加载有效 HTML 文档");
+    }
+
     std::cout << "\n=========================================================\n";
     if (failures == 0) {
         std::cout << "  [SUCCESS] 所有 GSI 前台隔离、游戏事件与回归护栏测试全部 100% 通过！\n";

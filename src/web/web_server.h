@@ -21,9 +21,11 @@ public:
     // 请求平滑停止
     void Stop();
 
+    // 加载 HTML 资源（供服务分发及自测验证）
+    std::string LoadHtmlContent() const;
+
 private:
     void SetupRoutes();
-    std::string LoadHtmlContent() const;
     bool ReadConfigFile(std::string& out_json_str) const;
     bool WriteConfigFile(const std::string& json_str) const;
 

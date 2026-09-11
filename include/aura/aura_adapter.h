@@ -45,6 +45,8 @@ public:
     AdapterState GetState() const { return state_; }
     bool IsConnected() const { return state_ == AdapterState::Connected; }
     bool IsDryRun() const { return dry_run_; }
+    uint64_t GetReconnectIntervalMs() const { return current_reconnect_interval_ms_; }
+    size_t GetReconnectAttempts() const { return reconnect_attempts_; }
 
 private:
     bool ConnectHardwareInternal();
@@ -70,7 +72,9 @@ private:
     uint8_t stream_buffer_[HARDWARE_STREAM_BUFFER_SIZE]{0};
 
     std::chrono::steady_clock::time_point last_reconnect_attempt_;
-    size_t failed_push_count_;
+    size_t failed_push_count_ = 0;
+    uint64_t current_reconnect_interval_ms_ = 1500;
+    size_t reconnect_attempts_ = 0;
     uint64_t dry_run_frame_count_ = 0;
 };
 

@@ -615,10 +615,10 @@ nlohmann::json GsiState::ToJson() const {
         });
     }
 
-    double last_updated_sec = (last_update_ms_ > 0 && now_ms >= last_update_ms_) ?
-                              (static_cast<double>(now_ms - last_update_ms_) / 1000.0) : -1.0;
+    const uint64_t diff_ms = (now_ms >= last_update_ms_) ? (now_ms - last_update_ms_) : (last_update_ms_ - now_ms);
+    double last_updated_sec = (last_update_ms_ > 0) ? (static_cast<double>(diff_ms) / 1000.0) : -1.0;
 
-    bool active = (last_update_ms_ > 0 && (now_ms - last_update_ms_ < 10000));
+    bool active = (last_update_ms_ > 0 && diff_ms < 10000);
 
     std::string lower_proc = ToLowerStr(foreground_process_);
     bool is_cs2 = (lower_proc == "cs2.exe" || lower_proc == "cs2" || lower_proc == "csgo.exe" || lower_proc == "csgo");
@@ -640,7 +640,8 @@ bool GsiState::IsActive(uint64_t timeout_ms) const {
     std::lock_guard<std::mutex> lock(mutex_);
     if (last_update_ms_ == 0) return false;
     uint64_t now_ms = GetCurrentEpochMs();
-    return (now_ms - last_update_ms_) <= timeout_ms;
+    uint64_t diff_ms = (now_ms >= last_update_ms_) ? (now_ms - last_update_ms_) : (last_update_ms_ - now_ms);
+    return diff_ms <= timeout_ms;
 }
 
 uint64_t GsiState::GetLastUpdateMs() const {
@@ -696,9 +697,10 @@ GsiAdapter::~GsiAdapter() {
 }
 
 void GsiAdapter::SetupRoutes() {
+    if (!svr_) return;
     // 限制请求体上限为 256KB，防止超大 payload 引发内存拒绝服务 (DoS)
-    svr_.set_payload_max_length(256 * 1024);
-    svr_.set_error_handler([](const httplib::Request& /*req*/, httplib::Response& res) {
+    svr_->set_payload_max_length(256 * 1024);
+    svr_->set_error_handler([](const httplib::Request& /*req*/, httplib::Response& res) {
         if (res.status == 413) {
             res.set_content(R"json({"status":"error","error":"Payload Too Large","message":"请求体超过 256KB 上限"})json", "application/json; charset=utf-8");
         }
@@ -718,8 +720,8 @@ void GsiAdapter::SetupRoutes() {
         }
     };
 
-    svr_.Post("/", gsi_post_handler);
-    svr_.Post("/gsi", gsi_post_handler);
+    svr_->Post("/", gsi_post_handler);
+    svr_->Post("/gsi", gsi_post_handler);
 
     // 查询当前扁平化状态
     auto gsi_get_handler = [this](const httplib::Request&, httplib::Response& res) {
@@ -727,8 +729,8 @@ void GsiAdapter::SetupRoutes() {
         res.set_content(json_str, "application/json; charset=utf-8");
     };
 
-    svr_.Get("/", gsi_get_handler);
-    svr_.Get("/api/gsi/current", gsi_get_handler);
+    svr_->Get("/", gsi_get_handler);
+    svr_->Get("/api/gsi/current", gsi_get_handler);
 }
 
 bool GsiAdapter::Start(int port) {
@@ -737,33 +739,55 @@ bool GsiAdapter::Start(int port) {
     }
 
     port_ = port;
+    svr_ = std::make_unique<httplib::Server>();
     SetupRoutes();
 
-    // 严格设置地址复用，避免重启时 TIME_WAIT 冲突
-    svr_.set_keep_alive_max_count(100);
+    // 严格设置独占地址绑定（Windows 下杜绝 SO_REUSEADDR 端口劫持与伪成功），避免多实例冲突
+    svr_->set_socket_options([](socket_t sock) {
+#ifdef _WIN32
+        int opt = 1;
+        ::setsockopt(sock, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, reinterpret_cast<const char*>(&opt), sizeof(opt));
+#else
+        int opt = 1;
+        ::setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const void*>(&opt), sizeof(opt));
+#endif
+    });
+    svr_->set_keep_alive_max_count(100);
+
+    // 显式同步绑定端口，以同步检测端口是否可用/被占用，杜绝假阳性成功
+    if (!svr_->bind_to_port("127.0.0.1", port_)) {
+        LOG_ERROR("[GSI] 无法绑定并监听 127.0.0.1:" + std::to_string(port_) + " (端口可能已被占用)");
+        svr_.reset();
+        return false;
+    }
 
     is_running_.store(true, std::memory_order_release);
 
     worker_thread_ = std::thread([this]() {
         LOG_INFO("[GSI] 接收服务专属 I/O 线程启动，正在监听 127.0.0.1:" + std::to_string(port_));
-        bool ok = svr_.listen("127.0.0.1", port_);
+        bool ok = svr_->listen_after_bind();
         if (!ok) {
-            LOG_ERROR("[GSI] 无法监听 127.0.0.1:" + std::to_string(port_) + "，服务已停止");
+            LOG_ERROR("[GSI] listen_after_bind 异常退出: 127.0.0.1:" + std::to_string(port_));
         }
         is_running_.store(false, std::memory_order_release);
         LOG_INFO("[GSI] 接收服务专属 I/O 线程已安全退出");
     });
 
+    svr_->wait_until_ready();
     return true;
 }
 
 void GsiAdapter::Stop() {
     if (is_running_.exchange(false, std::memory_order_acq_rel)) {
         LOG_INFO("[GSI] 正在请求平滑停止 GSI HTTP 接收服务...");
-        svr_.stop();
+        if (svr_) {
+            svr_->wait_until_ready();
+            svr_->stop();
+        }
         if (worker_thread_.joinable()) {
             worker_thread_.join();
         }
+        svr_.reset();
         LOG_INFO("[+] GSI HTTP 接收服务已完全释放");
     }
 }

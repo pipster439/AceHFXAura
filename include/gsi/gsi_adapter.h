@@ -165,7 +165,7 @@ private:
     void SetupRoutes();
 
     int port_{19897};
-    httplib::Server svr_;
+    std::unique_ptr<httplib::Server> svr_;
     std::thread worker_thread_;
     std::atomic<bool> is_running_{false};
     GsiState state_;

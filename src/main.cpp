@@ -13,6 +13,7 @@
 #include <sstream>
 #include <iomanip>
 #include <cctype>
+#include <cmath>
 #include <vector>
 #include <memory>
 #include <chrono>
@@ -96,8 +97,9 @@ int main(int argc, char* argv[]) {
     // 1. 预先设置 DLL 搜索路径并加载华硕 HAL (必须在创建驱动实例前完成，确保其依赖项正常解析)
     SetDllDirectoryW(L"C:\\Program Files\\ASUS\\Aac_Keyboard");
     HMODULE hHalPreload = LoadLibraryW(L"C:\\Program Files\\ASUS\\Aac_Keyboard\\AacKbHal_x64.dll");
-    // 预加载句柄在进程生命周期内常驻以保全依赖，显式标记避免 /W4 C4189 警告
-    (void)hHalPreload;
+    if (!hHalPreload) {
+        LOG_WARN("未能在默认路径预加载 AacKbHal_x64.dll (非华硕默认安装路径或驱动未安装，硬件连接时将尝试常规 COM 解析)");
+    }
 
     // 2. 解析命令行参数
     bool dry_run = false;
@@ -110,15 +112,68 @@ int main(int argc, char* argv[]) {
         std::string arg = argv[i];
         if (arg == "--dry-run") {
             dry_run = true;
-        } else if (arg == "--test-init" && i + 1 < argc) {
-            test_init_count = std::stoi(argv[++i]);
-        } else if (arg == "--test-stability" && i + 1 < argc) {
-            test_stability_minutes = std::stod(argv[++i]);
-        } else if (arg == "--config" && i + 1 < argc) {
+        } else if (arg == "--test-init") {
+            if (i + 1 >= argc) {
+                std::cerr << "错误: --test-init 缺少正整数参数\n\n";
+                PrintUsage();
+                return 1;
+            }
+            std::string val = argv[++i];
+            try {
+                size_t pos = 0;
+                int count = std::stoi(val, &pos);
+                if (pos != val.size() || count <= 0) {
+                    std::cerr << "错误: --test-init 参数必须为大于 0 的正整数: " << val << "\n\n";
+                    PrintUsage();
+                    return 1;
+                }
+                test_init_count = count;
+            } catch (const std::exception&) {
+                std::cerr << "错误: --test-init 参数非法 (必须为有效正整数): " << val << "\n\n";
+                PrintUsage();
+                return 1;
+            }
+        } else if (arg == "--test-stability") {
+            if (i + 1 >= argc) {
+                std::cerr << "错误: --test-stability 缺少运行分钟数参数\n\n";
+                PrintUsage();
+                return 1;
+            }
+            std::string val = argv[++i];
+            try {
+                size_t pos = 0;
+                double minutes = std::stod(val, &pos);
+                if (pos != val.size() || minutes <= 0.0 || !std::isfinite(minutes)) {
+                    std::cerr << "错误: --test-stability 参数必须为大于 0 的有限正数: " << val << "\n\n";
+                    PrintUsage();
+                    return 1;
+                }
+                test_stability_minutes = minutes;
+            } catch (const std::exception&) {
+                std::cerr << "错误: --test-stability 参数非法 (必须为有效正数): " << val << "\n\n";
+                PrintUsage();
+                return 1;
+            }
+        } else if (arg == "--config") {
+            if (i + 1 >= argc) {
+                std::cerr << "错误: --config 缺少配置文件路径\n\n";
+                PrintUsage();
+                return 1;
+            }
             config_path = argv[++i];
-        } else if (arg == "--keymap" && i + 1 < argc) {
+        } else if (arg == "--keymap") {
+            if (i + 1 >= argc) {
+                std::cerr << "错误: --keymap 缺少键位映射表路径\n\n";
+                PrintUsage();
+                return 1;
+            }
             keymap_path = argv[++i];
-        } else if (arg == "--log-level" && i + 1 < argc) {
+        } else if (arg == "--log-level") {
+            if (i + 1 >= argc) {
+                std::cerr << "错误: --log-level 缺少级别参数\n\n";
+                PrintUsage();
+                return 1;
+            }
             std::string level_str = argv[++i];
             for (auto& c : level_str) {
                 c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
@@ -132,11 +187,17 @@ int main(int argc, char* argv[]) {
             } else if (level_str == "error") {
                 aura::Logger::Instance().SetLogLevel(aura::LogLevel::Error);
             } else {
-                std::cerr << "未知的日志级别: " << level_str << " (支持: debug, info, warn, error)\n";
+                std::cerr << "未知的日志级别: " << level_str << " (支持: debug, info, warn, error)\n\n";
+                PrintUsage();
+                return 1;
             }
         } else if (arg == "--help" || arg == "-h") {
             PrintUsage();
             return 0;
+        } else {
+            std::cerr << "未知的命令行参数: " << arg << "\n\n";
+            PrintUsage();
+            return 1;
         }
     }
 

@@ -2,10 +2,18 @@
 #include "utils/logger.h"
 #include "utils/system_info.h"
 #include <thread>
+#include <sstream>
+#include <iomanip>
 
 namespace aura {
 
-
+namespace {
+std::string FormatHex(HRESULT hr) {
+    std::ostringstream oss;
+    oss << "0x" << std::hex << std::uppercase << static_cast<unsigned long>(hr);
+    return oss.str();
+}
+} // namespace
 
 AuraAdapter::AuraAdapter(bool dry_run)
     : dry_run_(dry_run),
@@ -16,7 +24,9 @@ AuraAdapter::AuraAdapter(bool dry_run)
       pDev_(nullptr),
       fn_set_single_(nullptr),
       last_reconnect_attempt_(std::chrono::steady_clock::now()),
-      failed_push_count_(0) {}
+      failed_push_count_(0),
+      current_reconnect_interval_ms_(1500),
+      reconnect_attempts_(0) {}
 
 AuraAdapter::~AuraAdapter() {
     Shutdown();
@@ -115,7 +125,7 @@ bool AuraAdapter::ConnectHardwareInternal() {
     );
 
     if (FAILED(hr) || !hal_ptr) {
-        LOG_WARN("CoCreateInstance(CLSID_ClaymoreHal) 失败: 0x" + std::to_string(hr));
+        LOG_WARN("CoCreateInstance(CLSID_ClaymoreHal) 失败: " + FormatHex(hr));
         state_ = AdapterState::Disconnected;
         return false;
     }
@@ -280,6 +290,8 @@ bool AuraAdapter::PushFrame(const FrameBuffer& frame) {
                      " 次，错误码: " + std::to_string(res) + ")，判定硬件连接断开");
             state_ = AdapterState::Disconnected;
             ReleaseHardwareInternal();
+            current_reconnect_interval_ms_ = 1500;
+            reconnect_attempts_ = 0;
             last_reconnect_attempt_ = std::chrono::steady_clock::now();
             return false;
         }
@@ -327,11 +339,22 @@ bool AuraAdapter::CheckReconnect() {
     auto now = std::chrono::steady_clock::now();
     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_reconnect_attempt_).count();
     
-    // 退避重试周期: 1.5 秒
-    if (elapsed >= 1500) {
+    // 指数退避重试：初始 1.5 秒，连续失败则按 1.5s -> 3s -> 6s -> 12s -> 24s -> 60s 递增
+    if (static_cast<uint64_t>(elapsed) >= current_reconnect_interval_ms_) {
         last_reconnect_attempt_ = now;
-        LOG_INFO("正在尝试重新连接 ROG FALCHION ACE HFX 硬件...");
-        return ConnectHardwareInternal();
+        ++reconnect_attempts_;
+        LOG_INFO("正在尝试重新连接 ROG FALCHION ACE HFX 硬件 (第 " + std::to_string(reconnect_attempts_) + 
+                 " 次重试，当前退避间隔: " + std::to_string(current_reconnect_interval_ms_) + "ms)...");
+        bool ok = ConnectHardwareInternal();
+        if (ok) {
+            LOG_INFO("[+] ROG FALCHION ACE HFX 硬件重新连接成功！");
+            current_reconnect_interval_ms_ = 1500;
+            reconnect_attempts_ = 0;
+            return true;
+        } else {
+            current_reconnect_interval_ms_ = std::min<uint64_t>(current_reconnect_interval_ms_ * 2, 60000);
+            return false;
+        }
     }
 
     return false;
