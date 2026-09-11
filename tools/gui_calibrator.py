@@ -23,7 +23,8 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 
 # 引入 tools/py 共享基础模块
-_TOOLS_PY = os.path.abspath(os.path.join(os.path.dirname(__file__), "tools", "py"))
+_DIR = os.path.dirname(os.path.abspath(__file__))
+_TOOLS_PY = os.path.join(_DIR, "py") if os.path.isdir(os.path.join(_DIR, "py")) else os.path.join(_DIR, "tools", "py")
 if _TOOLS_PY not in sys.path:
     sys.path.insert(0, _TOOLS_PY)
 
@@ -228,6 +229,16 @@ def load_calibrated_map():
             pass
     return {}
 
+def get_layout_physical_coords():
+    coords = {}
+    for row in GUI_LAYOUT:
+        col_offset = 0.0
+        for k_name, label, w, r, c, cat in row:
+            cx = col_offset + w / 2.0
+            coords[k_name] = (round(cx, 3), float(r))
+            col_offset += w
+    return coords
+
 def save_detailed_calibrated_map(records_dict, device_name="ROG FALCHION ACE HFX"):
     now_str = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
     
@@ -235,6 +246,7 @@ def save_detailed_calibrated_map(records_dict, device_name="ROG FALCHION ACE HFX
     lookup_table = {}
     reverse_id_table = {}
     row_counts = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
+    coords_map = get_layout_physical_coords()
     
     for k_name, rec in records_dict.items():
         led_id = rec['led_id']
@@ -243,6 +255,7 @@ def save_detailed_calibrated_map(records_dict, device_name="ROG FALCHION ACE HFX
         status = rec.get('status', 'VERIFIED')
         display_label = rec.get('label', k_name)
         category = rec.get('category', 'General')
+        phys_x, phys_y = coords_map.get(k_name, (float(col_idx), float(row_num)))
         
         if row_num in row_counts:
             row_counts[row_num] = row_counts.get(row_num, 0) + 1
@@ -255,6 +268,8 @@ def save_detailed_calibrated_map(records_dict, device_name="ROG FALCHION ACE HFX
             "display_label": display_label,
             "physical_row": row_num,
             "physical_col": col_idx,
+            "physical_x": phys_x,
+            "physical_y": phys_y,
             "row_description": ROW_DESCRIPTIONS.get(row_num, f"第 {row_num} 排"),
             "category": category,
             "led_id": led_id,
@@ -330,6 +345,18 @@ class KeyboardCalibratorGUI:
         self.root.geometry("1100x680")
         self.root.minsize(1000, 620)
         self.root.configure(bg="#1E1E24")
+
+        # 检测是否有后台 aura_daemon.exe 正在运行
+        try:
+            import subprocess
+            tasks = subprocess.check_output('tasklist /FI "IMAGENAME eq aura_daemon.exe"', shell=True, text=True)
+            if "aura_daemon.exe" in tasks:
+                messagebox.showinfo(
+                    "运行环境提示", 
+                    "检测到后台正在运行 aura_daemon.exe 服务。\n\n为确保校准灯光稳定显示且不发生推流争抢，建议在校准前先暂停该服务，校准完成后重新启动。"
+                )
+        except Exception:
+            pass
 
         # 初始化驱动
         try:

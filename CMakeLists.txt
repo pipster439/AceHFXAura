@@ -85,7 +85,7 @@ target_link_libraries(aura_daemon PRIVATE
     crypt32
 )
 
-add_executable(test_com test_com.cpp)
+add_executable(test_com tests/test_com.cpp)
 target_link_libraries(test_com PRIVATE ole32 oleaut32)
 
 # 2. 轻量网页配置服务 (aura_web_ui)

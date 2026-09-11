@@ -19,7 +19,8 @@ import time
 from typing import List, Optional, Union
 
 # 引入 tools/py 共享基础模块
-_TOOLS_PY = os.path.abspath(os.path.join(os.path.dirname(__file__), "tools", "py"))
+_DIR = os.path.dirname(os.path.abspath(__file__))
+_TOOLS_PY = os.path.join(_DIR, "py") if os.path.isdir(os.path.join(_DIR, "py")) else os.path.join(_DIR, "tools", "py")
 if _TOOLS_PY not in sys.path:
     sys.path.insert(0, _TOOLS_PY)
 

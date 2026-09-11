@@ -111,8 +111,8 @@ void WaveEffect::Render(uint64_t elapsed_ms, FrameBuffer& out_frame, const Keyma
 
     for (const auto& [name, info] : keymap.GetAllKeys()) {
         if (info.led_id >= 0 && info.led_id < static_cast<int>(TOTAL_LEDS)) {
-            double norm_x = static_cast<double>(info.physical_col - 1) / 15.0;
-            double norm_y = static_cast<double>(info.physical_row - 1) / 4.0;
+            double norm_x = info.physical_x > 0.0 ? (info.physical_x / 16.0) : (static_cast<double>(info.physical_col - 1) / 15.0);
+            double norm_y = info.physical_y > 0.0 ? ((info.physical_y - 1.0) / 4.0) : (static_cast<double>(info.physical_row - 1) / 4.0);
             double proj = norm_x * dir_x + norm_y * dir_y;
             double hue = std::fmod((proj - time_phase + 100.0) * 360.0, 360.0);
             ColorRGB rgb = HsvToRgb(hue, 1.0, 1.0);
@@ -162,7 +162,9 @@ void RippleEffect::Render(uint64_t elapsed_ms, FrameBuffer& out_frame, const Key
     for (const auto& ev : events) {
         auto it = all_keys.find(ev.key_name);
         if (it != all_keys.end()) {
-            ripples_.push_back({static_cast<double>(it->second.physical_col), static_cast<double>(it->second.physical_row), elapsed_ms});
+            double rx = it->second.physical_x > 0.0 ? it->second.physical_x : static_cast<double>(it->second.physical_col);
+            double ry = it->second.physical_y > 0.0 ? it->second.physical_y : static_cast<double>(it->second.physical_row);
+            ripples_.push_back({rx, ry, elapsed_ms});
         }
     }
 
@@ -179,20 +181,20 @@ void RippleEffect::Render(uint64_t elapsed_ms, FrameBuffer& out_frame, const Key
         if (info.led_id < 0 || info.led_id >= static_cast<int>(TOTAL_LEDS)) continue;
 
         double total_glow = 0.0;
-        double k_col = static_cast<double>(info.physical_col);
-        double k_row = static_cast<double>(info.physical_row);
+        double k_x = info.physical_x > 0.0 ? info.physical_x : static_cast<double>(info.physical_col);
+        double k_y = info.physical_y > 0.0 ? info.physical_y : static_cast<double>(info.physical_row);
 
         for (const auto& r : ripples_) {
             double current_r = static_cast<double>(elapsed_ms - r.start_ms) * speed;
-            if (current_r > 18.0) continue;
+            if (current_r > 20.0) continue;
 
-            double dx = k_col - r.col;
-            double dy = (k_row - r.row) * 2.2;
+            double dx = k_x - r.col;
+            double dy = (k_y - r.row) * 1.0; // 物理键间距比例 1:1
             double dist = std::sqrt(dx * dx + dy * dy);
 
             double diff = std::abs(dist - current_r);
             if (diff < 1.8) {
-                double wave_factor = (1.0 - diff / 1.8) * (1.0 - current_r / 18.0);
+                double wave_factor = (1.0 - diff / 1.8) * (1.0 - current_r / 20.0);
                 total_glow += wave_factor;
             }
         }
@@ -237,7 +239,9 @@ void QuicksandEffect::Render(uint64_t elapsed_ms, FrameBuffer& out_frame, const 
     for (const auto& [name, info] : keymap.GetAllKeys()) {
         if (info.led_id < 0 || info.led_id >= static_cast<int>(TOTAL_LEDS)) continue;
 
-        double wave = std::sin((info.physical_col * 0.4 * dir_x + info.physical_row * 0.8 * dir_y) + (time_phase * 2.0 * PI)) * 0.5 + 0.5;
+        double k_x = info.physical_x > 0.0 ? info.physical_x : static_cast<double>(info.physical_col);
+        double k_y = info.physical_y > 0.0 ? info.physical_y : static_cast<double>(info.physical_row);
+        double wave = std::sin((k_x * 0.4 * dir_x + k_y * 0.8 * dir_y) + (time_phase * 2.0 * PI)) * 0.5 + 0.5;
         uint8_t r = static_cast<uint8_t>(c1_.r * wave + c2_.r * (1.0 - wave));
         uint8_t g = static_cast<uint8_t>(c1_.g * wave + c2_.g * (1.0 - wave));
         uint8_t b = static_cast<uint8_t>(c1_.b * wave + c2_.b * (1.0 - wave));
@@ -254,7 +258,8 @@ void CurrentEffect::Render(uint64_t elapsed_ms, FrameBuffer& out_frame, const Ke
     for (const auto& [name, info] : keymap.GetAllKeys()) {
         if (info.led_id < 0 || info.led_id >= static_cast<int>(TOTAL_LEDS)) continue;
 
-        double diff = std::abs(static_cast<double>(info.physical_col) - pulse_col);
+        double k_x = info.physical_x > 0.0 ? info.physical_x : static_cast<double>(info.physical_col);
+        double diff = std::abs(k_x - pulse_col);
         if (diff < 1.6) {
             out_frame.SetKey(info.led_id, ColorRGB(255, 255, 255)); // 核心白炽
         } else {

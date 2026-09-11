@@ -29,7 +29,8 @@ import time
 from ctypes import wintypes
 
 # 引入 tools/py 共享模块
-_TOOLS_PY = os.path.abspath(os.path.join(os.path.dirname(__file__), "tools", "py"))
+_DIR = os.path.dirname(os.path.abspath(__file__))
+_TOOLS_PY = os.path.join(_DIR, "py") if os.path.isdir(os.path.join(_DIR, "py")) else os.path.join(_DIR, "tools", "py")
 if _TOOLS_PY not in sys.path:
     sys.path.insert(0, _TOOLS_PY)
 
@@ -41,7 +42,7 @@ from aura_hal import (
     get_calibrated_name_map,
 )
 
-ROOT = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.abspath(os.path.join(_DIR, "..")) if os.path.basename(_DIR) == "tools" else _DIR
 _candidate_daemons = [
     os.environ.get("AURA_DAEMON_PATH", ""),
     os.path.join("G:/Aura-build-verify", "Release", "aura_daemon.exe"),

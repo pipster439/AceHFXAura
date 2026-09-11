@@ -495,4 +495,69 @@ Phase 2 已完成，作为里程碑记录。
 ### 15.3 状态
 Phase 3（CS2 GSI 适配器与架构加固治理）已全量高标准交付，构建 0 error / 0 warning，自动化测试套件（CTest / test_gsi_rules）全 PASS。
 
+## 16. 动态帧率、实时重载、异常恢复与单实例规范（基于 commit 329e34c）
+
+### 16.1 进程单实例互斥与生命周期守卫规范
+
+1. **命名互斥量与防并发防冲突**：
+   - 全局单实例互斥量命名：`Local\RogFalchionAceHfxDaemonMutex`。
+   - 目的：强力杜绝多个守护进程同时运行导致底层华硕 HAL 驱动接口被并发抢占、COM STA 套间冲突以及 USB HID / LED 硬件推流撕裂。
+   - 冲突行为：若 `CreateMutexW` 返回 `ERROR_ALREADY_EXISTS`，主程序记录 `FATAL` 级别错误日志后立即退出（退出码 `1`），严禁静默覆盖或强行进入推流。
+   - 运维排查规范：启动报 `FATAL: 检测到已有另一个 ROG Falchion Ace HFX 守护进程正在运行，拒绝重复启动！` 时，说明后台已存在活动的守护进程实例（可能无窗运行），应通过 `Get-Process aura*` 确认，并使用 `Stop-Process -Name aura_daemon, aura_web_ui -Force` 终止后重新启动。
+
+2. **控制台关闭与注销平滑等待**：
+   - `ConsoleCtrlHandler` 拦截 `CTRL_CLOSE_EVENT`、`CTRL_SHUTDOWN_EVENT`、`CTRL_LOGOFF_EVENT`。
+   - 主线程在退出阶段通过 `g_shutdown_done.store(true, std::memory_order_release)` 广播清理完成信号。
+   - 控制台回调线程循环等待 `g_shutdown_done` 最长 4 秒（Windows 控制台关闭硬上限 5 秒），确保驱动安全黑灯复位、释放互斥量并移除 `.daemon_running` 标记，杜绝系统直接 TerminateProcess 导致硬件通道残留脏数据。
+
+### 16.2 硬件异常崩溃隔离探测与自愈规范
+
+1. **异常退出状态标记**：
+   - 进程运行期间在工作目录维护 `.daemon_running` 标记文件，内含 PID 与启动时间戳。
+   - 正常优雅退出时自动删除；若异常断电、强杀或驱动底层崩溃，该标记遗留。
+2. **硬件探测子进程隔离复位机制（`--probe-hardware`）**：
+   - 下次启动若检测到 `.daemon_running` 且未开启 `--dry-run`，主进程**不直接挂载底层驱动**，而是通过 `CreateProcessW` 启动带 `--probe-hardware` 参数的自身克隆子进程（无窗口）。
+   - 子进程开启 `SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX` 屏蔽 WER 崩溃对话框，尝试进行底层 HAL 挂载测试。
+   - 主进程等待子进程退出（10s 超时防护）：
+     - 退出码 0：硬件通道正常，等待 200ms 后主进程正常接管；
+     - 异常退出码（非零）：表明底层驱动或硬件通道先前处于挂死状态，子进程的崩溃已吸收通道故障并触发了驱动复位。主进程记录退出码并主动休眠 1.5 秒等待硬件总线通道电气与驱动状态完全平稳，之后再行接入；
+     - 超时：记录警告，放弃等待以防死锁。
+3. **强制复位（`ForceReset`）寻址安全纪律**：
+   - `AuraAdapter::ForceReset()` 清理残余光效时，严禁直接调用无边界保护的裸虚表函数，**必须严格通过 `PushFrame(black)`** 映射安全硬件隔离寻址表（144 槽上界防护），保证异常复位时绝对不会发生缓冲区溢出或驱动通道越界崩溃。
+
+### 16.3 动态 FPS 契约与帧节拍动态重置规范
+
+1. **FPS 配置契约与钳制区间**：
+   - 支持根节点全局配置 `"fps": <int>`（默认 25 FPS）。
+   - 支持各个 Profile 方案级独立重写配置 `"fps": <int>`。若未指定或非法，继承全局配置。
+   - **安全钳制区间**：严格限制在 `[10, 100]` FPS 闭区间（`std::clamp(val, 10, 100)`）。
+     - 下限 10 FPS：防止配置过小导致光效明显卡顿、停顿；
+     - 上限 100 FPS：ROG Falchion Ace HFX 硬件通道与 USB 轮询推流安全物理上限，超过此频率会引起驱动总线拥堵与丢帧。
+2. **帧节拍步进与动态对齐（Frame Pacing Realignment）**：
+   - 帧时间计算公式：`frame_time = std::chrono::milliseconds(1000 / target_fps)`。
+   - **动态重置契约**：在**方案切换**（前台进程变化或手动切换）或**配置热重载**导致有效 `target_fps` 发生变更时，**必须执行 `next_tick = std::chrono::steady_clock::now()`**。
+   - 核心收益：彻底消除因帧率跳变时累计历史 `next_tick` 差值引发的短暂高频帧风暴（burst）或数百毫秒的停顿，实现平滑无缝变速。
+
+### 16.4 50ms 极低延迟实时热重载规范
+
+1. **热重载频率升级**：
+   - 主循环检测配置文件修改时间（`last_write_time_`）的周期由旧版的每秒（25 帧）大幅缩减为 **每 50ms 轮询一次**。
+2. **零 IPC 架构下的即时调参体验**：
+   - 50ms 检查仅调用极轻量的 Win32 文件元数据查询，CPU 开销趋近于 0（< 1 微秒）。
+   - WebUI 前端无论通过滑动条调节亮度、更改颜色、还是切换 FPS，点击保存后守护进程在 50ms 内即可捕获并生效，无需为实时预览单独搭建复杂的命名管道（Named Pipe）或 WebSocket IPC 通道。
+
+### 16.5 特效参数与前端架构扩展
+
+1. **波纹特效参数扩展（Ripple Thickness）**：
+   - `ripple` 方案新增 `thickness` 属性（整数，默认值为 1），用于控制波纹波峰扩散时的宽度与厚度。
+2. **Web 配置前端组件化治理**：
+   - 前端架构采用 React 组件化拆分：
+     - `KeyboardVisualizer.jsx`：键盘 68 键物理布局高保真渲染与实时光效可视化；
+     - `LightingSettings.jsx`：方案参数面板（支持 FPS、速度、波纹厚度、亮度及静态/动态效果表单）；
+     - `GsiSettings.jsx`：CS2 游戏状态规则联动绑定面板；
+     - `Sidebar.jsx`：方案列表切换与守护进程运行状态展示；
+     - `App.jsx`：状态流整合与 REST API 交互控制。
+   - 所有前端修改经由 `POST /api/config` 提交，后端通过原子写保障文件完整性，配合 50ms 实时热重载形成毫秒级生效闭环。
+
+
 

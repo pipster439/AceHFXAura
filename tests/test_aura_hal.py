@@ -16,10 +16,13 @@ import os
 import sys
 import unittest
 
-# 确保加载 Aura 根目录及 tools/py 模块
+# 确保加载 Aura 根目录、tools 目录及 tools/py 模块
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
+TOOLS_DIR = os.path.join(ROOT, "tools")
+if TOOLS_DIR not in sys.path:
+    sys.path.insert(0, TOOLS_DIR)
 TOOLS_PY = os.path.join(ROOT, "tools", "py")
 if TOOLS_PY not in sys.path:
     sys.path.insert(0, TOOLS_PY)
@@ -246,8 +249,9 @@ class TestMigratedScriptsBehavior(unittest.TestCase):
             ['F1'],
             ['12'],
         ]
+        set_per_key_script = os.path.join(TOOLS_DIR, "set_per_key.py")
         for bad_key in test_args:
-            cmd = [sys.executable, os.path.join(ROOT, "set_per_key.py"), "--dry-run", "--key", bad_key[0], "255", "0", "0"]
+            cmd = [sys.executable, set_per_key_script, "--dry-run", "--key", bad_key[0], "255", "0", "0"]
             proc = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, timeout=5)
             self.assertEqual(proc.returncode, 1, f"命令 {cmd} 应该返回 1，实际返回: {proc.returncode}")
             self.assertIn("[-] 错误:", proc.stdout)
@@ -257,7 +261,7 @@ class TestMigratedScriptsBehavior(unittest.TestCase):
         import subprocess
         # 验证 CLI 参数解析正确识别单键、数字键、数字 ID 与连击组合键
         cmd = [
-            sys.executable, os.path.join(ROOT, "set_per_key.py"), "--dry-run", "--duration", "0.1",
+            sys.executable, os.path.join(TOOLS_DIR, "set_per_key.py"), "--dry-run", "--duration", "0.1",
             "--key", "1", "255", "0", "0",
             "--key", "107", "0", "255", "0",
             "--key", "1234", "0", "0", "255",

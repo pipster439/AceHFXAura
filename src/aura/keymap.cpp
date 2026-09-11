@@ -43,6 +43,48 @@ bool Keymap::LoadFromJson(const std::string& json_path) {
             if (v.contains("physical_col")) info.physical_col = v["physical_col"].get<int>();
             if (v.contains("category")) info.category = v["category"].get<std::string>();
 
+            if (v.contains("physical_x")) {
+                info.physical_x = v["physical_x"].get<double>();
+            }
+            if (v.contains("physical_y")) {
+                info.physical_y = v["physical_y"].get<double>();
+            } else if (info.physical_row > 0) {
+                info.physical_y = static_cast<double>(info.physical_row);
+            }
+
+            // 若 JSON 中未提供 physical_x，基于标准 68 键 65% 配列几何中心推算
+            if (info.physical_x <= 0.0) {
+                static const std::unordered_map<std::string, double> kDefaultX = {
+                    // Row 1
+                    {"ESC", 0.5}, {"1", 1.5}, {"2", 2.5}, {"3", 3.5}, {"4", 4.5},
+                    {"5", 5.5}, {"6", 6.5}, {"7", 7.5}, {"8", 8.5}, {"9", 9.5},
+                    {"0", 10.5}, {"-", 11.5}, {"=", 12.5}, {"BACKSPACE", 14.0}, {"INS", 15.5},
+                    // Row 2
+                    {"TAB", 0.75}, {"Q", 2.0}, {"W", 3.0}, {"E", 4.0}, {"R", 5.0},
+                    {"T", 6.0}, {"Y", 7.0}, {"U", 8.0}, {"I", 9.0}, {"O", 10.0},
+                    {"P", 11.0}, {"[", 12.0}, {"]", 13.0}, {"\\", 14.25}, {"DEL", 15.5},
+                    // Row 3
+                    {"CAPS", 0.875}, {"A", 2.25}, {"S", 3.25}, {"D", 4.25}, {"F", 5.25},
+                    {"G", 6.25}, {"H", 7.25}, {"J", 8.25}, {"K", 9.25}, {"L", 10.25},
+                    {";", 11.25}, {"'", 12.25}, {"ENTER", 13.875}, {"PGUP", 15.5},
+                    // Row 4
+                    {"L_SHIFT", 1.125}, {"Z", 2.75}, {"X", 3.75}, {"C", 4.75}, {"V", 5.75},
+                    {"B", 6.75}, {"N", 7.75}, {"M", 8.75}, {",", 9.75}, {".", 10.75},
+                    {"/", 11.75}, {"R_SHIFT", 13.125}, {"UP", 14.5}, {"PGDN", 15.5},
+                    // Row 5
+                    {"L_CTRL", 0.625}, {"L_WIN", 1.875}, {"L_ALT", 3.125}, {"SPACE", 6.875},
+                    {"R_ALT", 10.5}, {"FN", 11.5}, {"COPILOT", 12.5}, {"LEFT", 13.5},
+                    {"DOWN", 14.5}, {"RIGHT", 15.5}
+                };
+                std::string std_name = ToUpper(k);
+                auto it = kDefaultX.find(std_name);
+                if (it != kDefaultX.end()) {
+                    info.physical_x = it->second;
+                } else if (info.physical_col > 0) {
+                    info.physical_x = static_cast<double>(info.physical_col);
+                }
+            }
+
             std::string upper_k = ToUpper(k);
             keys_[upper_k] = info;
             name_to_id_[upper_k] = info.led_id;

@@ -13,6 +13,8 @@ struct KeyInfo {
     int led_id = -1;
     int physical_row = 0;
     int physical_col = 0;
+    double physical_x = 0.0;
+    double physical_y = 0.0;
     std::string category;
 };
 

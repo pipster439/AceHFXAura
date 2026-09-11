@@ -99,7 +99,8 @@ export const CODE_TO_KEY_MAP = {
   KeyM: 'M', Comma: ',', Period: '.', Slash: '/', ShiftRight: 'R_SHIFT',
   ArrowUp: 'UP', PageDown: 'PGDN', ControlLeft: 'L_CTRL', MetaLeft: 'L_WIN',
   AltLeft: 'L_ALT', Space: 'SPACE', AltRight: 'R_ALT', ControlRight: 'R_CTRL',
-  ArrowLeft: 'LEFT', ArrowDown: 'DOWN', ArrowRight: 'RIGHT'
+  ArrowLeft: 'LEFT', ArrowDown: 'DOWN', ArrowRight: 'RIGHT',
+  ContextMenu: 'COPILOT', F23: 'COPILOT', App: 'COPILOT'
 };
 
 export const DIR_VECTORS = {

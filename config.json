@@ -1,13 +1,32 @@
 {
-  "default_profile": "desktop",
-  "fps": 60,
+  "default_profile": "ripple",
+  "fps": 100,
   "profiles": {
     "coding": {
+      "analog": false,
+      "bg": [
+        0,
+        0,
+        0
+      ],
+      "brightness": 1,
       "color": [
         10,
         30,
         50
       ],
+      "color1": [
+        10,
+        30,
+        50
+      ],
+      "color2": [
+        2,
+        132,
+        199
+      ],
+      "direction": "diag_dl",
+      "fps": 100,
       "keys": {
         "ENTER": [
           0,
@@ -25,6 +44,9 @@
           255
         ]
       },
+      "period_ms": 1600,
+      "speed_index": 2,
+      "thickness": 1,
       "type": "static"
     },
     "cs2_gamer": {
@@ -111,10 +133,11 @@
         196
       ],
       "direction": "diag_dl",
-      "fps": 25,
-      "period_ms": 1600,
-      "speed_index": 2,
-      "type": "ripple"
+      "fps": 100,
+      "period_ms": 5500,
+      "speed_index": 0,
+      "thickness": 1,
+      "type": "custom_keymap"
     },
     "office": {
       "color": [
@@ -132,8 +155,29 @@
       "type": "static"
     },
     "rainbow_wave": {
+      "analog": false,
+      "brightness": 1,
+      "color": [
+        10,
+        30,
+        50
+      ],
+      "color1": [
+        10,
+        30,
+        50
+      ],
+      "color2": [
+        2,
+        132,
+        199
+      ],
+      "direction": "diag_ur",
+      "fps": 100,
       "period_ms": 1600,
-      "type": "wave"
+      "speed_index": 2,
+      "thickness": 0.6,
+      "type": "quicksand"
     },
     "reactive": {
       "bg": [
@@ -155,11 +199,13 @@
       "type": "reactive"
     },
     "ripple": {
+      "analog": false,
       "bg": [
         0,
-        5,
-        15
+        0,
+        0
       ],
+      "brightness": 1,
       "color": [
         0,
         240,
@@ -170,7 +216,17 @@
         240,
         255
       ],
-      "period_ms": 2500,
+      "color2": [
+        2,
+        132,
+        199
+      ],
+      "direction": "diag_ur",
+      "fps": 100,
+      "keys": {},
+      "period_ms": 1600,
+      "speed_index": 2,
+      "thickness": 0.6,
       "type": "ripple"
     }
   },

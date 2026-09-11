@@ -11,6 +11,7 @@
 #include "web/web_server.h"
 #include "aura/aura_types.h"
 #include "engine/builtin_effects.h"
+#include "monitor/key_input_hub.h"
 
 int main() {
     // 真实失败计数器。在 Release 构建下普通 assert() 会被 /DNDEBUG 消除，
@@ -1206,6 +1207,87 @@ int main() {
         CHECK(p_under != nullptr && p_under->fps == 10, "过低 2 FPS 正确钳制为安全下限 10 FPS");
 
         std::filesystem::remove(tmp_fps_cfg);
+    }
+
+    // =========================================================================
+    // 18. 按键物理几何坐标推导与 Win32 键盘钩子映射专项测试
+    // =========================================================================
+    {
+        std::cout << "\n[Test 18] 按键物理空间几何坐标与扩展键 / Copilot 映射...\n";
+
+        // 18.1 Keymap 几何坐标校验
+        aura::Keymap km;
+        std::string km_path = "tests/fixtures/calibrated_keymap.json";
+        if (!std::filesystem::exists(km_path)) {
+            km_path = "calibrated_keymap.json";
+        }
+        CHECK(km.LoadFromJson(km_path), "成功加载 calibrated_keymap.json 供几何测试");
+
+        const auto& all = km.GetAllKeys();
+        CHECK(all.find("UP") != all.end(), "存在 UP 键定义");
+        CHECK(all.find("DOWN") != all.end(), "存在 DOWN 键定义");
+        CHECK(all.find("LEFT") != all.end(), "存在 LEFT 键定义");
+        CHECK(all.find("RIGHT") != all.end(), "存在 RIGHT 键定义");
+        CHECK(all.find("R_ALT") != all.end(), "存在 R_ALT 键定义");
+        CHECK(all.find("COPILOT") != all.end(), "存在 COPILOT 键定义");
+
+        if (all.find("UP") != all.end() && all.find("DOWN") != all.end()) {
+            const auto& up = all.at("UP");
+            const auto& down = all.at("DOWN");
+            CHECK(std::abs(up.physical_x - 14.5) < 0.01, "UP 物理 X 坐标为 14.5");
+            CHECK(std::abs(down.physical_x - 14.5) < 0.01, "DOWN 物理 X 坐标为 14.5");
+            CHECK(std::abs(up.physical_x - down.physical_x) < 0.001, "UP 与 DOWN 物理绝对垂直对齐 (delta == 0)");
+            CHECK(std::abs(up.physical_y - 4.0) < 0.01, "UP 物理 Y 坐标为 4.0");
+            CHECK(std::abs(down.physical_y - 5.0) < 0.01, "DOWN 物理 Y 坐标为 5.0");
+        }
+
+        if (all.find("LEFT") != all.end() && all.find("RIGHT") != all.end()) {
+            const auto& left = all.at("LEFT");
+            const auto& right = all.at("RIGHT");
+            CHECK(std::abs(left.physical_x - 13.5) < 0.01, "LEFT 物理 X 坐标为 13.5 (DOWN 左侧 1u)");
+            CHECK(std::abs(right.physical_x - 15.5) < 0.01, "RIGHT 物理 X 坐标为 15.5 (DOWN 右侧 1u)");
+        }
+
+        if (all.find("R_ALT") != all.end()) {
+            CHECK(std::abs(all.at("R_ALT").physical_x - 10.5) < 0.01, "R_ALT 物理 X 坐标为 10.5 (空格右侧 1u)");
+        }
+        if (all.find("COPILOT") != all.end()) {
+            CHECK(std::abs(all.at("COPILOT").physical_x - 12.5) < 0.01, "COPILOT 物理 X 坐标为 12.5 (LEFT 左侧 1u)");
+        }
+
+        // 18.2 VkToKeyName 扩展键与 Copilot 键解析
+        CHECK(aura::VkToKeyName(VK_MENU, 0) == "L_ALT", "无扩展位 VK_MENU 解析为 L_ALT");
+        CHECK(aura::VkToKeyName(VK_MENU, 1) == "R_ALT", "含扩展位 (LLKHF_EXTENDED) VK_MENU 解析为 R_ALT");
+        CHECK(aura::VkToKeyName(VK_LMENU, 0) == "L_ALT", "VK_LMENU 解析为 L_ALT");
+        CHECK(aura::VkToKeyName(VK_RMENU, 0) == "R_ALT", "VK_RMENU 解析为 R_ALT");
+        CHECK(aura::VkToKeyName(VK_CONTROL, 0) == "L_CTRL", "无扩展位 VK_CONTROL 解析为 L_CTRL");
+        CHECK(aura::VkToKeyName(VK_CONTROL, 1) == "R_CTRL", "含扩展位 (LLKHF_EXTENDED) VK_CONTROL 解析为 R_CTRL");
+        CHECK(aura::VkToKeyName(VK_LCONTROL, 0) == "L_CTRL", "VK_LCONTROL 解析为 L_CTRL");
+        CHECK(aura::VkToKeyName(VK_RCONTROL, 0) == "R_CTRL", "VK_RCONTROL 解析为 R_CTRL");
+        CHECK(aura::VkToKeyName(VK_APPS, 0) == "COPILOT", "VK_APPS (0x5D) 解析为 COPILOT");
+        CHECK(aura::VkToKeyName(0x86, 0) == "COPILOT", "VK_F23 (0x86) 解析为 COPILOT");
+        CHECK(aura::VkToKeyName(VK_UP, 0) == "UP", "VK_UP 解析为 UP");
+        CHECK(aura::VkToKeyName(VK_DOWN, 0) == "DOWN", "VK_DOWN 解析为 DOWN");
+        CHECK(aura::VkToKeyName(VK_LEFT, 0) == "LEFT", "VK_LEFT 解析为 LEFT");
+        CHECK(aura::VkToKeyName(VK_RIGHT, 0) == "RIGHT", "VK_RIGHT 解析为 RIGHT");
+
+        // 18.3 KeyInputHub Copilot 宏消抖保护
+        {
+            auto& hub = aura::KeyInputHub::Instance();
+            std::vector<aura::KeyPressEvent> drained;
+            hub.DrainEvents(drained); // 清空历史
+
+            // 模拟 Windows 11 Copilot 组合键序列: L_WIN + L_SHIFT + F23
+            hub.RecordKeyPress("L_WIN");
+            hub.RecordKeyPress("L_SHIFT");
+            hub.RecordKeyPress("COPILOT");
+
+            hub.DrainEvents(drained);
+            CHECK(drained.size() == 1, "Copilot 宏消抖后只保留单一按键事件");
+            if (!drained.empty()) {
+                CHECK(drained[0].key_name == "COPILOT", "消抖后的保留事件为 COPILOT");
+            }
+        }
     }
 
     std::cout << "\n=========================================================\n";

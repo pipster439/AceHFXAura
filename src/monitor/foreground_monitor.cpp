@@ -11,7 +11,7 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
     if (nCode == HC_ACTION && (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN)) {
         KBDLLHOOKSTRUCT* pKb = reinterpret_cast<KBDLLHOOKSTRUCT*>(lParam);
         if (pKb) {
-            std::string kName = VkToKeyName(pKb->vkCode);
+            std::string kName = VkToKeyName(pKb->vkCode, pKb->flags);
             if (!kName.empty()) {
                 KeyInputHub::Instance().RecordKeyPress(kName);
             }

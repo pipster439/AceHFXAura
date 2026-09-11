@@ -12,25 +12,37 @@
 G:/Aura/
 ├── README.md                      # [层级 1] 生产基线：项目总览、双进程架构、配置指南、CS2 GSI 规范
 ├── AGENT.md                       # [层级 1] 演进与决策：Phase 1–3 里程碑、核心技术决策、已知风险与取舍
-├── HANDOVER.md                    # [层级 1] 交接与红线：6 大架构红线、构建与测试环境、关键编码陷阱
+├── CMakeLists.txt                 # [层级 1] 构建基线：C++17 CMake 工程配置
+├── calibrated_keymap.json         # [层级 1] 硬件基准：68 键物理键位与硬件 LED ID 权威映射（唯一事实来源）
+├── config.json                    # [层级 1] 运行时配置
+├── config.example.json            # [层级 1] 配置模板
 │
-├── REMEDIATION_PLAN.md            # [层级 2] 修复总纲：批次 A–E（R1–R23）缺陷定位、交叉改法、验收标准
-├── REPORT_CROSSCHECK.md           # [层级 2] 审计核查：跨代理交叉核查报告（实施基线确定）
-├── ANTIGRAVITY_CROSSCHECK.md      # [层级 2] 审计核查：交叉核查机理修正与收益评估
-├── AURA_CODE_REVIEW_REPORT.md     # [层级 2] 审计原件：80 项系统性审查全景报告（用户保护文件）
+├── tools/                         # [运维与工具]
+│   ├── py/aura_hal.py             # 统一底层硬件驱动封装
+│   ├── gui_calibrator.py          # 可视化键位标定器
+│   ├── run_gui_calibrator.bat     # 标定器快速启动脚本
+│   ├── set_per_key.py             # 独立单键控制 CLI
+│   └── e2e_key_test.py            # 硬件端到端校验脚本
 │
-├── calibrated_keymap.json         # [层级 3] 硬件基准：68 键物理键位与硬件 LED ID 权威映射（唯一事实来源）
-├── calibrated_keymap.md           # [层级 3] 硬件基准：物理按键分布与通道对照说明
+├── tests/                         # [测试体系]
+│   ├── fixtures/                  # 固化测试数据
+│   ├── test_aura_hal.py           # Python 驱动单元与回归测试 (CTest)
+│   ├── test_cs2_gsi.py            # CS2 GSI 自动化测试套件
+│   ├── test_gsi_rules.cpp         # 规则引擎与 GSI 核心单元测试 (CTest)
+│   ├── test_diag_hook.cpp         # 交互式前台监控诊断工具
+│   ├── test_com.cpp               # COM 驱动加载探针
+│   └── test_util.h                # 测试断言宏辅助库
 │
 └── docs/                          # [文档中心]
     ├── README.md                  # 本索引导航文件
+    ├── calibrated_keymap.md       # 硬件物理按键分布与通道对照说明
+    ├── reports/                   # [审计报告与修复总纲]
+    │   ├── AURA_CODE_REVIEW_REPORT.md
+    │   ├── REMEDIATION_PLAN.md
+    │   ├── REPORT_CROSSCHECK.md
+    │   ├── ANTIGRAVITY_CROSSCHECK.md
+    │   └── HANDOVER.md
     └── archive/                   # [历史归档] 早期探索、证伪与过渡期报告
-        ├── README.md              # 归档总览与迁移说明
-        ├── AURA_HARDWARE_VERIFICATION_REPORT.md
-        ├── WORKING_SOLUTION_REPORT111.md
-        ├── LIGHTING_FIX_REPORT.md
-        ├── request-working-solution-report-prompt.md
-        └── README_PER_KEY.md
 ```
 
 ---
@@ -43,23 +55,23 @@ G:/Aura/
 | :--- | :--- | :--- |
 | **项目生产总览** | [`README.md`](../README.md) | 针对生产部署与使用者：C++17 双进程架构、MSVC 构建与运行参数、配置中心与热重载、CS2 GSI 字段与游戏事件状态机规范。 |
 | **决策演进日志** | [`AGENT.md`](../AGENT.md) | 针对架构师与维护者：完整记录 Phase 1（驱动逆向与通道寻址）、Phase 2（网页配置与监护体系）、Phase 3（CS2 GSI 适配器与批次 A–D 加固治理）的全流程工程决策与技术考量。 |
-| **任务交接指南** | [`HANDOVER.md`](../HANDOVER.md) | 针对后续修复与功能开发者：总结 6 大不可逾越的架构红线、0 error / 0 warning 构建基线、CTest 自动化回归测试方法、关键编码陷阱（显式定界符 raw string、宽字符路径链路、MSVC NDEBUG 规避）。 |
+| **任务交接指南** | [`HANDOVER.md`](reports/HANDOVER.md) | 针对后续修复与功能开发者：总结 6 大不可逾越的架构红线、0 error / 0 warning 构建基线、CTest 自动化回归测试方法、关键编码陷阱（显式定界符 raw string、宽字符路径链路、MSVC NDEBUG 规避）。 |
 
 ### 2.2 缺陷修复与审计体系（Remediation & Review Specifications）
 
 | 文档 | 路径 | 核心范围与职责 |
 | :--- | :--- | :--- |
-| **修复方案总纲** | [`REMEDIATION_PLAN.md`](../REMEDIATION_PLAN.md) | **缺陷处理的权威基准**。覆盖 R1 至 R23 项完整问题定位、经双向交叉验证的最小化改动方案及逐项验收标准。 |
-| **跨代理核查报告** | [`REPORT_CROSSCHECK.md`](../REPORT_CROSSCHECK.md) | 记录独立代理对审查意见的交叉审核、可行性判定与分歧裁决。 |
-| **交叉核查意见** | [`ANTIGRAVITY_CROSSCHECK.md`](../ANTIGRAVITY_CROSSCHECK.md) | 记录对方案机理的更正说明、边界条件防范与防引入新缺陷的论证过程。 |
-| **审查全景报告** | [`AURA_CODE_REVIEW_REPORT.md`](../AURA_CODE_REVIEW_REPORT.md) | 初始 80 项审查发现的完整记录（属工作树受保护用户文件，仅供比对查阅）。 |
+| **修复方案总纲** | [`REMEDIATION_PLAN.md`](reports/REMEDIATION_PLAN.md) | **缺陷处理的权威基准**。覆盖 R1 至 R23 项完整问题定位、经双向交叉验证的最小化改动方案及逐项验收标准。 |
+| **跨代理核查报告** | [`REPORT_CROSSCHECK.md`](reports/REPORT_CROSSCHECK.md) | 记录独立代理对审查意见的交叉审核、可行性判定与分歧裁决。 |
+| **交叉核查意见** | [`ANTIGRAVITY_CROSSCHECK.md`](reports/ANTIGRAVITY_CROSSCHECK.md) | 记录对方案机理的更正说明、边界条件防范与防引入新缺陷的论证过程。 |
+| **审查全景报告** | [`AURA_CODE_REVIEW_REPORT.md`](reports/AURA_CODE_REVIEW_REPORT.md) | 初始 80 项审查发现的完整记录（仅供比对查阅）。 |
 
 ### 2.3 硬件驱动与键位标定基准（Hardware & Keymap SSOT）
 
 | 文件 | 路径 | 权威性与使用准则 |
 | :--- | :--- | :--- |
 | **68 键硬件映射表** | [`calibrated_keymap.json`](../calibrated_keymap.json) | **全工程唯一权威事实来源**。记录 ROG Falchion Ace HFX 键盘全部 68 个物理键的按键名称、硬件 LED ID 以及点对点点亮校验状态。严禁在代码或脚本中硬编码未经标定的 LED ID。 |
-| **标定对照表** | [`calibrated_keymap.md`](../calibrated_keymap.md) | 硬件键位矩阵与通道映射的视觉对照说明文档。 |
+| **标定对照表** | [`calibrated_keymap.md`](calibrated_keymap.md) | 硬件键位矩阵与通道映射的视觉对照说明文档。 |
 | **统一 Python 驱动** | [`tools/py/aura_hal.py`](../tools/py/aura_hal.py) | Python 工具链的单一底层硬件驱动模块，封装 COM/CLSID、VTable 偏移以及硬件寻址逻辑。 |
 
 ---
