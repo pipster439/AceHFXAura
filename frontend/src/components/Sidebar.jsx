@@ -7,7 +7,6 @@ import {
   SlidersHorizontal, 
   PanelLeftClose, 
   PanelLeftOpen, 
-  Save, 
   Radio, 
   Layers,
   Cpu
@@ -22,7 +21,6 @@ export default function Sidebar({
   onProfileChange,
   profiles,
   defaultProfileName,
-  onSave,
   isSaving,
   isServiceOnline
 }) {
@@ -121,8 +119,8 @@ export default function Sidebar({
         })}
       </nav>
 
-      {/* 底部保存与服务心跳 */}
-      <div className="p-2.5 border-t border-slate-200 flex flex-col gap-2 bg-slate-50">
+      {/* 底部服务心跳与实时生效状态 */}
+      <div className="p-2.5 border-t border-slate-200 flex flex-col gap-1.5 bg-slate-50">
         <div className={`flex items-center gap-1.5 px-1 py-0.5 text-[11px] font-medium text-slate-600 ${isCollapsed ? 'justify-center px-0' : ''}`}>
           <Radio className={`w-3.5 h-3.5 ${isServiceOnline ? 'text-emerald-600' : 'text-amber-500'}`} />
           {!isCollapsed && (
@@ -131,19 +129,12 @@ export default function Sidebar({
             </span>
           )}
         </div>
-
-        {/* 保存按键 */}
-        <button
-          onClick={onSave}
-          disabled={isSaving}
-          className={`w-full flex items-center justify-center gap-1.5 h-8 rounded-none text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 active:scale-98 shadow-xs transition-all border border-slate-900 disabled:opacity-50 cursor-pointer ${
-            isCollapsed ? 'px-0 aspect-square' : 'px-2'
-          }`}
-          title="保存并应用"
-        >
-          <Save className="w-3.5 h-3.5 shrink-0" />
-          {!isCollapsed && <span>{isSaving ? '保存中...' : '保存并应用'}</span>}
-        </button>
+        {!isCollapsed && (
+          <div className="flex items-center gap-1.5 px-1 text-[10px] text-slate-500 font-medium">
+            <span className={`w-1.5 h-1.5 rounded-full ${isSaving ? 'bg-amber-500 animate-ping' : 'bg-emerald-500'}`} />
+            <span>{isSaving ? '正在同步...' : '修改实时生效'}</span>
+          </div>
+        )}
       </div>
     </aside>
   );

@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Crosshair,
   Radio,
@@ -108,7 +108,7 @@ export default function GsiSettings({
     }
     const updated = [...bindings, newBinding];
     onUpdateGsiBindings(updated);
-    showToast('已添加 GSI 规则，点击侧边栏“保存并应用”生效');
+    showToast('已添加 GSI 规则，已实时生效');
   };
 
   const handleDeleteBinding = (index) => {

@@ -317,11 +317,10 @@ bool AuraAdapter::ForceReset() {
     FrameBuffer black;
     black.Clear();
 
-    // 推送数帧全黑确保硬件彻底消光
+    // 推送数帧全黑确保硬件彻底消光 (通过 PushFrame 映射安全硬件隔离寻址表)
     for (int f = 0; f < 5; ++f) {
-        LONG res = CallSetSingleSafe(pDev_, const_cast<uint8_t*>(black.Data()));
-        if (res < 0) {
-            LOG_WARN("硬件状态重置推流失败，错误码: " + std::to_string(res));
+        if (!PushFrame(black)) {
+            LOG_WARN("硬件状态重置推流失败");
             return false;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(40));

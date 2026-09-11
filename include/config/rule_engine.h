@@ -58,6 +58,10 @@ public:
         std::lock_guard<std::mutex> lock(mutex_);
         return gsi_bindings_;
     }
+    int GetFps() const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return target_fps_;
+    }
     bool HasProfile(const std::string& name) const;
     std::shared_ptr<const Profile> GetProfile(const std::string& name) const;
 
@@ -70,6 +74,7 @@ private:
     FILETIME last_write_time_{0, 0};
 
     std::string default_profile_name_;
+    int target_fps_{25};
     std::vector<RuleEntry> rules_;
     std::vector<GsiBinding> gsi_bindings_;
     std::unordered_map<std::string, std::shared_ptr<Profile>> profiles_;

@@ -47,8 +47,8 @@ export default function LightingSettings({
   setSelectedStopId,
   isStarryRandom,
   setIsStarryRandom,
-  onSave,
-  isSaving
+  fpsVal = 25,
+  setFpsVal
 }) {
   const effects = [
     { id: 'static', label: '静态', icon: Sun },
@@ -157,7 +157,7 @@ export default function LightingSettings({
               响应式光效已就绪：
             </span>
             <p className="text-[11px] leading-relaxed text-emerald-800">
-              敲击键盘任意实体按键（或点击上方虚拟按键），被按下的键位将瞬间触发高光并渐进式余晖衰减；点击下方“保存并应用”即可实时推流到物理键盘！
+              敲击键盘任意实体按键（或点击上方虚拟按键），被按下的键位将瞬间触发高光并渐进式余晖衰减，所有参数修改均已自动实时生效至物理键盘！
             </p>
           </div>
         )}
@@ -206,6 +206,60 @@ export default function LightingSettings({
             onChange={(e) => setBrightnessVal(parseFloat(e.target.value))}
             className="w-full h-1.5 bg-slate-200 rounded-none appearance-none cursor-pointer accent-slate-900"
           />
+        </div>
+
+        {/* 推流帧率 (FPS) */}
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center justify-between text-xs font-semibold text-slate-900">
+            <span className="flex items-center gap-1">
+              <Activity className="w-3.5 h-3.5 text-slate-500" />
+              推流帧率 (FPS)
+            </span>
+            <div className="flex items-center gap-1.5">
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-none border font-medium ${
+                fpsVal >= 100 
+                  ? 'border-amber-400 bg-amber-50 text-amber-700' 
+                  : fpsVal >= 60 
+                  ? 'border-emerald-400 bg-emerald-50 text-emerald-700' 
+                  : 'border-slate-300 bg-slate-50 text-slate-600'
+              }`}>
+                {fpsVal >= 100 ? '硬件上限' : fpsVal >= 60 ? '高刷流畅' : '省电低耗'}
+              </span>
+              <span className="font-mono text-slate-900 font-bold text-xs">{fpsVal} FPS</span>
+            </div>
+          </div>
+          <input
+            type="range"
+            min="10"
+            max="100"
+            step="5"
+            value={fpsVal}
+            onChange={(e) => setFpsVal && setFpsVal(parseInt(e.target.value, 10))}
+            className="w-full h-1.5 bg-slate-200 rounded-none appearance-none cursor-pointer accent-slate-900"
+          />
+          <div className="flex items-center justify-between">
+            <div className="flex gap-1">
+              {[
+                { label: '25 默认', val: 25 },
+                { label: '60 流畅', val: 60 },
+                { label: '100 极速', val: 100 }
+              ].map((p) => (
+                <button
+                  key={p.val}
+                  type="button"
+                  onClick={() => setFpsVal && setFpsVal(p.val)}
+                  className={`px-1.5 py-0.5 text-[10px] font-mono rounded-none border transition-all cursor-pointer ${
+                    fpsVal === p.val
+                      ? 'bg-slate-900 text-white border-slate-900'
+                      : 'bg-white border-slate-300 text-slate-600 hover:border-slate-400'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+            <span className="text-[10px] text-slate-600 font-medium">硬件上限 100 FPS (10ms)</span>
+          </div>
         </div>
 
         {/* 速度：紧凑正方形按钮 */}
@@ -372,20 +426,6 @@ export default function LightingSettings({
             </div>
           </div>
         </div>
-
-        {/* 立即保存并生效快捷按钮 */}
-        {onSave && (
-          <div className="pt-2">
-            <button
-              onClick={onSave}
-              disabled={isSaving}
-              className="w-full flex items-center justify-center gap-2 h-9 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-none border border-slate-900 active:scale-98 transition-all disabled:opacity-50 cursor-pointer shadow-xs"
-            >
-              <Zap className="w-4 h-4" />
-              <span>{isSaving ? '正在应用生效...' : '立即保存并生效到物理键盘'}</span>
-            </button>
-          </div>
-        )}
       </div>
     </div>
   );

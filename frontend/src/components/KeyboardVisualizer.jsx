@@ -16,7 +16,8 @@ export default function KeyboardVisualizer({
   currentProfile,
   selectedKeyNames,
   onToggleKeySelection,
-  bgColor
+  bgColor,
+  fpsVal = 25
 }) {
   const containerRef = useRef(null);
   const [scale, setScale] = useState(1);
@@ -133,10 +134,20 @@ export default function KeyboardVisualizer({
       return 1600;
     };
 
+    let lastRenderTime = 0;
     const renderFrame = (timestamp) => {
       if (!isVisible) return;
 
       const t = timestamp || 0;
+      const targetFps = fpsVal || 25;
+      const frameInterval = 1000 / targetFps;
+
+      if (t - lastRenderTime < frameInterval - 1.0) {
+        animId = requestAnimationFrame(renderFrame);
+        return;
+      }
+      lastRenderTime = t;
+
       const period = getPeriodMs();
       const dirVec = DIR_VECTORS[currentDirection] || DIR_VECTORS.right;
       const keysOverride = currentProfile?.keys || {};
@@ -338,7 +349,8 @@ export default function KeyboardVisualizer({
     gradientStops,
     isStarryRandom,
     currentProfile,
-    bgColor
+    bgColor,
+    fpsVal
   ]);
 
   return (

@@ -156,6 +156,11 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
         std::string def_name = "desktop";
         bool valid = true;
 
+        int new_fps = 25;
+        if (j.contains("fps") && j["fps"].is_number()) {
+            new_fps = std::clamp(j["fps"].get<int>(), 10, 100);
+        }
+
         if (j.contains("default_profile")) {
             if (j["default_profile"].is_string()) {
                 def_name = j["default_profile"].get<std::string>();
@@ -244,6 +249,11 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
                 auto prof = std::make_shared<Profile>();
                 prof->name = pname;
                 prof->brightness = ParseBrightness(pname, pval);
+                int prof_fps = new_fps;
+                if (pval.contains("fps") && pval["fps"].is_number()) {
+                    prof_fps = std::clamp(pval["fps"].get<int>(), 10, 100);
+                }
+                prof->fps = prof_fps;
 
                 std::string type = pval.value("type", "static");
                 if (type == "static") {
@@ -409,6 +419,7 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
             std::lock_guard<std::mutex> lock(mutex_);
             config_path_ = config_path;
             default_profile_name_ = def_name;
+            target_fps_ = new_fps;
             rules_ = std::move(new_rules);
             gsi_bindings_ = std::move(new_gsi_bindings);
             profiles_ = std::move(new_profiles);

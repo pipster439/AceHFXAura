@@ -24,6 +24,7 @@ struct Profile {
     std::shared_ptr<Effect> base_effect;
     std::vector<KeyOverride> key_overrides;
     uint8_t brightness = 255;
+    int fps = 25;
 
     void Render(uint64_t elapsed_ms, FrameBuffer& out_frame, const Keymap& keymap) const {
         if (base_effect) {

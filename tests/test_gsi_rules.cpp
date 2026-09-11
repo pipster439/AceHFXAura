@@ -1172,6 +1172,41 @@ int main() {
         CHECK(html.find("html") != std::string::npos || html.find("HTML") != std::string::npos, 
               "LoadHtmlContent 成功加载有效 HTML 文档");
     }
+    // 19. FPS 帧率配置与钳制保护验证
+    std::cout << "\n[测试 19] 验证 FPS 帧率解析与 10~100 范围钳制保护...\n";
+    {
+        const std::string tmp_fps_cfg = (std::filesystem::temp_directory_path() / "test_cfg_fps.json").string();
+        {
+            std::ofstream ofs(tmp_fps_cfg);
+            ofs << R"json({
+                "default_profile": "prof_normal",
+                "fps": 60,
+                "profiles": {
+                    "prof_normal": { "type": "static" },
+                    "prof_100": { "type": "static", "fps": 100 },
+                    "prof_over": { "type": "static", "fps": 240 },
+                    "prof_under": { "type": "static", "fps": 2 }
+                }
+            })json";
+        }
+        aura::RuleEngine fps_engine;
+        CHECK(fps_engine.LoadConfig(tmp_fps_cfg), "成功加载包含 FPS 的配置文件");
+        CHECK(fps_engine.GetFps() == 60, "根级 fps 解析为 60");
+        
+        auto p_normal = fps_engine.GetProfile("prof_normal");
+        CHECK(p_normal != nullptr && p_normal->fps == 60, "未指定 profile fps 时继承根级 60 FPS");
+
+        auto p_100 = fps_engine.GetProfile("prof_100");
+        CHECK(p_100 != nullptr && p_100->fps == 100, "指定的 100 FPS 正确解析 (硬件物理上限)");
+
+        auto p_over = fps_engine.GetProfile("prof_over");
+        CHECK(p_over != nullptr && p_over->fps == 100, "超限 240 FPS 正确钳制为硬件上限 100 FPS");
+
+        auto p_under = fps_engine.GetProfile("prof_under");
+        CHECK(p_under != nullptr && p_under->fps == 10, "过低 2 FPS 正确钳制为安全下限 10 FPS");
+
+        std::filesystem::remove(tmp_fps_cfg);
+    }
 
     std::cout << "\n=========================================================\n";
     if (failures == 0) {

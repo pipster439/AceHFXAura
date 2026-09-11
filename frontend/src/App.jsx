@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import Sidebar from './components/Sidebar';
 import KeyboardVisualizer from './components/KeyboardVisualizer';
@@ -30,6 +30,7 @@ export default function App() {
   const [selectedStopId, setSelectedStopId] = useState(1);
   const [isStarryRandom, setIsStarryRandom] = useState(false);
   const [bgColor, setBgColor] = useState('#000000');
+  const [fpsVal, setFpsVal] = useState(25);
 
   // 逐键涂装选中集合
   const [selectedKeyNames, setSelectedKeyNames] = useState(new Set());
@@ -39,6 +40,12 @@ export default function App() {
   const [isSaving, setIsSaving] = useState(false);
   const [isServiceOnline, setIsServiceOnline] = useState(true);
   const [isGameModalOpen, setIsGameModalOpen] = useState(false);
+
+  const isInitializedRef = useRef(false);
+  const isSwitchingProfileRef = useRef(false);
+  const saveTimeoutRef = useRef(null);
+  const configRef = useRef(null);
+  configRef.current = config;
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
@@ -84,6 +91,12 @@ export default function App() {
     if (profileData.bg) {
       setBgColor(rgbToHex(profileData.bg));
     }
+
+    if (typeof profileData.fps === 'number' && Number.isFinite(profileData.fps)) {
+      setFpsVal(Math.max(10, Math.min(100, Math.round(profileData.fps))));
+    } else {
+      setFpsVal(25);
+    }
   }, []);
 
   // 读取配置
@@ -94,9 +107,17 @@ export default function App() {
       const data = await res.json();
       setConfig(data);
 
+      if (typeof data.fps === 'number' && Number.isFinite(data.fps)) {
+        setFpsVal(Math.max(10, Math.min(100, Math.round(data.fps))));
+      }
+
       const defaultProf = data.default_profile || Object.keys(data.profiles || {})[0] || 'desktop';
       setCurrentProfileName(defaultProf);
       loadProfileToState(data.profiles?.[defaultProf]);
+
+      setTimeout(() => {
+        isInitializedRef.current = true;
+      }, 150);
     } catch (err) {
       console.warn('获取配置异常:', err);
     }
@@ -135,109 +156,129 @@ export default function App() {
     return () => clearInterval(interval);
   }, [isGameModalOpen, fetchConfig]);
 
-  // 切换方案，可选择是否直接应用为硬件活跃方案
-  const handleProfileChange = async (pname, applyToHardware = false) => {
-    if (!config?.profiles?.[pname]) return;
-    syncCurrentStateToConfig();
-    setCurrentProfileName(pname);
-    loadProfileToState(config.profiles[pname]);
-    setSelectedKeyNames(new Set());
-
-    if (applyToHardware) {
-      const nextConfig = {
-        ...config,
-        default_profile: pname
-      };
-      setConfig(nextConfig);
-      try {
-        await fetch('/api/config', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(nextConfig)
-        });
-        showToast(`已切换方案 [${pname}] 并立即激活到物理键盘！`);
-      } catch (e) {
-        showToast('切换硬件方案失败: ' + e.message, 'error');
-      }
-    }
-  };
-
-  // 将当前 UI 状态同步进 config 内存树
-  const syncCurrentStateToConfig = useCallback(() => {
-    if (!config?.profiles?.[currentProfileName]) return;
-    const prof = config.profiles[currentProfileName];
-
-    if (activeTab === 'perkey') {
-      prof.type = 'custom_keymap';
-      prof.bg = hexToRgb(bgColor);
-      prof.brightness = brightnessVal;
-    } else {
-      prof.type = currentEffect;
-      prof.analog = currentEffect === 'static' ? isAnalogEnabled : false;
-      prof.brightness = brightnessVal;
-      prof.speed_index = speedIndex;
-      prof.direction = currentDirection;
-      prof.period_ms = speedIndex === 0 ? 5500 : speedIndex === 1 ? 3200 : 1600;
-
-      if (gradientStops.length > 0) {
-        prof.color = hexToRgb(gradientStops[0].color);
-        prof.color1 = hexToRgb(gradientStops[0].color);
-      }
-      if (gradientStops.length > 1) {
-        prof.color2 = hexToRgb(gradientStops[1].color);
-      }
-
-      if (currentEffect === 'reactive' || currentEffect === 'ripple' || currentEffect === 'static') {
-        prof.bg = [0, 0, 0];
-      } else {
-        delete prof.bg;
-      }
-    }
-  }, [
-    config,
-    currentProfileName,
-    activeTab,
-    currentEffect,
-    isAnalogEnabled,
-    brightnessVal,
-    currentDirection,
-    speedIndex,
-    gradientStops,
-    bgColor
-  ]);
-
-  // 保存当前方案配置到后端（沿用当前已生效的 default_profile，不覆盖默认方案）
-  const handleSave = async () => {
-    syncCurrentStateToConfig();
-    const toSave = {
-      ...config,
-      default_profile: config?.default_profile || currentProfileName
-    };
-    setConfig(toSave);
-    setIsSaving(true);
+  // 直接保存配置到后端（无阻断静默提交）
+  const saveConfigDirectly = useCallback(async (newConfig) => {
+    if (!newConfig) return;
     try {
+      setIsSaving(true);
       const res = await fetch('/api/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(toSave)
+        body: JSON.stringify(newConfig)
       });
-      const data = await res.json();
-      if (res.ok) {
-        const isDefault = toSave.default_profile === currentProfileName;
-        showToast(
-          isDefault
-            ? `方案 [${currentProfileName}] 已保存并立即生效到物理键盘！`
-            : `方案 [${currentProfileName}] 已保存（当前默认方案仍为 [${toSave.default_profile}]）`
-        );
-      } else {
-        showToast(data.message || '保存失败', 'error');
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        console.warn('实时配置保存失败:', data.message);
       }
     } catch (err) {
-      showToast('请求失败: ' + err.message, 'error');
+      console.warn('实时配置保存网络异常:', err.message);
     } finally {
       setIsSaving(false);
     }
+  }, []);
+
+  // 方案切换 (实时自动激活至硬件)
+  const handleProfileChange = (pname) => {
+    if (!configRef.current?.profiles?.[pname]) return;
+    isSwitchingProfileRef.current = true;
+    setCurrentProfileName(pname);
+    loadProfileToState(configRef.current.profiles[pname]);
+    setSelectedKeyNames(new Set());
+
+    const nextConfig = {
+      ...configRef.current,
+      default_profile: pname
+    };
+    setConfig(nextConfig);
+    saveConfigDirectly(nextConfig);
+
+    setTimeout(() => {
+      isSwitchingProfileRef.current = false;
+    }, 150);
   };
+
+  // 防抖自动同步当前 UI 状态到后端与内存
+  const queueAutoSync = useCallback(() => {
+    if (!isInitializedRef.current || isSwitchingProfileRef.current) return;
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+
+    saveTimeoutRef.current = setTimeout(() => {
+      const baseConfig = configRef.current;
+      if (!baseConfig || !baseConfig.profiles) return;
+      const pName = currentProfileName;
+      if (!baseConfig.profiles[pName]) return;
+
+      const cloned = JSON.parse(JSON.stringify(baseConfig));
+      const prof = cloned.profiles[pName];
+
+      if (activeTab === 'perkey') {
+        prof.type = 'custom_keymap';
+        prof.bg = hexToRgb(bgColor);
+        prof.brightness = brightnessVal;
+      } else {
+        prof.type = currentEffect;
+        prof.analog = currentEffect === 'static' ? isAnalogEnabled : false;
+        prof.brightness = isMasterLightOn ? brightnessVal : 0;
+        prof.speed_index = speedIndex;
+        prof.direction = currentDirection;
+        prof.thickness = thicknessVal;
+        prof.period_ms = speedIndex === 0 ? 5500 : speedIndex === 1 ? 3200 : 1600;
+
+        if (gradientStops && gradientStops.length > 0) {
+          prof.color = hexToRgb(gradientStops[0].color);
+          prof.color1 = hexToRgb(gradientStops[0].color);
+        }
+        if (gradientStops && gradientStops.length > 1) {
+          prof.color2 = hexToRgb(gradientStops[1].color);
+        }
+
+        if (currentEffect === 'reactive' || currentEffect === 'ripple' || currentEffect === 'static') {
+          prof.bg = [0, 0, 0];
+        } else {
+          delete prof.bg;
+        }
+        prof.fps = fpsVal;
+      }
+
+      cloned.fps = fpsVal;
+      cloned.default_profile = pName;
+
+      setConfig(cloned);
+      saveConfigDirectly(cloned);
+    }, 120);
+  }, [
+    currentProfileName,
+    activeTab,
+    currentEffect,
+    isMasterLightOn,
+    isAnalogEnabled,
+    brightnessVal,
+    currentDirection,
+    thicknessVal,
+    speedIndex,
+    gradientStops,
+    bgColor,
+    fpsVal,
+    saveConfigDirectly
+  ]);
+
+  // 监听所有调光与硬件参数，自动实时推流生效
+  useEffect(() => {
+    if (!isInitializedRef.current || isSwitchingProfileRef.current) return;
+    queueAutoSync();
+  }, [
+    currentEffect,
+    isMasterLightOn,
+    isAnalogEnabled,
+    brightnessVal,
+    fpsVal,
+    speedIndex,
+    currentDirection,
+    thicknessVal,
+    gradientStops,
+    bgColor,
+    queueAutoSync
+  ]);
 
   // 逐键点选交互
   const handleToggleKeySelection = (keyName) => {
@@ -278,7 +319,10 @@ export default function App() {
       showToast('请先在虚拟键盘上选定按键', 'info');
       return;
     }
-    const prof = config?.profiles?.[currentProfileName];
+    const baseConfig = configRef.current;
+    if (!baseConfig || !baseConfig.profiles) return;
+    const cloned = JSON.parse(JSON.stringify(baseConfig));
+    const prof = cloned.profiles[currentProfileName];
     if (!prof) return;
     if (!prof.keys) prof.keys = {};
 
@@ -290,8 +334,10 @@ export default function App() {
       prof.keys[kname] = rgb;
     });
 
-    setConfig({ ...config });
-    showToast(`已涂装 ${selectedKeyNames.size} 个按键 (已自动切换为逐键定制模式)`);
+    cloned.default_profile = currentProfileName;
+    setConfig(cloned);
+    saveConfigDirectly(cloned);
+    showToast(`已涂装 ${selectedKeyNames.size} 个按键 (已实时生效)`);
   };
 
   const handleRemoveOverridesFromSelected = () => {
@@ -299,71 +345,76 @@ export default function App() {
       showToast('请先选择要清除自定义覆写的按键', 'info');
       return;
     }
-    const prof = config?.profiles?.[currentProfileName];
+    const baseConfig = configRef.current;
+    if (!baseConfig || !baseConfig.profiles) return;
+    const cloned = JSON.parse(JSON.stringify(baseConfig));
+    const prof = cloned.profiles[currentProfileName];
     if (!prof?.keys) return;
 
     selectedKeyNames.forEach((kname) => {
       delete prof.keys[kname];
     });
 
-    setConfig({ ...config });
-    showToast(`已清除 ${selectedKeyNames.size} 个按键的独立覆写`);
+    cloned.default_profile = currentProfileName;
+    setConfig(cloned);
+    saveConfigDirectly(cloned);
+    showToast(`已清除 ${selectedKeyNames.size} 个按键的独立覆写 (已实时生效)`);
   };
 
-  // 规则设置操作
+  // 规则设置操作 (实时同步)
   const handleAddRule = (newRule = { process: '', profile: currentProfileName, suppress_web_ui: false }) => {
     const updated = {
-      ...config,
-      rules: [...(config.rules || []), newRule]
+      ...configRef.current,
+      rules: [...(configRef.current?.rules || []), newRule]
     };
     setConfig(updated);
+    saveConfigDirectly(updated);
   };
 
   const handleDeleteRule = (idx) => {
-    const updatedRules = config.rules.filter((_, i) => i !== idx);
-    setConfig({ ...config, rules: updatedRules });
+    const updatedRules = (configRef.current?.rules || []).filter((_, i) => i !== idx);
+    const updated = { ...configRef.current, rules: updatedRules };
+    setConfig(updated);
+    saveConfigDirectly(updated);
   };
 
   const handleUpdateRule = (idx, patch) => {
-    const updatedRules = config.rules.map((r, i) => (i === idx ? { ...r, ...patch } : r));
-    setConfig({ ...config, rules: updatedRules });
+    const updatedRules = (configRef.current?.rules || []).map((r, i) => (i === idx ? { ...r, ...patch } : r));
+    const updated = { ...configRef.current, rules: updatedRules };
+    setConfig(updated);
+    saveConfigDirectly(updated);
   };
 
-  // GSI 规则操作 (过滤空字段)
+  // GSI 规则操作 (过滤空字段并实时同步)
   const handleUpdateGsiBindings = (updatedBindings) => {
     const cleaned = updatedBindings.filter(b => b && b.field && b.field.trim() !== '');
-    setConfig({ ...config, gsi_bindings: cleaned });
+    const updated = { ...configRef.current, gsi_bindings: cleaned };
+    setConfig(updated);
+    saveConfigDirectly(updated);
   };
 
   // 方案管理操作 (设为默认立即同步至硬件)
-  const handleSetDefaultProfile = async (name) => {
-    const nextConfig = { ...config, default_profile: name };
+  const handleSetDefaultProfile = (name) => {
+    const nextConfig = { ...configRef.current, default_profile: name };
     setConfig(nextConfig);
-    try {
-      await fetch('/api/config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(nextConfig)
-      });
-      showToast(`已将 [${name}] 设为默认方案并已应用到键盘！`);
-    } catch (e) {
-      showToast('设置默认失败: ' + e.message, 'error');
-    }
+    saveConfigDirectly(nextConfig);
+    showToast(`已将 [${name}] 设为默认方案并实时生效！`);
   };
 
   const handleCloneProfile = (sourceName, newName) => {
-    syncCurrentStateToConfig();
-    const cloned = JSON.parse(JSON.stringify(config.profiles[sourceName]));
+    if (!configRef.current?.profiles?.[sourceName]) return;
+    const clonedProf = JSON.parse(JSON.stringify(configRef.current.profiles[sourceName]));
     const nextConfig = {
-      ...config,
+      ...configRef.current,
       profiles: {
-        ...config.profiles,
-        [newName]: cloned
+        ...configRef.current.profiles,
+        [newName]: clonedProf
       }
     };
     setConfig(nextConfig);
+    saveConfigDirectly(nextConfig);
     setCurrentProfileName(newName);
-    loadProfileToState(cloned);
+    loadProfileToState(clonedProf);
     showToast(`已克隆方案: ${newName}`);
   };
 
@@ -377,38 +428,40 @@ export default function App() {
       keys: {}
     };
     const nextConfig = {
-      ...config,
+      ...configRef.current,
       profiles: {
-        ...config.profiles,
+        ...configRef.current.profiles,
         [newName]: fresh
       }
     };
     setConfig(nextConfig);
+    saveConfigDirectly(nextConfig);
     setCurrentProfileName(newName);
     loadProfileToState(fresh);
     showToast(`已新建方案: ${newName}`);
   };
 
   const handleDeleteProfile = (name) => {
-    if (Object.keys(config.profiles).length <= 1) {
+    if (Object.keys(configRef.current?.profiles || {}).length <= 1) {
       showToast('至少需保留一个配置文件', 'error');
       return;
     }
-    const nextProfiles = { ...config.profiles };
+    const nextProfiles = { ...configRef.current.profiles };
     delete nextProfiles[name];
 
-    let nextDefault = config.default_profile;
+    let nextDefault = configRef.current.default_profile;
     if (nextDefault === name) {
       nextDefault = Object.keys(nextProfiles)[0];
     }
     const nextCurrent = Object.keys(nextProfiles)[0];
 
     const nextConfig = {
-      ...config,
+      ...configRef.current,
       default_profile: nextDefault,
       profiles: nextProfiles
     };
     setConfig(nextConfig);
+    saveConfigDirectly(nextConfig);
     setCurrentProfileName(nextCurrent);
     loadProfileToState(nextProfiles[nextCurrent]);
     showToast(`已删除方案: ${name}`);
@@ -426,7 +479,6 @@ export default function App() {
         onProfileChange={handleProfileChange}
         profiles={config?.profiles}
         defaultProfileName={config?.default_profile}
-        onSave={handleSave}
         isSaving={isSaving}
         isServiceOnline={isServiceOnline}
       />
@@ -449,6 +501,7 @@ export default function App() {
           selectedKeyNames={selectedKeyNames}
           onToggleKeySelection={handleToggleKeySelection}
           bgColor={bgColor}
+          fpsVal={fpsVal}
         />
 
         {/* 下方功能设置面板 (随侧边栏 Tab 切换平滑过渡) */}
@@ -483,8 +536,8 @@ export default function App() {
                   setSelectedStopId={setSelectedStopId}
                   isStarryRandom={isStarryRandom}
                   setIsStarryRandom={setIsStarryRandom}
-                  onSave={handleSave}
-                  isSaving={isSaving}
+                  fpsVal={fpsVal}
+                  setFpsVal={setFpsVal}
                 />
               )}
 

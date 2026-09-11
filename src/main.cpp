@@ -27,13 +27,24 @@
 namespace {
 
 std::atomic<bool> g_running{true};
+std::atomic<bool> g_shutdown_done{false};
 std::string g_state_file = ".daemon_running";
 
 BOOL WINAPI ConsoleCtrlHandler(DWORD signal) {
-    if (signal == CTRL_C_EVENT || signal == CTRL_BREAK_EVENT || 
-        signal == CTRL_CLOSE_EVENT || signal == CTRL_SHUTDOWN_EVENT) {
-        LOG_INFO("接收到系统中断信号 (" + std::to_string(signal) + ")，正在请求优雅退出...");
+    if (signal == CTRL_C_EVENT || signal == CTRL_BREAK_EVENT) {
+        LOG_INFO("接收到控制台中断信号 (" + std::to_string(signal) + ")，正在请求优雅退出...");
         g_running.store(false, std::memory_order_release);
+        return TRUE;
+    }
+    if (signal == CTRL_CLOSE_EVENT || signal == CTRL_SHUTDOWN_EVENT || signal == CTRL_LOGOFF_EVENT) {
+        LOG_INFO("接收到控制台关闭/系统注销信号 (" + std::to_string(signal) + ")，正在等待守护进程优雅停机...");
+        g_running.store(false, std::memory_order_release);
+        // Windows 给控制台关闭分配有限的超时时间 (通常为 5 秒)。
+        // 若直接返回 TRUE，Windows 会瞬间强杀主线程，导致硬件状态未复位、标记文件未清除。
+        // 此处等待主线程完成清理，最长等待 4 秒。
+        for (int i = 0; i < 80 && !g_shutdown_done.load(std::memory_order_acquire); ++i) {
+            Sleep(50);
+        }
         return TRUE;
     }
     return FALSE;
@@ -78,8 +89,17 @@ int main(int argc, char* argv[]) {
     // 0. 初始化 COM 单线程套间 (RAII 守卫置于 main 顶部，先于所有局部对象声明以保证 LIFO 逆序析构)
     ComScope com;
 
-    // 初始化日志系统
-    aura::Logger::Instance().Init("aura_daemon.log");
+    // 检查是否有 --probe-hardware 参数 (硬件隔离探测模式)
+    bool probe_mode = false;
+    for (int i = 1; i < argc; ++i) {
+        if (std::string(argv[i]) == "--probe-hardware") {
+            probe_mode = true;
+            break;
+        }
+    }
+
+    // 初始化日志系统 (探测模式仅向控制台输出，避免与父进程日志文件句柄冲突)
+    aura::Logger::Instance().Init(probe_mode ? "" : "aura_daemon.log");
 
     // 检查 COM 初始化结果 (含 RPC_E_CHANGED_MODE 模式冲突处理)
     if (!com.ok()) {
@@ -110,7 +130,9 @@ int main(int argc, char* argv[]) {
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
-        if (arg == "--dry-run") {
+        if (arg == "--probe-hardware") {
+            probe_mode = true;
+        } else if (arg == "--dry-run") {
             dry_run = true;
         } else if (arg == "--test-init") {
             if (i + 1 >= argc) {
@@ -201,6 +223,27 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    // 2.5 硬件探测隔离模式分支 (在创建全局互斥量与维护状态文件之前执行)
+    if (probe_mode) {
+        // 屏蔽 Windows 错误报告 (WER) 崩溃弹窗，确保底层异常时静默终止以触发通道复位
+        SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
+
+        LOG_INFO("[Probe] 正在执行硬件隔离探测与通道复位...");
+        aura::Keymap probe_keymap;
+        if (!probe_keymap.LoadFromJson(keymap_path)) {
+            LOG_ERROR("[Probe] 无法加载键位表: " + keymap_path);
+            return 1;
+        }
+        aura::AuraAdapter probe_adapter(false);
+        if (!probe_adapter.Initialize(&probe_keymap)) {
+            LOG_WARN("[Probe] 底层驱动初次挂载未就绪");
+            return 2;
+        }
+        probe_adapter.Shutdown();
+        LOG_INFO("[Probe] 硬件探测成功完成");
+        return 0;
+    }
+
     // 3. 单实例保护 (Named Mutex)
     HANDLE hMutex = CreateMutexW(NULL, FALSE, L"Local\\RogFalchionAceHfxDaemonMutex");
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
@@ -216,7 +259,9 @@ int main(int argc, char* argv[]) {
     if (test_init_count > 0) {
         aura::AuraAdapter test_adapter(false);
         bool test_ok = test_adapter.RunInitStressTest(static_cast<size_t>(test_init_count));
+        DeleteFileA(g_state_file.c_str());
         if (hMutex) CloseHandle(hMutex);
+        g_shutdown_done.store(true, std::memory_order_release);
         return test_ok ? 0 : 1;
     }
 
@@ -255,9 +300,52 @@ int main(int argc, char* argv[]) {
     }
 
     // 8. 挂载华硕底层驱动适配器 (在主线程完全拥有，杜绝多线程 COM 激活冲突)
-    if (had_abnormal_exit) {
-        LOG_INFO("检测到上次非正常退出，正在等待华硕底层驱动通道就绪 (3 秒)...");
-        std::this_thread::sleep_for(std::chrono::seconds(3));
+    if (had_abnormal_exit && !dry_run) {
+        LOG_INFO("【异常退出自愈】检测到上次非正常退出，正在启动硬件探测隔离子进程以安全复位驱动通道...");
+
+        wchar_t exe_path[MAX_PATH];
+        DWORD len = GetModuleFileNameW(NULL, exe_path, MAX_PATH);
+        if (len > 0 && len < MAX_PATH) {
+            std::wstring cmd = L"\"" + std::wstring(exe_path) + L"\" --probe-hardware";
+            if (keymap_path != "calibrated_keymap.json") {
+                int wlen = MultiByteToWideChar(CP_UTF8, 0, keymap_path.c_str(), -1, NULL, 0);
+                if (wlen > 0) {
+                    std::vector<wchar_t> wbuf(wlen);
+                    MultiByteToWideChar(CP_UTF8, 0, keymap_path.c_str(), -1, wbuf.data(), wlen);
+                    cmd += L" --keymap \"" + std::wstring(wbuf.data()) + L"\"";
+                }
+            }
+
+            STARTUPINFOW si{};
+            si.cb = sizeof(si);
+            PROCESS_INFORMATION pi{};
+
+            std::vector<wchar_t> cmd_buf(cmd.begin(), cmd.end());
+            cmd_buf.push_back(L'\0');
+
+            if (CreateProcessW(NULL, cmd_buf.data(), NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi)) {
+                DWORD wait_res = WaitForSingleObject(pi.hProcess, 10000);
+                DWORD exit_code = 0;
+                GetExitCodeProcess(pi.hProcess, &exit_code);
+                CloseHandle(pi.hProcess);
+                CloseHandle(pi.hThread);
+
+                if (wait_res == WAIT_TIMEOUT) {
+                    LOG_WARN("【异常退出自愈】探测子进程执行超时，已放弃等待");
+                } else if (exit_code == 0) {
+                    LOG_INFO("【异常退出自愈】探测子进程执行成功 (硬件通道正常，未发生驱动崩溃)");
+                    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+                } else {
+                    std::ostringstream oss;
+                    oss << "0x" << std::hex << std::uppercase << exit_code;
+                    LOG_INFO("【异常退出自愈】探测子进程已捕获驱动异常并完成底层通道复位 (退出码: " + oss.str() + 
+                             ")，正在等待硬件通道稳定 (1.5 秒)...");
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+                }
+            } else {
+                LOG_WARN("【异常退出自愈】创建探测子进程失败 (Win32错误码: " + std::to_string(GetLastError()) + ")");
+            }
+        }
     }
 
     aura::AuraAdapter adapter(dry_run);
@@ -308,12 +396,14 @@ int main(int argc, char* argv[]) {
     LOG_INFO("[+] ROG FALCHION ACE HFX 守护进程正在运行中 (按 Ctrl+C 优雅退出)...");
 
     aura::FrameBuffer frame_buf;
-    constexpr int TARGET_FPS = 25;
-    constexpr std::chrono::milliseconds FRAME_TIME(1000 / TARGET_FPS); // 40ms
+    int target_fps = rule_engine.GetFps();
+    if (target_fps < 10 || target_fps > 100) target_fps = 25;
+    std::chrono::milliseconds frame_time(1000 / target_fps);
 
     auto loop_start = std::chrono::steady_clock::now();
     auto next_tick = loop_start;
     auto last_stat_time = loop_start;
+    auto last_reload_check = loop_start;
 
     uint64_t total_frames = 0;
     uint64_t frames_since_stat = 0;
@@ -332,9 +422,17 @@ int main(int argc, char* argv[]) {
         if (prof_name != current_active_profile_name) {
             current_active_profile_name = prof_name;
             effect_engine.SetActiveProfile(matched);
+            int new_fps = (matched && matched->fps >= 10 && matched->fps <= 100) ? matched->fps : rule_engine.GetFps();
+            if (new_fps < 10 || new_fps > 100) new_fps = 25;
+            if (new_fps != target_fps) {
+                target_fps = new_fps;
+                frame_time = std::chrono::milliseconds(1000 / target_fps);
+                next_tick = std::chrono::steady_clock::now();
+            }
             LOG_INFO("灯效方案动态切换 -> [" + prof_name + "] (前台: " + 
                      (cur_proc.empty() ? "桌面/未知" : cur_proc) + 
-                     (gsi_adapter.GetState().IsActive() ? ", GSI在线" : "") + ")");
+                     (gsi_adapter.GetState().IsActive() ? ", GSI在线" : "") + 
+                     ", 帧率: " + std::to_string(target_fps) + " FPS)");
         }
 
         // 网页服务抑制状态：必须按【前台进程名】变化来更新，不能挂在【方案名】变化上。
@@ -363,19 +461,30 @@ int main(int argc, char* argv[]) {
         total_frames++;
         frames_since_stat++;
 
-        // 每秒 (25 帧) 检查一次配置文件热重载
-        if (total_frames % TARGET_FPS == 0) {
+        // 实时热重载检测 (每 50ms 轮询一次文件修改时间，保障网页调参实时生效)
+        auto now_reload = std::chrono::steady_clock::now();
+        if (std::chrono::duration_cast<std::chrono::milliseconds>(now_reload - last_reload_check).count() >= 50) {
+            last_reload_check = now_reload;
             if (rule_engine.CheckAndReload()) {
                 std::string cur_proc_now = monitor.GetCurrentProcessName();
                 std::shared_ptr<const aura::Profile> reload_matched = rule_engine.MatchProfile(cur_proc_now, &gsi_adapter.GetState());
                 current_active_profile_name = reload_matched ? reload_matched->name : "(None)";
                 effect_engine.SetActiveProfile(reload_matched);
 
+                int new_fps = (reload_matched && reload_matched->fps >= 10 && reload_matched->fps <= 100) ? reload_matched->fps : rule_engine.GetFps();
+                if (new_fps < 10 || new_fps > 100) new_fps = 25;
+                if (new_fps != target_fps) {
+                    target_fps = new_fps;
+                    frame_time = std::chrono::milliseconds(1000 / target_fps);
+                    next_tick = std::chrono::steady_clock::now();
+                }
+
                 bool suppress = rule_engine.ShouldSuppressWebUi(cur_proc_now);
                 web_supervisor.SetSuppressed(suppress);
 
-                LOG_INFO("配置热重载生效，当前活跃方案更新为: [" + current_active_profile_name + "]" + 
-                         (suppress ? " (网页服务已抑制)" : ""));
+                LOG_INFO("配置实时重载生效，当前活跃方案更新为: [" + current_active_profile_name + "]" + 
+                         (suppress ? " (网页服务已抑制)" : "") +
+                         ", 帧率: " + std::to_string(target_fps) + " FPS");
             }
         }
 
@@ -411,8 +520,8 @@ int main(int argc, char* argv[]) {
             }
         }
 
-        // 对齐 40ms 节拍
-        next_tick += FRAME_TIME;
+        // 对齐帧节拍
+        next_tick += frame_time;
         auto sleep_dur = next_tick - std::chrono::steady_clock::now();
         if (sleep_dur > std::chrono::milliseconds(0)) {
             std::this_thread::sleep_for(sleep_dur);
@@ -442,6 +551,7 @@ int main(int argc, char* argv[]) {
         CloseHandle(hMutex);
     }
 
+    g_shutdown_done.store(true, std::memory_order_release);
     LOG_INFO("[+] 守护进程已优雅退出，所有资源已安全释放。");
     return 0;
 }
