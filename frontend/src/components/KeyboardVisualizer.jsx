@@ -55,7 +55,7 @@ export default function KeyboardVisualizer({
       return;
     }
 
-    animRef.current.reactiveDecays[keyName] = 1.4;
+    animRef.current.reactiveDecays[keyName] = 1.0;
     animRef.current.analogDecays[keyName] = 1.0;
 
     // 涟漪发射
@@ -74,11 +74,9 @@ export default function KeyboardVisualizer({
       animRef.current.activeRipples.push({
         col: targetKeyData.col,
         row: targetKeyData.row,
-        startTime: performance.now(),
-        maxRadius: 20.0,
-        speed: 0.018
+        startTime: performance.now()
       });
-      if (animRef.current.activeRipples.length > 12) {
+      if (animRef.current.activeRipples.length > 8) {
         animRef.current.activeRipples.shift();
       }
     }
@@ -151,6 +149,7 @@ export default function KeyboardVisualizer({
       const period = getPeriodMs();
       const dirVec = DIR_VECTORS[currentDirection] || DIR_VECTORS.right;
       const keysOverride = currentProfile?.keys || {};
+      const rippleSpeed = 0.014 * (2500.0 / period);
 
       KEYBOARD_LAYOUT.forEach((row, rowIdx) => {
         let colOffset = 0.0;
@@ -162,7 +161,7 @@ export default function KeyboardVisualizer({
             return;
           }
 
-          let r = 244, g = 246, b = 249; // 浅色底
+          let r = 0, g = 0, b = 0; // 默认深色未点亮暗态
 
           let hasOverride = false;
           let ovColor = null;
@@ -177,140 +176,158 @@ export default function KeyboardVisualizer({
             hasOverride = true;
           }
 
-          if (activeTab === 'perkey') {
+          if (activeTab === 'perkey' || currentEffect === 'custom_keymap') {
             if (hasOverride && ovColor) {
               r = ovColor[0]; g = ovColor[1]; b = ovColor[2];
             } else {
-              const base = hexToRgb(bgColor || '#F1F5F9');
+              const base = hexToRgb(bgColor || '#000000');
               r = base[0]; g = base[1]; b = base[2];
             }
-          } else if (!isMasterLightOn) {
-            r = 230; g = 233; b = 237;
           } else if (hasOverride && ovColor) {
             r = ovColor[0]; g = ovColor[1]; b = ovColor[2];
           } else if (currentEffect === 'static') {
-            const col = hexToRgb(gradientStops[0]?.color || '#0F172A');
+            const col = hexToRgb(gradientStops[0]?.color || '#0050C8');
             r = col[0]; g = col[1]; b = col[2];
             if (isAnalogEnabled) {
               const extra = animRef.current.analogDecays[k.name] || 0;
               if (extra > 0) {
                 animRef.current.analogDecays[k.name] = Math.max(0, extra - 0.035);
-                r = Math.min(255, r + extra * (255 - r));
-                g = Math.min(255, g + extra * (255 - g));
-                b = Math.min(255, b + extra * (255 - b));
+                r = Math.min(255, Math.floor(r + extra * (255 - r)));
+                g = Math.min(255, Math.floor(g + extra * (255 - g)));
+                b = Math.min(255, Math.floor(b + extra * (255 - b)));
               }
             }
           } else if (currentEffect === 'breathing') {
             const phase = (t % period) / period;
             const factor = 0.5 - 0.5 * Math.cos(2.0 * Math.PI * phase);
-            const col1 = hexToRgb(gradientStops[0]?.color || '#0F172A');
-            const col2 = hexToRgb(gradientStops[1]?.color || '#F8FAFC');
-            r = col1[0] * factor + col2[0] * (1.0 - factor);
-            g = col1[1] * factor + col2[1] * (1.0 - factor);
-            b = col1[2] * factor + col2[2] * (1.0 - factor);
+            const col1 = hexToRgb(gradientStops[0]?.color || '#0064FF');
+            const col2 = hexToRgb(gradientStops[1]?.color || '#000A32');
+            r = Math.floor(col1[0] * (1.0 - factor) + col2[0] * factor);
+            g = Math.floor(col1[1] * (1.0 - factor) + col2[1] * factor);
+            b = Math.floor(col1[2] * (1.0 - factor) + col2[2] * factor);
           } else if (currentEffect === 'color_cycle') {
             const hue = ((t % period) / period) * 360.0;
-            [r, g, b] = hsvToRgb(hue, 0.85, 1.0);
+            [r, g, b] = hsvToRgb(hue, 1.0, 1.0);
           } else if (currentEffect === 'wave') {
             let proj = 0.0;
             if (currentDirection === 'spread') {
               const dx = colOffset - 8.0;
               const dy = (rowIdx - 2.0) * 2.0;
-              proj = Math.sqrt(dx * dx + dy * dy) / 10.0;
+              proj = (Math.sqrt(dx * dx + dy * dy) / 10.0) * thicknessVal;
             } else {
               const normX = colOffset / 16.0;
               const normY = rowIdx / 4.0;
               proj = (normX * dirVec.x + normY * dirVec.y) * thicknessVal;
             }
             const phase = (t % period) / period;
-            const ratio = (proj - phase + 100.0) % 1.0;
+            let ratio = (proj - phase + 100.0) % 1.0;
+            if (ratio < 0) ratio += 1.0;
             const col = hexToRgb(sampleGradientColor(gradientStops, ratio));
             r = col[0]; g = col[1]; b = col[2];
-          } else if (currentEffect === 'starry_night') {
-            if (isStarryRandom) {
-              const seed = (colOffset * 19 + rowIdx * 37) % 360;
-              const starPhase = ((t + seed * 40) % 2200) / 2200;
-              const starGlow = Math.max(0, Math.sin(starPhase * Math.PI) * 1.5 - 0.5);
-              [r, g, b] = hsvToRgb(seed, 0.8, starGlow);
-            } else {
-              const seed = (colOffset * 17 + rowIdx * 31) % 100;
-              const starPhase = ((t + seed * 50) % 2000) / 2000;
-              const starGlow = Math.max(0, Math.sin(starPhase * Math.PI) * 1.5 - 0.5);
-              const col = hexToRgb(sampleGradientColor(gradientStops, seed / 100.0));
-              r = col[0] * starGlow + 244 * (1 - starGlow);
-              g = col[1] * starGlow + 246 * (1 - starGlow);
-              b = col[2] * starGlow + 249 * (1 - starGlow);
-            }
-          } else if (currentEffect === 'quicksand') {
-            const phase = (t % period) / period;
-            const wave = Math.sin(colOffset * 0.4 * dirVec.x + rowIdx * 0.8 * dirVec.y + phase * 2 * Math.PI);
-            const factor = wave * 0.5 + 0.5;
-            const col = hexToRgb(sampleGradientColor(gradientStops, factor));
-            r = col[0]; g = col[1]; b = col[2];
-          } else if (currentEffect === 'current') {
-            const phase = (t % (period / 2)) / (period / 2);
-            const isPulse = Math.abs(colOffset - phase * 16.0) < 1.8 * thicknessVal;
-            if (isPulse) {
-              r = 255; g = 255; b = 255;
-            } else {
-              const col = hexToRgb(gradientStops[0]?.color || '#0284C7');
-              r = col[0] * 0.2 + 200;
-              g = col[1] * 0.2 + 205;
-              b = col[2] * 0.2 + 210;
-            }
-          } else if (currentEffect === 'raindrop') {
-            const seed = (colOffset * 23 + rowIdx * 47) % 80;
-            const dropPhase = ((t + seed * 80) % 2800) / 2800;
-            const dropGlow = Math.pow(Math.max(0, 1.0 - dropPhase * 4), 2);
-            const col = hexToRgb(gradientStops[0]?.color || '#0284C7');
-            r = col[0] * dropGlow + 244 * (1 - dropGlow);
-            g = col[1] * dropGlow + 246 * (1 - dropGlow);
-            b = col[2] * dropGlow + 249 * (1 - dropGlow);
-          } else if (currentEffect === 'reactive' || currentEffect === 'ripple') {
-            let totalGlow = 0.0;
+          } else if (currentEffect === 'reactive') {
+            const baseCol = hexToRgb(bgColor || '#00050F');
+            const trigCol = hexToRgb(gradientStops[0]?.color || '#FF1929');
             const decay = animRef.current.reactiveDecays[k.name] || 0;
-            if (decay > 0) {
-              totalGlow += decay;
-              animRef.current.reactiveDecays[k.name] = Math.max(0, decay - 0.025);
+            if (decay > 0.01) {
+              animRef.current.reactiveDecays[k.name] = Math.max(0, decay - 0.035);
+              r = Math.min(255, Math.floor(baseCol[0] + decay * (trigCol[0] - baseCol[0])));
+              g = Math.min(255, Math.floor(baseCol[1] + decay * (trigCol[1] - baseCol[1])));
+              b = Math.min(255, Math.floor(baseCol[2] + decay * (trigCol[2] - baseCol[2])));
+            } else {
+              r = baseCol[0];
+              g = baseCol[1];
+              b = baseCol[2];
             }
-
+          } else if (currentEffect === 'ripple') {
+            const halfThick = Math.max(0.1, 1.8 * thicknessVal);
+            let totalGlow = 0.0;
             const centerCol = colOffset + k.width / 2.0;
+
             for (const rip of animRef.current.activeRipples) {
-              const radius = (t - rip.startTime) * rip.speed;
-              if (radius <= rip.maxRadius) {
+              const radius = (t - rip.startTime) * rippleSpeed;
+              if (radius <= 20.0) {
                 const dx = centerCol - rip.col;
-                const dy = (rowIdx - rip.row) * 2.2;
+                const dy = (rowIdx - rip.row) * 1.0;
                 const dist = Math.sqrt(dx * dx + dy * dy);
                 const diff = Math.abs(dist - radius);
-                if (diff < 1.8) {
-                  const wf = (1.0 - diff / 1.8) * (1.0 - radius / rip.maxRadius);
-                  totalGlow += wf * 0.95;
+                if (diff < halfThick) {
+                  const wf = (1.0 - diff / halfThick) * (1.0 - radius / 20.0);
+                  totalGlow += wf;
                 }
               }
             }
 
-            let baseCol = hexToRgb(gradientStops[0]?.color || '#FF1929');
-            if (baseCol[0] < 35 && baseCol[1] < 35 && baseCol[2] < 35) {
-              if (gradientStops[1]?.color) {
-                baseCol = hexToRgb(gradientStops[1].color);
-              } else {
-                baseCol = [255, 25, 41]; // ROG 红色
-              }
-            }
+            const baseCol = hexToRgb(bgColor || '#00050F');
+            const trigCol = hexToRgb(gradientStops[0]?.color || '#00F0FF');
             if (totalGlow > 0.01) {
-              const factor = Math.min(1.0, totalGlow);
-              r = Math.min(255, Math.floor(baseCol[0] * factor + 241 * (1 - factor)));
-              g = Math.min(255, Math.floor(baseCol[1] * factor + 245 * (1 - factor)));
-              b = Math.min(255, Math.floor(baseCol[2] * factor + 249 * (1 - factor)));
+              const factor = Math.min(1.0, Math.max(0.0, totalGlow));
+              r = Math.min(255, Math.floor(baseCol[0] + factor * (trigCol[0] - baseCol[0])));
+              g = Math.min(255, Math.floor(baseCol[1] + factor * (trigCol[1] - baseCol[1])));
+              b = Math.min(255, Math.floor(baseCol[2] + factor * (trigCol[2] - baseCol[2])));
             } else {
-              r = 241; g = 245; b = 249;
+              r = baseCol[0];
+              g = baseCol[1];
+              b = baseCol[2];
             }
+          } else if (currentEffect === 'starry_night') {
+            const seed = (Math.round(colOffset) * 17 + rowIdx * 31) % 100;
+            const starPhase = ((t + seed * 45) % period) / period;
+            const glow = Math.max(0, Math.sin(starPhase * Math.PI) * 1.5 - 0.5);
+            if (isStarryRandom) {
+              const hue = seed * 3.6;
+              [r, g, b] = hsvToRgb(hue, 1.0, glow);
+            } else {
+              const col = hexToRgb(gradientStops[0]?.color || '#00F0FF');
+              r = Math.floor(col[0] * glow);
+              g = Math.floor(col[1] * glow);
+              b = Math.floor(col[2] * glow);
+            }
+          } else if (currentEffect === 'quicksand') {
+            const phase = (t % period) / period;
+            let proj = 0.0;
+            if (currentDirection === 'spread') {
+              const cx = colOffset - 8.0;
+              const cy = (rowIdx - 2.5) * 2.0;
+              proj = Math.sqrt(cx * cx + cy * cy) * 0.4 * thicknessVal;
+            } else {
+              proj = (colOffset * 0.4 * dirVec.x + rowIdx * 0.8 * dirVec.y) * thicknessVal;
+            }
+            const wave = Math.sin(proj + phase * 2.0 * Math.PI) * 0.5 + 0.5;
+            const col1 = hexToRgb(gradientStops[0]?.color || '#FF1929');
+            const col2 = hexToRgb(gradientStops[1]?.color || '#148AC4');
+            r = Math.floor(col1[0] * wave + col2[0] * (1.0 - wave));
+            g = Math.floor(col1[1] * wave + col2[1] * (1.0 - wave));
+            b = Math.floor(col1[2] * wave + col2[2] * (1.0 - wave));
+          } else if (currentEffect === 'current') {
+            const half = Math.max(1, period / 2);
+            const phase = (t % half) / half;
+            const pulseCol = phase * 16.0;
+            const pulseWidth = Math.max(0.1, 1.6 * thicknessVal);
+            const diff = Math.abs(colOffset - pulseCol);
+            if (diff < pulseWidth) {
+              r = 255; g = 255; b = 255;
+            } else {
+              const col = hexToRgb(gradientStops[0]?.color || '#00F0FF');
+              r = Math.floor(col[0] * 0.15);
+              g = Math.floor(col[1] * 0.15);
+              b = Math.floor(col[2] * 0.15);
+            }
+          } else if (currentEffect === 'raindrop') {
+            const seed = (Math.round(colOffset) * 23 + rowIdx * 47) % 80;
+            const dropPhase = ((t + seed * 80) % period) / period;
+            const dropGlow = Math.pow(Math.max(0, 1.0 - dropPhase * 4.0), 2.0);
+            const col = hexToRgb(gradientStops[0]?.color || '#00F0FF');
+            const intensity = 0.15 + 0.85 * dropGlow;
+            r = Math.floor(col[0] * intensity);
+            g = Math.floor(col[1] * intensity);
+            b = Math.floor(col[2] * intensity);
           }
 
-          // 亮度调整
-          r = Math.min(255, Math.floor(r * brightnessVal + 244 * (1 - brightnessVal)));
-          g = Math.min(255, Math.floor(g * brightnessVal + 246 * (1 - brightnessVal)));
-          b = Math.min(255, Math.floor(b * brightnessVal + 249 * (1 - brightnessVal)));
+          // 亮度调整：真实光学乘法缩放，关闭时降至纯黑 [0, 0, 0]
+          const effectiveBrightness = isMasterLightOn ? Math.max(0, Math.min(1.0, brightnessVal)) : 0;
+          r = Math.min(255, Math.max(0, Math.round(r * effectiveBrightness)));
+          g = Math.min(255, Math.max(0, Math.round(g * effectiveBrightness)));
+          b = Math.min(255, Math.max(0, Math.round(b * effectiveBrightness)));
 
           el.style.backgroundColor = `rgb(${r}, ${g}, ${b})`;
 
@@ -326,7 +343,7 @@ export default function KeyboardVisualizer({
       });
 
       animRef.current.activeRipples = animRef.current.activeRipples.filter(
-        (rip) => (t - rip.startTime) * rip.speed <= rip.maxRadius
+        (rip) => (t - rip.startTime) * rippleSpeed <= 20.0
       );
 
       animId = requestAnimationFrame(renderFrame);

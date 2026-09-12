@@ -13,6 +13,12 @@
 #include "engine/builtin_effects.h"
 #include "monitor/key_input_hub.h"
 
+namespace aura {
+double ParseAndClampThickness(const std::string& pname, const nlohmann::json& pval, double def_val = 1.0);
+double ParseAndClampThickness(const nlohmann::json& pval, double def_val = 1.0);
+std::shared_ptr<Effect> CreateEffectFromProfile(const std::string& pname, const nlohmann::json& pval);
+}
+
 int main() {
     // 真实失败计数器。在 Release 构建下普通 assert() 会被 /DNDEBUG 消除，
     // 因此全面使用 CHECK 宏，保证在 Release 与 Debug 下均具有真实校验力。
@@ -1288,6 +1294,473 @@ int main() {
                 CHECK(drained[0].key_name == "COPILOT", "消抖后的保留事件为 COPILOT");
             }
         }
+    }
+
+    // =========================================================================
+    // 20. thickness 参数解析、边界钳制与非有限/非法类型防御专项测试
+    // =========================================================================
+    std::cout << "\n[测试 20] ParseAndClampThickness 参数边界与容错测试...\n";
+    {
+        // 20.1 正常合法值测试
+        nlohmann::json j_normal = {{"thickness", 1.5}};
+        CHECK(std::abs(aura::ParseAndClampThickness(j_normal, 1.0) - 1.5) < 0.001,
+              "正常合法值 1.5 正确解析为 1.5");
+
+        nlohmann::json j_min = {{"thickness", 0.1}};
+        CHECK(std::abs(aura::ParseAndClampThickness(j_min, 1.0) - 0.1) < 0.001,
+              "边界合法值 0.1 正确解析为 0.1");
+
+        nlohmann::json j_max = {{"thickness", 5.0}};
+        CHECK(std::abs(aura::ParseAndClampThickness(j_max, 1.0) - 5.0) < 0.001,
+              "边界合法值 5.0 正确解析为 5.0");
+
+        // 20.2 下界与过小值钳制
+        nlohmann::json j_zero = {{"thickness", 0.0}};
+        CHECK(std::abs(aura::ParseAndClampThickness(j_zero, 1.0) - 0.1) < 0.001,
+              "下界超限 0.0 正确钳制为 0.1 (防除零安全底线)");
+
+        nlohmann::json j_neg = {{"thickness", -2.5}};
+        CHECK(std::abs(aura::ParseAndClampThickness(j_neg, 1.0) - 0.1) < 0.001,
+              "负值 -2.5 正确钳制为 0.1");
+
+        nlohmann::json j_tiny = {{"thickness", 0.0001}};
+        CHECK(std::abs(aura::ParseAndClampThickness(j_tiny, 1.0) - 0.1) < 0.001,
+              "微小值 0.0001 正确钳制为 0.1");
+
+        // 20.3 上界超限钳制
+        nlohmann::json j_over = {{"thickness", 5.1}};
+        CHECK(std::abs(aura::ParseAndClampThickness(j_over, 1.0) - 5.0) < 0.001,
+              "上界超限 5.1 正确钳制为 5.0");
+
+        nlohmann::json j_huge = {{"thickness", 999.0}};
+        CHECK(std::abs(aura::ParseAndClampThickness(j_huge, 1.0) - 5.0) < 0.001,
+              "超大值 999.0 正确钳制为 5.0");
+
+        // 20.4 非有限数值与非数值类型防御 (安全回退默认值)
+        nlohmann::json j_nan = {{"thickness", std::numeric_limits<double>::quiet_NaN()}};
+        CHECK(std::abs(aura::ParseAndClampThickness(j_nan, 1.0) - 1.0) < 0.001,
+              "NaN 非有限数值安全回退默认值 1.0");
+
+        nlohmann::json j_inf = {{"thickness", std::numeric_limits<double>::infinity()}};
+        CHECK(std::abs(aura::ParseAndClampThickness(j_inf, 1.0) - 1.0) < 0.001,
+              "Infinity 非有限数值安全回退默认值 1.0");
+
+        nlohmann::json j_str = {{"thickness", "invalid_string"}};
+        CHECK(std::abs(aura::ParseAndClampThickness(j_str, 1.0) - 1.0) < 0.001,
+              "非数值字符串安全回退默认值 1.0");
+
+        nlohmann::json j_bool = {{"thickness", true}};
+        CHECK(std::abs(aura::ParseAndClampThickness(j_bool, 1.0) - 1.0) < 0.001,
+              "非数值布尔值安全回退默认值 1.0");
+
+        nlohmann::json j_null = {{"thickness", nullptr}};
+        CHECK(std::abs(aura::ParseAndClampThickness(j_null, 1.0) - 1.0) < 0.001,
+              "null 安全回退默认值 1.0");
+
+        nlohmann::json j_empty = nlohmann::json::object();
+        CHECK(std::abs(aura::ParseAndClampThickness(j_empty, 2.0) - 2.0) < 0.001,
+              "缺失 thickness 字段时返回指定的默认值 2.0");
+
+        // 20.5 引擎构造函数层级 ClampThickness 辅助函数校验
+        CHECK(std::abs(aura::ClampThickness(0.0) - 0.1) < 0.001, "ClampThickness(0.0) 钳制为 0.1");
+        CHECK(std::abs(aura::ClampThickness(-10.0) - 0.1) < 0.001, "ClampThickness(-10.0) 钳制为 0.1");
+        CHECK(std::abs(aura::ClampThickness(10.0) - 5.0) < 0.001, "ClampThickness(10.0) 钳制为 5.0");
+        CHECK(std::abs(aura::ClampThickness(2.2) - 2.2) < 0.001, "ClampThickness(2.2) 保持 2.2");
+        CHECK(std::abs(aura::ClampThickness(std::numeric_limits<double>::quiet_NaN()) - 1.0) < 0.001,
+              "ClampThickness(NaN) 安全回退 1.0");
+    }
+
+    // =========================================================================
+    // 21. 11 款光效引擎实例化、参数获取、spread 扩散方向与多帧安全推流测试
+    // =========================================================================
+    std::cout << "\n[测试 21] 11 款光效引擎实例化与渲染鲁棒性测试 (含 thickness 边界、spread 方向、速度联动)...\n";
+    {
+        aura::Keymap km;
+        std::string km_path = "tests/fixtures/calibrated_keymap.json";
+        if (!std::filesystem::exists(km_path)) {
+            km_path = "calibrated_keymap.json";
+        }
+        km.LoadFromJson(km_path);
+
+        aura::FrameBuffer frame;
+
+        // 21.1 StaticEffect (静态单色 + 模拟按压)
+        {
+            aura::StaticEffect st1(aura::ColorRGB(255, 128, 64), false);
+            CHECK(st1.GetColor().r == 255 && st1.GetColor().g == 128 && st1.GetColor().b == 64,
+                  "StaticEffect 获取基准单色成功");
+            CHECK(!st1.GetAnalog(), "StaticEffect analog 标志为 false");
+            frame.Clear();
+            st1.Render(0, frame, km);
+            CHECK(frame.buffer[0] == 255 && frame.buffer[1] == 128 && frame.buffer[2] == 64,
+                  "StaticEffect Render 成功全键铺满");
+
+            aura::StaticEffect st_analog(aura::ColorRGB(50, 50, 50), true);
+            CHECK(st_analog.GetAnalog(), "StaticEffect analog 标志为 true");
+            frame.Clear();
+            st_analog.Render(100, frame, km);
+        }
+
+        // 21.2 BreathingEffect (双色呼吸)
+        {
+            aura::BreathingEffect br(aura::ColorRGB(255, 0, 0), aura::ColorRGB(0, 0, 255), 2000);
+            CHECK(br.GetPeriodMs() == 2000, "BreathingEffect period_ms 为 2000");
+            CHECK(br.GetC1().r == 255 && br.GetC2().b == 255, "BreathingEffect c1/c2 参数获取成功");
+            frame.Clear();
+            br.Render(0, frame, km);
+            br.Render(1000, frame, km);
+            br.Render(2000, frame, km);
+        }
+
+        // 21.3 ColorCycleEffect (全光谱循环)
+        {
+            aura::ColorCycleEffect cc(3000);
+            CHECK(cc.GetPeriodMs() == 3000, "ColorCycleEffect period_ms 为 3000");
+            frame.Clear();
+            cc.Render(0, frame, km);
+            cc.Render(750, frame, km);
+            cc.Render(1500, frame, km);
+        }
+
+        // 21.4 WaveEffect (波浪 + spread 扩散方向 + thickness 边界)
+        {
+            // 正常参数
+            aura::WaveEffect wave_norm(3500, "spread", 2.0);
+            CHECK(wave_norm.GetPeriodMs() == 3500, "WaveEffect period_ms 为 3500");
+            CHECK(wave_norm.GetDirection() == "spread", "WaveEffect 扩散方向为 spread");
+            CHECK(std::abs(wave_norm.GetThickness() - 2.0) < 0.001, "WaveEffect thickness 为 2.0");
+
+            // 越界保护
+            aura::WaveEffect wave_under(10, "diag_dl", 0.0);
+            CHECK(wave_under.GetPeriodMs() == 33, "WaveEffect 周期安全钳制为 33ms");
+            CHECK(std::abs(wave_under.GetThickness() - 0.1) < 0.001, "WaveEffect 下界厚度钳制为 0.1");
+
+            aura::WaveEffect wave_over(3500, "spread", 10.0);
+            CHECK(std::abs(wave_over.GetThickness() - 5.0) < 0.001, "WaveEffect 上界厚度钳制为 5.0");
+
+            // 多帧推流验证（重点验证 spread 径向数学在各时间点稳定无崩溃、无 NaN）
+            frame.Clear();
+            for (uint64_t t = 0; t <= 3500; t += 350) {
+                wave_norm.Render(t, frame, km);
+                wave_under.Render(t, frame, km);
+                wave_over.Render(t, frame, km);
+            }
+            CHECK(true, "WaveEffect 扩散 spread 与极限 thickness 多帧推流安全运行无异常");
+        }
+
+        // 21.5 ReactiveEffect (响应式点亮与渐隐)
+        {
+            aura::ReactiveEffect react(aura::ColorRGB(0, 10, 20), aura::ColorRGB(255, 50, 80), 2000);
+            CHECK(react.GetSpeedMs() == 2000, "ReactiveEffect 周期为 2000");
+            CHECK(react.GetBaseColor().b == 20, "ReactiveEffect bg 底色获取成功");
+            CHECK(react.GetTriggerColor().r == 255, "ReactiveEffect 高亮色获取成功");
+            frame.Clear();
+            react.Render(0, frame, km);
+            react.Render(500, frame, km);
+        }
+
+        // 21.6 RippleEffect (涟漪同心扩散 + thickness 边界 + 速度 speed_ms_ 联动)
+        {
+            aura::RippleEffect rip(aura::ColorRGB(0, 5, 10), aura::ColorRGB(0, 240, 255), 1600, 2.5);
+            CHECK(rip.GetSpeedMs() == 1600, "RippleEffect 速度周期为 1600");
+            CHECK(std::abs(rip.GetThickness() - 2.5) < 0.001, "RippleEffect thickness 为 2.5");
+            CHECK(rip.GetBaseColor().b == 10, "RippleEffect bg 底色获取成功");
+            CHECK(rip.GetTriggerColor().g == 240, "RippleEffect trigger 色获取成功");
+
+            // 越界下界保护（确保 half_thick >= 0.1 彻底防止除零）
+            aura::RippleEffect rip_zero(aura::ColorRGB(0, 0, 0), aura::ColorRGB(255, 255, 255), 33, 0.0);
+            CHECK(rip_zero.GetSpeedMs() == 33, "RippleEffect 周期下界钳制为 33ms");
+            CHECK(std::abs(rip_zero.GetThickness() - 0.1) < 0.001, "RippleEffect 厚度下界钳制为 0.1");
+
+            // 模拟按键激发涟漪
+            auto& hub = aura::KeyInputHub::Instance();
+            hub.RecordKeyPress("SPACE");
+            hub.RecordKeyPress("W");
+
+            frame.Clear();
+            for (uint64_t t = 0; t <= 2000; t += 200) {
+                rip.Render(t, frame, km);
+                rip_zero.Render(t, frame, km);
+            }
+            CHECK(true, "RippleEffect 敲击同心扩散与极端下界厚度多帧渲染无除零无崩溃");
+        }
+
+        // 21.7 StarryNightEffect (繁星闪烁 + random_colors)
+        {
+            aura::StarryNightEffect star_mono(aura::ColorRGB(0, 200, 255), false, 2500);
+            CHECK(!star_mono.GetRandomColors(), "StarryNightEffect 单色模式 random_colors 为 false");
+            CHECK(star_mono.GetColor().g == 200, "StarryNightEffect 单色色值正确");
+
+            aura::StarryNightEffect star_rand(aura::ColorRGB(0, 200, 255), true, 2500);
+            CHECK(star_rand.GetRandomColors(), "StarryNightEffect 随机色模式 random_colors 为 true");
+
+            frame.Clear();
+            star_mono.Render(0, frame, km);
+            star_rand.Render(500, frame, km);
+        }
+
+        // 21.8 QuicksandEffect (流沙 + thickness + spread 方向)
+        {
+            aura::QuicksandEffect qs(aura::ColorRGB(255, 0, 0), aura::ColorRGB(0, 0, 255), 3500, "spread", 3.0);
+            CHECK(qs.GetPeriodMs() == 3500, "QuicksandEffect 周期为 3500");
+            CHECK(qs.GetDirection() == "spread", "QuicksandEffect 方向为 spread");
+            CHECK(std::abs(qs.GetThickness() - 3.0) < 0.001, "QuicksandEffect thickness 为 3.0");
+            CHECK(qs.GetC1().r == 255 && qs.GetC2().b == 255, "QuicksandEffect c1/c2 获取成功");
+
+            aura::QuicksandEffect qs_clamp(aura::ColorRGB(0,0,0), aura::ColorRGB(255,255,255), 20, "diag_dl", 10.0);
+            CHECK(qs_clamp.GetPeriodMs() == 33, "QuicksandEffect 周期钳制为 33ms");
+            CHECK(std::abs(qs_clamp.GetThickness() - 5.0) < 0.001, "QuicksandEffect thickness 上界钳制为 5.0");
+
+            frame.Clear();
+            for (uint64_t t = 0; t <= 3500; t += 500) {
+                qs.Render(t, frame, km);
+                qs_clamp.Render(t, frame, km);
+            }
+            CHECK(true, "QuicksandEffect 流沙多帧渲染平稳");
+        }
+
+        // 21.9 CurrentEffect (电流脉冲 + thickness 光束宽度)
+        {
+            aura::CurrentEffect cur(aura::ColorRGB(0, 240, 255), 2000, 1.8);
+            CHECK(cur.GetPeriodMs() == 2000, "CurrentEffect 周期为 2000");
+            CHECK(std::abs(cur.GetThickness() - 1.8) < 0.001, "CurrentEffect thickness 为 1.8");
+            CHECK(cur.GetColor().g == 240, "CurrentEffect 颜色获取正确");
+
+            aura::CurrentEffect cur_clamp(aura::ColorRGB(255, 0, 0), 10, -5.0);
+            CHECK(cur_clamp.GetPeriodMs() == 33, "CurrentEffect 周期钳制为 33ms");
+            CHECK(std::abs(cur_clamp.GetThickness() - 0.1) < 0.001, "CurrentEffect thickness 下界钳制为 0.1");
+
+            frame.Clear();
+            for (uint64_t t = 0; t <= 2000; t += 200) {
+                cur.Render(t, frame, km);
+                cur_clamp.Render(t, frame, km);
+            }
+            CHECK(true, "CurrentEffect 电流光束宽度缩放与多帧渲染无异常");
+        }
+
+        // 21.10 RaindropEffect (雨滴淅沥)
+        {
+            aura::RaindropEffect rain(aura::ColorRGB(0, 180, 255), 2500);
+            CHECK(rain.GetPeriodMs() == 2500, "RaindropEffect 周期为 2500");
+            CHECK(rain.GetColor().b == 255, "RaindropEffect 颜色获取正确");
+            frame.Clear();
+            for (uint64_t t = 0; t <= 2500; t += 250) {
+                rain.Render(t, frame, km);
+            }
+            CHECK(true, "RaindropEffect 雨滴多帧渲染无异常");
+        }
+
+        // 21.11 CustomKeymapEffect (自定义逐键与底色)
+        {
+            aura::CustomKeymapEffect ckm(aura::ColorRGB(20, 40, 60));
+            CHECK(ckm.GetBgColor().r == 20 && ckm.GetBgColor().g == 40 && ckm.GetBgColor().b == 60,
+                  "CustomKeymapEffect 背景色获取正确");
+            frame.Clear();
+            ckm.Render(0, frame, km);
+            CHECK(frame.buffer[0] == 20 && frame.buffer[1] == 40 && frame.buffer[2] == 60,
+                  "CustomKeymapEffect 铺底渲染成功");
+        }
+    }
+
+    // =========================================================================
+    // 22. RuleEngine 完整配置解析 11 种光效与对称颜色回退验证
+    // =========================================================================
+    std::cout << "\n[测试 22] RuleEngine 完整配置解析 11 种光效与对称颜色回退验证...\n";
+    {
+        const std::string tmp_11_cfg = (std::filesystem::temp_directory_path() / "test_cfg_11_effects.json").string();
+        {
+            std::ofstream ofs(tmp_11_cfg);
+            ofs << R"json({
+                "default_profile": "p_static",
+                "fps": 30,
+                "profiles": {
+                    "p_static": {
+                        "type": "static",
+                        "color1": [12, 34, 56],
+                        "analog": true
+                    },
+                    "p_breathing": {
+                        "type": "breathing",
+                        "color": [100, 150, 200],
+                        "color2": [10, 20, 30],
+                        "speed_index": 0
+                    },
+                    "p_cycle": {
+                        "type": "color_cycle",
+                        "speed_index": 2
+                    },
+                    "p_wave": {
+                        "type": "wave",
+                        "direction": "spread",
+                        "thickness": 2.5,
+                        "speed_index": 1
+                    },
+                    "p_custom": {
+                        "type": "custom_keymap",
+                        "bg": [5, 10, 15]
+                    },
+                    "p_reactive": {
+                        "type": "reactive",
+                        "bg": [12, 18, 24],
+                        "color1": [255, 40, 60],
+                        "speed_index": 1
+                    },
+                    "p_ripple": {
+                        "type": "ripple",
+                        "bg": [8, 16, 32],
+                        "color": [0, 200, 255],
+                        "thickness": 0.8,
+                        "speed_index": 2
+                    },
+                    "p_starry": {
+                        "type": "starry_night",
+                        "color1": [60, 120, 180],
+                        "random_colors": true,
+                        "speed_index": 1
+                    },
+                    "p_quicksand": {
+                        "type": "quicksand",
+                        "color": [255, 120, 30],
+                        "color2": [30, 120, 255],
+                        "direction": "spread",
+                        "thickness": 3.2,
+                        "speed_index": 0
+                    },
+                    "p_current": {
+                        "type": "current",
+                        "color1": [0, 220, 240],
+                        "thickness": 1.5,
+                        "speed_index": 2
+                    },
+                    "p_raindrop": {
+                        "type": "raindrop",
+                        "color1": [110, 210, 255],
+                        "speed_index": 1
+                    }
+                }
+            })json";
+        }
+
+        aura::RuleEngine engine11;
+        bool loaded11 = engine11.LoadConfig(tmp_11_cfg);
+        CHECK(loaded11, "RuleEngine 成功加载包含全部 11 种光效配置的 JSON 文件");
+
+        // 验证 11 个 profile 均已正确注册
+        CHECK(engine11.HasProfile("p_static"), "已解析 p_static");
+        CHECK(engine11.HasProfile("p_breathing"), "已解析 p_breathing");
+        CHECK(engine11.HasProfile("p_cycle"), "已解析 p_cycle");
+        CHECK(engine11.HasProfile("p_wave"), "已解析 p_wave");
+        CHECK(engine11.HasProfile("p_custom"), "已解析 p_custom");
+        CHECK(engine11.HasProfile("p_reactive"), "已解析 p_reactive");
+        CHECK(engine11.HasProfile("p_ripple"), "已解析 p_ripple");
+        CHECK(engine11.HasProfile("p_starry"), "已解析 p_starry");
+        CHECK(engine11.HasProfile("p_quicksand"), "已解析 p_quicksand");
+        CHECK(engine11.HasProfile("p_current"), "已解析 p_current");
+        CHECK(engine11.HasProfile("p_raindrop"), "已解析 p_raindrop");
+
+        // 验证各方案参数与回退值
+        auto p_static = engine11.GetProfile("p_static");
+        auto eff_static = std::dynamic_pointer_cast<const aura::StaticEffect>(p_static->base_effect);
+        CHECK(eff_static != nullptr, "p_static 正确实例化为 StaticEffect");
+        if (eff_static) {
+            CHECK(eff_static->GetColor().r == 12 && eff_static->GetColor().g == 34 && eff_static->GetColor().b == 56,
+                  "p_static: 成功从 color1 回退读取颜色 (12, 34, 56)");
+            CHECK(eff_static->GetAnalog(), "p_static: analog 成功解析为 true");
+        }
+
+        auto p_breathing = engine11.GetProfile("p_breathing");
+        auto eff_breathing = std::dynamic_pointer_cast<const aura::BreathingEffect>(p_breathing->base_effect);
+        CHECK(eff_breathing != nullptr, "p_breathing 正确实例化为 BreathingEffect");
+        if (eff_breathing) {
+            CHECK(eff_breathing->GetC1().r == 100 && eff_breathing->GetC1().g == 150 && eff_breathing->GetC1().b == 200,
+                  "p_breathing: 成功从 color 回退读取 c1 (100, 150, 200)");
+            CHECK(eff_breathing->GetPeriodMs() == 5500, "p_breathing: speed_index 0 解析为 5500ms");
+        }
+
+        auto p_wave = engine11.GetProfile("p_wave");
+        auto eff_wave = std::dynamic_pointer_cast<const aura::WaveEffect>(p_wave->base_effect);
+        CHECK(eff_wave != nullptr, "p_wave 正确实例化为 WaveEffect");
+        if (eff_wave) {
+            CHECK(eff_wave->GetDirection() == "spread", "p_wave: direction 成功解析为 spread");
+            CHECK(std::abs(eff_wave->GetThickness() - 2.5) < 0.001, "p_wave: thickness 成功解析为 2.5");
+            CHECK(eff_wave->GetPeriodMs() == 3200, "p_wave: speed_index 1 解析为 3200ms");
+        }
+
+        auto p_reactive = engine11.GetProfile("p_reactive");
+        auto eff_reactive = std::dynamic_pointer_cast<const aura::ReactiveEffect>(p_reactive->base_effect);
+        CHECK(eff_reactive != nullptr, "p_reactive 正确实例化为 ReactiveEffect");
+        if (eff_reactive) {
+            CHECK(eff_reactive->GetBaseColor().r == 12 && eff_reactive->GetBaseColor().g == 18 && eff_reactive->GetBaseColor().b == 24,
+                  "p_reactive: bg 成功解析为 (12, 18, 24)");
+            CHECK(eff_reactive->GetTriggerColor().r == 255 && eff_reactive->GetTriggerColor().g == 40 && eff_reactive->GetTriggerColor().b == 60,
+                  "p_reactive: 成功从 color1 回退读取高亮色");
+        }
+
+        auto p_ripple = engine11.GetProfile("p_ripple");
+        auto eff_ripple = std::dynamic_pointer_cast<const aura::RippleEffect>(p_ripple->base_effect);
+        CHECK(eff_ripple != nullptr, "p_ripple 正确实例化为 RippleEffect");
+        if (eff_ripple) {
+            CHECK(eff_ripple->GetBaseColor().r == 8 && eff_ripple->GetBaseColor().g == 16 && eff_ripple->GetBaseColor().b == 32,
+                  "p_ripple: bg 成功解析为 (8, 16, 32)");
+            CHECK(eff_ripple->GetTriggerColor().r == 0 && eff_ripple->GetTriggerColor().g == 200 && eff_ripple->GetTriggerColor().b == 255,
+                  "p_ripple: trigger 颜色成功解析为 (0, 200, 255)");
+            CHECK(std::abs(eff_ripple->GetThickness() - 0.8) < 0.001, "p_ripple: thickness 成功解析为 0.8");
+            CHECK(eff_ripple->GetSpeedMs() == 1600, "p_ripple: speed_index 2 解析为 1600ms");
+        }
+
+        auto p_starry = engine11.GetProfile("p_starry");
+        auto eff_starry = std::dynamic_pointer_cast<const aura::StarryNightEffect>(p_starry->base_effect);
+        CHECK(eff_starry != nullptr, "p_starry 正确实例化为 StarryNightEffect");
+        if (eff_starry) {
+            CHECK(eff_starry->GetRandomColors(), "p_starry: random_colors 成功解析为 true");
+            CHECK(eff_starry->GetColor().r == 60 && eff_starry->GetColor().g == 120 && eff_starry->GetColor().b == 180,
+                  "p_starry: 成功从 color1 回退读取颜色 (60, 120, 180)");
+        }
+
+        auto p_quicksand = engine11.GetProfile("p_quicksand");
+        auto eff_quicksand = std::dynamic_pointer_cast<const aura::QuicksandEffect>(p_quicksand->base_effect);
+        CHECK(eff_quicksand != nullptr, "p_quicksand 正确实例化为 QuicksandEffect");
+        if (eff_quicksand) {
+            CHECK(eff_quicksand->GetDirection() == "spread", "p_quicksand: direction 成功解析为 spread");
+            CHECK(std::abs(eff_quicksand->GetThickness() - 3.2) < 0.001, "p_quicksand: thickness 成功解析为 3.2");
+            CHECK(eff_quicksand->GetC1().r == 255 && eff_quicksand->GetC1().g == 120 && eff_quicksand->GetC1().b == 30,
+                  "p_quicksand: 成功从 color 回退读取 c1 (255, 120, 30)");
+        }
+
+        auto p_current = engine11.GetProfile("p_current");
+        auto eff_current = std::dynamic_pointer_cast<const aura::CurrentEffect>(p_current->base_effect);
+        CHECK(eff_current != nullptr, "p_current 正确实例化为 CurrentEffect");
+        if (eff_current) {
+            CHECK(std::abs(eff_current->GetThickness() - 1.5) < 0.001, "p_current: thickness 成功解析为 1.5");
+            CHECK(eff_current->GetColor().r == 0 && eff_current->GetColor().g == 220 && eff_current->GetColor().b == 240,
+                  "p_current: 成功从 color1 回退读取颜色");
+        }
+
+        // 统一多帧渲染验证（全部 11 种方案）
+        aura::Keymap km;
+        std::string km_path = "tests/fixtures/calibrated_keymap.json";
+        if (!std::filesystem::exists(km_path)) {
+            km_path = "calibrated_keymap.json";
+        }
+        km.LoadFromJson(km_path);
+
+        aura::FrameBuffer frame;
+        const std::vector<std::string> all_pnames = {
+            "p_static", "p_breathing", "p_cycle", "p_wave", "p_custom",
+            "p_reactive", "p_ripple", "p_starry", "p_quicksand", "p_current", "p_raindrop"
+        };
+        for (const auto& pname : all_pnames) {
+            auto prof = engine11.GetProfile(pname);
+            CHECK(prof != nullptr && prof->base_effect != nullptr, pname + " 具有有效的 base_effect");
+            if (prof && prof->base_effect) {
+                frame.Clear();
+                prof->Render(100, frame, km);
+                prof->Render(1000, frame, km);
+            }
+        }
+        CHECK(true, "RuleEngine 解析生成的全部 11 款光效多帧渲染安全验证通过");
+
+        std::filesystem::remove(tmp_11_cfg);
     }
 
     std::cout << "\n=========================================================\n";

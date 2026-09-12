@@ -90,7 +90,137 @@ uint8_t ParseBrightness(const std::string& pname, const nlohmann::json& pval) {
     return static_cast<uint8_t>(std::clamp(static_cast<int>(std::round(v)), 0, 255));
 }
 
+ColorRGB ParseColorFromArray(const nlohmann::json& arr, const ColorRGB& def) {
+    if (!arr.is_array() || arr.size() < 3) return def;
+    if (!arr[0].is_number() || !arr[1].is_number() || !arr[2].is_number()) return def;
+    double r = arr[0].get<double>();
+    double g = arr[1].get<double>();
+    double b = arr[2].get<double>();
+    if (!std::isfinite(r) || !std::isfinite(g) || !std::isfinite(b)) return def;
+    return ColorRGB(
+        static_cast<uint8_t>(std::clamp(static_cast<int>(std::round(r)), 0, 255)),
+        static_cast<uint8_t>(std::clamp(static_cast<int>(std::round(g)), 0, 255)),
+        static_cast<uint8_t>(std::clamp(static_cast<int>(std::round(b)), 0, 255))
+    );
+}
+
+ColorRGB ParseColor(const nlohmann::json& pval, const std::string& primary_key, const std::string& fallback_key, const ColorRGB& def_color) {
+    if (pval.contains(primary_key)) {
+        return ParseColorFromArray(pval[primary_key], def_color);
+    }
+    if (!fallback_key.empty() && pval.contains(fallback_key)) {
+        return ParseColorFromArray(pval[fallback_key], def_color);
+    }
+    return def_color;
+}
+
+ColorRGB ParseBgColor(const nlohmann::json& pval, const ColorRGB& def_bg = ColorRGB(0, 0, 0)) {
+    if (pval.contains("bg")) {
+        return ParseColorFromArray(pval["bg"], def_bg);
+    }
+    if (pval.contains("background")) {
+        return ParseColorFromArray(pval["background"], def_bg);
+    }
+    return def_bg;
+}
+
 } // namespace
+
+double ParseAndClampThickness(const std::string& pname, const nlohmann::json& pval, double def_val = 1.0) {
+    if (!pval.contains("thickness")) return def_val;
+    const auto& tv = pval["thickness"];
+    if (!tv.is_number()) {
+        if (!pname.empty()) {
+            LOG_WARN("方案 '" << pname << "' 的 thickness 字段非数值 (" << tv.dump() << ")，已使用默认值 " << def_val);
+        }
+        return def_val;
+    }
+    double v = tv.get<double>();
+    if (!std::isfinite(v)) {
+        if (!pname.empty()) {
+            LOG_WARN("方案 '" << pname << "' 的 thickness 非有限数值 (" << tv.dump() << ")，已使用默认值 " << def_val);
+        }
+        return def_val;
+    }
+    if (v < 0.1) {
+        if (!pname.empty()) {
+            LOG_WARN("方案 '" << pname << "' 的 thickness 小于 0.1 (" << v << ")，已被钳制为 0.1");
+        }
+        return 0.1;
+    }
+    if (v > 5.0) {
+        if (!pname.empty()) {
+            LOG_WARN("方案 '" << pname << "' 的 thickness 超过 5.0 (" << v << ")，已被钳制为 5.0");
+        }
+        return 5.0;
+    }
+    return v;
+}
+
+double ParseAndClampThickness(const nlohmann::json& pval, double def_val = 1.0) {
+    return ParseAndClampThickness("", pval, def_val);
+}
+
+std::shared_ptr<Effect> CreateEffectFromProfile(const std::string& pname, const nlohmann::json& pval) {
+    std::string type = pval.value("type", "static");
+    if (type == "static") {
+        ColorRGB col = ParseColor(pval, "color", "color1", ColorRGB(0, 80, 200));
+        bool analog = pval.value("analog", false);
+        return std::make_shared<StaticEffect>(col, analog);
+    } else if (type == "breathing") {
+        ColorRGB c1 = ParseColor(pval, "color1", "color", ColorRGB(0, 100, 255));
+        ColorRGB c2 = ParseColor(pval, "color2", "", ColorRGB(0, 10, 50));
+        uint64_t period = ParseAndClampPeriod(pname, pval, 3000);
+        return std::make_shared<BreathingEffect>(c1, c2, period);
+    } else if (type == "color_cycle") {
+        uint64_t period = ParseAndClampPeriod(pname, pval, 3500);
+        return std::make_shared<ColorCycleEffect>(period);
+    } else if (type == "wave") {
+        uint64_t period = ParseAndClampPeriod(pname, pval, 3500);
+        std::string dir = pval.value("direction", "diag_dl");
+        double thickness = ParseAndClampThickness(pname, pval, 1.0);
+        return std::make_shared<WaveEffect>(period, dir, thickness);
+    } else if (type == "custom_keymap") {
+        ColorRGB bg = ParseBgColor(pval, ColorRGB(0, 0, 0));
+        return std::make_shared<CustomKeymapEffect>(bg);
+    } else if (type == "reactive") {
+        ColorRGB bg = ParseBgColor(pval, ColorRGB(0, 5, 15));
+        ColorRGB c1 = ParseColor(pval, "color", "color1", ColorRGB(255, 25, 41));
+        uint64_t period = ParseAndClampPeriod(pname, pval, 2500);
+        return std::make_shared<ReactiveEffect>(bg, c1, period);
+    } else if (type == "ripple") {
+        ColorRGB bg = ParseBgColor(pval, ColorRGB(0, 5, 15));
+        ColorRGB c1 = ParseColor(pval, "color", "color1", ColorRGB(0, 240, 255));
+        uint64_t period = ParseAndClampPeriod(pname, pval, 2500);
+        double thickness = ParseAndClampThickness(pname, pval, 1.0);
+        return std::make_shared<RippleEffect>(bg, c1, period, thickness);
+    } else if (type == "starry_night") {
+        ColorRGB col = ParseColor(pval, "color", "color1", ColorRGB(0, 240, 255));
+        bool random_colors = pval.value("random_colors", false);
+        uint64_t period = ParseAndClampPeriod(pname, pval, 2500);
+        return std::make_shared<StarryNightEffect>(col, random_colors, period);
+    } else if (type == "quicksand") {
+        ColorRGB c1 = ParseColor(pval, "color1", "color", ColorRGB(255, 25, 41));
+        ColorRGB c2 = ParseColor(pval, "color2", "", ColorRGB(20, 138, 196));
+        uint64_t period = ParseAndClampPeriod(pname, pval, 3500);
+        std::string dir = pval.value("direction", "diag_dl");
+        double thickness = ParseAndClampThickness(pname, pval, 1.0);
+        return std::make_shared<QuicksandEffect>(c1, c2, period, dir, thickness);
+    } else if (type == "current") {
+        ColorRGB col = ParseColor(pval, "color", "color1", ColorRGB(0, 240, 255));
+        uint64_t period = ParseAndClampPeriod(pname, pval, 2000);
+        double thickness = ParseAndClampThickness(pname, pval, 1.0);
+        return std::make_shared<CurrentEffect>(col, period, thickness);
+    } else if (type == "raindrop") {
+        ColorRGB col = ParseColor(pval, "color", "color1", ColorRGB(0, 240, 255));
+        uint64_t period = ParseAndClampPeriod(pname, pval, 2500);
+        return std::make_shared<RaindropEffect>(col, period);
+    } else {
+        LOG_ERROR("方案 '" << pname << "' 配置了未知的效果类型: '" << type 
+                  << "' (支持的有效类型: static, breathing, color_cycle, wave, custom_keymap, reactive, ripple, starry_night, quicksand, current, raindrop)");
+        return nullptr;
+    }
+}
 
 std::string RuleEngine::ToLower(const std::string& s) {
     std::string res = s;
@@ -255,109 +385,11 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
                 }
                 prof->fps = prof_fps;
 
-                std::string type = pval.value("type", "static");
-                if (type == "static") {
-                    ColorRGB col(0, 80, 200);
-                    if (pval.contains("color") && pval["color"].is_array() && pval["color"].size() >= 3) {
-                        col = ColorRGB(pval["color"][0], pval["color"][1], pval["color"][2]);
-                    }
-                    bool analog = pval.value("analog", false);
-                    prof->base_effect = std::make_shared<StaticEffect>(col, analog);
-                } else if (type == "breathing") {
-                    ColorRGB c1(0, 100, 255);
-                    ColorRGB c2(0, 10, 50);
-                    uint64_t period = ParseAndClampPeriod(pname, pval, 3000);
-                    if (pval.contains("color1") && pval["color1"].is_array() && pval["color1"].size() >= 3) {
-                        c1 = ColorRGB(pval["color1"][0], pval["color1"][1], pval["color1"][2]);
-                    }
-                    if (pval.contains("color2") && pval["color2"].is_array() && pval["color2"].size() >= 3) {
-                        c2 = ColorRGB(pval["color2"][0], pval["color2"][1], pval["color2"][2]);
-                    }
-                    prof->base_effect = std::make_shared<BreathingEffect>(c1, c2, period);
-                } else if (type == "color_cycle") {
-                    uint64_t period = ParseAndClampPeriod(pname, pval, 3500);
-                    prof->base_effect = std::make_shared<ColorCycleEffect>(period);
-                } else if (type == "wave") {
-                    uint64_t period = ParseAndClampPeriod(pname, pval, 3500);
-                    std::string dir = pval.value("direction", "diag_dl");
-                    prof->base_effect = std::make_shared<WaveEffect>(period, dir);
-                } else if (type == "custom_keymap") {
-                    ColorRGB bg(0, 0, 0);
-                    if (pval.contains("bg") && pval["bg"].is_array() && pval["bg"].size() >= 3) {
-                        bg = ColorRGB(pval["bg"][0], pval["bg"][1], pval["bg"][2]);
-                    }
-                    prof->base_effect = std::make_shared<CustomKeymapEffect>(bg);
-                } else if (type == "reactive") {
-                    ColorRGB bg(0, 5, 15);
-                    ColorRGB c1(255, 25, 41);
-                    uint64_t period = ParseAndClampPeriod(pname, pval, 2500);
-                    if (pval.contains("bg") && pval["bg"].is_array() && pval["bg"].size() >= 3) {
-                        bg = ColorRGB(pval["bg"][0], pval["bg"][1], pval["bg"][2]);
-                    }
-                    if (pval.contains("color") && pval["color"].is_array() && pval["color"].size() >= 3) {
-                        c1 = ColorRGB(pval["color"][0], pval["color"][1], pval["color"][2]);
-                    } else if (pval.contains("color1") && pval["color1"].is_array() && pval["color1"].size() >= 3) {
-                        c1 = ColorRGB(pval["color1"][0], pval["color1"][1], pval["color1"][2]);
-                    }
-                    prof->base_effect = std::make_shared<ReactiveEffect>(bg, c1, period);
-                } else if (type == "ripple") {
-                    ColorRGB bg(0, 5, 15);
-                    ColorRGB c1(0, 240, 255);
-                    uint64_t period = ParseAndClampPeriod(pname, pval, 2500);
-                    if (pval.contains("bg") && pval["bg"].is_array() && pval["bg"].size() >= 3) {
-                        bg = ColorRGB(pval["bg"][0], pval["bg"][1], pval["bg"][2]);
-                    }
-                    if (pval.contains("color") && pval["color"].is_array() && pval["color"].size() >= 3) {
-                        c1 = ColorRGB(pval["color"][0], pval["color"][1], pval["color"][2]);
-                    } else if (pval.contains("color1") && pval["color1"].is_array() && pval["color1"].size() >= 3) {
-                        c1 = ColorRGB(pval["color1"][0], pval["color1"][1], pval["color1"][2]);
-                    }
-                    prof->base_effect = std::make_shared<RippleEffect>(bg, c1, period);
-                } else if (type == "starry_night") {
-                    ColorRGB col(0, 240, 255);
-                    if (pval.contains("color") && pval["color"].is_array() && pval["color"].size() >= 3) {
-                        col = ColorRGB(pval["color"][0], pval["color"][1], pval["color"][2]);
-                    } else if (pval.contains("color1") && pval["color1"].is_array() && pval["color1"].size() >= 3) {
-                        col = ColorRGB(pval["color1"][0], pval["color1"][1], pval["color1"][2]);
-                    }
-                    bool random_colors = pval.value("random_colors", false);
-                    uint64_t period = ParseAndClampPeriod(pname, pval, 2500);
-                    prof->base_effect = std::make_shared<StarryNightEffect>(col, random_colors, period);
-                } else if (type == "quicksand") {
-                    ColorRGB c1(255, 25, 41);
-                    ColorRGB c2(20, 138, 196);
-                    uint64_t period = ParseAndClampPeriod(pname, pval, 3500);
-                    std::string dir = pval.value("direction", "diag_dl");
-                    if (pval.contains("color1") && pval["color1"].is_array() && pval["color1"].size() >= 3) {
-                        c1 = ColorRGB(pval["color1"][0], pval["color1"][1], pval["color1"][2]);
-                    }
-                    if (pval.contains("color2") && pval["color2"].is_array() && pval["color2"].size() >= 3) {
-                        c2 = ColorRGB(pval["color2"][0], pval["color2"][1], pval["color2"][2]);
-                    }
-                    prof->base_effect = std::make_shared<QuicksandEffect>(c1, c2, period, dir);
-                } else if (type == "current") {
-                    ColorRGB col(0, 240, 255);
-                    if (pval.contains("color") && pval["color"].is_array() && pval["color"].size() >= 3) {
-                        col = ColorRGB(pval["color"][0], pval["color"][1], pval["color"][2]);
-                    } else if (pval.contains("color1") && pval["color1"].is_array() && pval["color1"].size() >= 3) {
-                        col = ColorRGB(pval["color1"][0], pval["color1"][1], pval["color1"][2]);
-                    }
-                    uint64_t period = ParseAndClampPeriod(pname, pval, 2000);
-                    prof->base_effect = std::make_shared<CurrentEffect>(col, period);
-                } else if (type == "raindrop") {
-                    ColorRGB col(0, 240, 255);
-                    if (pval.contains("color") && pval["color"].is_array() && pval["color"].size() >= 3) {
-                        col = ColorRGB(pval["color"][0], pval["color"][1], pval["color"][2]);
-                    } else if (pval.contains("color1") && pval["color1"].is_array() && pval["color1"].size() >= 3) {
-                        col = ColorRGB(pval["color1"][0], pval["color1"][1], pval["color1"][2]);
-                    }
-                    uint64_t period = ParseAndClampPeriod(pname, pval, 2500);
-                    prof->base_effect = std::make_shared<RaindropEffect>(col, period);
-                } else {
-                    LOG_ERROR("方案 '" << pname << "' 配置了未知的效果类型: '" << type 
-                              << "' (支持的有效类型: static, breathing, color_cycle, wave, custom_keymap, reactive, ripple, starry_night, quicksand, current, raindrop)");
+                auto effect = CreateEffectFromProfile(pname, pval);
+                if (!effect) {
                     valid = false;
                 }
+                prof->base_effect = effect;
 
                 // Parse key overrides
                 if (pval.contains("keys") && pval["keys"].is_object()) {

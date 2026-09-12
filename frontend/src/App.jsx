@@ -59,7 +59,27 @@ export default function App() {
     setCurrentEffect(profileData.type || 'static');
     setIsAnalogEnabled(profileData.analog === true);
 
-    if (profileData.direction) setCurrentDirection(profileData.direction);
+    if (profileData.direction) {
+      setCurrentDirection(profileData.direction);
+    } else {
+      setCurrentDirection('diag_dl');
+    }
+
+    if (typeof profileData.thickness === 'number' && Number.isFinite(profileData.thickness)) {
+      setThicknessVal(Math.max(0.1, Math.min(5.0, profileData.thickness)));
+    } else {
+      setThicknessVal(1.0);
+    }
+
+    setIsStarryRandom(Boolean(profileData.random_colors));
+
+    if (profileData.bg) {
+      setBgColor(rgbToHex(profileData.bg));
+    } else if (profileData.type === 'reactive' || profileData.type === 'ripple') {
+      setBgColor(rgbToHex([0, 5, 15]));
+    } else {
+      setBgColor('#000000');
+    }
 
     if (typeof profileData.brightness === 'number' && Number.isFinite(profileData.brightness)) {
       const b = profileData.brightness > 1.0 ? profileData.brightness / 255.0 : profileData.brightness;
@@ -75,6 +95,8 @@ export default function App() {
       if (profileData.period_ms > 4500) setSpeedIndex(0);
       else if (profileData.period_ms > 2400) setSpeedIndex(1);
       else setSpeedIndex(2);
+    } else {
+      setSpeedIndex(1);
     }
 
     if (profileData.color || profileData.color1) {
@@ -86,10 +108,6 @@ export default function App() {
       ];
       setGradientStops(nextStops);
       setSelectedStopId(1);
-    }
-
-    if (profileData.bg) {
-      setBgColor(rgbToHex(profileData.bg));
     }
 
     if (typeof profileData.fps === 'number' && Number.isFinite(profileData.fps)) {
@@ -214,7 +232,7 @@ export default function App() {
       if (activeTab === 'perkey') {
         prof.type = 'custom_keymap';
         prof.bg = hexToRgb(bgColor);
-        prof.brightness = brightnessVal;
+        prof.brightness = isMasterLightOn ? brightnessVal : 0;
       } else {
         prof.type = currentEffect;
         prof.analog = currentEffect === 'static' ? isAnalogEnabled : false;
@@ -232,8 +250,14 @@ export default function App() {
           prof.color2 = hexToRgb(gradientStops[1].color);
         }
 
-        if (currentEffect === 'reactive' || currentEffect === 'ripple' || currentEffect === 'static') {
-          prof.bg = [0, 0, 0];
+        if (currentEffect === 'starry_night') {
+          prof.random_colors = Boolean(isStarryRandom);
+        } else {
+          delete prof.random_colors;
+        }
+
+        if (['reactive', 'ripple', 'custom_keymap', 'static'].includes(currentEffect)) {
+          prof.bg = hexToRgb(bgColor);
         } else {
           delete prof.bg;
         }
@@ -255,6 +279,7 @@ export default function App() {
     brightnessVal,
     currentDirection,
     thicknessVal,
+    isStarryRandom,
     speedIndex,
     gradientStops,
     bgColor,
@@ -275,6 +300,7 @@ export default function App() {
     speedIndex,
     currentDirection,
     thicknessVal,
+    isStarryRandom,
     gradientStops,
     bgColor,
     queueAutoSync
@@ -538,6 +564,9 @@ export default function App() {
                   setIsStarryRandom={setIsStarryRandom}
                   fpsVal={fpsVal}
                   setFpsVal={setFpsVal}
+                  bgColor={bgColor}
+                  setBgColor={setBgColor}
+                  setActiveTab={setActiveTab}
                 />
               )}
 
