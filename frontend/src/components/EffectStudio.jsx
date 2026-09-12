@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import * as Blockly from 'blockly/core';
-import 'blockly/blocks';
+import Blockly, { loadSafeWorkspaceJson } from '../blockly/index.js';
 import { registerCustomBlocks } from '../blockly/customBlocks';
 import { DEFAULT_INJECT_OPTIONS } from '../blockly/theme';
 import { EFFECT_STUDIO_TOOLBOX } from '../blockly/toolboxes';
@@ -66,11 +65,7 @@ export default function EffectStudio({
     // 默认加载第一个样例模板
     const defaultPreset = EFFECT_PRESETS[0];
     if (defaultPreset?.blocklyJson) {
-      try {
-        Blockly.serialization.workspaces.load(defaultPreset.blocklyJson, ws);
-      } catch (err) {
-        console.warn('Failed to load default effect preset:', err);
-      }
+      loadSafeWorkspaceJson(defaultPreset.blocklyJson, ws);
     }
 
     const onWorkspaceChange = () => {
@@ -157,7 +152,7 @@ export default function EffectStudio({
   const handleLoadPreset = (preset) => {
     if (!workspaceRef.current || !preset.blocklyJson) return;
     workspaceRef.current.clear();
-    Blockly.serialization.workspaces.load(preset.blocklyJson, workspaceRef.current);
+    loadSafeWorkspaceJson(preset.blocklyJson, workspaceRef.current);
     setEffectName(preset.id);
     showToast?.(`已加载预设: ${preset.name}`, 'info');
   };

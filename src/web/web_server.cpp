@@ -540,6 +540,11 @@ void WebServer::SetupRoutes() {
         res.set_content(LoadHtmlContent(), "text/html; charset=utf-8");
     });
 
+    // Favicon 静默处理，避免浏览器默认请求产生 404 控制台错误
+    svr_.Get("/favicon.ico", [](const httplib::Request&, httplib::Response& res) {
+        res.status = 204;
+    });
+
     // 静态资源兜底 (支持外部 css/js/ico 等，带 R6 词法路径穿越校验)
     svr_.Get("/web/(.*)", [](const httplib::Request& req, httplib::Response& res) {
         std::string subpath = req.matches[1];

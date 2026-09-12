@@ -1,4 +1,4 @@
-import * as Blockly from 'blockly/core';
+import Blockly from './index.js';
 
 let blocksRegistered = false;
 

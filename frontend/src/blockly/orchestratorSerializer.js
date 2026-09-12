@@ -1,4 +1,4 @@
-import * as Blockly from 'blockly/core';
+import Blockly, { loadSafeWorkspaceJson } from './index.js';
 
 /**
  * Serializer & Deserializer for Profile & GSI Event Orchestrator
@@ -140,12 +140,8 @@ export class OrchestratorSerializer {
     workspace.clear();
 
     if (config?.blockly_orchestrator?.blockly_json) {
-      try {
-        Blockly.serialization.workspaces.load(config.blockly_orchestrator.blockly_json, workspace);
-        return;
-      } catch (err) {
-        console.warn('Error loading blockly_orchestrator, building default workspace:', err);
-      }
+      loadSafeWorkspaceJson(config.blockly_orchestrator.blockly_json, workspace);
+      return;
     }
 
     // Auto-create default root block with legacy rules

@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import * as Blockly from 'blockly/core';
-import 'blockly/blocks';
+import Blockly, { loadSafeWorkspaceJson } from '../blockly/index.js';
 import { registerCustomBlocks } from '../blockly/customBlocks';
 import { DEFAULT_INJECT_OPTIONS } from '../blockly/theme';
 import { ORCHESTRATOR_STUDIO_TOOLBOX } from '../blockly/toolboxes';
@@ -72,7 +71,7 @@ export default function OrchestratorStudio({
   const handleLoadPreset = (preset) => {
     if (!workspaceRef.current || !preset.blocklyJson) return;
     workspaceRef.current.clear();
-    Blockly.serialization.workspaces.load(preset.blocklyJson, workspaceRef.current);
+    loadSafeWorkspaceJson(preset.blocklyJson, workspaceRef.current);
     showToast?.(`已加载预设编排: ${preset.name}`, 'info');
   };
 

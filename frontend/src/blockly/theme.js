@@ -1,4 +1,4 @@
-import * as Blockly from 'blockly/core';
+import Blockly from './index.js';
 
 /**
  * MD3E Theme for Google Blockly
