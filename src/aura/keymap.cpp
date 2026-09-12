@@ -216,4 +216,20 @@ bool Keymap::ResolveKeys(const std::string& key_spec, std::vector<int>& out_led_
     return false;
 }
 
+const std::vector<std::string>& Keymap::GetStandardLayoutKeys() {
+    static const std::vector<std::string> kStandardLayout = {
+        // Row 1 (15 keys)
+        "ESC", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "=", "BACKSPACE", "INS",
+        // Row 2 (15 keys)
+        "TAB", "Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P", "[", "]", "\\", "DEL",
+        // Row 3 (14 keys)
+        "CAPS", "A", "S", "D", "F", "G", "H", "J", "K", "L", ";", "'", "ENTER", "PGUP",
+        // Row 4 (14 keys)
+        "L_SHIFT", "Z", "X", "C", "V", "B", "N", "M", ",", ".", "/", "R_SHIFT", "UP", "PGDN",
+        // Row 5 (10 keys)
+        "L_CTRL", "L_WIN", "L_ALT", "SPACE", "R_ALT", "FN", "COPILOT", "LEFT", "DOWN", "RIGHT"
+    };
+    return kStandardLayout;
+}
+
 } // namespace aura

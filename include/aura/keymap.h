@@ -37,6 +37,9 @@ public:
         return keys_.size();
     }
 
+    // 68 键 ANSI 65% 标准物理配列几何顺序列表（唯一权威顺序，用于 Web/推流与硬件矩阵映射）
+    static const std::vector<std::string>& GetStandardLayoutKeys();
+
 private:
     void SetupAliases();
     static std::string ToUpper(const std::string& str);

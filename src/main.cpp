@@ -534,18 +534,52 @@ int main(int argc, char* argv[]) {
     });
 
     // 注册守护进程编辑态推流硬件预览 IPC 回调
-    gsi_adapter.SetPreviewHandler([&effect_engine](const std::string& body) {
+    gsi_adapter.SetPreviewHandler([&effect_engine, &keymap](const std::string& body) {
         try {
             auto j = nlohmann::json::parse(body);
             if (j.contains("colors") && j["colors"].is_array()) {
                 aura::FrameBuffer fb;
                 fb.Clear();
                 const auto& arr = j["colors"];
-                for (size_t i = 0; i < arr.size() && (i * 3 + 2) < aura::FRAME_BUFFER_SIZE; ++i) {
-                    if (arr[i].is_array() && arr[i].size() >= 3) {
-                        fb.buffer[i * 3]     = static_cast<uint8_t>(arr[i][0].get<int>());
-                        fb.buffer[i * 3 + 1] = static_cast<uint8_t>(arr[i][1].get<int>());
-                        fb.buffer[i * 3 + 2] = static_cast<uint8_t>(arr[i][2].get<int>());
+                const auto& layout_keys = aura::Keymap::GetStandardLayoutKeys();
+                if (arr.size() == layout_keys.size()) {
+                    // 68 键标准物理键盘配列推流帧映射：将前端 68 键色彩几何序列精准映射至硬件矩阵 led_id
+                    for (size_t i = 0; i < layout_keys.size(); ++i) {
+                        if (arr[i].is_array() && arr[i].size() >= 3) {
+                            int r = std::clamp(arr[i][0].get<int>(), 0, 255);
+                            int g = std::clamp(arr[i][1].get<int>(), 0, 255);
+                            int b = std::clamp(arr[i][2].get<int>(), 0, 255);
+                            int led_id = -1;
+                            if (keymap.FindLedId(layout_keys[i], led_id) && led_id >= 0 && led_id < static_cast<int>(aura::TOTAL_LEDS)) {
+                                fb.SetKey(static_cast<size_t>(led_id), static_cast<uint8_t>(r), static_cast<uint8_t>(g), static_cast<uint8_t>(b));
+                            }
+                        }
+                    }
+                } else {
+                    // 原始底层帧缓冲直接赋值兜底 (支持原始 128 通道及单元测试)
+                    for (size_t i = 0; i < arr.size() && (i * 3 + 2) < aura::FRAME_BUFFER_SIZE; ++i) {
+                        if (arr[i].is_array() && arr[i].size() >= 3) {
+                            fb.buffer[i * 3 + 0] = static_cast<uint8_t>(std::clamp(arr[i][0].get<int>(), 0, 255));
+                            fb.buffer[i * 3 + 1] = static_cast<uint8_t>(std::clamp(arr[i][1].get<int>(), 0, 255));
+                            fb.buffer[i * 3 + 2] = static_cast<uint8_t>(std::clamp(arr[i][2].get<int>(), 0, 255));
+                        }
+                    }
+                }
+                uint64_t dur = j.value("duration_ms", 300ULL);
+                effect_engine.SetPreviewFrame(fb, dur);
+                return true;
+            } else if (j.contains("colors") && j["colors"].is_object()) {
+                aura::FrameBuffer fb;
+                fb.Clear();
+                for (auto& [kname, col_arr] : j["colors"].items()) {
+                    if (col_arr.is_array() && col_arr.size() >= 3) {
+                        int led_id = -1;
+                        if (keymap.FindLedId(kname, led_id) && led_id >= 0 && led_id < static_cast<int>(aura::TOTAL_LEDS)) {
+                            fb.SetKey(static_cast<size_t>(led_id),
+                                      static_cast<uint8_t>(std::clamp(col_arr[0].get<int>(), 0, 255)),
+                                      static_cast<uint8_t>(std::clamp(col_arr[1].get<int>(), 0, 255)),
+                                      static_cast<uint8_t>(std::clamp(col_arr[2].get<int>(), 0, 255)));
+                        }
                     }
                 }
                 uint64_t dur = j.value("duration_ms", 300ULL);
