@@ -476,3 +476,43 @@ PC）触发频率不足以在合理时间内积累成问题。**这是一个记�
 Phase 2 基本完成，作为里程碑记录。下一阶段是 CS2 GSI 适配器。
 README（含架构图、配置说明、构建步骤）已核对，除上述 1ms→14ms 的文档勘误外
 没有发现新问题，可以视为 Phase 2 文档交付完成。
+
+## 15. 彻底解决闪退与连续两次闪退问题（驱动内存热补丁与通道隔离自愈）
+
+### 15.1 根因分析
+1. **0xC0000409 驱动崩溃**：
+   Windows Application Event 1000 记录崩溃位于 `AacKbHal_x64.dll+0x107a8c`，异常码 `0xC0000409 (STATUS_STACK_BUFFER_OVERRUN / __fastfail)`。
+   在标准用户（非管理员）权限下，`AacKbHal_x64.dll` 在 COM 实例化期间调用 `RegOpenKeyExW(..., KEY_ALL_ACCESS)` 尝试写权限打开注册表，触发 `ERROR_ACCESS_DENIED (5)`。其栈/堆版本字符串缓冲区未被写入而残留脏数据，但 `EnableLog (RVA 0x1CB85C)` 仍为默认值 6。随后底层调用 `Logger::Log (RVA 0x7ABE0)` 格式化该脏缓冲区，触发 MSVC 安全运行时越界检查 `__report_rangecheckfailure`，导致进程被瞬时强杀。
+2. **连续两次闪退机制**：
+   在 `src/main.cpp` 中，`.daemon_running` 标记文件原先在 `adapter.Initialize()` 之前即被写入磁盘。初次启动因驱动日志崩溃后，标记文件残留。第二次启动检测到该标记，启动 `--probe-hardware` 子进程探测；探测子进程同样因未打补丁而抛出 `0xC0000409` 崩溃退出。而原代码将非零退出码误认为"复位完成"，父进程盲目再次调用 `adapter.Initialize()`，导致父进程当场第二次闪退。
+
+### 15.2 解决方案与技术规范
+1. **内存热补丁机制 (`ApplyAacDriverPatch`)**：
+   无论通过免注册 `LoadLibraryW` 还是系统注册表 `CoCreateInstance`，在调用底层 HAL 任何方法前均对 `AacKbHal_x64.dll` 施加内存补丁：
+   - **幂等性快速跳过**：若目标 RVA 已处于补丁状态（`0x7ABE0` 为 `0xC3` 且 `0x1CB85C` 为 0），立即返回，避免重复调用 `VirtualProtect` 与刷新指令缓存。
+   - **函数序言校验与动态特征码扫描**：首先校验默认 RVA `0x7ABE0` 的函数序言（`40 55 57 41...`），若不同 DLL 版本发生位移，自动对 `.text` 代码段执行动态特征码搜索匹配 `Logger::Log` 与 `lea rax, [rip+disp]; xor r8d, r8d`（`EnableLog` 定位），确保跨版本绝对可靠。
+   - 数据段标志置零：`*reinterpret_cast<uint32_t*>(enable_log_ptr) = 0` (PAGE_READWRITE 保护切换)；
+   - 函数入口短路：在 `Logger::Log` 首字节写入 `0xC3 (RET)` (PAGE_EXECUTE_READWRITE 保护切换 + `FlushInstructionCache`)。
+   - **动态 COM InprocServer32 解析**：解析注册表 `HKLM\SOFTWARE\Classes\CLSID\{05921124-...}\InprocServer32`，定位系统实际注册的 HAL 路径并在 `CoCreateInstance` 之前打上补丁。
+   - 硬件探测隔离模式 (`--probe-hardware`) 与 Python 工具库 (`tools/py/aura_hal.py`) 亦同步施加此补丁。
+
+2. **SEH 结构化异常保护隔离 (`__try / __except`)**：
+   - 针对闭源驱动 `fn_create_dev`（`CreateLedDevice`）与 `fn_rel`（`Release`），使用 MSVC 结构化异常处理 (`CallCreateLedDeviceSafe` / `CallReleaseSafe`) 进行隔离。一旦发生底层硬件非法访问或驱动空指针，直接捕获异常并降级，坚决不让未捕获硬件异常造成进程崩溃退出。
+
+3. **重复启动感知与 WebUI 自动唤起**：
+   - 当用户在托盘/后台已有运行中的 `Aura.exe` 或 `aura_daemon.exe` 实例时再次双击启动程序，互斥体 `Local\RogFalchionAceHfxDaemonMutex` 命中。
+   - 程序不再无提示瞬间闪退（ExitCode 1），而是向控制台打印清晰提示，自动通过系统默认浏览器打开 Web 控制面板 (`http://127.0.0.1:19898/`)，停留 1.5 秒后以代码 0 优雅退出。
+
+4. **启动时序、僵尸进程清理与异常降级**：
+   - 将 `.daemon_running` 标记的写入后移至 `adapter.Initialize()` 成功之后、正式进入 25 FPS 推流循环之前，启动阶段崩溃不再遗留脏标记。
+   - 标记文件路径规范化迁移至 `%LOCALAPPDATA%\Aura\.daemon_running`，同时兼容清理 CWD 旧标记 (`RemoveAllStateFiles`)。
+   - 注册全局未处理异常过滤器 `SetUnhandledExceptionFilter` 及主函数顶层 `try ... catch`，确保任何意外退出时彻底清理标记文件，永久杜绝连续两次闪退。
+   - 异常自愈探测子进程设置 5 秒超时保护，超时后主动调用 `TerminateProcess` 强杀子进程，杜绝僵尸进程占用 USB 硬件端点。
+   - 若探测子进程失败（超时或异常退出），主进程绝不再次尝试挂载硬件，而是记录警告、自动安全降级至虚拟推流模式 (`dry-run`) 并清理旧标记，保障 WebUI 与守护进程稳定启动，彻底打破死循环。
+
+5. **单文件启动器与发布流水线**：
+   - `launcher_main.cpp` 增加启动器二进制时间戳校验，每次重新构建发布包后，启动器自动刷新覆盖 `%LOCALAPPDATA%\Aura\runtime` 中的运行时文件。
+   - 单文件启动器同样具备互斥体防闪退检测与 WebUI 唤起能力；解压失败或子进程启动失败时提供至少 3 秒错误停顿，彻底消除"闪退后看不清报错"的问题。
+   - `CMakeLists.txt` 链接 `shell32.lib` 并配置 POST_BUILD 自动化复制二进制至仓库根目录；`tools/package_release.py` 编译 Release、同步发布产物至 `dist/Aura.exe` 及仓库根目录，打包时主动清理旧版运行时缓存。
+
+

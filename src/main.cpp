@@ -3,6 +3,7 @@
 #include "monitor/foreground_monitor.h"
 #include "config/rule_engine.h"
 #include "engine/effect_engine.h"
+#include "engine/plugin_manager.h"
 #include "supervisor/web_supervisor.h"
 #include "gsi/gsi_adapter.h"
 #include "utils/logger.h"
@@ -22,13 +23,59 @@
 #include <fstream>
 #include <filesystem>
 #include <windows.h>
+#include <shellapi.h>
 #include <objbase.h>
+
+#pragma comment(lib, "shell32.lib")
 
 namespace {
 
 std::atomic<bool> g_running{true};
 std::atomic<bool> g_shutdown_done{false};
-std::string g_state_file = ".daemon_running";
+
+std::string GetStateFilePath() {
+    wchar_t local_app_data[MAX_PATH];
+    if (GetEnvironmentVariableW(L"LOCALAPPDATA", local_app_data, MAX_PATH)) {
+        auto p = std::filesystem::path(local_app_data) / "Aura";
+        std::error_code ec;
+        std::filesystem::create_directories(p, ec);
+        return (p / ".daemon_running").string();
+    }
+    return ".daemon_running";
+}
+
+void RemoveAllStateFiles() {
+    std::string p = GetStateFilePath();
+    DeleteFileA(p.c_str());
+    DeleteFileA(".daemon_running");
+}
+
+LONG WINAPI GlobalUnhandledExceptionFilter(EXCEPTION_POINTERS* pEx) {
+    DWORD code = pEx && pEx->ExceptionRecord ? pEx->ExceptionRecord->ExceptionCode : 0;
+    std::ostringstream oss;
+    oss << "0x" << std::hex << std::uppercase << code;
+    LOG_ERROR("FATAL: 捕获全局未处理异常 (SEH: " + oss.str() + ")，正在紧急清理运行标记以防连续闪退死循环...");
+    RemoveAllStateFiles();
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+
+std::wstring GetRegisteredHalDllPath() {
+    wchar_t path[MAX_PATH] = {0};
+    DWORD pathSize = sizeof(path);
+    HKEY hKey = nullptr;
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Classes\\CLSID\\{AE9DB4C8-4F2A-4756-9B11-2F6D78C61F1A}\\InprocServer32", 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+        RegQueryValueExW(hKey, nullptr, nullptr, nullptr, reinterpret_cast<LPBYTE>(path), &pathSize);
+        RegCloseKey(hKey);
+    }
+    if (path[0] == L'\0') {
+        if (RegOpenKeyExW(HKEY_CLASSES_ROOT, L"CLSID\\{AE9DB4C8-4F2A-4756-9B11-2F6D78C61F1A}\\InprocServer32", 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+            pathSize = sizeof(path);
+            RegQueryValueExW(hKey, nullptr, nullptr, nullptr, reinterpret_cast<LPBYTE>(path), &pathSize);
+            RegCloseKey(hKey);
+        }
+    }
+    return std::wstring(path);
+}
 
 BOOL WINAPI ConsoleCtrlHandler(DWORD signal) {
     if (signal == CTRL_C_EVENT || signal == CTRL_BREAK_EVENT) {
@@ -86,63 +133,72 @@ struct ComScope {
 } // namespace
 
 int main(int argc, char* argv[]) {
+    // 设置全局 SEH 未处理异常过滤器：遇到致命崩溃时确保清除运行标记，打破连续闪退死循环
+    SetUnhandledExceptionFilter(GlobalUnhandledExceptionFilter);
+
     // 0. 初始化 COM 单线程套间 (RAII 守卫置于 main 顶部，先于所有局部对象声明以保证 LIFO 逆序析构)
     ComScope com;
 
-    // 检查是否有 --probe-hardware 参数 (硬件隔离探测模式)
-    bool probe_mode = false;
-    for (int i = 1; i < argc; ++i) {
-        if (std::string(argv[i]) == "--probe-hardware") {
-            probe_mode = true;
-            break;
-        }
-    }
-
-    // 初始化日志系统 (探测模式仅向控制台输出，避免与父进程日志文件句柄冲突)
-    aura::Logger::Instance().Init(probe_mode ? "" : "aura_daemon.log");
-
-    // 检查 COM 初始化结果 (含 RPC_E_CHANGED_MODE 模式冲突处理)
-    if (!com.ok()) {
-        std::ostringstream hr_oss;
-        hr_oss << "0x" << std::hex << std::uppercase << static_cast<unsigned long>(com.hr);
-        if (com.hr == RPC_E_CHANGED_MODE) {
-            LOG_ERROR("FATAL: COM 初始化失败: 当前线程已被初始化为与 STA 不兼容的并发模式 (RPC_E_CHANGED_MODE, " 
-                      + hr_oss.str() + ")，守护进程无法继续运行。");
-        } else {
-            LOG_ERROR("FATAL: COM 初始化失败 (错误码: " + hr_oss.str() + ")，守护进程无法继续运行。");
-        }
-        return 1;
-    }
-
-    // 1. 探测并预加载 AacKbHal_x64.dll (支持免奥创独立便携发布包)
-    wchar_t current_mod[MAX_PATH];
-    std::filesystem::path current_exe_dir;
-    if (GetModuleFileNameW(nullptr, current_mod, MAX_PATH)) {
-        current_exe_dir = std::filesystem::path(current_mod).parent_path();
-    }
-    std::vector<std::filesystem::path> preload_candidates = {
-        current_exe_dir / "AacKbHal_x64.dll",
-        current_exe_dir / "drivers" / "AacKbHal_x64.dll",
-        current_exe_dir / ".." / "drivers" / "AacKbHal_x64.dll",
-        std::filesystem::current_path() / "AacKbHal_x64.dll",
-        std::filesystem::current_path() / "drivers" / "AacKbHal_x64.dll",
-        L"C:\\Program Files\\ASUS\\Aac_Keyboard\\AacKbHal_x64.dll"
-    };
-    HMODULE hHalPreload = nullptr;
-    for (const auto& cand : preload_candidates) {
-        std::error_code ec;
-        if (std::filesystem::exists(cand, ec) && !std::filesystem::is_directory(cand, ec)) {
-            SetDllDirectoryW(cand.parent_path().c_str());
-            hHalPreload = LoadLibraryW(cand.c_str());
-            if (hHalPreload) {
-                LOG_INFO("底层硬件驱动预加载成功: " + cand.string());
+    try {
+        // 检查是否有 --probe-hardware 参数 (硬件隔离探测模式)
+        bool probe_mode = false;
+        for (int i = 1; i < argc; ++i) {
+            if (std::string(argv[i]) == "--probe-hardware") {
+                probe_mode = true;
                 break;
             }
         }
-    }
-    if (!hHalPreload) {
-        LOG_WARN("未能在本地或候选路径预加载 AacKbHal_x64.dll，后续硬件连接时将尝试系统注册表 COM 解析");
-    }
+
+        // 初始化日志系统 (探测模式仅向控制台输出，避免与父进程日志文件句柄冲突)
+        aura::Logger::Instance().Init(probe_mode ? "" : "aura_daemon.log");
+
+        // 检查 COM 初始化结果 (含 RPC_E_CHANGED_MODE 模式冲突处理)
+        if (!com.ok()) {
+            std::ostringstream hr_oss;
+            hr_oss << "0x" << std::hex << std::uppercase << static_cast<unsigned long>(com.hr);
+            if (com.hr == RPC_E_CHANGED_MODE) {
+                LOG_ERROR("FATAL: COM 初始化失败: 当前线程已被初始化为与 STA 不兼容的并发模式 (RPC_E_CHANGED_MODE, " 
+                          + hr_oss.str() + ")，守护进程无法继续运行。");
+            } else {
+                LOG_ERROR("FATAL: COM 初始化失败 (错误码: " + hr_oss.str() + ")，守护进程无法继续运行。");
+            }
+            return 1;
+        }
+
+        // 1. 探测并预加载 AacKbHal_x64.dll (支持免奥创独立便携发布包)
+        wchar_t current_mod[MAX_PATH];
+        std::filesystem::path current_exe_dir;
+        if (GetModuleFileNameW(nullptr, current_mod, MAX_PATH)) {
+            current_exe_dir = std::filesystem::path(current_mod).parent_path();
+        }
+        std::vector<std::filesystem::path> preload_candidates = {
+            current_exe_dir / "AacKbHal_x64.dll",
+            current_exe_dir / "drivers" / "AacKbHal_x64.dll",
+            current_exe_dir / ".." / "drivers" / "AacKbHal_x64.dll",
+            std::filesystem::current_path() / "AacKbHal_x64.dll",
+            std::filesystem::current_path() / "drivers" / "AacKbHal_x64.dll",
+            L"C:\\Program Files\\ASUS\\Aac_Keyboard\\AacKbHal_x64.dll"
+        };
+        std::wstring regHal = GetRegisteredHalDllPath();
+        if (!regHal.empty()) {
+            preload_candidates.push_back(regHal);
+        }
+        HMODULE hHalPreload = nullptr;
+        for (const auto& cand : preload_candidates) {
+            std::error_code ec;
+            if (std::filesystem::exists(cand, ec) && !std::filesystem::is_directory(cand, ec)) {
+                SetDllDirectoryW(cand.parent_path().c_str());
+                hHalPreload = LoadLibraryW(cand.c_str());
+                if (hHalPreload) {
+                    LOG_INFO("底层硬件驱动预加载成功: " + cand.string());
+                    aura::ApplyAacDriverPatch(hHalPreload);
+                    break;
+                }
+            }
+        }
+        if (!hHalPreload) {
+            LOG_WARN("未能在本地或候选路径预加载 AacKbHal_x64.dll，后续硬件连接时将尝试系统注册表 COM 解析");
+        }
 
     // 2. 解析命令行参数
     bool dry_run = false;
@@ -252,6 +308,7 @@ int main(int argc, char* argv[]) {
         SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
 
         LOG_INFO("[Probe] 正在执行硬件隔离探测与通道复位...");
+        aura::ApplyAacDriverPatch();
         if (!std::filesystem::exists(keymap_path) && !current_exe_dir.empty()) {
             auto cand = current_exe_dir / keymap_path;
             if (std::filesystem::exists(cand)) {
@@ -276,9 +333,13 @@ int main(int argc, char* argv[]) {
     // 3. 单实例保护 (Named Mutex)
     HANDLE hMutex = CreateMutexW(NULL, FALSE, L"Local\\RogFalchionAceHfxDaemonMutex");
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
-        LOG_ERROR("FATAL: 检测到已有另一个 ROG Falchion Ace HFX 守护进程正在运行，拒绝重复启动！");
+        LOG_WARN("检测到已有另一个 ROG Falchion Ace HFX 守护进程正在运行，自动唤起 Web 配置面板...");
+        std::cout << "[Aura] 检测到守护进程已在后台运行。\n";
+        std::cout << "[Aura] 正在自动打开 Web 控制面板: http://127.0.0.1:19898/ ...\n";
+        ShellExecuteW(nullptr, L"open", L"http://127.0.0.1:19898/", nullptr, nullptr, SW_SHOWNORMAL);
         if (hMutex) CloseHandle(hMutex);
-        return 1;
+        Sleep(1500);
+        return 0;
     }
 
     // 4. 注册控制台中断处理器 (Ctrl+C)
@@ -288,29 +349,23 @@ int main(int argc, char* argv[]) {
     if (test_init_count > 0) {
         aura::AuraAdapter test_adapter(false);
         bool test_ok = test_adapter.RunInitStressTest(static_cast<size_t>(test_init_count));
-        DeleteFileA(g_state_file.c_str());
+        RemoveAllStateFiles();
         if (hMutex) CloseHandle(hMutex);
         g_shutdown_done.store(true, std::memory_order_release);
         return test_ok ? 0 : 1;
     }
 
-    // 6. 检测异常退出标记并维护状态文件
+    // 6. 检测异常退出标记 (在底层驱动初始化并就绪前严禁写入状态文件，防止启动崩溃形成死循环)
+    std::string state_file = GetStateFilePath();
     bool had_abnormal_exit = false;
     {
-        std::ifstream check_file(g_state_file);
+        std::ifstream check_file(state_file);
+        if (!check_file.is_open()) {
+            check_file.open(".daemon_running");
+        }
         if (check_file.is_open()) {
             had_abnormal_exit = true;
-            LOG_WARN("【异常退出兜底】检测到上一次进程未正常退出（存在残留标记文件 " + g_state_file + 
-                     "），将在连接后执行强制复位！");
-        }
-    }
-
-    // 写入当前运行标记 (PID + 时间戳)
-    {
-        std::ofstream state_out(g_state_file, std::ios::trunc);
-        if (state_out.is_open()) {
-            state_out << "PID=" << GetCurrentProcessId() << "\n"
-                      << "StartTime=" << std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()) << "\n";
+            LOG_WARN("【异常退出兜底】检测到上一次进程未正常退出（存在残留标记文件），将在连接前启动硬件探测隔离子进程自愈！");
         }
     }
 
@@ -325,7 +380,7 @@ int main(int argc, char* argv[]) {
     aura::Keymap keymap;
     if (!keymap.LoadFromJson(keymap_path)) {
         LOG_ERROR("FATAL: 无法加载键位表: " + keymap_path);
-        DeleteFileA(g_state_file.c_str());
+        RemoveAllStateFiles();
         if (hMutex) CloseHandle(hMutex);
         return 1;
     }
@@ -349,6 +404,7 @@ int main(int argc, char* argv[]) {
     }
 
     // 8. 挂载华硕底层驱动适配器 (在主线程完全拥有，杜绝多线程 COM 激活冲突)
+    bool probe_failed = false;
     if (had_abnormal_exit && !dry_run) {
         LOG_INFO("【异常退出自愈】检测到上次非正常退出，正在启动硬件探测隔离子进程以安全复位驱动通道...");
 
@@ -374,27 +430,39 @@ int main(int argc, char* argv[]) {
 
             if (CreateProcessW(NULL, cmd_buf.data(), NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi)) {
                 DWORD wait_res = WaitForSingleObject(pi.hProcess, 10000);
-                DWORD exit_code = 0;
-                GetExitCodeProcess(pi.hProcess, &exit_code);
+                if (wait_res == WAIT_TIMEOUT) {
+                    LOG_WARN("【异常退出自愈】探测子进程执行超时，已强制终止并放弃等待");
+                    TerminateProcess(pi.hProcess, 1);
+                    WaitForSingleObject(pi.hProcess, 1000);
+                    probe_failed = true;
+                } else {
+                    DWORD exit_code = 0;
+                    GetExitCodeProcess(pi.hProcess, &exit_code);
+                    if (exit_code == 0) {
+                        LOG_INFO("【异常退出自愈】探测子进程执行成功 (硬件通道正常，未发生驱动崩溃)");
+                        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+                    } else {
+                        std::ostringstream oss;
+                        oss << "0x" << std::hex << std::uppercase << exit_code;
+                        LOG_WARN("【异常退出自愈】探测子进程异常终止 (退出码: " + oss.str() + 
+                                 ")，底层硬件驱动异常！");
+                        probe_failed = true;
+                    }
+                }
                 CloseHandle(pi.hProcess);
                 CloseHandle(pi.hThread);
-
-                if (wait_res == WAIT_TIMEOUT) {
-                    LOG_WARN("【异常退出自愈】探测子进程执行超时，已放弃等待");
-                } else if (exit_code == 0) {
-                    LOG_INFO("【异常退出自愈】探测子进程执行成功 (硬件通道正常，未发生驱动崩溃)");
-                    std::this_thread::sleep_for(std::chrono::milliseconds(200));
-                } else {
-                    std::ostringstream oss;
-                    oss << "0x" << std::hex << std::uppercase << exit_code;
-                    LOG_INFO("【异常退出自愈】探测子进程已捕获驱动异常并完成底层通道复位 (退出码: " + oss.str() + 
-                             ")，正在等待硬件通道稳定 (1.5 秒)...");
-                    std::this_thread::sleep_for(std::chrono::milliseconds(1500));
-                }
             } else {
                 LOG_WARN("【异常退出自愈】创建探测子进程失败 (Win32错误码: " + std::to_string(GetLastError()) + ")");
+                probe_failed = true;
             }
         }
+    }
+
+    if (probe_failed) {
+        LOG_WARN("【安全降级】硬件探测异常，为防止主守护进程崩溃闪退，自动降级为虚拟推流模式 (Dry-Run)！WebUI 与规则系统将保持正常运行。");
+        dry_run = true;
+        had_abnormal_exit = false;
+        RemoveAllStateFiles();
     }
 
     aura::AuraAdapter adapter(dry_run);
@@ -404,7 +472,10 @@ int main(int argc, char* argv[]) {
 
     // 异常退出强制复位兜底
     if (had_abnormal_exit) {
-        adapter.ForceReset();
+        if (!dry_run) {
+            adapter.ForceReset();
+        }
+        RemoveAllStateFiles();
     }
 
     // 9. 启动 CS2 GSI 适配器 (严格监听 127.0.0.1:19897)
@@ -416,11 +487,74 @@ int main(int argc, char* argv[]) {
         LOG_INFO("[+] CS2 GSI 接收服务已启动，监听 http://127.0.0.1:19897/");
     }
 
+    // 9.5 自动加载已安装的动态光效插件 (plugins/)
+    aura::PluginManager::Instance().LoadAllFromDirectory("plugins");
+
     // 10. 构建效果引擎
     aura::EffectEngine effect_engine;
     std::shared_ptr<const aura::Profile> initial_profile = rule_engine.MatchProfile("", &gsi_adapter.GetState());
     std::string current_active_profile_name = initial_profile ? initial_profile->name : "(None)";
     effect_engine.SetActiveProfile(initial_profile);
+
+    // 同步编排事件覆盖规则至 OverlayManager
+    auto sync_event_overlays = [&rule_engine, &effect_engine]() {
+        auto& om = effect_engine.GetOverlayManager();
+        om.ClearBindings();
+        for (const auto& r : rule_engine.GetEventOverlayRules()) {
+            aura::OverlayBinding b;
+            b.event_name = r.event;
+            b.effect_name = r.effect;
+            b.duration_ms = r.duration_ms;
+            b.fade_out_ms = r.fade_out_ms;
+            b.attack_ms = r.attack_ms;
+            b.blend_mode = r.blend_mode;
+
+            auto prof = rule_engine.GetProfile(r.effect);
+            if (prof && prof->base_effect) {
+                b.effect = prof->base_effect;
+            } else {
+                b.effect = aura::PluginManager::Instance().CreateEffect(r.effect);
+            }
+            if (b.effect) {
+                om.RegisterBinding(b);
+            }
+        }
+    };
+    sync_event_overlays();
+
+    // 注册守护进程插件热重载 IPC 处理回调
+    gsi_adapter.SetPluginReloadHandler([&rule_engine, &effect_engine, &sync_event_overlays](const std::string& name) {
+        LOG_INFO("[Daemon] 收到插件热重载 IPC 请求: " << name);
+        bool reloaded = aura::PluginManager::Instance().ReloadPlugin(name);
+        if (reloaded) {
+            rule_engine.CheckAndReload();
+            sync_event_overlays();
+        }
+        return reloaded;
+    });
+
+    // 注册守护进程编辑态推流硬件预览 IPC 回调
+    gsi_adapter.SetPreviewHandler([&effect_engine](const std::string& body) {
+        try {
+            auto j = nlohmann::json::parse(body);
+            if (j.contains("colors") && j["colors"].is_array()) {
+                aura::FrameBuffer fb;
+                fb.Clear();
+                const auto& arr = j["colors"];
+                for (size_t i = 0; i < arr.size() && (i * 3 + 2) < aura::FRAME_BUFFER_SIZE; ++i) {
+                    if (arr[i].is_array() && arr[i].size() >= 3) {
+                        fb.buffer[i * 3]     = static_cast<uint8_t>(arr[i][0].get<int>());
+                        fb.buffer[i * 3 + 1] = static_cast<uint8_t>(arr[i][1].get<int>());
+                        fb.buffer[i * 3 + 2] = static_cast<uint8_t>(arr[i][2].get<int>());
+                    }
+                }
+                uint64_t dur = j.value("duration_ms", 300ULL);
+                effect_engine.SetPreviewFrame(fb, dur);
+                return true;
+            }
+        } catch (...) {}
+        return false;
+    });
 
     // 11. 启动网页配置服务后台监护器 (默认桌面状态自动拉起，由独立工线程异步监护)
     aura::WebUiSupervisor web_supervisor;
@@ -439,6 +573,15 @@ int main(int argc, char* argv[]) {
 
     if (!monitor.Start()) {
         LOG_ERROR("启动前台窗口监控失败");
+    }
+
+    // 写入当前运行标记 (PID + 时间戳) - 必须在底层驱动及全部子系统初始化成功后写入，避免启动崩溃留下残留标记
+    {
+        std::ofstream state_out(state_file, std::ios::trunc);
+        if (state_out.is_open()) {
+            state_out << "PID=" << GetCurrentProcessId() << "\n"
+                      << "StartTime=" << std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()) << "\n";
+        }
     }
 
     // 13. 主循环：25 FPS (40ms) 定时时钟推流与配置热重载
@@ -497,8 +640,9 @@ int main(int argc, char* argv[]) {
                      (suppress ? " (网页服务已抑制)" : ""));
         }
 
-        // 零分配计算当前帧
-        effect_engine.Tick(frame_buf, keymap);
+        // 零分配计算当前帧 (包含 GSI 原子读取与瞬态事件叠加)
+        effect_engine.GetOverlayManager().UpdateBindingsFromGsi(&gsi_adapter.GetState(), effect_engine.GetElapsedMs());
+        effect_engine.Tick(frame_buf, keymap, &gsi_adapter.GetState());
 
         // 推流至硬件
         if (adapter.IsConnected()) {
@@ -515,6 +659,7 @@ int main(int argc, char* argv[]) {
         if (std::chrono::duration_cast<std::chrono::milliseconds>(now_reload - last_reload_check).count() >= 50) {
             last_reload_check = now_reload;
             if (rule_engine.CheckAndReload()) {
+                sync_event_overlays();
                 std::string cur_proc_now = monitor.GetCurrentProcessName();
                 std::shared_ptr<const aura::Profile> reload_matched = rule_engine.MatchProfile(cur_proc_now, &gsi_adapter.GetState());
                 current_active_profile_name = reload_matched ? reload_matched->name : "(None)";
@@ -593,7 +738,7 @@ int main(int argc, char* argv[]) {
     adapter.Shutdown();
 
     // 正常优雅退出：清除运行状态标记文件
-    DeleteFileA(g_state_file.c_str());
+    RemoveAllStateFiles();
     LOG_INFO("[+] 运行状态标记已清除 (.daemon_running 已删除)");
 
     if (hMutex) {
@@ -603,4 +748,15 @@ int main(int argc, char* argv[]) {
     g_shutdown_done.store(true, std::memory_order_release);
     LOG_INFO("[+] 守护进程已优雅退出，所有资源已安全释放。");
     return 0;
+    } catch (const std::exception& e) {
+        LOG_ERROR("FATAL: 守护进程捕获未处理的 C++ 异常: " + std::string(e.what()));
+        std::cerr << "\n[Aura 异常退出] " << e.what() << "\n";
+        RemoveAllStateFiles();
+        return 1;
+    } catch (...) {
+        LOG_ERROR("FATAL: 守护进程捕获未知底层异常！");
+        std::cerr << "\n[Aura 异常退出] 捕获未知底层异常！\n";
+        RemoveAllStateFiles();
+        return 1;
+    }
 }

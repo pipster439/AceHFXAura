@@ -62,6 +62,7 @@ pnpm-debug.log*
 *.log
 aura_daemon.log*
 .daemon_running
+plugins/.cache/
 hw_test_config.json
 smoke_test_config.json
 e2e_test_config.json

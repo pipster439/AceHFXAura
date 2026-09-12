@@ -19,6 +19,9 @@ enum class AdapterState {
     Error
 };
 
+// 对 AacKbHal_x64.dll 施加内存防崩补丁 (禁用 Logger::Log 并将 EnableLog 标志位置 0，杜绝 0xC0000409 异常)
+bool ApplyAacDriverPatch(HMODULE hHalMod = nullptr);
+
 class AuraAdapter {
 public:
     explicit AuraAdapter(bool dry_run = false);

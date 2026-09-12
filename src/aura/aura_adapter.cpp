@@ -106,6 +106,144 @@ bool AuraAdapter::Initialize(const Keymap* keymap) {
     return ConnectHardwareInternal();
 }
 
+bool ApplyAacDriverPatch(HMODULE hHalMod) {
+    if (!hHalMod) {
+        hHalMod = GetModuleHandleW(L"AacKbHal_x64.dll");
+    }
+    if (!hHalMod) {
+        return false;
+    }
+
+    uint8_t* base = reinterpret_cast<uint8_t*>(hHalMod);
+    IMAGE_DOS_HEADER* dos = reinterpret_cast<IMAGE_DOS_HEADER*>(base);
+    if (dos->e_magic != IMAGE_DOS_SIGNATURE) {
+        return false;
+    }
+    IMAGE_NT_HEADERS* nt = reinterpret_cast<IMAGE_NT_HEADERS*>(base + dos->e_lfanew);
+    if (nt->Signature != IMAGE_NT_SIGNATURE) {
+        return false;
+    }
+
+    constexpr DWORD DEFAULT_RVA_LOGGER_LOG = 0x7ABE0;
+    constexpr DWORD DEFAULT_RVA_ENABLE_LOG = 0x1CB85C;
+
+    DWORD rva_logger = DEFAULT_RVA_LOGGER_LOG;
+    DWORD rva_enable = DEFAULT_RVA_ENABLE_LOG;
+
+    // Fast-path: Check if already patched
+    if (*(base + rva_logger) == 0xC3 && *reinterpret_cast<const uint32_t*>(base + rva_enable) == 0) {
+        return true;
+    }
+
+    // Check if prologue at default RVA matches known signature (40 55 57 41...) or is already patched (C3)
+    if (*(base + rva_logger) != 0x40 && *(base + rva_logger) != 0xC3) {
+        // Dynamic signature search in .text section for Logger::Log
+        const uint8_t log_sig[] = {0x40, 0x55, 0x57, 0x41, 0x54, 0x41, 0x56, 0x41, 0x57, 0x48, 0x8D, 0xAC, 0x24, 0xE0, 0xEF, 0xFF};
+        IMAGE_SECTION_HEADER* sec = IMAGE_FIRST_SECTION(nt);
+        for (WORD i = 0; i < nt->FileHeader.NumberOfSections; ++i, ++sec) {
+            if (strncmp(reinterpret_cast<const char*>(sec->Name), ".text", 5) == 0) {
+                for (DWORD o = 0; o + sizeof(log_sig) < sec->Misc.VirtualSize; ++o) {
+                    if (memcmp(base + sec->VirtualAddress + o, log_sig, sizeof(log_sig)) == 0) {
+                        rva_logger = sec->VirtualAddress + o;
+                        break;
+                    }
+                }
+                break;
+            }
+        }
+    }
+
+    // Dynamic search for EnableLog instruction in .text: lea rax, [rip+disp]; xor r8d, r8d
+    IMAGE_SECTION_HEADER* sec = IMAGE_FIRST_SECTION(nt);
+    for (WORD i = 0; i < nt->FileHeader.NumberOfSections; ++i, ++sec) {
+        if (strncmp(reinterpret_cast<const char*>(sec->Name), ".text", 5) == 0) {
+            const uint8_t tail[] = {0x45, 0x33, 0xC0, 0x48, 0x89, 0x44, 0x24, 0x20};
+            for (DWORD o = 0; o + 15 < sec->Misc.VirtualSize; ++o) {
+                uint8_t* p = base + sec->VirtualAddress + o;
+                if (p[0] == 0x48 && p[1] == 0x8D && p[2] == 0x05 && memcmp(p + 7, tail, sizeof(tail)) == 0) {
+                    int32_t disp = *reinterpret_cast<int32_t*>(p + 3);
+                    rva_enable = (sec->VirtualAddress + o) + 7 + disp;
+                    break;
+                }
+            }
+            break;
+        }
+    }
+
+    bool patched_any = false;
+
+    // 1. Zero data segment flag: *reinterpret_cast<uint32_t*>(base + rva_enable) = 0;
+    DWORD old_protect_data = 0;
+    if (VirtualProtect(base + rva_enable, sizeof(uint32_t), PAGE_READWRITE, &old_protect_data)) {
+        *reinterpret_cast<uint32_t*>(base + rva_enable) = 0;
+        VirtualProtect(base + rva_enable, sizeof(uint32_t), old_protect_data, &old_protect_data);
+        patched_any = true;
+    } else {
+        LOG_WARN("ApplyAacDriverPatch: VirtualProtect(EnableLog) 失败，错误码: " + std::to_string(GetLastError()));
+    }
+
+    // 2. Short-circuit function entry point: Write 0xC3 (ret) at Logger::Log via VirtualProtect + FlushInstructionCache
+    DWORD old_protect_code = 0;
+    if (VirtualProtect(base + rva_logger, 1, PAGE_EXECUTE_READWRITE, &old_protect_code)) {
+        *(base + rva_logger) = 0xC3; // ret
+        VirtualProtect(base + rva_logger, 1, old_protect_code, &old_protect_code);
+        FlushInstructionCache(GetCurrentProcess(), base + rva_logger, 1);
+        patched_any = true;
+    } else {
+        LOG_WARN("ApplyAacDriverPatch: VirtualProtect(Logger::Log) 失败，错误码: " + std::to_string(GetLastError()));
+    }
+
+    if (patched_any) {
+        LOG_INFO("ApplyAacDriverPatch: 已成功对 AacKbHal_x64.dll 应用内存防崩补丁 (Logger::Log RVA " + 
+                 FormatHex(rva_logger) + ", EnableLog RVA " + FormatHex(rva_enable) + ")");
+    }
+    return patched_any;
+}
+
+static std::wstring GetComServerDllPath(REFCLSID clsid) {
+    LPOLESTR clsidStr = nullptr;
+    if (FAILED(StringFromCLSID(clsid, &clsidStr)) || !clsidStr) {
+        return L"";
+    }
+    std::wstring subkey = L"SOFTWARE\\Classes\\CLSID\\" + std::wstring(clsidStr) + L"\\InprocServer32";
+    CoTaskMemFree(clsidStr);
+
+    wchar_t path[MAX_PATH] = {0};
+    DWORD pathSize = sizeof(path);
+    HKEY hKey = nullptr;
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, subkey.c_str(), 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+        RegQueryValueExW(hKey, nullptr, nullptr, nullptr, reinterpret_cast<LPBYTE>(path), &pathSize);
+        RegCloseKey(hKey);
+    }
+    if (path[0] == L'\0') {
+        std::wstring hkcrKey = L"CLSID\\" + std::wstring(clsidStr) + L"\\InprocServer32";
+        if (RegOpenKeyExW(HKEY_CLASSES_ROOT, hkcrKey.c_str(), 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+            pathSize = sizeof(path);
+            RegQueryValueExW(hKey, nullptr, nullptr, nullptr, reinterpret_cast<LPBYTE>(path), &pathSize);
+            RegCloseKey(hKey);
+        }
+    }
+    return std::wstring(path);
+}
+
+static LONG CallCreateLedDeviceSafe(PFN_CreateLedDevice fn, void* pHal, FakeVector* pVec) {
+    if (!fn || !pHal || !pVec) return -1;
+    __try {
+        return fn(pHal, pVec);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return -2;
+    }
+}
+
+static void CallReleaseSafe(PFN_Release fn, void* ptr) {
+    if (!fn || !ptr) return;
+    __try {
+        fn(ptr);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        // 捕获硬件释放时的底层访问异常，避免析构时二次崩溃
+    }
+}
+
 bool AuraAdapter::ConnectHardwareInternal() {
     state_ = AdapterState::Connecting;
     ReleaseHardwareInternal();
@@ -117,6 +255,9 @@ bool AuraAdapter::ConnectHardwareInternal() {
     void* hal_ptr = nullptr;
 
     // 1. 优先尝试从本地路径/驱动目录加载 AacKbHal_x64.dll 并免注册表调用 DllGetClassObject
+    if (!hHalMod_) {
+        hHalMod_ = GetModuleHandleW(L"AacKbHal_x64.dll");
+    }
     if (!hHalMod_) {
         std::vector<std::filesystem::path> candidates;
         wchar_t mod_path[MAX_PATH];
@@ -145,6 +286,7 @@ bool AuraAdapter::ConnectHardwareInternal() {
     }
 
     if (hHalMod_) {
+        ApplyAacDriverPatch(hHalMod_);
         using PFN_DllGetClassObject = HRESULT (__stdcall *)(REFCLSID, REFIID, LPVOID*);
         PFN_DllGetClassObject fn_get_class_obj = reinterpret_cast<PFN_DllGetClassObject>(
             GetProcAddress(hHalMod_, "DllGetClassObject")
@@ -171,6 +313,17 @@ bool AuraAdapter::ConnectHardwareInternal() {
     // 2. 若免注册加载未成功，回退至系统 COM 注册表解析 (兼容已安装奥创的标准环境)
     if (!hal_ptr) {
         LOG_INFO("尝试通过系统注册表 CoCreateInstance 创建 CLSID_ClaymoreHal 实例...");
+        std::wstring regDllPath = GetComServerDllPath(clsid_hal);
+        HMODULE hSysPre = nullptr;
+        if (!regDllPath.empty()) {
+            hSysPre = LoadLibraryW(regDllPath.c_str());
+        }
+        if (!hSysPre) {
+            hSysPre = LoadLibraryW(L"C:\\Program Files\\ASUS\\Aac_Keyboard\\AacKbHal_x64.dll");
+        }
+        if (hSysPre) {
+            ApplyAacDriverPatch(hSysPre);
+        }
         HRESULT hr = CoCreateInstance(
             clsid_hal,
             nullptr,
@@ -178,6 +331,7 @@ bool AuraAdapter::ConnectHardwareInternal() {
             iid_hal,
             &hal_ptr
         );
+        ApplyAacDriverPatch();
         if (FAILED(hr) || !hal_ptr) {
             LOG_WARN("CoCreateInstance(CLSID_ClaymoreHal) 失败: " + FormatHex(hr) + " (驱动未就绪或未找到硬件组件)");
             state_ = AdapterState::Disconnected;
@@ -206,8 +360,13 @@ bool AuraAdapter::ConnectHardwareInternal() {
     vec.end = dev_storage + PREALLOC_CAPACITY;
 
     PFN_CreateLedDevice fn_create_dev = reinterpret_cast<PFN_CreateLedDevice>(hal_vtable[VTABLE_HAL_CREATE_LED_DEVICE]);
-    LONG create_res = fn_create_dev(pHal_, &vec);
-    // 华硕 HAL 调用返回值留档，显式标记避免 /W4 C4189 警告
+    LONG create_res = CallCreateLedDeviceSafe(fn_create_dev, pHal_, &vec);
+    if (create_res == -2) {
+        LOG_ERROR("FATAL: CreateLedDevice 执行时触发底层硬件访问异常 (SEH)，已安全拦截！");
+        ReleaseHardwareInternal();
+        state_ = AdapterState::Error;
+        return false;
+    }
     (void)create_res;
 
     // Memory safety validation
@@ -420,7 +579,7 @@ void AuraAdapter::ReleaseHardwareInternal() {
         void** dev_vtable = *reinterpret_cast<void***>(pDev_);
         if (dev_vtable) {
             PFN_Release fn_rel = reinterpret_cast<PFN_Release>(dev_vtable[VTABLE_DEV_RELEASE]);
-            fn_rel(pDev_);
+            CallReleaseSafe(fn_rel, pDev_);
         }
         pDev_ = nullptr;
     }
@@ -429,7 +588,7 @@ void AuraAdapter::ReleaseHardwareInternal() {
         void** hal_vtable = *reinterpret_cast<void***>(pHal_);
         if (hal_vtable) {
             PFN_Release fn_rel = reinterpret_cast<PFN_Release>(hal_vtable[VTABLE_HAL_RELEASE]);
-            fn_rel(pHal_);
+            CallReleaseSafe(fn_rel, pHal_);
         }
         pHal_ = nullptr;
     }

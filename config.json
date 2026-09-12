@@ -1,394 +1,126 @@
 {
-  "default_profile": "static",
-  "fps": 100,
-  "gsi_bindings": [
-    {
-      "field": "player_state.health",
-      "operator": "<",
-      "profile": "danger_red",
-      "value": 20
-    },
-    {
-      "field": "round.bomb",
-      "operator": "==",
-      "profile": "bomb_pulse",
-      "value": "planted"
-    },
-    {
-      "field": "event.kill",
-      "operator": "==",
-      "profile": "rainbow_wave",
-      "value": true
-    }
-  ],
+  "default_profile": "default",
+  "fps": 25,
   "profiles": {
-    "bomb_pulse": {
-      "brightness": 1,
-      "color1": [
-        255,
-        80,
-        0
-      ],
-      "color2": [
-        20,
-        0,
-        0
-      ],
-      "fps": 100,
-      "period_ms": 500,
-      "type": "breathing"
-    },
-    "breathing": {
-      "brightness": 1,
-      "color1": [
-        0,
-        100,
-        255
-      ],
-      "color2": [
-        0,
-        10,
-        50
-      ],
-      "fps": 100,
-      "period_ms": 3000,
-      "type": "breathing"
-    },
-    "coding": {
-      "brightness": 1,
-      "color": [
-        10,
-        30,
-        50
-      ],
-      "fps": 100,
-      "keys": {
-        "ENTER": [
-          0,
-          255,
-          120
-        ],
-        "ESC": [
-          255,
-          120,
-          0
-        ],
-        "TAB": [
-          0,
-          200,
-          255
-        ]
-      },
-      "type": "static"
-    },
-    "color_cycle": {
-      "brightness": 1,
-      "fps": 100,
-      "period_ms": 3500,
-      "type": "color_cycle"
-    },
-    "cs2_gamer": {
-      "bg": [
-        0,
-        0,
-        0
-      ],
-      "brightness": 1,
-      "fps": 100,
-      "keys": {
-        "ARROWS": [
-          255,
-          255,
-          0
-        ],
-        "ESC": [
-          255,
-          0,
-          0
-        ],
-        "SPACE": [
-          0,
-          200,
-          255
-        ],
-        "WASD": [
-          0,
-          255,
-          0
-        ]
-      },
-      "type": "custom_keymap"
-    },
-    "current": {
-      "brightness": 1,
-      "color": [
-        0,
-        240,
-        255
-      ],
-      "fps": 100,
-      "period_ms": 2000,
-      "thickness": 1,
-      "type": "current"
-    },
-    "custom_keymap": {
-      "bg": [
-        0,
-        0,
-        0
-      ],
-      "brightness": 1,
-      "fps": 100,
-      "keys": {
-        "ESC": [
-          255,
-          0,
-          0
-        ],
-        "SPACE": [
-          0,
-          200,
-          255
-        ],
-        "WASD": [
-          0,
-          255,
-          0
-        ]
-      },
-      "type": "custom_keymap"
-    },
-    "cyberpunk": {
-      "bg": [
-        10,
-        0,
-        20
-      ],
-      "brightness": 1,
-      "fps": 100,
-      "keys": {
-        "ARROWS": [
-          255,
-          0,
-          128
-        ],
-        "ESC": [
-          0,
-          255,
-          255
-        ],
-        "SPACE": [
-          255,
-          255,
-          0
-        ],
-        "WASD": [
-          0,
-          255,
-          255
-        ]
-      },
-      "type": "custom_keymap"
-    },
-    "danger_red": {
-      "brightness": 1,
-      "color1": [
-        255,
-        0,
-        0
-      ],
-      "color2": [
-        60,
-        0,
-        0
-      ],
-      "fps": 100,
-      "period_ms": 600,
-      "type": "breathing"
-    },
-    "desktop": {
+    "default": {
       "analog": false,
-      "bg": [
-        0,
-        0,
-        0
-      ],
+      "bg": [0, 0, 0],
       "brightness": 1,
-      "color": [
-        232,
-        158,
-        142
-      ],
-      "color1": [
-        232,
-        158,
-        142
-      ],
-      "color2": [
-        56,
-        189,
-        248
-      ],
+      "color": [15, 23, 42],
+      "color1": [15, 23, 42],
+      "color2": [2, 132, 199],
       "direction": "diag_dl",
-      "fps": 100,
-      "period_ms": 1600,
-      "speed_index": 2,
-      "thickness": 0.2,
-      "type": "ripple"
-    },
-    "office": {
-      "brightness": 1,
-      "color": [
-        40,
-        40,
-        40
-      ],
-      "fps": 100,
-      "keys": {
-        "ENTER": [
-          0,
-          180,
-          255
-        ]
-      },
-      "type": "static"
-    },
-    "quicksand": {
-      "brightness": 1,
-      "color1": [
-        255,
-        25,
-        41
-      ],
-      "color2": [
-        20,
-        138,
-        196
-      ],
-      "direction": "diag_dl",
-      "fps": 100,
-      "period_ms": 3500,
-      "thickness": 1,
-      "type": "quicksand"
-    },
-    "rainbow_wave": {
-      "analog": false,
-      "brightness": 1,
-      "color": [
-        232,
-        158,
-        142
-      ],
-      "color1": [
-        232,
-        158,
-        142
-      ],
-      "color2": [
-        56,
-        189,
-        248
-      ],
-      "direction": "diag_dl",
-      "fps": 100,
+      "fps": 25,
+      "keys": {},
       "period_ms": 3200,
       "speed_index": 1,
       "thickness": 1,
+      "type": "static"
+    },
+    "cs2_gamer": {
+      "analog": false,
+      "bg": [0, 5, 20],
+      "brightness": 1,
+      "color": [0, 200, 100],
+      "color1": [0, 200, 100],
+      "color2": [255, 100, 0],
+      "direction": "spread",
+      "fps": 25,
+      "keys": {},
+      "period_ms": 2000,
+      "speed_index": 2,
+      "thickness": 1.2,
       "type": "wave"
     },
-    "raindrop": {
-      "brightness": 1,
-      "color": [
-        0,
-        240,
-        255
-      ],
-      "fps": 100,
-      "period_ms": 2500,
-      "type": "raindrop"
-    },
-    "reactive": {
-      "bg": [
-        0,
-        5,
-        15
-      ],
-      "brightness": 1,
-      "color": [
-        255,
-        25,
-        41
-      ],
-      "fps": 100,
-      "period_ms": 2500,
-      "type": "reactive"
-    },
-    "ripple": {
-      "bg": [
-        0,
-        0,
-        0
-      ],
-      "brightness": 1,
-      "color": [
-        0,
-        240,
-        255
-      ],
-      "fps": 100,
-      "period_ms": 2500,
-      "thickness": 1,
-      "type": "ripple"
-    },
-    "starry_night": {
-      "brightness": 1,
-      "color": [
-        0,
-        240,
-        255
-      ],
-      "fps": 100,
-      "period_ms": 2500,
-      "random_colors": true,
-      "type": "starry_night"
-    },
-    "static": {
+    "coding": {
       "analog": false,
-      "bg": [
-        0,
-        0,
-        0
-      ],
-      "brightness": 1,
-      "color": [
-        0,
-        80,
-        200
-      ],
-      "color1": [
-        0,
-        80,
-        200
-      ],
-      "color2": [
-        2,
-        132,
-        199
-      ],
+      "bg": [0, 10, 0],
+      "brightness": 0.8,
+      "color": [0, 255, 128],
       "direction": "diag_dl",
-      "fps": 100,
-      "period_ms": 1600,
+      "fps": 25,
+      "keys": {},
+      "period_ms": 3200,
+      "speed_index": 1,
+      "thickness": 1,
+      "type": "static"
+    },
+    "office": {
+      "analog": false,
+      "bg": [20, 20, 20],
+      "brightness": 0.6,
+      "color": [255, 220, 180],
+      "direction": "diag_dl",
+      "fps": 25,
+      "keys": {},
+      "period_ms": 3200,
+      "speed_index": 1,
+      "thickness": 1,
+      "type": "static"
+    },
+    "cyberpunk": {
+      "analog": false,
+      "bg": [10, 0, 20],
+      "brightness": 1,
+      "color": [255, 0, 128],
+      "color1": [255, 0, 128],
+      "color2": [0, 255, 255],
+      "direction": "spread",
+      "fps": 25,
+      "keys": {},
+      "period_ms": 2400,
+      "speed_index": 1,
+      "thickness": 1,
+      "type": "breathing"
+    },
+    "danger_red": {
+      "analog": false,
+      "bg": [50, 0, 0],
+      "brightness": 1,
+      "color": [255, 0, 0],
+      "direction": "diag_dl",
+      "fps": 25,
+      "keys": {},
+      "period_ms": 1000,
       "speed_index": 2,
       "thickness": 1,
       "type": "static"
     },
-    "wave": {
+    "bomb_pulse": {
+      "analog": false,
+      "bg": [40, 20, 0],
       "brightness": 1,
-      "direction": "diag_dl",
-      "fps": 100,
-      "period_ms": 3500,
+      "color": [255, 140, 0],
+      "direction": "spread",
+      "fps": 25,
+      "keys": {},
+      "period_ms": 1000,
+      "speed_index": 2,
       "thickness": 1,
+      "type": "breathing"
+    },
+    "rainbow_wave": {
+      "analog": false,
+      "bg": [0, 0, 0],
+      "brightness": 1,
+      "color": [255, 0, 0],
+      "color1": [255, 0, 0],
+      "color2": [0, 255, 255],
+      "direction": "diag_dl",
+      "fps": 25,
+      "keys": {},
+      "period_ms": 1800,
+      "speed_index": 2,
+      "thickness": 1.5,
       "type": "wave"
+    },
+    "cs2_health": {
+      "analog": false,
+      "bg": [0, 0, 0],
+      "brightness": 1,
+      "fps": 25,
+      "plugin_name": "cs2_health",
+      "type": "plugin"
     }
   },
   "rules": [
@@ -413,5 +145,123 @@
       "process": "chrome.exe",
       "profile": "cyberpunk"
     }
-  ]
+  ],
+  "gsi_bindings": [
+    {
+      "field": "player_state.health",
+      "operator": "<",
+      "profile": "danger_red",
+      "value": 20
+    },
+    {
+      "field": "round.bomb",
+      "operator": "==",
+      "profile": "bomb_pulse",
+      "value": "planted"
+    },
+    {
+      "field": "event.kill",
+      "operator": "==",
+      "profile": "rainbow_wave",
+      "value": true
+    }
+  ],
+  "orchestration": {
+    "fallback_profile": "default",
+    "rules": [
+      {
+        "id": "rule_cs2_0",
+        "process": "cs2.exe",
+        "dnd": true,
+        "condition": {
+          "field": "player.state.health",
+          "op": ">",
+          "value": 0
+        },
+        "target_profile": "cs2_gamer"
+      },
+      {
+        "id": "rule_code_1",
+        "process": "code.exe",
+        "dnd": false,
+        "condition": {},
+        "target_profile": "coding"
+      }
+    ],
+    "event_overlays": [
+      {
+        "event": "event.kill",
+        "effect": "rainbow_wave",
+        "duration_ms": 1200,
+        "fade_ms": 400,
+        "priority": 20
+      },
+      {
+        "event": "event.flash",
+        "effect": "default",
+        "duration_ms": 2000,
+        "fade_ms": 1000,
+        "priority": 50
+      }
+    ]
+  },
+  "blockly_orchestrator": {
+    "version": 1,
+    "blockly_json": {
+      "languageVersion": 0,
+      "blocks": [
+        {
+          "type": "orchestrator_root",
+          "x": 50,
+          "y": 50,
+          "fields": {
+            "FALLBACK_PROFILE": "default"
+          },
+          "inputs": {
+            "OVERLAYS": {
+              "block": {
+                "type": "event_overlay",
+                "fields": {
+                  "EVENT": "event.kill",
+                  "EFFECT": "rainbow_wave",
+                  "DURATION": 1200,
+                  "FADE": 400,
+                  "PRIORITY": 20
+                }
+              }
+            },
+            "RULES": {
+              "block": {
+                "type": "match_process",
+                "fields": {
+                  "PROCESS": "cs2.exe",
+                  "TARGET_PROFILE": "cs2_gamer",
+                  "DND": "TRUE"
+                },
+                "inputs": {
+                  "CONDITION": {
+                    "block": {
+                      "type": "condition_compare",
+                      "fields": {
+                        "FIELD": "player.state.health",
+                        "OP": ">",
+                        "VALUE": "0"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "blockly_effects": {
+    "cs2_health": {
+      "version": 1,
+      "name": "cs2_health",
+      "updated_at": 1773360000000
+    }
+  }
 }

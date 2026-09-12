@@ -1,5 +1,6 @@
 #include "config/rule_engine.h"
 #include "engine/builtin_effects.h"
+#include "engine/plugin_manager.h"
 #include "gsi/gsi_adapter.h"
 #include "third_party/json.hpp"
 #include "utils/logger.h"
@@ -11,7 +12,184 @@
 
 namespace aura {
 
+std::string ConditionNode::CompareOpToString(CompareOp op) {
+    switch (op) {
+        case CompareOp::Eq: return "==";
+        case CompareOp::Ne: return "!=";
+        case CompareOp::Lt: return "<";
+        case CompareOp::Le: return "<=";
+        case CompareOp::Gt: return ">";
+        case CompareOp::Ge: return ">=";
+        default: return "==";
+    }
+}
+
+CompareOp ConditionNode::StringToCompareOp(const std::string& op_str) {
+    if (op_str == "==" || op_str == "=" || op_str == "eq" || op_str == "equals") return CompareOp::Eq;
+    if (op_str == "!=" || op_str == "ne" || op_str == "neq" || op_str == "not_equals") return CompareOp::Ne;
+    if (op_str == "<" || op_str == "lt") return CompareOp::Lt;
+    if (op_str == "<=" || op_str == "le" || op_str == "lte") return CompareOp::Le;
+    if (op_str == ">" || op_str == "gt") return CompareOp::Gt;
+    if (op_str == ">=" || op_str == "ge" || op_str == "gte") return CompareOp::Ge;
+    return CompareOp::Eq;
+}
+
+std::string ConditionNode::LogicOpToString(LogicOp op) {
+    switch (op) {
+        case LogicOp::And: return "and";
+        case LogicOp::Or: return "or";
+        case LogicOp::Not: return "not";
+        default: return "none";
+    }
+}
+
+LogicOp ConditionNode::StringToLogicOp(const std::string& op_str) {
+    std::string s = RuleEngine::ToLower(op_str);
+    if (s == "and") return LogicOp::And;
+    if (s == "or") return LogicOp::Or;
+    if (s == "not") return LogicOp::Not;
+    return LogicOp::None;
+}
+
+ConditionNode ConditionNode::FromJson(const nlohmann::json& j) {
+    ConditionNode node;
+    if (!j.is_object()) return node;
+
+    std::string logic_str;
+    if (j.contains("type") && j["type"].is_string()) {
+        logic_str = j["type"].get<std::string>();
+    } else if (j.contains("op") && j["op"].is_string() && (j.contains("conditions") || j.contains("condition"))) {
+        logic_str = j["op"].get<std::string>();
+    }
+    if (!logic_str.empty()) {
+        node.logic_op = StringToLogicOp(logic_str);
+        if (node.logic_op != LogicOp::None) {
+            if (j.contains("conditions") && j["conditions"].is_array()) {
+                for (const auto& item : j["conditions"]) {
+                    node.children.push_back(FromJson(item));
+                }
+            } else if (j.contains("condition")) {
+                node.children.push_back(FromJson(j["condition"]));
+            }
+            return node;
+        }
+    }
+
+    if (j.contains("and") && j["and"].is_array()) {
+        node.logic_op = LogicOp::And;
+        for (const auto& item : j["and"]) {
+            node.children.push_back(FromJson(item));
+        }
+        return node;
+    }
+    if (j.contains("or") && j["or"].is_array()) {
+        node.logic_op = LogicOp::Or;
+        for (const auto& item : j["or"]) {
+            node.children.push_back(FromJson(item));
+        }
+        return node;
+    }
+    if (j.contains("not")) {
+        node.logic_op = LogicOp::Not;
+        node.children.push_back(FromJson(j["not"]));
+        return node;
+    }
+
+    node.logic_op = LogicOp::None;
+    node.field = j.value("field", "");
+    std::string op_str = j.value("op", j.value("operator", "=="));
+    node.comp_op = StringToCompareOp(op_str);
+    if (j.contains("value")) {
+        node.target_value = j["value"];
+    } else if (j.contains("target_value")) {
+        node.target_value = j["target_value"];
+    }
+    return node;
+}
+
+nlohmann::json ConditionNode::ToJson() const {
+    nlohmann::json j;
+    if (logic_op == LogicOp::And) {
+        j["type"] = "and";
+        j["op"] = "and";
+        j["conditions"] = nlohmann::json::array();
+        for (const auto& child : children) {
+            j["conditions"].push_back(child.ToJson());
+        }
+        return j;
+    }
+    if (logic_op == LogicOp::Or) {
+        j["type"] = "or";
+        j["op"] = "or";
+        j["conditions"] = nlohmann::json::array();
+        for (const auto& child : children) {
+            j["conditions"].push_back(child.ToJson());
+        }
+        return j;
+    }
+    if (logic_op == LogicOp::Not) {
+        j["type"] = "not";
+        j["op"] = "not";
+        j["conditions"] = nlohmann::json::array();
+        if (!children.empty()) {
+            j["conditions"].push_back(children[0].ToJson());
+        }
+        return j;
+    }
+
+    j["field"] = field;
+    j["op"] = CompareOpToString(comp_op);
+    j["value"] = target_value;
+    return j;
+}
+
+bool ConditionNode::Evaluate(const GsiState* gsi, const std::string& foreground_proc) const {
+    if (logic_op == LogicOp::And) {
+        if (children.empty()) return true;
+        for (const auto& child : children) {
+            if (!child.Evaluate(gsi, foreground_proc)) return false;
+        }
+        return true;
+    }
+    if (logic_op == LogicOp::Or) {
+        if (children.empty()) return false;
+        for (const auto& child : children) {
+            if (child.Evaluate(gsi, foreground_proc)) return true;
+        }
+        return false;
+    }
+    if (logic_op == LogicOp::Not) {
+        if (children.empty()) return false;
+        return !children[0].Evaluate(gsi, foreground_proc);
+    }
+
+    // Leaf node
+    if (field.empty()) return true;
+
+    std::string lower_field = RuleEngine::ToLower(field);
+    if (lower_field == "process.name" || lower_field == "process" || lower_field == "process_name") {
+        std::string proc = RuleEngine::ToLower(foreground_proc);
+        std::string target = target_value.is_string() ? RuleEngine::ToLower(target_value.get<std::string>()) : "";
+        bool matches = (proc == target);
+        if (!matches && target.size() > 4 && target.substr(target.size() - 4) == ".exe") {
+            matches = (proc == target.substr(0, target.size() - 4));
+        }
+        if (!matches && proc.size() > 4 && proc.substr(proc.size() - 4) == ".exe") {
+            matches = (proc.substr(0, proc.size() - 4) == target);
+        }
+
+        if (comp_op == CompareOp::Eq) return matches;
+        if (comp_op == CompareOp::Ne) return !matches;
+        return false;
+    }
+
+    if (!gsi) return false;
+    std::string op_str = CompareOpToString(comp_op);
+    return gsi->Evaluate(field, op_str, target_value);
+}
+
 namespace {
+
 
 uint64_t ParseAndClampPeriod(const std::string& pname, const nlohmann::json& pval, uint64_t def_period) {
     if (pval.contains("period_ms")) {
@@ -215,9 +393,24 @@ std::shared_ptr<Effect> CreateEffectFromProfile(const std::string& pname, const 
         ColorRGB col = ParseColor(pval, "color", "color1", ColorRGB(0, 240, 255));
         uint64_t period = ParseAndClampPeriod(pname, pval, 2500);
         return std::make_shared<RaindropEffect>(col, period);
+    } else if (type == "plugin") {
+        std::string plugin_name = pval.value("plugin_name", pval.value("plugin", pval.value("effect", pval.value("effect_name", pval.value("plugin_path", "")))));
+        if (plugin_name.empty()) {
+            LOG_ERROR("方案 '" << pname << "' (type: plugin) 缺少 plugin_name 字段");
+            return nullptr;
+        }
+        auto eff = PluginManager::Instance().CreateEffect(plugin_name);
+        if (!eff) {
+            eff = PluginManager::Instance().LoadPlugin(plugin_name);
+        }
+        if (!eff) {
+            LOG_WARN("方案 '" << pname << "' 引用的插件 '" << plugin_name << "' 暂未就绪，使用静默占位效果");
+            return std::make_shared<StaticEffect>(ColorRGB(0, 0, 0));
+        }
+        return eff;
     } else {
         LOG_ERROR("方案 '" << pname << "' 配置了未知的效果类型: '" << type 
-                  << "' (支持的有效类型: static, breathing, color_cycle, wave, custom_keymap, reactive, ripple, starry_night, quicksand, current, raindrop)");
+                  << "' (支持的有效类型: static, breathing, color_cycle, wave, custom_keymap, reactive, ripple, starry_night, quicksand, current, raindrop, plugin)");
         return nullptr;
     }
 }
@@ -365,6 +558,66 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
             }
         }
 
+        OrchestrationConfig new_orchestration;
+        if (j.contains("orchestration") && j["orchestration"].is_object()) {
+            const auto& orch = j["orchestration"];
+            if (orch.contains("fallback_profile") && orch["fallback_profile"].is_string()) {
+                new_orchestration.fallback_profile = orch["fallback_profile"].get<std::string>();
+            }
+            if (orch.contains("rules") && orch["rules"].is_array()) {
+                for (const auto& item : orch["rules"]) {
+                    if (!item.is_object()) {
+                        LOG_ERROR("编排规则项必须为 JSON 对象: " << item.dump());
+                        valid = false;
+                        continue;
+                    }
+                    OrchestrationRule r;
+                    r.id = item.value("id", "");
+                    r.name = item.value("name", "");
+                    r.process = ToLower(item.value("process", ""));
+                    r.dnd = item.value("dnd", item.value("suppress_web_ui", false));
+                    r.target_profile = item.value("target_profile", item.value("profile", ""));
+                    if (item.contains("condition")) {
+                        r.condition = ConditionNode::FromJson(item["condition"]);
+                    }
+                    if (r.target_profile.empty()) {
+                        LOG_ERROR("编排规则缺少有效的 target_profile / profile 字段: " << item.dump());
+                        valid = false;
+                        continue;
+                    }
+                    new_orchestration.rules.push_back(r);
+                }
+            }
+            if (orch.contains("event_overlays") && orch["event_overlays"].is_array()) {
+                for (const auto& item : orch["event_overlays"]) {
+                    if (!item.is_object()) {
+                        LOG_ERROR("事件覆盖规则项必须为 JSON 对象: " << item.dump());
+                        valid = false;
+                        continue;
+                    }
+                    EventOverlayRule ev;
+                    ev.event = item.value("event", "");
+                    ev.name = item.value("name", "");
+                    ev.effect = item.value("effect", item.value("profile", ""));
+                    ev.duration_ms = item.value("duration_ms", 1200ULL);
+                    ev.fade_out_ms = item.value("fade_ms", item.value("fade_out_ms", 400ULL));
+                    ev.attack_ms = item.value("attack_ms", 0ULL);
+                    ev.blend_mode = item.value("blend_mode", "blend");
+                    if (ev.event.empty()) {
+                        LOG_ERROR("事件覆盖规则缺少有效的 event 字段: " << item.dump());
+                        valid = false;
+                        continue;
+                    }
+                    if (ev.effect.empty()) {
+                        LOG_ERROR("事件覆盖规则缺少有效的 effect / profile 字段: " << item.dump());
+                        valid = false;
+                        continue;
+                    }
+                    new_orchestration.event_overlays.push_back(ev);
+                }
+            }
+        }
+
         std::unordered_map<std::string, std::shared_ptr<Profile>> new_profiles;
         if (!j.contains("profiles") || !j["profiles"].is_object() || j["profiles"].empty()) {
             LOG_ERROR("配置文件缺少有效的 'profiles' 节点或 profiles 为空: " << config_path);
@@ -437,6 +690,24 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
             }
         }
 
+        // 5. 编排规则 (orchestration.rules) 方案引用完整性校验
+        for (const auto& rule : new_orchestration.rules) {
+            if (new_profiles.find(rule.target_profile) == new_profiles.end()) {
+                LOG_ERROR("编排规则 (ID: '" << rule.id << "') 引用了未定义的方案: '" << rule.target_profile 
+                          << "'，请在 profiles 中定义方案 '" << rule.target_profile << "'");
+                valid = false;
+            }
+        }
+
+        // 6. 编排兜底方案 (orchestration.fallback_profile) 校验
+        if (!new_orchestration.fallback_profile.empty()) {
+            if (new_profiles.find(new_orchestration.fallback_profile) == new_profiles.end()) {
+                LOG_ERROR("编排兜底方案 fallback_profile '" << new_orchestration.fallback_profile 
+                          << "' 未在 profiles 中定义");
+                valid = false;
+            }
+        }
+
         if (!valid) {
             record_failure_ft();
             return false;
@@ -444,6 +715,7 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
 
         const size_t rules_count = new_rules.size();
         const size_t bindings_count = new_gsi_bindings.size();
+        const size_t orch_rules_count = new_orchestration.rules.size();
         const size_t profiles_count = new_profiles.size();
 
         // Apply under lock
@@ -454,6 +726,7 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
             target_fps_ = new_fps;
             rules_ = std::move(new_rules);
             gsi_bindings_ = std::move(new_gsi_bindings);
+            orchestration_ = std::move(new_orchestration);
             profiles_ = std::move(new_profiles);
             last_write_time_ = file_ft;
         }
@@ -461,6 +734,7 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
         LOG_INFO("成功加载配置文件: " << config_path << " (默认方案: " << def_name 
                  << ", 规则数: " << rules_count 
                  << ", GSI绑定数: " << bindings_count 
+                 << ", 编排规则数: " << orch_rules_count
                  << ", Profile数: " << profiles_count << ")");
         return true;
     } catch (const std::exception& e) {
@@ -506,7 +780,28 @@ std::shared_ptr<const Profile> RuleEngine::MatchProfile(const std::string& proce
     std::string lower_proc = ToLower(process_name);
     bool is_cs2 = (lower_proc == "cs2.exe" || lower_proc == "cs2" || lower_proc == "csgo.exe" || lower_proc == "csgo");
 
-    // 1. 如果当前处于 CS2 游戏中，优先按优先级顺序评估 GSI 绑定 (靠前优先)
+    // 1. 如果配置了现代声明式编排规则 (orchestration.rules)，优先顺序评估
+    for (const auto& rule : orchestration_.rules) {
+        if (!rule.process.empty()) {
+            bool matches = (lower_proc == rule.process);
+            if (!matches && rule.process.size() > 4 && rule.process.substr(rule.process.size() - 4) == ".exe") {
+                matches = (lower_proc == rule.process.substr(0, rule.process.size() - 4));
+            }
+            if (!matches && lower_proc.size() > 4 && lower_proc.substr(lower_proc.size() - 4) == ".exe") {
+                matches = (lower_proc.substr(0, lower_proc.size() - 4) == rule.process);
+            }
+            if (!matches) continue;
+        }
+
+        if (rule.condition.Evaluate(gsi_state, lower_proc)) {
+            auto it = profiles_.find(rule.target_profile);
+            if (it != profiles_.end()) {
+                return it->second;
+            }
+        }
+    }
+
+    // 2. 如果当前处于 CS2 游戏中，优先按优先级顺序评估传统 GSI 绑定 (靠前优先)
     if (is_cs2 && gsi_state != nullptr && gsi_state->IsActive()) {
         for (const auto& binding : gsi_bindings_) {
             if (gsi_state->Evaluate(binding.field, binding.op, binding.target_value)) {
@@ -518,7 +813,7 @@ std::shared_ptr<const Profile> RuleEngine::MatchProfile(const std::string& proce
         }
     }
 
-    // 2. 匹配具体的前台进程规则
+    // 3. 匹配具体的前台进程规则
     if (!lower_proc.empty()) {
         for (const auto& rule : rules_) {
             if (rule.process_name == lower_proc) {
@@ -540,7 +835,15 @@ std::shared_ptr<const Profile> RuleEngine::MatchProfile(const std::string& proce
         }
     }
 
-    // 3. Fallback to default profile (前台不是 cs2.exe 时，GSI 绑定绝不生效)
+    // 4. 编排兜底方案
+    if (!orchestration_.fallback_profile.empty()) {
+        auto fb_it = profiles_.find(orchestration_.fallback_profile);
+        if (fb_it != profiles_.end()) {
+            return fb_it->second;
+        }
+    }
+
+    // 5. Fallback to default profile (前台不是 cs2.exe 且无其他命中时，GSI 绑定绝不生效)
     auto def_it = profiles_.find(default_profile_name_);
     if (def_it != profiles_.end()) {
         return def_it->second;
@@ -554,10 +857,35 @@ std::shared_ptr<const Profile> RuleEngine::MatchProfile(const std::string& proce
     return nullptr;
 }
 
-bool RuleEngine::ShouldSuppressWebUi(const std::string& process_name) {
+bool RuleEngine::ShouldSuppressWebUi(const std::string& process_name, const GsiState* gsi) {
     std::lock_guard<std::mutex> lock(mutex_);
 
     std::string lower_proc = ToLower(process_name);
+
+    // 1. 优先检查编排规则的 DND 抑制
+    for (const auto& rule : orchestration_.rules) {
+        bool proc_matches = true;
+        if (!rule.process.empty()) {
+            proc_matches = (lower_proc == rule.process);
+            if (!proc_matches && rule.process.size() > 4 && rule.process.substr(rule.process.size() - 4) == ".exe") {
+                proc_matches = (lower_proc == rule.process.substr(0, rule.process.size() - 4));
+            }
+            if (!proc_matches && lower_proc.size() > 4 && lower_proc.substr(lower_proc.size() - 4) == ".exe") {
+                proc_matches = (lower_proc.substr(0, lower_proc.size() - 4) == rule.process);
+            }
+        }
+        if (proc_matches) {
+            bool cond_matches = true;
+            if (rule.condition.logic_op != LogicOp::None || !rule.condition.field.empty() || !rule.condition.children.empty()) {
+                cond_matches = rule.condition.Evaluate(gsi, lower_proc);
+            }
+            if (cond_matches && rule.dnd) {
+                return true;
+            }
+        }
+    }
+
+    // 2. 检查传统进程规则
     if (!lower_proc.empty()) {
         for (const auto& rule : rules_) {
             if (rule.process_name == lower_proc) {
@@ -575,6 +903,7 @@ bool RuleEngine::ShouldSuppressWebUi(const std::string& process_name) {
     // Default policy: unmapped (desktop / unknown) => false (do not suppress)
     return false;
 }
+
 
 bool RuleEngine::HasProfile(const std::string& name) const {
     std::lock_guard<std::mutex> lock(mutex_);

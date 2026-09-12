@@ -549,6 +549,27 @@ class AuraHal:
                     break
 
         if self._hHalMod:
+            # 施加内存防崩热补丁 (禁用 Logger::Log 并置零 EnableLog，杜绝 0xC0000409 崩溃)
+            try:
+                if not (ctypes.c_uint8.from_address(self._hHalMod + 0x7ABE0).value == 0xC3 and ctypes.c_uint32.from_address(self._hHalMod + 0x1CB85C).value == 0):
+                    k32.VirtualProtect.restype = wintypes.BOOL
+                    k32.VirtualProtect.argtypes = [ctypes.c_void_p, ctypes.c_size_t, wintypes.DWORD, ctypes.POINTER(wintypes.DWORD)]
+                    k32.FlushInstructionCache.restype = wintypes.BOOL
+                    k32.FlushInstructionCache.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_size_t]
+
+                    old_prot = wintypes.DWORD()
+                    # 1. EnableLog (RVA 0x1CB85C)
+                    if k32.VirtualProtect(self._hHalMod + 0x1CB85C, 4, 0x04, ctypes.byref(old_prot)):
+                        ctypes.c_uint32.from_address(self._hHalMod + 0x1CB85C).value = 0
+                        k32.VirtualProtect(self._hHalMod + 0x1CB85C, 4, old_prot.value, ctypes.byref(old_prot))
+                    # 2. Logger::Log (RVA 0x7ABE0) -> RET (0xC3)
+                    if k32.VirtualProtect(self._hHalMod + 0x7ABE0, 1, 0x40, ctypes.byref(old_prot)):
+                        ctypes.c_uint8.from_address(self._hHalMod + 0x7ABE0).value = 0xC3
+                        k32.VirtualProtect(self._hHalMod + 0x7ABE0, 1, old_prot.value, ctypes.byref(old_prot))
+                        k32.FlushInstructionCache(k32.GetCurrentProcess(), self._hHalMod + 0x7ABE0, 1)
+            except Exception as e:
+                logger.warning("驱动内存热补丁施加异常: %s", e)
+
             p_fn = k32.GetProcAddress(self._hHalMod, b"DllGetClassObject")
             if p_fn:
                 fn_get_class_obj = ctypes.WINFUNCTYPE(

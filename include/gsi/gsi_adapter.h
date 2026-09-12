@@ -21,6 +21,7 @@
 #include <vector>
 #include "third_party/json.hpp"
 #include "third_party/httplib.h"
+#include "engine/plugin_interface.h"
 
 namespace aura {
 
@@ -51,9 +52,16 @@ struct GameEventRecord {
 
 // 线程安全的 GSI 扁平化状态存储、事件推导与条件判断引擎
 // 核心纪律：该状态仅在内存中维护键值对，绝对不涉及任何 COM/HAL 或硬件调用
-class GsiState {
+class GsiState : public IGsiReader {
 public:
     GsiState() = default;
+    ~GsiState() override = default;
+
+    // IGsiReader 接口实现
+    double GetNumber(const char* field, double def_val = 0.0) const override;
+    bool GetBool(const char* field, bool def_val = false) const override;
+    const char* GetString(const char* field, const char* def_val = "") const override;
+    bool IsActive() const override { return IsActive(10000); }
 
     // 解析并扁平化来自 CS2 的 JSON Payload，同时执行状态跃迁比对，触发完整游戏事件
     void UpdateFromPayload(const nlohmann::json& payload);
@@ -65,7 +73,7 @@ public:
     nlohmann::json ToJson() const;
 
     // 检查 GSI 是否在指定时间内收到过有效心跳
-    bool IsActive(uint64_t timeout_ms = 10000) const;
+    bool IsActive(uint64_t timeout_ms) const;
 
     // 获取最新更新时间戳 (毫秒)
     uint64_t GetLastUpdateMs() const;
@@ -161,8 +169,18 @@ public:
     bool IsRunning() const { return is_running_.load(std::memory_order_acquire); }
     int GetPort() const { return port_; }
 
+    void SetPluginReloadHandler(std::function<bool(const std::string&)> handler) {
+        on_reload_plugin_ = std::move(handler);
+    }
+    void SetPreviewHandler(std::function<bool(const std::string&)> handler) {
+        on_preview_frame_ = std::move(handler);
+    }
+
 private:
     void SetupRoutes();
+
+    std::function<bool(const std::string&)> on_reload_plugin_;
+    std::function<bool(const std::string&)> on_preview_frame_;
 
     int port_{19897};
     std::unique_ptr<httplib::Server> svr_;

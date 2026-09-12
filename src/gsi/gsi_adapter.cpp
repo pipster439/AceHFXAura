@@ -357,6 +357,7 @@ void GsiState::TriggerEvent(const std::string& name,
     event_timestamps_[name] = now_ms;
     last_event_name_ = name;
     last_event_label_ = label;
+    last_event_sync_ms_ = 0;
 
     GameEventRecord rec;
     rec.name = name;
@@ -687,6 +688,88 @@ void GsiState::Clear() {
     prev_t_score_ = -1;
 }
 
+double GsiState::GetNumber(const char* field, double def_val) const {
+    if (!field || !*field) return def_val;
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (std::strncmp(field, "event.", 6) == 0) {
+        SyncEventFieldsToFlatState(GetCurrentEpochMs());
+    }
+    auto it = flat_state_.find(field);
+    if (it == flat_state_.end()) {
+        std::string f(field);
+        if (f.rfind("player.state.", 0) == 0) {
+            it = flat_state_.find("player_state." + f.substr(13));
+        } else if (f.rfind("player_state.", 0) == 0) {
+            it = flat_state_.find("player.state." + f.substr(13));
+        }
+    }
+    if (it != flat_state_.end()) {
+        if (it->second.type == GsiValue::Type::Number) return it->second.num_val;
+        if (it->second.type == GsiValue::Type::Boolean) return it->second.bool_val ? 1.0 : 0.0;
+        if (it->second.type == GsiValue::Type::String) {
+            try { return std::stod(it->second.str_val); } catch (...) { return def_val; }
+        }
+    }
+    return def_val;
+}
+
+bool GsiState::GetBool(const char* field, bool def_val) const {
+    if (!field || !*field) return def_val;
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (std::strncmp(field, "event.", 6) == 0) {
+        SyncEventFieldsToFlatState(GetCurrentEpochMs());
+    }
+    auto it = flat_state_.find(field);
+    if (it == flat_state_.end()) {
+        std::string f(field);
+        if (f.rfind("player.state.", 0) == 0) {
+            it = flat_state_.find("player_state." + f.substr(13));
+        } else if (f.rfind("player_state.", 0) == 0) {
+            it = flat_state_.find("player.state." + f.substr(13));
+        }
+    }
+    if (it != flat_state_.end()) {
+        if (it->second.type == GsiValue::Type::Boolean) return it->second.bool_val;
+        if (it->second.type == GsiValue::Type::Number) return it->second.num_val != 0.0;
+        if (it->second.type == GsiValue::Type::String) {
+            return !it->second.str_val.empty() && it->second.str_val != "false" && it->second.str_val != "0";
+        }
+    }
+    return def_val;
+}
+
+const char* GsiState::GetString(const char* field, const char* def_val) const {
+    if (!field || !*field) return def_val;
+    thread_local static std::string tl_buf;
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (std::strncmp(field, "event.", 6) == 0) {
+        SyncEventFieldsToFlatState(GetCurrentEpochMs());
+    }
+    auto it = flat_state_.find(field);
+    if (it == flat_state_.end()) {
+        std::string f(field);
+        if (f.rfind("player.state.", 0) == 0) {
+            it = flat_state_.find("player_state." + f.substr(13));
+        } else if (f.rfind("player_state.", 0) == 0) {
+            it = flat_state_.find("player.state." + f.substr(13));
+        }
+    }
+    if (it != flat_state_.end()) {
+        if (it->second.type == GsiValue::Type::String) {
+            tl_buf = it->second.str_val;
+            return tl_buf.c_str();
+        }
+        if (it->second.type == GsiValue::Type::Number) {
+            tl_buf = std::to_string(it->second.num_val);
+            return tl_buf.c_str();
+        }
+        if (it->second.type == GsiValue::Type::Boolean) {
+            return it->second.bool_val ? "true" : "false";
+        }
+    }
+    return def_val;
+}
+
 // ========================================================
 // GsiAdapter 实现
 // ========================================================
@@ -731,6 +814,31 @@ void GsiAdapter::SetupRoutes() {
 
     svr_->Get("/", gsi_get_handler);
     svr_->Get("/api/gsi/current", gsi_get_handler);
+
+    // 守护进程插件热重载 IPC 入口
+    svr_->Post("/api/plugin/reload", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string name;
+        try {
+            auto j = nlohmann::json::parse(req.body);
+            name = j.value("name", j.value("plugin_name", ""));
+        } catch (...) {}
+        bool ok = true;
+        if (on_reload_plugin_) {
+            ok = on_reload_plugin_(name);
+        }
+        res.status = ok ? 200 : 400;
+        res.set_content(ok ? "{\"status\":\"ok\",\"message\":\"Plugin reloaded\"}" : "{\"status\":\"error\",\"message\":\"Plugin reload failed\"}", "application/json; charset=utf-8");
+    });
+
+    // 守护进程编辑态硬件推流预览 IPC 入口
+    svr_->Post("/api/preview", [this](const httplib::Request& req, httplib::Response& res) {
+        bool ok = true;
+        if (on_preview_frame_) {
+            ok = on_preview_frame_(req.body);
+        }
+        res.status = ok ? 200 : 400;
+        res.set_content(ok ? "{\"status\":\"ok\"}" : "{\"status\":\"error\"}", "application/json; charset=utf-8");
+    });
 }
 
 bool GsiAdapter::Start(int port) {

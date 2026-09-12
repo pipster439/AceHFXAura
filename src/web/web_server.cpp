@@ -1,3 +1,11 @@
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+
 #include "web/web_server.h"
 #include "third_party/json.hpp"
 #include <fstream>
@@ -6,10 +14,280 @@
 #include <filesystem>
 #include <cctype>
 #include <algorithm>
+#include <vector>
 
 namespace aura {
 
 namespace {
+
+// -----------------------------------------------------------------------------
+// Win32 Code Page & UTF-8 Encoding Helpers
+// -----------------------------------------------------------------------------
+
+// 检查并确保字符串为合法 UTF-8 编码，若包含 OEM/ANSI (如 Windows CP936) 非 UTF-8 字符则进行转码，防范 nlohmann::json 抛出 type_error.316
+std::string EnsureValidUtf8(const std::string& input) {
+    if (input.empty()) {
+        return "";
+    }
+
+    // 1. 检查是否已经是合法的 UTF-8 编码 (防止重复转码造成乱码)
+    int valid_utf8_len = MultiByteToWideChar(
+        CP_UTF8,
+        MB_ERR_INVALID_CHARS,
+        input.data(),
+        static_cast<int>(input.size()),
+        nullptr,
+        0
+    );
+    if (valid_utf8_len > 0) {
+        return input;
+    }
+
+    // 2. 非合法 UTF-8，优先尝试从系统控制台 OEM 代码页 (如 CP936 GBK) 转码
+    UINT src_cp = GetOEMCP();
+    if (src_cp == 0) src_cp = CP_OEMCP;
+
+    int wlen = MultiByteToWideChar(src_cp, 0, input.data(), static_cast<int>(input.size()), nullptr, 0);
+    if (wlen <= 0) {
+        // 回退至系统 ANSI 代码页 (CP_ACP)
+        src_cp = GetACP();
+        if (src_cp == 0) src_cp = CP_ACP;
+        wlen = MultiByteToWideChar(src_cp, 0, input.data(), static_cast<int>(input.size()), nullptr, 0);
+    }
+
+    if (wlen <= 0) {
+        // 极端异常二进制数据兜底：替换为 Unicode Replacement Character \uFFFD
+        std::string safe;
+        safe.reserve(input.size());
+        for (unsigned char c : input) {
+            if (c < 0x80) {
+                safe.push_back(static_cast<char>(c));
+            } else {
+                safe += "\xEF\xBF\xBD"; // U+FFFD in UTF-8
+            }
+        }
+        return safe;
+    }
+
+    std::wstring wstr(static_cast<size_t>(wlen), L'\0');
+    MultiByteToWideChar(src_cp, 0, input.data(), static_cast<int>(input.size()), wstr.data(), wlen);
+
+    int ulen = WideCharToMultiByte(CP_UTF8, 0, wstr.data(), static_cast<int>(wstr.size()), nullptr, 0, nullptr, nullptr);
+    if (ulen <= 0) {
+        return input;
+    }
+
+    std::string utf8_str(static_cast<size_t>(ulen), '\0');
+    WideCharToMultiByte(CP_UTF8, 0, wstr.data(), static_cast<int>(wstr.size()), utf8_str.data(), ulen, nullptr, nullptr);
+    return utf8_str;
+}
+
+inline std::string EnsureUtf8(const std::string& input) {
+    return EnsureValidUtf8(input);
+}
+
+std::filesystem::path FindVcvars64Bat() {
+    std::vector<std::filesystem::path> candidates = {
+        L"C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Auxiliary\\Build\\vcvars64.bat",
+        L"C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\Build\\vcvars64.bat",
+        L"C:\\Program Files\\Microsoft Visual Studio\\2022\\Professional\\VC\\Auxiliary\\Build\\vcvars64.bat",
+        L"C:\\Program Files\\Microsoft Visual Studio\\2022\\Enterprise\\VC\\Auxiliary\\Build\\vcvars64.bat",
+        L"C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Community\\VC\\Auxiliary\\Build\\vcvars64.bat",
+        L"C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Professional\\VC\\Auxiliary\\Build\\vcvars64.bat",
+        L"C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Enterprise\\VC\\Auxiliary\\Build\\vcvars64.bat"
+    };
+
+    std::error_code ec;
+    for (const auto& c : candidates) {
+        if (std::filesystem::exists(c, ec)) {
+            return c;
+        }
+    }
+
+    // Try finding via vswhere.exe
+    std::filesystem::path vswhere = L"C:\\Program Files (x86)\\Microsoft Visual Studio\\Installer\\vswhere.exe";
+    if (std::filesystem::exists(vswhere, ec)) {
+        FILE* pipe = _popen("\"\"C:\\Program Files (x86)\\Microsoft Visual Studio\\Installer\\vswhere.exe\" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath\"", "r");
+        if (pipe) {
+            char buf[512] = {0};
+            if (fgets(buf, sizeof(buf), pipe)) {
+                std::string path_str(buf);
+                while (!path_str.empty() && (path_str.back() == '\r' || path_str.back() == '\n' || path_str.back() == ' ')) {
+                    path_str.pop_back();
+                }
+                if (!path_str.empty()) {
+                    std::filesystem::path p = std::filesystem::u8path(path_str) / "VC" / "Auxiliary" / "Build" / "vcvars64.bat";
+                    if (std::filesystem::exists(p, ec)) {
+                        _pclose(pipe);
+                        return p;
+                    }
+                }
+            }
+            _pclose(pipe);
+        }
+    }
+
+    return {};
+}
+
+bool CompileCppSourceToDll(const std::string& effect_name, 
+                           const std::string& source_code, 
+                           std::string& out_log, 
+                           std::string& out_dll_path, 
+                           int& out_exit_code) {
+    std::filesystem::path vcvars = FindVcvars64Bat();
+    if (vcvars.empty() || !std::filesystem::exists(vcvars)) {
+        out_log = "Error: Unable to locate MSVC vcvars64.bat on this Windows host.";
+        out_exit_code = -1;
+        return false;
+    }
+
+    std::error_code ec;
+    std::filesystem::path plugins_dir = "plugins";
+    std::filesystem::path src_dir = plugins_dir / "src";
+    std::filesystem::create_directories(plugins_dir, ec);
+    std::filesystem::create_directories(src_dir, ec);
+
+    std::string safe_name = effect_name;
+    if (safe_name.rfind("effect_", 0) == 0) {
+        safe_name = safe_name.substr(7);
+    }
+    std::string base_name = "effect_" + safe_name;
+
+    std::filesystem::path src_file = src_dir / (base_name + ".cpp");
+    std::filesystem::path dll_file = plugins_dir / (base_name + ".dll");
+    std::filesystem::path obj_file = plugins_dir / (base_name + ".obj");
+
+    // 写入 C++ 源码
+    {
+        std::ofstream ofs(src_file, std::ios::binary | std::ios::trunc);
+        if (!ofs.is_open()) {
+            out_log = "Error: Failed to write generated C++ source file to " + src_file.string();
+            out_exit_code = -2;
+            return false;
+        }
+        ofs.write(source_code.data(), source_code.size());
+        ofs.flush();
+    }
+
+    // 解析 project include 绝对路径
+    std::filesystem::path root_dir = std::filesystem::current_path();
+    if (!std::filesystem::exists(root_dir / "include" / "engine" / "effect.h")) {
+        wchar_t mod_path[MAX_PATH];
+        if (GetModuleFileNameW(nullptr, mod_path, MAX_PATH)) {
+            std::filesystem::path exe_dir = std::filesystem::path(mod_path).parent_path();
+            if (std::filesystem::exists(exe_dir / "include" / "engine" / "effect.h")) {
+                root_dir = exe_dir;
+            } else if (std::filesystem::exists(exe_dir / ".." / "include" / "engine" / "effect.h")) {
+                root_dir = (exe_dir / "..").lexically_normal();
+            } else if (std::filesystem::exists(exe_dir / ".." / ".." / "include" / "engine" / "effect.h")) {
+                root_dir = (exe_dir / ".." / "..").lexically_normal();
+            }
+        }
+    }
+
+    std::filesystem::path inc_dir = root_dir / "include";
+    std::filesystem::path inc_tp = inc_dir / "third_party";
+
+    std::filesystem::path abs_src = std::filesystem::absolute(src_file);
+    std::filesystem::path abs_dll = std::filesystem::absolute(dll_file);
+    std::filesystem::path abs_obj = std::filesystem::absolute(obj_file);
+
+    // 构造编译器命令行
+    std::wstring cmd_str = L"cmd.exe /c \"call \"" + vcvars.wstring() + L"\" >nul && cl.exe /nologo /std:c++17 /O2 /EHsc /utf-8 /MD /LD "
+        + L"/I \"" + inc_dir.wstring() + L"\" "
+        + L"/I \"" + inc_tp.wstring() + L"\" "
+        + L"/Fe:\"" + abs_dll.wstring() + L"\" "
+        + L"/Fo:\"" + abs_obj.wstring() + L"\" "
+        + L"\"" + abs_src.wstring() + L"\" /link /INCREMENTAL:NO\"";
+
+    SECURITY_ATTRIBUTES sa{};
+    sa.nLength = sizeof(sa);
+    sa.bInheritHandle = TRUE;
+    sa.lpSecurityDescriptor = nullptr;
+
+    HANDLE hPipeRead = nullptr;
+    HANDLE hPipeWrite = nullptr;
+    if (!CreatePipe(&hPipeRead, &hPipeWrite, &sa, 0)) {
+        out_log = "Error: Failed to create pipe for compiler process.";
+        out_exit_code = -3;
+        return false;
+    }
+    SetHandleInformation(hPipeRead, HANDLE_FLAG_INHERIT, 0);
+
+    STARTUPINFOW si{};
+    si.cb = sizeof(si);
+    si.hStdOutput = hPipeWrite;
+    si.hStdError = hPipeWrite;
+    si.dwFlags |= STARTF_USESTDHANDLES;
+
+    PROCESS_INFORMATION pi{};
+    std::vector<wchar_t> cmd_buf(cmd_str.begin(), cmd_str.end());
+    cmd_buf.push_back(L'\0');
+
+    BOOL created = CreateProcessW(nullptr, cmd_buf.data(), nullptr, nullptr, TRUE, CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi);
+    CloseHandle(hPipeWrite);
+
+    if (!created) {
+        CloseHandle(hPipeRead);
+        out_log = "Error: Failed to launch compiler process (CreateProcessW error " + std::to_string(GetLastError()) + ")";
+        out_exit_code = -4;
+        return false;
+    }
+
+    // 捕获编译器输出日志，并配合 PeekNamedPipe 轮询，杜绝管道写满造成的死锁
+    std::string pipe_output;
+    char buf[4096];
+    DWORD bytes_read = 0;
+    auto start_wait = std::chrono::steady_clock::now();
+
+    while (true) {
+        DWORD bytes_avail = 0;
+        if (PeekNamedPipe(hPipeRead, nullptr, 0, nullptr, &bytes_avail, nullptr) && bytes_avail > 0) {
+            DWORD to_read = (std::min)(bytes_avail, static_cast<DWORD>(sizeof(buf) - 1));
+            if (ReadFile(hPipeRead, buf, to_read, &bytes_read, nullptr) && bytes_read > 0) {
+                pipe_output.append(buf, bytes_read);
+            }
+        } else {
+            DWORD wait_res = WaitForSingleObject(pi.hProcess, 50);
+            if (wait_res == WAIT_OBJECT_0) {
+                // 彻底排空管道中残留数据
+                while (ReadFile(hPipeRead, buf, sizeof(buf) - 1, &bytes_read, nullptr) && bytes_read > 0) {
+                    pipe_output.append(buf, bytes_read);
+                }
+                break;
+            }
+        }
+
+        auto elapsed_s = std::chrono::duration_cast<std::chrono::seconds>(
+            std::chrono::steady_clock::now() - start_wait).count();
+        if (elapsed_s >= 25) {
+            TerminateProcess(pi.hProcess, 1);
+            WaitForSingleObject(pi.hProcess, 1000);
+            while (ReadFile(hPipeRead, buf, sizeof(buf) - 1, &bytes_read, nullptr) && bytes_read > 0) {
+                pipe_output.append(buf, bytes_read);
+            }
+            CloseHandle(pi.hProcess);
+            CloseHandle(pi.hThread);
+            CloseHandle(hPipeRead);
+            out_log = "Error: Compilation timed out after 25 seconds.\n" + EnsureValidUtf8(pipe_output);
+            out_exit_code = -5;
+            return false;
+        }
+    }
+
+    DWORD exit_code = 0;
+    GetExitCodeProcess(pi.hProcess, &exit_code);
+    out_exit_code = static_cast<int>(exit_code);
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+    CloseHandle(hPipeRead);
+
+    out_log = EnsureValidUtf8(pipe_output);
+    out_dll_path = dll_file.string();
+    return (exit_code == 0 && std::filesystem::exists(dll_file));
+}
 
 const char* EMBEDDED_FALLBACK_HTML = R"rawhtml(<!DOCTYPE html>
 <html lang="zh-CN">
@@ -239,11 +517,11 @@ WebServer::~WebServer() {
 }
 
 void WebServer::SetupRoutes() {
-    // 限制请求体上限为 256KB，防止超大请求引发内存拒绝服务 (DoS)
-    svr_.set_payload_max_length(256 * 1024);
+    // 限制请求体上限为 1024KB (1MB)，容纳生成的完整 C++ 源码
+    svr_.set_payload_max_length(1024 * 1024);
     svr_.set_error_handler([](const httplib::Request& /*req*/, httplib::Response& res) {
         if (res.status == 413) {
-            res.set_content(R"json({"status":"error","error":"Payload Too Large","message":"请求体超过 256KB 上限"})json", "application/json; charset=utf-8");
+            res.set_content(R"json({"status":"error","error":"Payload Too Large","message":"请求体超过 1MB 上限"})json", "application/json; charset=utf-8");
         }
     });
 
@@ -295,6 +573,34 @@ void WebServer::SetupRoutes() {
             {"status", "ok"},
             {"service", "aura_web_ui"},
             {"timestamp", now_ms}
+        };
+        res.set_content(j.dump(), "application/json; charset=utf-8");
+    });
+
+    // 查询所有已编译的光效插件列表
+    svr_.Get("/api/plugins", [](const httplib::Request&, httplib::Response& res) {
+        nlohmann::json plugins = nlohmann::json::array();
+        std::error_code ec;
+        std::filesystem::path plugins_dir = "plugins";
+        if (std::filesystem::exists(plugins_dir, ec)) {
+            for (const auto& entry : std::filesystem::directory_iterator(plugins_dir, ec)) {
+                if (entry.is_regular_file(ec) && entry.path().extension() == ".dll") {
+                    std::string stem = entry.path().stem().string();
+                    std::string name = stem;
+                    if (name.rfind("effect_", 0) == 0) {
+                        name = name.substr(7);
+                    }
+                    plugins.push_back({
+                        {"name", name},
+                        {"filename", entry.path().filename().string()},
+                        {"path", entry.path().string()}
+                    });
+                }
+            }
+        }
+        nlohmann::json j = {
+            {"status", "ok"},
+            {"plugins", plugins}
         };
         res.set_content(j.dump(), "application/json; charset=utf-8");
     });
@@ -473,6 +779,241 @@ void WebServer::SetupRoutes() {
             nlohmann::json err = {
                 {"status", "error"},
                 {"message", std::string("请求处理失败: ") + e.what()}
+            };
+            res.set_content(err.dump(), "application/json; charset=utf-8");
+        }
+    });
+
+    // 编译自定义 C++ 光效源码为独立插件 DLL
+    svr_.Post("/api/compile_effect", [this](const httplib::Request& req, httplib::Response& res) {
+        if (!ValidateWriteRequest(req, res)) {
+            return;
+        }
+        auto start_t = std::chrono::steady_clock::now();
+        try {
+            auto j = nlohmann::json::parse(req.body);
+            std::string name = j.value("name", "");
+            std::string code = j.value("code", j.value("source", ""));
+
+            if (name.empty()) {
+                res.status = 400;
+                res.set_content(R"json({"status":"error","success":false,"message":"缺少插件名称 name 字段"})json", "application/json; charset=utf-8");
+                return;
+            }
+
+            // 校验名称合法性: 1-64 位英文字母、数字与下划线
+            if (name.size() > 64) {
+                res.status = 400;
+                res.set_content(R"json({"status":"error","success":false,"message":"插件名称超过 64 字符上限"})json", "application/json; charset=utf-8");
+                return;
+            }
+            for (char c : name) {
+                if (!std::isalnum(static_cast<unsigned char>(c)) && c != '_') {
+                    res.status = 400;
+                    res.set_content(R"json({"status":"error","success":false,"message":"插件名称非法，仅允许英文字母、数字及下划线"})json", "application/json; charset=utf-8");
+                    return;
+                }
+            }
+
+            if (code.empty()) {
+                res.status = 400;
+                res.set_content(R"json({"status":"error","success":false,"message":"缺少待编译的 C++ 源码 code 字段"})json", "application/json; charset=utf-8");
+                return;
+            }
+
+            std::string out_log;
+            std::string out_dll_path;
+            int exit_code = 0;
+            bool ok = CompileCppSourceToDll(name, code, out_log, out_dll_path, exit_code);
+
+            auto duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - start_t).count();
+
+            std::string safe_name = name;
+            if (safe_name.rfind("effect_", 0) == 0) {
+                safe_name = safe_name.substr(7);
+            }
+            std::string plugin_file_name = "effect_" + safe_name;
+
+            if (ok) {
+                nlohmann::json resp = {
+                    {"status", "ok"},
+                    {"success", true},
+                    {"plugin_name", plugin_file_name},
+                    {"dll_path", "plugins/" + plugin_file_name + ".dll"},
+                    {"plugin_path", "plugins/" + plugin_file_name + ".dll"},
+                    {"compiler_output", out_log},
+                    {"log", out_log},
+                    {"duration_ms", duration_ms}
+                };
+                res.status = 200;
+                res.set_content(resp.dump(), "application/json; charset=utf-8");
+            } else {
+                nlohmann::json resp = {
+                    {"status", "error"},
+                    {"success", false},
+                    {"message", "Compilation failed"},
+                    {"exit_code", exit_code},
+                    {"compiler_output", out_log},
+                    {"log", out_log},
+                    {"duration_ms", duration_ms}
+                };
+                res.status = 400;
+                res.set_content(resp.dump(), "application/json; charset=utf-8");
+            }
+        } catch (const std::exception& e) {
+            res.status = 400;
+            nlohmann::json err = {
+                {"status", "error"},
+                {"success", false},
+                {"message", std::string("编译请求处理异常: ") + e.what()}
+            };
+            res.set_content(err.dump(), "application/json; charset=utf-8");
+        }
+    });
+
+    // 守护进程插件热重载触发接口
+    svr_.Post("/api/reload_plugin", [this](const httplib::Request& req, httplib::Response& res) {
+        if (!ValidateWriteRequest(req, res)) {
+            return;
+        }
+        try {
+            auto j = nlohmann::json::parse(req.body);
+            std::string name = j.value("name", j.value("plugin_name", ""));
+            if (name.empty()) {
+                res.status = 400;
+                res.set_content(R"json({"status":"error","success":false,"message":"缺少 plugin_name 或 name 字段"})json", "application/json; charset=utf-8");
+                return;
+            }
+
+            // 同步通知 daemon IPC (127.0.0.1:19897)
+            httplib::Client cli("127.0.0.1", 19897);
+            cli.set_connection_timeout(1, 0);
+            cli.set_read_timeout(2, 0);
+            nlohmann::json payload = {{"plugin_name", name}, {"name", name}};
+            auto cli_res = cli.Post("/api/plugin/reload", payload.dump(), "application/json");
+
+            bool daemon_synced = (cli_res && cli_res->status == 200);
+
+            nlohmann::json resp = {
+                {"status", "ok"},
+                {"success", true},
+                {"message", "Plugin " + name + " reloaded"},
+                {"daemon_synced", daemon_synced}
+            };
+            res.status = 200;
+            res.set_content(resp.dump(), "application/json; charset=utf-8");
+        } catch (const std::exception& e) {
+            res.status = 400;
+            nlohmann::json err = {
+                {"status", "error"},
+                {"success", false},
+                {"message", std::string("重载插件异常: ") + e.what()}
+            };
+            res.set_content(err.dump(), "application/json; charset=utf-8");
+        }
+    });
+
+    // 编辑态虚拟/硬件推流实时预览接口
+    svr_.Post("/api/preview", [this](const httplib::Request& req, httplib::Response& res) {
+        if (!ValidateWriteRequest(req, res)) {
+            return;
+        }
+        try {
+            // 转发推流预览帧至 daemon (127.0.0.1:19897)
+            httplib::Client cli("127.0.0.1", 19897);
+            cli.set_connection_timeout(0, 300000);
+            cli.set_read_timeout(0, 500000);
+            auto cli_res = cli.Post("/api/preview", req.body, "application/json");
+
+            nlohmann::json resp = {
+                {"status", "ok"},
+                {"success", true},
+                {"daemon_active", (cli_res && cli_res->status == 200)}
+            };
+            res.status = 200;
+            res.set_content(resp.dump(), "application/json; charset=utf-8");
+        } catch (const std::exception& e) {
+            res.status = 400;
+            nlohmann::json err = {
+                {"status", "error"},
+                {"success", false},
+                {"message", std::string("预览推流异常: ") + e.what()}
+            };
+            res.set_content(err.dump(), "application/json; charset=utf-8");
+        }
+    });
+
+    svr_.Post("/api/preview_frame", [this](const httplib::Request& req, httplib::Response& res) {
+        if (!ValidateWriteRequest(req, res)) {
+            return;
+        }
+        try {
+            httplib::Client cli("127.0.0.1", 19897);
+            cli.set_connection_timeout(0, 300000);
+            cli.set_read_timeout(0, 500000);
+            auto cli_res = cli.Post("/api/preview", req.body, "application/json");
+
+            nlohmann::json resp = {
+                {"status", "ok"},
+                {"success", true},
+                {"daemon_active", (cli_res && cli_res->status == 200)}
+            };
+            res.status = 200;
+            res.set_content(resp.dump(), "application/json; charset=utf-8");
+        } catch (const std::exception& e) {
+            res.status = 400;
+            nlohmann::json err = {
+                {"status", "error"},
+                {"success", false},
+                {"message", std::string("预览推流异常: ") + e.what()}
+            };
+            res.set_content(err.dump(), "application/json; charset=utf-8");
+        }
+    });
+
+    // 查询所有已安装或已编译的动态光效插件
+    svr_.Get("/api/plugins", [this](const httplib::Request& req, httplib::Response& res) {
+        try {
+            std::error_code ec;
+            std::filesystem::path plugins_dir = "plugins";
+            nlohmann::json plugin_list = nlohmann::json::array();
+
+            if (std::filesystem::exists(plugins_dir, ec) && std::filesystem::is_directory(plugins_dir, ec)) {
+                for (const auto& entry : std::filesystem::directory_iterator(plugins_dir, ec)) {
+                    if (entry.is_regular_file(ec) && entry.path().extension() == ".dll") {
+                        std::string filename = entry.path().filename().string();
+                        std::string effect_name = entry.path().stem().string();
+                        if (effect_name.rfind("effect_", 0) == 0) {
+                            effect_name = effect_name.substr(7);
+                        }
+                        auto fsize = entry.file_size(ec);
+                        auto lwt = entry.last_write_time(ec);
+                        auto s_time = std::chrono::duration_cast<std::chrono::seconds>(lwt.time_since_epoch()).count();
+
+                        plugin_list.push_back({
+                            {"name", effect_name},
+                            {"filename", filename},
+                            {"path", entry.path().string()},
+                            {"size_bytes", fsize},
+                            {"modified_epoch", s_time}
+                        });
+                    }
+                }
+            }
+
+            nlohmann::json resp = {
+                {"status", "ok"},
+                {"plugins", plugin_list},
+                {"count", plugin_list.size()}
+            };
+            res.status = 200;
+            res.set_content(resp.dump(), "application/json; charset=utf-8");
+        } catch (const std::exception& e) {
+            res.status = 500;
+            nlohmann::json err = {
+                {"status", "error"},
+                {"message", std::string("获取插件列表异常: ") + e.what()}
             };
             res.set_content(err.dump(), "application/json; charset=utf-8");
         }

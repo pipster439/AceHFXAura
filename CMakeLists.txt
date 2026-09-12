@@ -49,6 +49,8 @@ set(DAEMON_SOURCES
     src/config/rule_engine.cpp
     src/engine/effect_engine.cpp
     src/engine/builtin_effects.cpp
+    src/engine/plugin_manager.cpp
+    src/engine/overlay_manager.cpp
     src/supervisor/web_supervisor.cpp
     src/gsi/gsi_adapter.cpp
 )
@@ -62,6 +64,9 @@ set(DAEMON_HEADERS
     include/engine/effect.h
     include/engine/builtin_effects.h
     include/engine/effect_engine.h
+    include/engine/plugin_interface.h
+    include/engine/plugin_manager.h
+    include/engine/overlay_manager.h
     include/supervisor/web_supervisor.h
     include/gsi/gsi_adapter.h
     include/utils/logger.h
@@ -80,9 +85,17 @@ target_link_libraries(aura_daemon PRIVATE
     ole32
     oleaut32
     user32
+    shell32
     psapi
     ws2_32
     crypt32
+)
+
+add_custom_command(TARGET aura_daemon POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        $<TARGET_FILE:aura_daemon>
+        "${CMAKE_CURRENT_SOURCE_DIR}/aura_daemon.exe"
+    COMMENT "Copying aura_daemon.exe to workspace root"
 )
 
 add_executable(test_com tests/test_com.cpp)
@@ -108,11 +121,21 @@ target_link_libraries(aura_web_ui PRIVATE
     user32
 )
 
+add_custom_command(TARGET aura_web_ui POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        $<TARGET_FILE:aura_web_ui>
+        "${CMAKE_CURRENT_SOURCE_DIR}/aura_web_ui.exe"
+    COMMENT "Copying aura_web_ui.exe to workspace root"
+)
+
 # 3. 单元测试: test_gsi_rules
 add_executable(test_gsi_rules
     tests/test_gsi_rules.cpp
     src/config/rule_engine.cpp
     src/engine/builtin_effects.cpp
+    src/engine/effect_engine.cpp
+    src/engine/plugin_manager.cpp
+    src/engine/overlay_manager.cpp
     src/gsi/gsi_adapter.cpp
     src/aura/keymap.cpp
     src/web/web_server.cpp
@@ -123,6 +146,7 @@ target_link_libraries(test_gsi_rules PRIVATE
     crypt32
     user32
 )
+
 
 # 4. 诊断测试: test_diag_hook (手动交互式诊断工具，不注册到 CTest)
 add_executable(test_diag_hook tests/test_diag_hook.cpp)

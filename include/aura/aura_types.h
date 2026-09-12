@@ -112,6 +112,10 @@ struct FrameBuffer {
         }
     }
 
+    void Fill(const ColorRGB& color) {
+        Fill(color.r, color.g, color.b);
+    }
+
     void SetKey(size_t led_id, uint8_t r, uint8_t g, uint8_t b) {
         if (led_id < TOTAL_LEDS) {
             buffer[led_id * 3 + 0] = r;

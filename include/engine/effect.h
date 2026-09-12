@@ -2,6 +2,7 @@
 
 #include "aura/aura_types.h"
 #include "aura/keymap.h"
+#include "engine/plugin_interface.h"
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -10,8 +11,13 @@ namespace aura {
 
 class Effect {
 public:
+    Effect() = default;
+    explicit Effect(const std::string& /*name*/) {}
     virtual ~Effect() = default;
     virtual void Render(uint64_t elapsed_ms, FrameBuffer& out_frame, const Keymap& keymap) = 0;
+    virtual void RenderWithContext(const EffectContext& ctx, FrameBuffer& out_frame) {
+        Render(ctx.elapsed_ms, out_frame, ctx.keymap);
+    }
 };
 
 struct KeyOverride {
@@ -26,9 +32,10 @@ struct Profile {
     uint8_t brightness = 255;
     int fps = 25;
 
-    void Render(uint64_t elapsed_ms, FrameBuffer& out_frame, const Keymap& keymap) const {
+    void Render(uint64_t elapsed_ms, FrameBuffer& out_frame, const Keymap& keymap, const IGsiReader* gsi = nullptr) const {
         if (base_effect) {
-            base_effect->Render(elapsed_ms, out_frame, keymap);
+            EffectContext ctx(elapsed_ms, keymap, gsi);
+            base_effect->RenderWithContext(ctx, out_frame);
         } else {
             out_frame.Clear();
         }

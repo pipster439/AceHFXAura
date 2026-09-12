@@ -1,6 +1,7 @@
 #pragma once
 
 #include "engine/effect.h"
+#include "engine/overlay_manager.h"
 #include "aura/aura_types.h"
 #include "aura/keymap.h"
 #include <memory>
@@ -17,10 +18,19 @@ public:
     // invalidate the profile currently being rendered (no dangling pointers).
     void SetActiveProfile(std::shared_ptr<const Profile> profile);
 
-    // Zero-allocation render tick for the current elapsed time
-    void Tick(FrameBuffer& out_frame, const Keymap& keymap);
+    // Zero-allocation render tick for the current elapsed time with optional GSI reader and overlays
+    void Tick(FrameBuffer& out_frame, const Keymap& keymap, const IGsiReader* gsi = nullptr);
 
     uint64_t GetElapsedMs() const;
+
+    // CS2 Transient Event Overlay Manager
+    OverlayManager& GetOverlayManager() { return overlay_manager_; }
+    const OverlayManager& GetOverlayManager() const { return overlay_manager_; }
+
+    // Edit-time preview frame hardware push
+    void SetPreviewFrame(const FrameBuffer& frame, uint64_t duration_ms = 300);
+    void ClearPreview();
+    bool HasActivePreview() const;
 
 private:
     std::shared_ptr<const Profile> GetActiveProfileCopy() const;
@@ -28,6 +38,13 @@ private:
     mutable std::mutex profile_mutex_;
     std::shared_ptr<const Profile> active_profile_;
     std::chrono::steady_clock::time_point start_time_;
+
+    OverlayManager overlay_manager_;
+
+    mutable std::mutex preview_mutex_;
+    FrameBuffer preview_frame_;
+    bool preview_active_{false};
+    std::chrono::steady_clock::time_point preview_expiry_;
 };
 
 } // namespace aura

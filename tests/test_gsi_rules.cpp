@@ -12,6 +12,10 @@
 #include "aura/aura_types.h"
 #include "engine/builtin_effects.h"
 #include "monitor/key_input_hub.h"
+#include "engine/plugin_interface.h"
+#include "engine/plugin_manager.h"
+#include "engine/overlay_manager.h"
+#include "engine/effect_engine.h"
 
 namespace aura {
 double ParseAndClampThickness(const std::string& pname, const nlohmann::json& pval, double def_val = 1.0);
@@ -1761,6 +1765,410 @@ int main() {
         CHECK(true, "RuleEngine 解析生成的全部 11 款光效多帧渲染安全验证通过");
 
         std::filesystem::remove(tmp_11_cfg);
+    }
+
+    // =========================================================================
+    // 23. ConditionNode AST 递归逻辑与多条件运算验证
+    // =========================================================================
+    std::cout << "\n[测试 23] ConditionNode AST 递归逻辑与多条件运算验证...\n";
+    {
+        aura::GsiState gsi;
+        nlohmann::json payload = {
+            {"player", {
+                {"state", {
+                    {"health", 18},
+                    {"armor", 85},
+                    {"flashed", 120}
+                }},
+                {"activity", "playing"},
+                {"match_stats", {
+                    {"kills", 3},
+                    {"assists", 1}
+                }}
+            }},
+            {"round", {
+                {"phase", "live"},
+                {"bomb", "planted"}
+            }}
+        };
+        gsi.UpdateFromPayload(payload);
+
+        // 1. 叶子节点比较运算符 (Eq, Ne, Lt, Le, Gt, Ge)
+        {
+            aura::ConditionNode node_eq;
+            node_eq.field = "player.state.health";
+            node_eq.comp_op = aura::CompareOp::Eq;
+            node_eq.target_value = 18;
+            CHECK(node_eq.Evaluate(&gsi, "cs2.exe"), "叶子节点: health == 18 判定为 true");
+
+            aura::ConditionNode node_ne;
+            node_ne.field = "player.state.health";
+            node_ne.comp_op = aura::CompareOp::Ne;
+            node_ne.target_value = 100;
+            CHECK(node_ne.Evaluate(&gsi, "cs2.exe"), "叶子节点: health != 100 判定为 true");
+
+            aura::ConditionNode node_lt;
+            node_lt.field = "player.state.health";
+            node_lt.comp_op = aura::CompareOp::Lt;
+            node_lt.target_value = 20;
+            CHECK(node_lt.Evaluate(&gsi, "cs2.exe"), "叶子节点: health < 20 判定为 true");
+
+            aura::ConditionNode node_le;
+            node_le.field = "player.state.health";
+            node_le.comp_op = aura::CompareOp::Le;
+            node_le.target_value = 18;
+            CHECK(node_le.Evaluate(&gsi, "cs2.exe"), "叶子节点: health <= 18 判定为 true");
+
+            aura::ConditionNode node_gt;
+            node_gt.field = "player.state.armor";
+            node_gt.comp_op = aura::CompareOp::Gt;
+            node_gt.target_value = 50;
+            CHECK(node_gt.Evaluate(&gsi, "cs2.exe"), "叶子节点: armor > 50 判定为 true");
+
+            aura::ConditionNode node_ge;
+            node_ge.field = "player.state.armor";
+            node_ge.comp_op = aura::CompareOp::Ge;
+            node_ge.target_value = 85;
+            CHECK(node_ge.Evaluate(&gsi, "cs2.exe"), "叶子节点: armor >= 85 判定为 true");
+        }
+
+        // 2. 字符串与进程叶子节点
+        {
+            aura::ConditionNode node_bomb;
+            node_bomb.field = "round.bomb";
+            node_bomb.comp_op = aura::CompareOp::Eq;
+            node_bomb.target_value = "planted";
+            CHECK(node_bomb.Evaluate(&gsi, "cs2.exe"), "字符串字段: round.bomb == 'planted' 判定为 true");
+
+            aura::ConditionNode node_proc;
+            node_proc.field = "process";
+            node_proc.comp_op = aura::CompareOp::Eq;
+            node_proc.target_value = "cs2.exe";
+            CHECK(node_proc.Evaluate(&gsi, "cs2.exe"), "进程字段: process == 'cs2.exe' 判定为 true");
+            CHECK(!node_proc.Evaluate(&gsi, "code.exe"), "进程字段: process == 'cs2.exe' 在 code.exe 下判定为 false");
+        }
+
+        // 3. 逻辑运算与复合 AST 树
+        {
+            // AND 节点: (health < 20) AND (round.bomb == "planted")
+            aura::ConditionNode c1, c2, node_and;
+            c1.field = "player.state.health";
+            c1.comp_op = aura::CompareOp::Lt;
+            c1.target_value = 20;
+
+            c2.field = "round.bomb";
+            c2.comp_op = aura::CompareOp::Eq;
+            c2.target_value = "planted";
+
+            node_and.logic_op = aura::LogicOp::And;
+            node_and.children = {c1, c2};
+            CHECK(node_and.Evaluate(&gsi, "cs2.exe"), "复合 AND 树节点求值正确");
+
+            // OR 节点: (health == 100) OR (round.bomb == "planted")
+            aura::ConditionNode c_eq_100;
+            c_eq_100.field = "player.state.health";
+            c_eq_100.comp_op = aura::CompareOp::Eq;
+            c_eq_100.target_value = 100;
+
+            aura::ConditionNode node_or;
+            node_or.logic_op = aura::LogicOp::Or;
+            node_or.children = {c_eq_100, c2};
+            CHECK(node_or.Evaluate(&gsi, "cs2.exe"), "复合 OR 树节点 (false OR true) 求值正确");
+
+            // NOT 节点: NOT (health == 100)
+            aura::ConditionNode node_not;
+            node_not.logic_op = aura::LogicOp::Not;
+            node_not.children = {c_eq_100};
+            CHECK(node_not.Evaluate(&gsi, "cs2.exe"), "复合 NOT 节点求值正确");
+        }
+
+        // 4. JSON 序列化与反序列化双向一致性
+        {
+            nlohmann::json tree_json = {
+                {"op", "and"},
+                {"conditions", {
+                    {
+                        {"field", "process"},
+                        {"op", "=="},
+                        {"value", "cs2.exe"}
+                    },
+                    {
+                        {"op", "or"},
+                        {"conditions", {
+                            {{"field", "player.state.health"}, {"op", "<="}, {"value", 20}},
+                            {{"field", "round.bomb"}, {"op", "=="}, {"value", "planted"}}
+                        }}
+                    }
+                }}
+            };
+
+            auto parsed_tree = aura::ConditionNode::FromJson(tree_json);
+            CHECK(parsed_tree.Evaluate(&gsi, "cs2.exe"), "从 JSON 解析的高级 AST 树求值通过 (cs2.exe)");
+            CHECK(!parsed_tree.Evaluate(&gsi, "explorer.exe"), "从 JSON 解析的高级 AST 树在前台不是 cs2 时严格隔离返回 false");
+
+            nlohmann::json serialized = parsed_tree.ToJson();
+            CHECK(serialized.contains("op") && serialized["op"] == "and", "AST 序列化保留顶级 op 字段");
+            CHECK(serialized.contains("conditions") && serialized["conditions"].size() == 2, "AST 序列化保留 conditions 数组");
+            auto re_parsed = aura::ConditionNode::FromJson(serialized);
+            CHECK(re_parsed.Evaluate(&gsi, "cs2.exe"), "反序列化往返后求值结果完全一致");
+        }
+    }
+
+    // =========================================================================
+    // 24. OverlayManager CS2 瞬态覆盖光效驱动与生命周期/混合验证
+    // =========================================================================
+    std::cout << "\n[测试 24] OverlayManager CS2 瞬态覆盖光效驱动与生命周期/混合验证...\n";
+    {
+        aura::OverlayManager overlay_mgr;
+        aura::Keymap km;
+        std::string km_path = "tests/fixtures/calibrated_keymap.json";
+        if (!std::filesystem::exists(km_path)) {
+            km_path = "calibrated_keymap.json";
+        }
+        km.LoadFromJson(km_path);
+
+        // 注册覆盖光效绑定: event.kill, event.bomb_planted
+        aura::OverlayBinding b_kill;
+        b_kill.event_name = "event.kill";
+        b_kill.duration_ms = 1000;
+        b_kill.attack_ms = 100;
+        b_kill.fade_out_ms = 400;
+        b_kill.blend_mode = "replace";
+        b_kill.effect = std::make_shared<aura::StaticEffect>(aura::ColorRGB(255, 0, 0));
+        overlay_mgr.RegisterBinding(b_kill);
+
+        aura::OverlayBinding b_bomb;
+        b_bomb.event_name = "event.bomb_planted";
+        b_bomb.duration_ms = 2000;
+        b_bomb.attack_ms = 200;
+        b_bomb.fade_out_ms = 600;
+        b_bomb.blend_mode = "add";
+        b_bomb.effect = std::make_shared<aura::StaticEffect>(aura::ColorRGB(100, 50, 0));
+        overlay_mgr.RegisterBinding(b_bomb);
+
+        CHECK(overlay_mgr.GetActiveOverlayCount() == 0, "初始状态下无活跃覆盖光效");
+
+        // 模拟 GSI 遥测驱动边缘触发
+        aura::GsiState gsi;
+        nlohmann::json s_initial = {
+            {"player", {
+                {"state", {{"health", 100}, {"armor", 100}, {"round_kills", 0}, {"round_killhs", 0}}},
+                {"team", "CT"}
+            }},
+            {"round", {{"phase", "live"}, {"bomb", ""}}}
+        };
+        gsi.UpdateFromPayload(s_initial);
+        overlay_mgr.UpdateBindingsFromGsi(&gsi, 1000);
+        CHECK(overlay_mgr.GetActiveOverlayCount() == 0, "kills=0 时未触发覆盖光效");
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+
+        // kills: 0 -> 1 上升沿触发
+        nlohmann::json s_kill1 = {
+            {"player", {
+                {"state", {{"health", 100}, {"armor", 100}, {"round_kills", 1}, {"round_killhs", 0}}},
+                {"team", "CT"}
+            }},
+            {"round", {{"phase", "live"}, {"bomb", ""}}}
+        };
+        gsi.UpdateFromPayload(s_kill1);
+        overlay_mgr.UpdateBindingsFromGsi(&gsi, 2000);
+        CHECK(overlay_mgr.GetActiveOverlayCount() == 1, "kills 递增上升沿成功触发 event.kill 覆盖光效");
+
+        // 持续处于 kills=1，不应重复触发叠加
+        overlay_mgr.UpdateBindingsFromGsi(&gsi, 2100);
+        CHECK(overlay_mgr.GetActiveOverlayCount() == 1, "kills 保持不变不产生重复触发");
+
+        // 验证 ActiveOverlay 权重计算与各阶段特征
+        aura::ActiveOverlay ao;
+        ao.start_ms = 1000;
+        ao.attack_ms = 100;
+        ao.duration_ms = 1000;
+        ao.fade_out_ms = 400; // 阶段: [1000, 1100] 爬坡, [1100, 1600] 持续, [1600, 2000] 线性消退
+
+        CHECK(std::abs(ao.ComputeWeight(1000) - 0.0) < 0.05, "t=1000 起始时刻权重接近 0.0");
+        CHECK(std::abs(ao.ComputeWeight(1050) - 0.5) < 0.05, "t=1050 attack 中点时刻权重接近 0.5");
+        CHECK(std::abs(ao.ComputeWeight(1100) - 1.0) < 0.05, "t=1100 attack 终点时刻权重达到 1.0");
+        CHECK(std::abs(ao.ComputeWeight(1300) - 1.0) < 0.05, "t=1300 sustain 维持期权重保持 1.0");
+        CHECK(std::abs(ao.ComputeWeight(1800) - 0.5) < 0.05, "t=1800 fade_out 衰减中点权重接近 0.5");
+        CHECK(std::abs(ao.ComputeWeight(2000) - 0.0) < 0.05, "t=2000 结束时刻权重衰减至 0.0");
+        CHECK(ao.IsExpired(2001), "t=2001 标记为已过期");
+
+        // 验证 FrameBuffer 混合应用 (replace 与 add 模式)
+        aura::FrameBuffer base_frame;
+        // 底色深蓝 (0, 0, 100)
+        base_frame.Fill(0, 0, 100);
+
+        aura::FrameBuffer test_frame = base_frame;
+        // 在 peak 时刻 (t = 2100，duration=1000，start=2000，weight=1.0) 执行 ApplyOverlays (replace 模式纯红 255, 0, 0)
+        overlay_mgr.ApplyOverlays(2100, test_frame, km, &gsi);
+        CHECK(test_frame.buffer[0] == 255 && test_frame.buffer[1] == 0 && test_frame.buffer[2] == 0,
+              "replace 模式在峰值完全替换底色为 (255, 0, 0)");
+
+        // 在过期时刻 (t = 3100) 执行 ApplyOverlays，覆盖自动清理并无残留
+        test_frame = base_frame;
+        overlay_mgr.ApplyOverlays(3100, test_frame, km, &gsi);
+        CHECK(overlay_mgr.GetActiveOverlayCount() == 0, "过期后 active_overlays_ 自动被清除释放");
+        CHECK(test_frame.buffer[0] == 0 && test_frame.buffer[1] == 0 && test_frame.buffer[2] == 100,
+              "覆盖光效自然结束后底色完全平滑还原");
+    }
+
+    // =========================================================================
+    // 25. Orchestration Rules, Plugin 方案解析与 EffectEngine 预览机制验证
+    // =========================================================================
+    std::cout << "\n[测试 25] Orchestration Rules, Plugin 方案解析与 EffectEngine 预览机制验证...\n";
+    {
+        // 1. 验证 RuleEngine 加载 orchestration.rules 配置
+        const std::string tmp_orch_cfg = (std::filesystem::temp_directory_path() / "test_cfg_orchestration.json").string();
+        {
+            std::ofstream ofs(tmp_orch_cfg);
+            ofs << R"json({
+                "default_profile": "desktop_prof",
+                "fps": 25,
+                "profiles": {
+                    "desktop_prof": {
+                        "type": "static",
+                        "color": [10, 20, 30]
+                    },
+                    "cs2_base": {
+                        "type": "breathing",
+                        "color": [0, 255, 100]
+                    },
+                    "danger_high_priority": {
+                        "type": "static",
+                        "color": [255, 0, 0]
+                    },
+                    "custom_plugin_prof": {
+                        "type": "plugin",
+                        "plugin_path": "plugins/nonexistent_plugin.dll",
+                        "effect_name": "NonexistentEffect"
+                    }
+                },
+                "orchestration": {
+                    "rules": [
+                        {
+                            "id": "rule_cs2_danger",
+                            "name": "CS2 Critical Low Health Alert",
+                            "process": "cs2.exe",
+                            "dnd": true,
+                            "condition": {
+                                "op": "and",
+                                "conditions": [
+                                    {"field": "process", "op": "==", "value": "cs2.exe"},
+                                    {"field": "player.state.health", "op": "<", "value": 25}
+                                ]
+                            },
+                            "profile": "danger_high_priority"
+                        },
+                        {
+                            "id": "rule_cs2_normal",
+                            "name": "CS2 Normal Ingame",
+                            "process": "cs2.exe",
+                            "condition": {
+                                "field": "process",
+                                "op": "==",
+                                "value": "cs2.exe"
+                            },
+                            "profile": "cs2_base"
+                        }
+                    ],
+                    "event_overlays": [
+                        {
+                            "event": "event.kill",
+                            "name": "Kill Splash",
+                            "effect": "danger_high_priority",
+                            "duration_ms": 900,
+                            "attack_ms": 60,
+                            "fade_out_ms": 300,
+                            "blend_mode": "replace"
+                        }
+                    ],
+                    "fallback_profile": "desktop_prof"
+                }
+            })json";
+        }
+
+        aura::RuleEngine engine;
+        bool loaded_orch = engine.LoadConfig(tmp_orch_cfg);
+        CHECK(loaded_orch, "成功加载包含 orchestration 完整规范的配置文件");
+
+        const auto& orch = engine.GetOrchestration();
+        CHECK(orch.rules.size() == 2, "成功解析 2 条现代 AST orchestration rules");
+        CHECK(orch.event_overlays.size() == 1, "成功解析 1 条 event_overlays 瞬态事件覆盖规则");
+        CHECK(orch.event_overlays[0].event == "event.kill", "event_overlay 事件名称解析为 event.kill");
+
+        // 验证插件 profile 解析无异常回退
+        CHECK(engine.HasProfile("custom_plugin_prof"), "插件类型 profile 成功解析注册到 Profile 表中");
+
+        // 验证 AST 优先级驱动匹配: cs2.exe 满血 -> cs2_base
+        aura::GsiState gsi;
+        nlohmann::json s_full = {
+            {"player", {{"state", {{"health", 100}}}}}
+        };
+        gsi.UpdateFromPayload(s_full);
+        auto p_match1 = engine.MatchProfile("cs2.exe", &gsi);
+        CHECK(p_match1 != nullptr && p_match1->name == "cs2_base", "满血状态下命中 cs2_base");
+        CHECK(!engine.ShouldSuppressWebUi("cs2.exe", &gsi), "cs2_base 规则未开启 DND，ShouldSuppressWebUi 为 false");
+
+        // cs2.exe 残血 (health = 15 < 25) -> danger_high_priority
+        nlohmann::json s_low = {
+            {"player", {{"state", {{"health", 15}}}}}
+        };
+        gsi.UpdateFromPayload(s_low);
+        auto p_match2 = engine.MatchProfile("cs2.exe", &gsi);
+        CHECK(p_match2 != nullptr && p_match2->name == "danger_high_priority", "残血状态下 AST 规则优先命中 danger_high_priority");
+        CHECK(engine.ShouldSuppressWebUi("cs2.exe", &gsi), "danger_high_priority 规则配置 dnd=true，ShouldSuppressWebUi 返回 true");
+
+        // 非目标前台进程 (code.exe) -> fallback desktop_prof
+        auto p_match3 = engine.MatchProfile("code.exe", &gsi);
+        CHECK(p_match3 != nullptr && p_match3->name == "desktop_prof", "非 cs2 进程回退为 fallback_profile (desktop_prof)");
+
+        // 2. 验证 EffectEngine 实时编辑预览 (Preview Frame) 机制
+        aura::EffectEngine effect_engine;
+        aura::Keymap km;
+        std::string km_path = "tests/fixtures/calibrated_keymap.json";
+        if (!std::filesystem::exists(km_path)) {
+            km_path = "calibrated_keymap.json";
+        }
+        km.LoadFromJson(km_path);
+
+        effect_engine.SetActiveProfile(engine.GetProfile("desktop_prof"));
+
+        aura::FrameBuffer normal_fb;
+        effect_engine.Tick(normal_fb, km, &gsi);
+        CHECK(normal_fb.buffer[0] == 10 && normal_fb.buffer[1] == 20 && normal_fb.buffer[2] == 30,
+              "未激活预览时输出 profile 原始帧 (10, 20, 30)");
+
+        // 压入编辑态预览帧 (亮黄色 255, 255, 0)，持续 150ms
+        aura::FrameBuffer preview_fb;
+        preview_fb.Fill(255, 255, 0);
+        effect_engine.SetPreviewFrame(preview_fb, 150);
+        CHECK(effect_engine.HasActivePreview(), "SetPreviewFrame 后 HasActivePreview 为 true");
+
+        aura::FrameBuffer rendered_preview;
+        effect_engine.Tick(rendered_preview, km, &gsi);
+        CHECK(rendered_preview.buffer[0] == 255 && rendered_preview.buffer[1] == 255 && rendered_preview.buffer[2] == 0,
+              "预览处于激活期时，Tick 严格优先渲染预览帧硬件缓冲");
+
+        // 模拟等待超时后预览自然过期
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        CHECK(!effect_engine.HasActivePreview(), "超时后 HasActivePreview 自动过期失效");
+
+        aura::FrameBuffer restored_fb;
+        effect_engine.Tick(restored_fb, km, &gsi);
+        CHECK(restored_fb.buffer[0] == 10 && restored_fb.buffer[1] == 20 && restored_fb.buffer[2] == 30,
+              "预览过期后无缝恢复为活动配置 profile 帧");
+
+        // 3. 验证 PluginManager 动态加载保护与路径规范化机制
+        auto& pm = aura::PluginManager::Instance();
+        auto nonexistent_eff = pm.CreateEffect("DefiniteNonexistentPluginEffect_12345");
+        CHECK(nonexistent_eff == nullptr, "不存在的插件安全返回 nullptr，不崩溃无异常");
+
+        auto shadow_path = aura::PluginManager::ResolvePluginPath("test_shadow_effect");
+        CHECK(shadow_path.string().find("test_shadow_effect") != std::string::npos,
+              "ResolvePluginPath 能够准确规范化插件路径");
+
+        std::filesystem::remove(tmp_orch_cfg);
     }
 
     std::cout << "\n=========================================================\n";
