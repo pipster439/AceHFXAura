@@ -11,7 +11,9 @@ import {
   Layers,
   Cpu,
   Sun,
-  Moon
+  Moon,
+  Sparkles,
+  GitBranch
 } from 'lucide-react';
 
 export default function Sidebar({
@@ -31,7 +33,9 @@ export default function Sidebar({
   const navItems = [
     { id: 'lighting', label: '预设灯效', icon: Palette },
     { id: 'perkey', label: '逐键涂装', icon: Keyboard },
-    { id: 'rules', label: '进程联动', icon: Workflow },
+    { id: 'blockly_effect', label: '光效工坊', icon: Sparkles },
+    { id: 'blockly_orchestrator', label: '方案编排', icon: GitBranch },
+    { id: 'rules', label: '进程规则', icon: Workflow },
     { id: 'gsi', label: 'CS2 GSI', icon: Crosshair },
     { id: 'profiles', label: '方案管理', icon: SlidersHorizontal }
   ];

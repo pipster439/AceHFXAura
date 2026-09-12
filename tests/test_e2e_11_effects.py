@@ -156,7 +156,7 @@ class RuleEngineModel:
             raise ValueError(f"Profile '{pname}' must be a JSON object")
 
         ptype = pval.get("type", "static")
-        if ptype not in ALL_11_EFFECTS:
+        if ptype not in ALL_11_EFFECTS and ptype != "plugin":
             raise ValueError(f"Unknown effect type '{ptype}' in profile '{pname}'")
 
         brightness = cls.parse_brightness(pname, pval)
@@ -212,6 +212,11 @@ class RuleEngineModel:
         elif ptype == "raindrop":
             result["color"] = cls.parse_color(pval, "color", "color1", [0, 240, 255])
             result["period_ms"] = cls.clamp_period(pname, pval, 2500)
+        elif ptype == "plugin":
+            plugin_name = pval.get("plugin_name", pval.get("plugin", pval.get("effect", pval.get("effect_name", ""))))
+            if not plugin_name:
+                raise ValueError(f"Profile '{pname}' (type: plugin) missing plugin_name")
+            result["plugin_name"] = plugin_name
 
         # Key overrides
         result["keys"] = {}

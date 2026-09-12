@@ -9,6 +9,8 @@ import GsiSettings from './components/GsiSettings';
 import ProfileManager from './components/ProfileManager';
 import Toast from './components/Toast';
 import GameModeModal from './components/GameModeModal';
+import EffectStudio from './components/EffectStudio';
+import OrchestratorStudio from './components/OrchestratorStudio';
 import { GRADIENT_PRESETS } from './constants/keyboardLayout';
 import { DEFAULT_KEYBOARD_BG, TACTICAL_PALETTE } from './tokens/keyboardPresets.tokens';
 import { rgbToHex, hexToRgb } from './utils/color';
@@ -51,6 +53,24 @@ export default function App() {
 
   // 逐键涂装选中集合
   const [selectedKeyNames, setSelectedKeyNames] = useState(new Set());
+
+  // Blockly 光效工坊实时推流帧 (68 颗按键 RGB)
+  const [blocklyFrame, setBlocklyFrame] = useState(null);
+  const lastPreviewPushRef = useRef(0);
+  const handleBlocklyPreviewFrame = useCallback((frame) => {
+    setBlocklyFrame(frame);
+    const now = performance.now();
+    if (now - lastPreviewPushRef.current > 45) { // 限制 ~22 FPS 推流给 daemon
+      lastPreviewPushRef.current = now;
+      if (frame && frame.length === 68) {
+        fetch('/api/preview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ colors: frame })
+        }).catch(() => {});
+      }
+    }
+  }, []);
 
   // 状态反馈与服务存活
   const [toast, setToast] = useState(null);
@@ -547,6 +567,7 @@ export default function App() {
           onToggleKeySelection={handleToggleKeySelection}
           bgColor={bgColor}
           fpsVal={fpsVal}
+          blocklyFrame={blocklyFrame}
         />
 
         {/* 下方功能设置面板 (随侧边栏 Tab 切换平滑物理弹簧过渡) */}
@@ -599,6 +620,26 @@ export default function App() {
                   onRemoveOverridesFromSelected={handleRemoveOverridesFromSelected}
                   bgColor={bgColor}
                   setBgColor={setBgColor}
+                />
+              )}
+
+              {activeTab === 'blockly_effect' && (
+                <EffectStudio
+                  config={config}
+                  onSaveConfig={saveConfigDirectly}
+                  showToast={showToast}
+                  onPreviewFrameUpdate={handleBlocklyPreviewFrame}
+                />
+              )}
+
+              {activeTab === 'blockly_orchestrator' && (
+                <OrchestratorStudio
+                  config={config}
+                  onSaveConfig={saveConfigDirectly}
+                  profiles={config?.profiles}
+                  currentProfileName={currentProfileName}
+                  showToast={showToast}
+                  onSwitchToLegacyRules={() => setActiveTab('rules')}
                 />
               )}
 

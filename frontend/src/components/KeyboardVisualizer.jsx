@@ -17,9 +17,12 @@ export default function KeyboardVisualizer({
   selectedKeyNames,
   onToggleKeySelection,
   bgColor,
-  fpsVal = 25
+  fpsVal = 25,
+  blocklyFrame
 }) {
   const containerRef = useRef(null);
+  const blocklyFrameRef = useRef(blocklyFrame);
+  blocklyFrameRef.current = blocklyFrame;
   const [scale, setScale] = useState(1);
   const [pressedKeys, setPressedKeys] = useState(new Set());
 
@@ -151,11 +154,13 @@ export default function KeyboardVisualizer({
       const keysOverride = currentProfile?.keys || {};
       const rippleSpeed = 0.014 * (2500.0 / period);
 
+      let globalLedIndex = 0;
       KEYBOARD_LAYOUT.forEach((row, rowIdx) => {
         let colOffset = 0.0;
 
         row.forEach((k) => {
           const el = keysDomRef.current[k.name];
+          const currLedId = globalLedIndex++;
           if (!el) {
             colOffset += k.width;
             return;
@@ -176,7 +181,10 @@ export default function KeyboardVisualizer({
             hasOverride = true;
           }
 
-          if (activeTab === 'perkey' || currentEffect === 'custom_keymap') {
+          if (activeTab === 'blockly_effect' && blocklyFrameRef.current && blocklyFrameRef.current[currLedId]) {
+            const bCol = blocklyFrameRef.current[currLedId];
+            r = bCol[0]; g = bCol[1]; b = bCol[2];
+          } else if (activeTab === 'perkey' || currentEffect === 'custom_keymap') {
             if (hasOverride && ovColor) {
               r = ovColor[0]; g = ovColor[1]; b = ovColor[2];
             } else {

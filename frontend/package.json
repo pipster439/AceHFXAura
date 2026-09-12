@@ -8,6 +8,7 @@
     "build": "vite build"
   },
   "dependencies": {
+    "blockly": "^13.3.0",
     "framer-motion": "^12.4.7",
     "lucide-react": "^0.475.0",
     "react": "^18.3.1",
