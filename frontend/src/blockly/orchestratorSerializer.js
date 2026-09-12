@@ -205,6 +205,9 @@ export class OrchestratorSerializer {
 
   static extractBlockValue(block, fallback) {
     if (!block) return fallback;
+    if (block.type === 'gsi_enum_constant') {
+      return block.getFieldValue('VALUE') ?? fallback;
+    }
     if (block.type === 'math_number') {
       return Number(block.getFieldValue('NUM')) || 0;
     }
@@ -219,6 +222,21 @@ export class OrchestratorSerializer {
 
   static parseConditionAst(block) {
     if (!block) return {};
+
+    if (block.type === 'gsi_state_match') {
+      const field = block.getFieldValue('STATE') || 'round.bomb';
+      const op = block.getFieldValue('OP') || '==';
+      const value = block.getFieldValue('VALUE') || '';
+      return { field, op, value };
+    }
+
+    if (block.type === 'gsi_numeric_compare') {
+      const field = block.getFieldValue('FIELD') || 'player.state.health';
+      const op = block.getFieldValue('OP') || '<';
+      const rawVal = block.getFieldValue('VALUE');
+      const value = (rawVal !== null && rawVal !== undefined && !isNaN(Number(rawVal))) ? Number(rawVal) : 0;
+      return { field, op, value };
+    }
 
     if (block.type === 'condition_and' || (block.type === 'logic_operation' && block.getFieldValue('OP') === 'AND')) {
       const c0 = this.parseConditionAst(block.getInputTargetBlock('COND0') || block.getInputTargetBlock('A'));
@@ -252,12 +270,15 @@ export class OrchestratorSerializer {
       if (targetA?.type === 'orch_current_process') {
         field = 'process.name';
         val = this.extractBlockValue(targetB, 'cs2.exe');
-      } else if (targetA?.type === 'orch_gsi_str') {
+      } else if (targetA?.type === 'orch_gsi_str' || targetA?.type === 'gsi_get_string') {
         field = targetA.getFieldValue('PATH') || 'round.bomb';
         val = this.extractBlockValue(targetB, '');
       } else if (targetB?.type === 'orch_current_process') {
         field = 'process.name';
         val = this.extractBlockValue(targetA, 'cs2.exe');
+      } else if (targetB?.type === 'orch_gsi_str' || targetB?.type === 'gsi_get_string') {
+        field = targetB.getFieldValue('PATH') || 'round.bomb';
+        val = this.extractBlockValue(targetA, '');
       } else {
         val = this.extractBlockValue(targetB, '');
       }
@@ -277,10 +298,16 @@ export class OrchestratorSerializer {
       if (targetA?.type === 'orch_current_process') {
         field = 'process.name';
         val = this.extractBlockValue(targetB, 'cs2.exe');
-      } else if (targetA?.type === 'orch_gsi_num' || targetA?.type === 'orch_gsi_str' || targetA?.type === 'orch_gsi_bool') {
+      } else if (
+        targetA?.type === 'orch_gsi_num' || targetA?.type === 'orch_gsi_str' || targetA?.type === 'orch_gsi_bool' ||
+        targetA?.type === 'gsi_get_number' || targetA?.type === 'gsi_get_string' || targetA?.type === 'gsi_get_boolean'
+      ) {
         field = targetA.getFieldValue('PATH') || 'player.state.health';
         val = this.extractBlockValue(targetB, 0);
-      } else if (targetB?.type === 'orch_gsi_num' || targetB?.type === 'orch_gsi_str') {
+      } else if (
+        targetB?.type === 'orch_gsi_num' || targetB?.type === 'orch_gsi_str' ||
+        targetB?.type === 'gsi_get_number' || targetB?.type === 'gsi_get_string'
+      ) {
         field = targetB.getFieldValue('PATH') || 'player.state.health';
         val = this.extractBlockValue(targetA, 0);
       } else {

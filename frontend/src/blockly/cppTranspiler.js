@@ -23,6 +23,8 @@ export class CppTranspiler {
 #include <cmath>
 #include <algorithm>
 #include <cstdint>
+#include <string_view>
+#include <string>
 
 namespace aura {
 
@@ -370,6 +372,33 @@ extern "C" {
         const a = this.valueToCpp(target, 'A', 'true');
         const b = this.valueToCpp(target, 'B', 'true');
         return `(${a} ${op === 'OR' ? '||' : '&&'} ${b})`;
+      }
+
+      case 'gsi_state_match': {
+        const stateKey = target.getFieldValue('STATE') || 'round.bomb';
+        const op = target.getFieldValue('OP') || '==';
+        const expectedVal = target.getFieldValue('VALUE') || '';
+        const opSym = op === '!=' ? '!=' : '==';
+        return `(std::string_view(gsi ? gsi->GetString("${stateKey}", "") : "") ${opSym} ${JSON.stringify(expectedVal)})`;
+      }
+
+      case 'gsi_numeric_compare': {
+        const fieldKey = target.getFieldValue('FIELD') || 'player.state.health';
+        const op = target.getFieldValue('OP') || '<';
+        const rawVal = target.getFieldValue('VALUE');
+        const expectedNum = (rawVal !== null && rawVal !== undefined && !isNaN(Number(rawVal))) ? Number(rawVal) : 0.0;
+        let opSym = '==';
+        if (op === '<') opSym = '<';
+        else if (op === '<=') opSym = '<=';
+        else if (op === '>') opSym = '>';
+        else if (op === '>=') opSym = '>=';
+        else if (op === '!=') opSym = '!=';
+        return `((gsi ? gsi->GetNumber("${fieldKey}", 0.0) : 0.0) ${opSym} ${expectedNum})`;
+      }
+
+      case 'gsi_enum_constant': {
+        const val = target.getFieldValue('VALUE') || '';
+        return JSON.stringify(val);
       }
 
       case 'gsi_get_number': {

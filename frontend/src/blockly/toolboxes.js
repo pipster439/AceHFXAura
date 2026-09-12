@@ -103,6 +103,9 @@ export const EFFECT_STUDIO_TOOLBOX = {
       name: '👁️ 侦测与传感 (Sensing)',
       colour: '#4CBFE6',
       contents: [
+        { kind: 'block', type: 'gsi_state_match' },
+        { kind: 'block', type: 'gsi_numeric_compare' },
+        { kind: 'block', type: 'gsi_enum_constant' },
         { kind: 'block', type: 'geometry_coords' },
         { kind: 'block', type: 'time_elapsed_ms' },
         {
@@ -220,6 +223,9 @@ export const ORCHESTRATOR_STUDIO_TOOLBOX = {
       name: '🔍 侦测与条件 (Sensing & Conditions)',
       colour: '#4CBFE6',
       contents: [
+        { kind: 'block', type: 'gsi_state_match' },
+        { kind: 'block', type: 'gsi_numeric_compare' },
+        { kind: 'block', type: 'gsi_enum_constant' },
         { kind: 'block', type: 'orch_current_process' },
         {
           kind: 'block',

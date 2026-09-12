@@ -346,6 +346,53 @@ export class JsTranspiler {
         return `(${a} ${op === 'OR' ? '||' : '&&'} ${b})`;
       }
 
+      case 'gsi_state_match': {
+        const stateKey = target.getFieldValue('STATE') || 'round.bomb';
+        const op = target.getFieldValue('OP') || '==';
+        const expectedVal = target.getFieldValue('VALUE') || '';
+        return `(() => {
+          if (!gsi) return false;
+          const parts = "${stateKey}".split(".");
+          let curr = gsi;
+          for (const p of parts) {
+            if (curr && typeof curr === "object" && p in curr) curr = curr[p];
+            else return false;
+          }
+          const actualStr = String(curr ?? "");
+          return ${op === '!=' ? `actualStr !== ${JSON.stringify(expectedVal)}` : `actualStr === ${JSON.stringify(expectedVal)}`};
+        })()`;
+      }
+
+      case 'gsi_numeric_compare': {
+        const fieldKey = target.getFieldValue('FIELD') || 'player.state.health';
+        const op = target.getFieldValue('OP') || '<';
+        const rawVal = target.getFieldValue('VALUE');
+        const expectedNum = (rawVal !== null && rawVal !== undefined && !isNaN(Number(rawVal))) ? Number(rawVal) : 0;
+        let opSym = '===';
+        if (op === '<') opSym = '<';
+        else if (op === '<=') opSym = '<=';
+        else if (op === '>') opSym = '>';
+        else if (op === '>=') opSym = '>=';
+        else if (op === '!=') opSym = '!==';
+        return `(() => {
+          if (!gsi) return false;
+          const parts = "${fieldKey}".split(".");
+          let curr = gsi;
+          for (const p of parts) {
+            if (curr && typeof curr === "object" && p in curr) curr = curr[p];
+            else return false;
+          }
+          const n = Number(curr);
+          const actualNum = Number.isFinite(n) ? n : 0;
+          return actualNum ${opSym} ${expectedNum};
+        })()`;
+      }
+
+      case 'gsi_enum_constant': {
+        const val = target.getFieldValue('VALUE') || '';
+        return JSON.stringify(val);
+      }
+
       case 'gsi_get_number': {
         const path = target.getFieldValue('PATH') || 'player.state.health';
         const def = this.valueToJs(target, 'DEFAULT', '100');

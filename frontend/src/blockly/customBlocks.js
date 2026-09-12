@@ -1,4 +1,11 @@
 import Blockly from './index.js';
+import {
+  DISCRETE_STATE_DROPDOWN_OPTIONS,
+  getStateOptions,
+  NUMERIC_STATE_DROPDOWN_OPTIONS,
+  getDefaultThreshold,
+  ALL_GSI_ENUM_VALUES
+} from '../constants/gsiDictionary.js';
 
 let blocksRegistered = false;
 
@@ -260,15 +267,7 @@ export function registerCustomBlocks() {
         {
           type: 'field_dropdown',
           name: 'PATH',
-          options: [
-            ['玩家血量 (player.state.health)', 'player.state.health'],
-            ['玩家护甲 (player.state.armor)', 'player.state.armor'],
-            ['金钱储备 (player.state.money)', 'player.state.money'],
-            ['本局击杀 (player.state.round_kills)', 'player.state.round_kills'],
-            ['被致盲度 (player.state.flashed)', 'player.state.flashed'],
-            ['燃烧伤害 (player.state.burning)', 'player.state.burning'],
-            ['当前回合 (map.round)', 'map.round']
-          ]
+          options: NUMERIC_STATE_DROPDOWN_OPTIONS
         },
         { type: 'input_value', name: 'DEFAULT', check: 'Number' }
       ],
@@ -284,14 +283,7 @@ export function registerCustomBlocks() {
         {
           type: 'field_dropdown',
           name: 'PATH',
-          options: [
-            ['C4状态 (round.bomb)', 'round.bomb'],
-            ['回合状态 (round.phase)', 'round.phase'],
-            ['所属阵营 (player.team)', 'player.team'],
-            ['地图名称 (map.name)', 'map.name'],
-            ['游戏模式 (map.mode)', 'map.mode'],
-            ['玩家状态 (player.activity)', 'player.activity']
-          ]
+          options: DISCRETE_STATE_DROPDOWN_OPTIONS
         },
         { type: 'input_value', name: 'DEFAULT', check: 'String' }
       ],
@@ -676,15 +668,7 @@ export function registerCustomBlocks() {
         {
           type: 'field_dropdown',
           name: 'PATH',
-          options: [
-            ['玩家血量 (player.state.health)', 'player.state.health'],
-            ['玩家护甲 (player.state.armor)', 'player.state.armor'],
-            ['金钱储备 (player.state.money)', 'player.state.money'],
-            ['本局击杀 (player.state.round_kills)', 'player.state.round_kills'],
-            ['被致盲度 (player.state.flashed)', 'player.state.flashed'],
-            ['燃烧伤害 (player.state.burning)', 'player.state.burning'],
-            ['当前回合 (map.round)', 'map.round']
-          ]
+          options: NUMERIC_STATE_DROPDOWN_OPTIONS
         },
         { type: 'input_value', name: 'DEFAULT', check: 'Number' }
       ],
@@ -700,14 +684,7 @@ export function registerCustomBlocks() {
         {
           type: 'field_dropdown',
           name: 'PATH',
-          options: [
-            ['C4状态 (round.bomb)', 'round.bomb'],
-            ['回合阶段 (round.phase)', 'round.phase'],
-            ['所属阵营 (player.team)', 'player.team'],
-            ['地图名称 (map.name)', 'map.name'],
-            ['游戏模式 (map.mode)', 'map.mode'],
-            ['玩家活动 (player.activity)', 'player.activity']
-          ]
+          options: DISCRETE_STATE_DROPDOWN_OPTIONS
         },
         { type: 'input_value', name: 'DEFAULT', check: 'String' }
       ],
@@ -748,5 +725,119 @@ export function registerCustomBlocks() {
       helpUrl: ''
     }
   ]);
+
+  // =========================================================================
+  // 9. DYNAMIC ENCAPSULATED CS2 GSI BLOCKS (ZERO-GUESSWORK DROPDOWNS)
+  // =========================================================================
+
+  // 1. GSI 状态智能匹配积木 (联动下拉选择状态与取值)
+  Blockly.Blocks['gsi_state_match'] = {
+    init: function() {
+      const stateField = new Blockly.FieldDropdown(
+        DISCRETE_STATE_DROPDOWN_OPTIONS,
+        function(newState) {
+          const block = this.getSourceBlock ? this.getSourceBlock() : null;
+          if (block) {
+            const valueField = block.getField('VALUE');
+            if (valueField) {
+              const opts = getStateOptions(newState);
+              const validVals = opts.map((o) => o[1]);
+              const currentVal = valueField.getValue();
+              if (!validVals.includes(currentVal) && opts.length > 0) {
+                valueField.setValue(opts[0][1]);
+              }
+            }
+          }
+          return newState;
+        }
+      );
+
+      const valueDropdown = new Blockly.FieldDropdown(function() {
+        const block = this?.getSourceBlock ? this.getSourceBlock() : null;
+        const currentState = block ? block.getFieldValue('STATE') : DISCRETE_STATE_DROPDOWN_OPTIONS[0][1];
+        return getStateOptions(currentState || DISCRETE_STATE_DROPDOWN_OPTIONS[0][1]);
+      });
+
+      this.appendDummyInput()
+        .appendField('GSI 状态')
+        .appendField(stateField, 'STATE')
+        .appendField(new Blockly.FieldDropdown([
+          ['等于 (==)', '=='],
+          ['不等于 (!=)', '!=']
+        ]), 'OP')
+        .appendField(valueDropdown, 'VALUE');
+
+      this.setOutput(true, ['Boolean', 'Condition']);
+      this.setStyle('condition_blocks');
+      this.setTooltip('针对 CS2 官方 GSI 离散状态进行精准匹配，根据所选状态动态筛选合法内容，彻底杜绝输入拼写错误');
+    },
+    saveExtraState: function() {
+      return {
+        state: this.getFieldValue('STATE'),
+        value: this.getFieldValue('VALUE')
+      };
+    },
+    loadExtraState: function(extraState) {
+      if (extraState?.state) {
+        this.setFieldValue(extraState.state, 'STATE');
+      }
+      if (extraState?.value) {
+        this.setFieldValue(extraState.value, 'VALUE');
+      }
+    }
+  };
+
+  // 2. GSI 数值智能比对积木 (自适应经典阈值建议)
+  Blockly.Blocks['gsi_numeric_compare'] = {
+    init: function() {
+      const fieldDropdown = new Blockly.FieldDropdown(
+        NUMERIC_STATE_DROPDOWN_OPTIONS,
+        function(newField) {
+          const block = this?.getSourceBlock ? this.getSourceBlock() : null;
+          if (block) {
+            const defaultMeta = getDefaultThreshold(newField);
+            const opField = block.getField('OP');
+            const valField = block.getField('VALUE');
+            if (opField && defaultMeta.op) {
+              opField.setValue(defaultMeta.op);
+            }
+            if (valField && defaultMeta.value !== undefined) {
+              valField.setValue(defaultMeta.value);
+            }
+          }
+          return newField;
+        }
+      );
+
+      this.appendDummyInput()
+        .appendField('GSI 数值')
+        .appendField(fieldDropdown, 'FIELD')
+        .appendField(new Blockly.FieldDropdown([
+          ['小于 (<)', '<'],
+          ['小于等于 (<=)', '<='],
+          ['等于 (==)', '=='],
+          ['大于等于 (>=)', '>='],
+          ['大于 (>)', '>'],
+          ['不等于 (!=)', '!=']
+        ]), 'OP')
+        .appendField(new Blockly.FieldNumber(20), 'VALUE');
+
+      this.setOutput(true, ['Boolean', 'Condition']);
+      this.setStyle('condition_blocks');
+      this.setTooltip('针对 CS2 官方 GSI 实时数值遥测（血量/护甲/金钱/致盲等）进行阈值比对判定');
+    }
+  };
+
+  // 3. GSI 预设枚举常量积木 (供 Scratch 式文本比对灵活插接)
+  Blockly.Blocks['gsi_enum_constant'] = {
+    init: function() {
+      this.appendDummyInput()
+        .appendField('GSI 枚举取值')
+        .appendField(new Blockly.FieldDropdown(ALL_GSI_ENUM_VALUES), 'VALUE');
+      this.setOutput(true, 'String');
+      this.setStyle('condition_blocks');
+      this.setTooltip('CS2 GSI 官方离散枚举字符串常量，可直接连接至 Scratch 文本比较槽，杜绝手动打字拼错');
+    }
+  };
 }
 
