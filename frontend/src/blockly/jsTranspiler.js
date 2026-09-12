@@ -65,6 +65,14 @@ export class JsTranspiler {
     let statements = [];
     statements.push('const frame = new Array(keymap.length).fill(null).map(() => [0, 0, 0]);');
 
+    const ws = topBlocks[0]?.workspace;
+    if (ws && typeof ws.getAllVariables === 'function') {
+      for (const v of ws.getAllVariables()) {
+        const cleanName = v.name.replace(/[^a-zA-Z0-9_]/g, '_');
+        statements.push(`let var_${cleanName} = 0;`);
+      }
+    }
+
     for (const block of topBlocks) {
       statements.push(this.blockToJs(block));
     }
@@ -128,11 +136,78 @@ export class JsTranspiler {
       }
 
       case 'controls_if': {
-        const cond = this.valueToJs(block, 'IF0', 'true');
-        const doBlock = block.getInputTargetBlock('DO0');
+        let code = '';
+        let i = 0;
+        while (block.getInput(`IF${i}`)) {
+          const cond = this.valueToJs(block, `IF${i}`, 'false');
+          const doBlock = block.getInputTargetBlock(`DO${i}`);
+          const doCode = doBlock ? this.blockToJs(doBlock) : '';
+          if (i === 0) {
+            code += `if (${cond}) {\n${doCode}\n}`;
+          } else {
+            code += ` else if (${cond}) {\n${doCode}\n}`;
+          }
+          i++;
+        }
+        const elseBlock = block.getInputTargetBlock('ELSE');
+        if (elseBlock) {
+          const elseCode = this.blockToJs(elseBlock);
+          code += ` else {\n${elseCode}\n}`;
+        }
+        const next = this.blockToJs(block.getNextBlock());
+        return `${code}\n${next}`;
+      }
+
+      case 'controls_repeat_ext': {
+        const times = this.valueToJs(block, 'TIMES', '10');
+        const doBlock = block.getInputTargetBlock('DO');
         const doCode = doBlock ? this.blockToJs(doBlock) : '';
         const next = this.blockToJs(block.getNextBlock());
-        return `if (${cond}) {\n${doCode}\n}\n${next}`;
+        return `for (let _rpt = 0; _rpt < Math.min(500, Math.max(0, Math.round(${times}))); _rpt++) {\n${doCode}\n}\n${next}`;
+      }
+
+      case 'controls_whileUntil': {
+        const mode = block.getFieldValue('MODE') || 'WHILE';
+        let cond = this.valueToJs(block, 'BOOL', 'false');
+        if (mode === 'UNTIL') cond = `!(${cond})`;
+        const doBlock = block.getInputTargetBlock('DO');
+        const doCode = doBlock ? this.blockToJs(doBlock) : '';
+        const next = this.blockToJs(block.getNextBlock());
+        return `(() => {
+          let _guard = 0;
+          while (${cond}) {
+            if (++_guard > 500) break;
+            ${doCode}
+          }
+        })();\n${next}`;
+      }
+
+      case 'controls_flow_statements': {
+        const flow = block.getFieldValue('FLOW') || 'BREAK';
+        return `${flow === 'BREAK' ? 'break;' : 'continue;'}\n`;
+      }
+
+      case 'effect_wait_ms': {
+        const next = this.blockToJs(block.getNextBlock());
+        return next;
+      }
+
+      case 'variables_set': {
+        const varModel = block.getField('VAR')?.getVariable?.();
+        const varName = varModel ? varModel.name : (block.getFieldValue('VAR') || 'x');
+        const cleanName = varName.replace(/[^a-zA-Z0-9_]/g, '_');
+        const val = this.valueToJs(block, 'VALUE', '0');
+        const next = this.blockToJs(block.getNextBlock());
+        return `var_${cleanName} = ${val};\n${next}`;
+      }
+
+      case 'math_change': {
+        const varModel = block.getField('VAR')?.getVariable?.();
+        const varName = varModel ? varModel.name : (block.getFieldValue('VAR') || 'x');
+        const cleanName = varName.replace(/[^a-zA-Z0-9_]/g, '_');
+        const delta = this.valueToJs(block, 'DELTA', '1');
+        const next = this.blockToJs(block.getNextBlock());
+        return `var_${cleanName} = (var_${cleanName} || 0) + (${delta});\n${next}`;
       }
 
       default: {
@@ -339,6 +414,53 @@ export class JsTranspiler {
         else if (op === 'GT') opSym = '>';
         else if (op === 'GTE') opSym = '>=';
         return `(${a} ${opSym} ${b})`;
+      }
+
+      case 'variables_get': {
+        const varModel = target.getField('VAR')?.getVariable?.();
+        const varName = varModel ? varModel.name : (target.getFieldValue('VAR') || 'x');
+        const cleanName = varName.replace(/[^a-zA-Z0-9_]/g, '_');
+        return `var_${cleanName}`;
+      }
+
+      case 'math_single': {
+        const op = target.getFieldValue('OP') || 'ROOT';
+        const num = this.valueToJs(target, 'NUM', '0');
+        if (op === 'ROOT') return `Math.sqrt(${num})`;
+        if (op === 'ABS') return `Math.abs(${num})`;
+        if (op === 'NEG') return `(-(${num}))`;
+        if (op === 'LN') return `Math.log(${num})`;
+        if (op === 'LOG10') return `Math.log10(${num})`;
+        if (op === 'EXP') return `Math.exp(${num})`;
+        if (op === 'POW10') return `Math.pow(10, ${num})`;
+        return num;
+      }
+
+      case 'math_trig': {
+        const op = target.getFieldValue('OP') || 'SIN';
+        const num = this.valueToJs(target, 'NUM', '0');
+        if (op === 'SIN') return `Math.sin(${num})`;
+        if (op === 'COS') return `Math.cos(${num})`;
+        if (op === 'TAN') return `Math.tan(${num})`;
+        if (op === 'ASIN') return `Math.asin(${num})`;
+        if (op === 'ACOS') return `Math.acos(${num})`;
+        if (op === 'ATAN') return `Math.atan(${num})`;
+        return num;
+      }
+
+      case 'math_round': {
+        const op = target.getFieldValue('OP') || 'ROUND';
+        const num = this.valueToJs(target, 'NUM', '0');
+        if (op === 'ROUND') return `Math.round(${num})`;
+        if (op === 'ROUNDUP') return `Math.ceil(${num})`;
+        if (op === 'ROUNDDOWN') return `Math.floor(${num})`;
+        return num;
+      }
+
+      case 'math_modulo': {
+        const a = this.valueToJs(target, 'DIVIDEND', '0');
+        const b = this.valueToJs(target, 'DIVISOR', '1');
+        return `(${a} % ${b})`;
       }
 
       default:

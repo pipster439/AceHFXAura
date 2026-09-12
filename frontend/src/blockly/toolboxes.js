@@ -1,7 +1,7 @@
 /**
  * Blockly Toolboxes for ROG Falchion Ace HFX
- * 1. Effect Studio Toolbox (6 Domain Categories + Standard Logic/Math/Loops/Variables)
- * 2. Orchestrator Studio Toolbox (4 Domain Categories)
+ * 1. Effect Studio Toolbox (5 Scratch-Style Domain Categories: Control, Math & Logic, Variables, Sensing, Color & Keys)
+ * 2. Orchestrator Studio Toolbox (Control Flow, Sensing & Conditions, Actions, Legacy)
  */
 
 export const EFFECT_STUDIO_TOOLBOX = {
@@ -9,19 +9,47 @@ export const EFFECT_STUDIO_TOOLBOX = {
   contents: [
     {
       kind: 'category',
-      name: 'Clock & Time',
-      categorystyle: 'clock_category',
+      name: '🕹️ 控制 (Control)',
+      colour: '#FFAB19',
       contents: [
-        { kind: 'block', type: 'time_elapsed_ms' },
+        { kind: 'block', type: 'controls_if' },
         {
           kind: 'block',
-          type: 'time_phase',
+          type: 'controls_repeat_ext',
           inputs: {
-            PERIOD: {
-              shadow: { type: 'math_number', fields: { NUM: 2000 } }
-            }
+            TIMES: { shadow: { type: 'math_number', fields: { NUM: 10 } } }
           }
         },
+        { kind: 'block', type: 'controls_whileUntil' },
+        { kind: 'block', type: 'key_for_each' },
+        {
+          kind: 'block',
+          type: 'effect_wait_ms',
+          inputs: {
+            MS: { shadow: { type: 'math_number', fields: { NUM: 50 } } }
+          }
+        },
+        { kind: 'block', type: 'controls_flow_statements' }
+      ]
+    },
+    {
+      kind: 'category',
+      name: '🧮 运算与逻辑 (Math & Logic)',
+      colour: '#59C059',
+      contents: [
+        { kind: 'block', type: 'math_number' },
+        {
+          kind: 'block',
+          type: 'math_arithmetic',
+          inputs: {
+            A: { shadow: { type: 'math_number', fields: { NUM: 1 } } },
+            B: { shadow: { type: 'math_number', fields: { NUM: 1 } } }
+          }
+        },
+        { kind: 'block', type: 'math_single' },
+        { kind: 'block', type: 'math_trig' },
+        { kind: 'block', type: 'math_round' },
+        { kind: 'block', type: 'math_modulo' },
         {
           kind: 'block',
           type: 'math_waveform',
@@ -30,15 +58,7 @@ export const EFFECT_STUDIO_TOOLBOX = {
             AMPLITUDE: { shadow: { type: 'math_number', fields: { NUM: 1 } } },
             OFFSET: { shadow: { type: 'math_number', fields: { NUM: 0 } } }
           }
-        }
-      ]
-    },
-    {
-      kind: 'category',
-      name: 'Geometry & Coords',
-      categorystyle: 'geometry_category',
-      contents: [
-        { kind: 'block', type: 'geometry_coords' },
+        },
         {
           kind: 'block',
           type: 'geometry_distance',
@@ -58,13 +78,75 @@ export const EFFECT_STUDIO_TOOLBOX = {
             WAVELENGTH: { shadow: { type: 'math_number', fields: { NUM: 4.0 } } },
             SPEED: { shadow: { type: 'math_number', fields: { NUM: 2.0 } } }
           }
+        },
+        {
+          kind: 'block',
+          type: 'logic_compare',
+          inputs: {
+            A: { shadow: { type: 'math_number', fields: { NUM: 10 } } },
+            B: { shadow: { type: 'math_number', fields: { NUM: 20 } } }
+          }
+        },
+        { kind: 'block', type: 'logic_operation' },
+        { kind: 'block', type: 'logic_negate' },
+        { kind: 'block', type: 'logic_boolean' }
+      ]
+    },
+    {
+      kind: 'category',
+      name: '📦 变量 (Variables)',
+      colour: '#FF8C1A',
+      custom: 'VARIABLE'
+    },
+    {
+      kind: 'category',
+      name: '👁️ 侦测与传感 (Sensing)',
+      colour: '#4CBFE6',
+      contents: [
+        { kind: 'block', type: 'geometry_coords' },
+        { kind: 'block', type: 'time_elapsed_ms' },
+        {
+          kind: 'block',
+          type: 'time_phase',
+          inputs: {
+            PERIOD: { shadow: { type: 'math_number', fields: { NUM: 2000 } } }
+          }
+        },
+        { kind: 'block', type: 'key_is_pressed' },
+        {
+          kind: 'block',
+          type: 'key_decay',
+          inputs: {
+            DECAY_RATE: { shadow: { type: 'math_number', fields: { NUM: 0.85 } } }
+          }
+        },
+        {
+          kind: 'block',
+          type: 'gsi_get_number',
+          inputs: {
+            DEFAULT: { shadow: { type: 'math_number', fields: { NUM: 100 } } }
+          }
+        },
+        {
+          kind: 'block',
+          type: 'gsi_get_string',
+          inputs: {
+            DEFAULT: { shadow: { type: 'text', fields: { TEXT: '' } } }
+          }
+        },
+        {
+          kind: 'block',
+          type: 'gsi_get_boolean',
+          inputs: {
+            DEFAULT: { shadow: { type: 'logic_boolean', fields: { BOOL: 'FALSE' } } }
+          }
         }
       ]
     },
     {
       kind: 'category',
-      name: 'Color & Gradients',
-      categorystyle: 'color_category',
+      name: '🎨 色彩与按键 (Color & Keys)',
+      colour: '#9966FF',
       contents: [
         {
           kind: 'block',
@@ -97,93 +179,19 @@ export const EFFECT_STUDIO_TOOLBOX = {
           inputs: {
             SCALE: { shadow: { type: 'math_number', fields: { NUM: 1.0 } } }
           }
-        }
-      ]
-    },
-    {
-      kind: 'category',
-      name: 'Keyboard Operations',
-      categorystyle: 'keyboard_category',
-      contents: [
-        { kind: 'block', type: 'key_fill_all' },
-        { kind: 'block', type: 'key_set_color' },
-        { kind: 'block', type: 'key_for_each' }
-      ]
-    },
-    {
-      kind: 'category',
-      name: 'Key Dynamics',
-      categorystyle: 'dynamics_category',
-      contents: [
-        { kind: 'block', type: 'key_is_pressed' },
+        },
         {
           kind: 'block',
-          type: 'key_decay',
+          type: 'key_set_color',
           inputs: {
-            DECAY_RATE: { shadow: { type: 'math_number', fields: { NUM: 0.85 } } }
-          }
-        }
-      ]
-    },
-    {
-      kind: 'category',
-      name: 'Atomic GSI Sensors',
-      categorystyle: 'gsi_category',
-      contents: [
-        {
-          kind: 'block',
-          type: 'gsi_get_number',
-          inputs: {
-            DEFAULT: { shadow: { type: 'math_number', fields: { NUM: 100 } } }
+            LED_ID: { shadow: { type: 'math_number', fields: { NUM: 0 } } }
           }
         },
         {
           kind: 'block',
-          type: 'gsi_get_string',
-          inputs: {
-            DEFAULT: { shadow: { type: 'text', fields: { TEXT: '' } } }
-          }
-        },
-        {
-          kind: 'block',
-          type: 'gsi_get_boolean',
-          inputs: {
-            DEFAULT: { shadow: { type: 'logic_boolean', fields: { BOOL: 'FALSE' } } }
-          }
+          type: 'key_fill_all'
         }
       ]
-    },
-    { kind: 'sep' },
-    {
-      kind: 'category',
-      name: 'Logic & Control',
-      colour: '#5C6BC0',
-      contents: [
-        { kind: 'block', type: 'controls_if' },
-        { kind: 'block', type: 'logic_compare' },
-        { kind: 'block', type: 'logic_operation' },
-        { kind: 'block', type: 'logic_negate' },
-        { kind: 'block', type: 'logic_boolean' }
-      ]
-    },
-    {
-      kind: 'category',
-      name: 'Math',
-      colour: '#AB47BC',
-      contents: [
-        { kind: 'block', type: 'math_number' },
-        { kind: 'block', type: 'math_arithmetic' },
-        { kind: 'block', type: 'math_single' },
-        { kind: 'block', type: 'math_trig' },
-        { kind: 'block', type: 'math_round' },
-        { kind: 'block', type: 'math_modulo' }
-      ]
-    },
-    {
-      kind: 'category',
-      name: 'Variables',
-      colour: '#E91E63',
-      custom: 'VARIABLE'
     }
   ]
 };
@@ -193,37 +201,102 @@ export const ORCHESTRATOR_STUDIO_TOOLBOX = {
   contents: [
     {
       kind: 'category',
-      name: 'Root & Fallback',
-      categorystyle: 'root_category',
+      name: '🕹️ 控制流 (Control Flow)',
+      colour: '#FFAB19',
       contents: [
-        { kind: 'block', type: 'orchestrator_root' }
+        { kind: 'block', type: 'orch_root_flow' },
+        { kind: 'block', type: 'controls_if' },
+        {
+          kind: 'block',
+          type: 'orch_action_wait_ms',
+          inputs: {
+            MS: { shadow: { type: 'math_number', fields: { NUM: 1000 } } }
+          }
+        }
       ]
     },
     {
       kind: 'category',
-      name: 'Event Overlays',
-      categorystyle: 'overlay_category',
+      name: '🔍 侦测与条件 (Sensing & Conditions)',
+      colour: '#4CBFE6',
       contents: [
-        { kind: 'block', type: 'event_overlay' }
+        { kind: 'block', type: 'orch_current_process' },
+        {
+          kind: 'block',
+          type: 'orch_gsi_num',
+          inputs: {
+            DEFAULT: { shadow: { type: 'math_number', fields: { NUM: 100 } } }
+          }
+        },
+        {
+          kind: 'block',
+          type: 'orch_gsi_str',
+          inputs: {
+            DEFAULT: { shadow: { type: 'text', fields: { TEXT: '' } } }
+          }
+        },
+        {
+          kind: 'block',
+          type: 'orch_gsi_bool',
+          inputs: {
+            DEFAULT: { shadow: { type: 'logic_boolean', fields: { BOOL: 'FALSE' } } }
+          }
+        },
+        { kind: 'block', type: 'orch_event_triggered' },
+        {
+          kind: 'block',
+          type: 'orch_text_equals',
+          inputs: {
+            A: { shadow: { type: 'text', fields: { TEXT: 'cs2.exe' } } },
+            B: { shadow: { type: 'text', fields: { TEXT: 'cs2.exe' } } }
+          }
+        },
+        {
+          kind: 'block',
+          type: 'logic_compare',
+          inputs: {
+            A: { shadow: { type: 'math_number', fields: { NUM: 100 } } },
+            B: { shadow: { type: 'math_number', fields: { NUM: 30 } } }
+          }
+        },
+        { kind: 'block', type: 'logic_operation' },
+        { kind: 'block', type: 'logic_negate' },
+        { kind: 'block', type: 'logic_boolean' },
+        { kind: 'block', type: 'math_number' },
+        { kind: 'block', type: 'text' }
       ]
     },
     {
       kind: 'category',
-      name: 'Process Rules',
-      categorystyle: 'process_category',
+      name: '⚡ 执行动作 (Actions)',
+      colour: '#9966FF',
       contents: [
-        { kind: 'block', type: 'match_process' }
+        { kind: 'block', type: 'orch_action_switch_profile' },
+        {
+          kind: 'block',
+          type: 'orch_action_overlay_pulse',
+          inputs: {
+            DURATION: { shadow: { type: 'math_number', fields: { NUM: 1200 } } },
+            FADE: { shadow: { type: 'math_number', fields: { NUM: 400 } } },
+            PRIORITY: { shadow: { type: 'math_number', fields: { NUM: 20 } } }
+          }
+        },
+        { kind: 'block', type: 'orch_action_set_dnd' }
       ]
     },
+    { kind: 'sep' },
     {
       kind: 'category',
-      name: 'GSI Conditions',
-      categorystyle: 'condition_category',
+      name: '🏛️ 经典模块 (Legacy)',
+      colour: '#705D00',
       contents: [
+        { kind: 'block', type: 'orchestrator_root' },
+        { kind: 'block', type: 'event_overlay' },
+        { kind: 'block', type: 'match_process' },
+        { kind: 'block', type: 'condition_compare' },
         { kind: 'block', type: 'condition_and' },
         { kind: 'block', type: 'condition_or' },
-        { kind: 'block', type: 'condition_not' },
-        { kind: 'block', type: 'condition_compare' }
+        { kind: 'block', type: 'condition_not' }
       ]
     }
   ]

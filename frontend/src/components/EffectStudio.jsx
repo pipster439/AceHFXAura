@@ -6,6 +6,7 @@ import { EFFECT_STUDIO_TOOLBOX } from '../blockly/toolboxes';
 import { CppTranspiler } from '../blockly/cppTranspiler';
 import { JsTranspiler, PREVIEW_68_KEYS } from '../blockly/jsTranspiler';
 import { EFFECT_PRESETS } from '../blockly/presets';
+import EffectLibraryModal from './EffectLibraryModal';
 import { 
   Play, 
   Square, 
@@ -20,7 +21,8 @@ import {
   Terminal, 
   AlertCircle,
   Save,
-  CheckCircle2
+  CheckCircle2,
+  FolderOpen
 } from 'lucide-react';
 
 export default function EffectStudio({
@@ -33,6 +35,7 @@ export default function EffectStudio({
   const workspaceRef = useRef(null);
   const [effectName, setEffectName] = useState('custom_rainbow');
   const [isPlaying, setIsPlaying] = useState(true);
+  const [isLibraryOpen, setIsLibraryOpen] = useState(false);
   const [cppCode, setCppCode] = useState('');
   const [isCodeModalOpen, setIsCodeModalOpen] = useState(false);
   const [isCompiling, setIsCompiling] = useState(false);
@@ -237,7 +240,7 @@ export default function EffectStudio({
     }
   };
 
-  // 保存当前积木工作区至 config.json
+  // 保存当前积木工作区至 config.json 并注册为可用方案
   const handleSaveToConfig = () => {
     if (!workspaceRef.current || !onSaveConfig) return;
     const wsJson = Blockly.serialization.workspaces.save(workspaceRef.current);
@@ -253,12 +256,210 @@ export default function EffectStudio({
           blockly_json: wsJson,
           updated_at: Date.now()
         }
+      },
+      profiles: {
+        ...(config?.profiles || {}),
+        [cleanName]: {
+          type: "plugin",
+          plugin_name: cleanName,
+          title: cleanName,
+          fps: 25,
+          color: [255, 255, 255],
+          bg: [0, 0, 0]
+        }
       }
     };
 
     onSaveConfig(nextConfig);
-    showToast?.(`已将光效工作区「${cleanName}」保存至配置中心`, 'success');
+    showToast?.(`已将光效工作区「${cleanName}」保存并同步至可用方案库`, 'success');
   };
+
+  // 光效管理中心操作逻辑
+  const handleSelectEffect = (name, blocklyJson) => {
+    if (!workspaceRef.current) return;
+    workspaceRef.current.clear();
+    if (blocklyJson) {
+      loadSafeWorkspaceJson(blocklyJson, workspaceRef.current);
+    }
+    setEffectName(name);
+    showToast?.(`已载入光效: ${name}`, 'info');
+  };
+
+  const handleCreateEffect = (name, templateKey) => {
+    if (!workspaceRef.current) return;
+    const clean = name.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_');
+    if (!clean) return;
+
+    workspaceRef.current.clear();
+    let templateJson = null;
+    if (templateKey !== 'blank') {
+      const preset = EFFECT_PRESETS.find(p => p.id === templateKey);
+      if (preset?.blocklyJson) {
+        templateJson = preset.blocklyJson;
+        loadSafeWorkspaceJson(templateJson, workspaceRef.current);
+      }
+    }
+
+    setEffectName(clean);
+
+    const wsJson = templateJson || Blockly.serialization.workspaces.save(workspaceRef.current);
+    const nextConfig = {
+      ...config,
+      blockly_effects: {
+        ...(config?.blockly_effects || {}),
+        [clean]: {
+          version: 1,
+          name: clean,
+          blockly_json: wsJson,
+          updated_at: Date.now()
+        }
+      },
+      profiles: {
+        ...(config?.profiles || {}),
+        [clean]: {
+          type: "plugin",
+          plugin_name: clean,
+          title: clean,
+          fps: 25,
+          color: [255, 255, 255],
+          bg: [0, 0, 0]
+        }
+      }
+    };
+    onSaveConfig?.(nextConfig);
+    showToast?.(`已新建光效「${clean}」并加入方案库`, 'success');
+  };
+
+  const handleCloneEffect = (sourceName, cloneName) => {
+    const srcData = config?.blockly_effects?.[sourceName];
+    if (!srcData) return;
+
+    const nextConfig = {
+      ...config,
+      blockly_effects: {
+        ...(config?.blockly_effects || {}),
+        [cloneName]: {
+          ...srcData,
+          name: cloneName,
+          updated_at: Date.now()
+        }
+      },
+      profiles: {
+        ...(config?.profiles || {}),
+        [cloneName]: {
+          type: "plugin",
+          plugin_name: cloneName,
+          title: cloneName,
+          fps: 25,
+          color: [255, 255, 255],
+          bg: [0, 0, 0]
+        }
+      }
+    };
+    onSaveConfig?.(nextConfig);
+    setEffectName(cloneName);
+    if (workspaceRef.current && srcData.blockly_json) {
+      workspaceRef.current.clear();
+      loadSafeWorkspaceJson(srcData.blockly_json, workspaceRef.current);
+    }
+    showToast?.(`已克隆生成光效副本: ${cloneName}`, 'success');
+  };
+
+  const handleRenameEffect = (oldName, newName) => {
+    if (oldName === newName) return;
+    const effects = { ...(config?.blockly_effects || {}) };
+    const profiles = { ...(config?.profiles || {}) };
+    if (!effects[oldName]) return;
+
+    effects[newName] = {
+      ...effects[oldName],
+      name: newName,
+      updated_at: Date.now()
+    };
+    delete effects[oldName];
+
+    if (profiles[oldName]) {
+      profiles[newName] = { ...profiles[oldName], plugin_name: newName, title: newName };
+      delete profiles[oldName];
+    }
+
+    const nextConfig = { ...config, blockly_effects: effects, profiles };
+    onSaveConfig?.(nextConfig);
+    if (effectName === oldName) {
+      setEffectName(newName);
+    }
+    showToast?.(`已将光效重命名为: ${newName}`, 'success');
+  };
+
+  const handleDeleteEffect = (name) => {
+    const effects = { ...(config?.blockly_effects || {}) };
+    const profiles = { ...(config?.profiles || {}) };
+    delete effects[name];
+    delete profiles[name];
+
+    const nextConfig = { ...config, blockly_effects: effects, profiles };
+    onSaveConfig?.(nextConfig);
+
+    if (effectName === name) {
+      const remaining = Object.keys(effects);
+      if (remaining.length > 0) {
+        handleSelectEffect(remaining[0], effects[remaining[0]]?.blockly_json);
+      } else {
+        setEffectName('custom_rainbow');
+        workspaceRef.current?.clear();
+      }
+    }
+    showToast?.(`已删除光效: ${name}`, 'info');
+  };
+
+  const handleExportEffect = (name) => {
+    const data = config?.blockly_effects?.[name];
+    if (!data) return;
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `effect_${name}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast?.(`已导出光效配置文件: effect_${name}.json`, 'success');
+  };
+
+  const handleImportEffect = (parsed) => {
+    if (!parsed || !parsed.name) {
+      showToast?.('导入的文件不是合法的光效配置文件', 'error');
+      return;
+    }
+    const clean = parsed.name.replace(/[^a-zA-Z0-9_]/g, '_');
+    const nextConfig = {
+      ...config,
+      blockly_effects: {
+        ...(config?.blockly_effects || {}),
+        [clean]: {
+          version: 1,
+          name: clean,
+          blockly_json: parsed.blockly_json || parsed,
+          updated_at: Date.now()
+        }
+      },
+      profiles: {
+        ...(config?.profiles || {}),
+        [clean]: {
+          type: "plugin",
+          plugin_name: clean,
+          title: clean,
+          fps: 25,
+          color: [255, 255, 255],
+          bg: [0, 0, 0]
+        }
+      }
+    };
+    onSaveConfig?.(nextConfig);
+    handleSelectEffect(clean, parsed.blockly_json || parsed);
+    showToast?.(`已导入并切换至光效: ${clean}`, 'success');
+  };
+
+  const customEffectKeys = Object.keys(config?.blockly_effects || {});
 
   return (
     <div className="flex flex-col gap-4 p-1 h-[calc(100vh-280px)] min-h-[600px]">
@@ -270,14 +471,41 @@ export default function EffectStudio({
           </div>
           <div className="flex flex-col">
             <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-md-on-surface-variant">插件标识:</span>
+              <span className="text-xs font-semibold text-md-on-surface-variant">当前光效:</span>
               <input
                 type="text"
                 value={effectName}
                 onChange={(e) => setEffectName(e.target.value.trim().toLowerCase().replace(/[^a-z0-9_]/g, ''))}
                 placeholder="effect_name"
-                className="w-44 h-8 px-2.5 bg-md-surface-container border border-md-outline rounded-md-sm text-xs font-mono font-bold text-md-primary outline-none focus:border-md-primary"
+                className="w-32 h-8 px-2.5 bg-md-surface-container border border-md-outline rounded-md-sm text-xs font-mono font-bold text-md-primary outline-none focus:border-md-primary"
               />
+
+              {customEffectKeys.length > 0 && (
+                <select
+                  value={effectName}
+                  onChange={(e) => {
+                    const selected = e.target.value;
+                    const blocklyJson = config?.blockly_effects?.[selected]?.blockly_json;
+                    handleSelectEffect(selected, blocklyJson);
+                  }}
+                  className="h-8 px-2 bg-md-surface-container border border-md-outline rounded-md-sm text-xs text-md-on-surface outline-none cursor-pointer"
+                  title="在已保存的工坊光效间快速切换"
+                >
+                  <option value={effectName}>{effectName} (当前编辑)</option>
+                  {customEffectKeys.filter(k => k !== effectName).map(k => (
+                    <option key={k} value={k}>{k}</option>
+                  ))}
+                </select>
+              )}
+
+              <button
+                onClick={() => setIsLibraryOpen(true)}
+                className="h-8 px-3 flex items-center gap-1.5 rounded-md-full bg-md-primary/15 text-md-primary hover:bg-md-primary/25 border border-md-primary/30 text-xs font-bold transition-all cursor-pointer shadow-xs"
+                title="打开光效管理中心，自由新建、克隆与管理自定义光效"
+              >
+                <FolderOpen className="w-3.5 h-3.5" />
+                <span>光效库 ({customEffectKeys.length})</span>
+              </button>
             </div>
             <span className="text-[11px] text-md-on-surface-variant">
               输出路径: plugins/effect_{effectName || 'custom'}.dll
@@ -484,6 +712,21 @@ export default function EffectStudio({
           </div>
         </div>
       )}
+
+      {/* 独立模态弹窗: 光效管理中心 */}
+      <EffectLibraryModal
+        isOpen={isLibraryOpen}
+        onClose={() => setIsLibraryOpen(false)}
+        effects={config?.blockly_effects || {}}
+        currentEffectName={effectName}
+        onSelectEffect={handleSelectEffect}
+        onCreateEffect={handleCreateEffect}
+        onCloneEffect={handleCloneEffect}
+        onRenameEffect={handleRenameEffect}
+        onDeleteEffect={handleDeleteEffect}
+        onExportEffect={handleExportEffect}
+        onImportEffect={handleImportEffect}
+      />
     </div>
   );
 }

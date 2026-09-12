@@ -510,6 +510,243 @@ export function registerCustomBlocks() {
       style: 'condition_blocks',
       tooltip: '判断 GSI 字段或进程状态是否满足比较运算',
       helpUrl: ''
+    },
+
+    // =========================================================================
+    // 8. SCRATCH-STYLE ATOMIC EFFECT & ORCHESTRATION BLOCKS
+    // =========================================================================
+    {
+      type: 'effect_wait_ms',
+      message0: '等待 %1 毫秒',
+      args0: [
+        { type: 'input_value', name: 'MS', check: 'Number' }
+      ],
+      previousStatement: null,
+      nextStatement: null,
+      style: 'clock_blocks',
+      tooltip: '非阻塞时序延迟：在动画循环中提供时间步进控制',
+      helpUrl: ''
+    },
+    {
+      type: 'orch_root_flow',
+      message0: '⚡ ROG 方案编排控制流',
+      message1: '默认基础方案: %1',
+      message2: '规则堆栈:\n%1',
+      args1: [
+        {
+          type: 'field_input',
+          name: 'FALLBACK_PROFILE',
+          text: 'default'
+        }
+      ],
+      args2: [
+        {
+          type: 'input_statement',
+          name: 'DO'
+        }
+      ],
+      style: 'root_blocks',
+      tooltip: 'Scratch 风格方案编排主入口：支持多层如果...那么...否则条件树与动作执行',
+      helpUrl: ''
+    },
+    {
+      type: 'orch_action_switch_profile',
+      message0: '切换方案为: %1',
+      args0: [
+        {
+          type: 'field_input',
+          name: 'PROFILE',
+          text: 'cs2_gamer'
+        }
+      ],
+      previousStatement: null,
+      nextStatement: null,
+      style: 'process_blocks',
+      tooltip: '将当前活动方案切换为指定内建方案或工坊自定义光效',
+      helpUrl: ''
+    },
+    {
+      type: 'orch_action_overlay_pulse',
+      message0: '临时叠加光效 %1 持续: %2 ms 淡出: %3 ms 优先级: %4',
+      args0: [
+        {
+          type: 'field_input',
+          name: 'EFFECT',
+          text: 'rainbow_wave'
+        },
+        {
+          type: 'field_number',
+          name: 'DURATION',
+          value: 1200,
+          min: 50,
+          max: 60000
+        },
+        {
+          type: 'field_number',
+          name: 'FADE',
+          value: 400,
+          min: 0,
+          max: 10000
+        },
+        {
+          type: 'field_number',
+          name: 'PRIORITY',
+          value: 20,
+          min: 1,
+          max: 100
+        }
+      ],
+      previousStatement: null,
+      nextStatement: null,
+      style: 'overlay_blocks',
+      tooltip: '非阻塞触发瞬态事件光效覆盖，超时后平滑线性淡出',
+      helpUrl: ''
+    },
+    {
+      type: 'orch_action_set_dnd',
+      message0: '设置游戏免打扰 %1',
+      args0: [
+        {
+          type: 'field_dropdown',
+          name: 'DND',
+          options: [
+            ['开启 (抑制网页服务)', 'TRUE'],
+            ['关闭', 'FALSE']
+          ]
+        }
+      ],
+      previousStatement: null,
+      nextStatement: null,
+      style: 'process_blocks',
+      tooltip: '在运行全屏游戏时挂起网页后台服务，节约 CPU 并消除干扰',
+      helpUrl: ''
+    },
+    {
+      type: 'orch_action_wait_ms',
+      message0: '等待 %1 毫秒',
+      args0: [
+        {
+          type: 'field_number',
+          name: 'MS',
+          value: 1000,
+          min: 10,
+          max: 60000
+        }
+      ],
+      previousStatement: null,
+      nextStatement: null,
+      style: 'clock_blocks',
+      tooltip: '非阻塞时序延迟：由守护进程定时状态机驱动，绝不阻塞硬件推流',
+      helpUrl: ''
+    },
+    {
+      type: 'orch_current_process',
+      message0: '当前前台窗口进程名',
+      output: 'String',
+      style: 'process_blocks',
+      tooltip: '获取当前处于系统最前台焦点的窗口进程名（例如 "cs2.exe", "code.exe"）',
+      helpUrl: ''
+    },
+    {
+      type: 'orch_event_triggered',
+      message0: '发生突发事件 %1 ?',
+      args0: [
+        {
+          type: 'field_dropdown',
+          name: 'EVENT',
+          options: [
+            ['击杀敌人 (event.kill)', 'event.kill'],
+            ['致盲白屏 (event.flash)', 'event.flash'],
+            ['C4已安放 (event.bomb_planted)', 'event.bomb_planted'],
+            ['C4已拆除 (event.bomb_defused)', 'event.bomb_defused'],
+            ['回合获胜/MVP (event.round_mvp)', 'event.round_mvp'],
+            ['受到伤害 (event.damage_taken)', 'event.damage_taken']
+          ]
+        }
+      ],
+      output: 'Boolean',
+      style: 'overlay_blocks',
+      tooltip: '检测指定 CS2 游戏突发事件当前是否被激活触发',
+      helpUrl: ''
+    },
+    {
+      type: 'orch_gsi_num',
+      message0: '读取 GSI 数值 %1 缺省: %2',
+      args0: [
+        {
+          type: 'field_dropdown',
+          name: 'PATH',
+          options: [
+            ['玩家血量 (player.state.health)', 'player.state.health'],
+            ['玩家护甲 (player.state.armor)', 'player.state.armor'],
+            ['金钱储备 (player.state.money)', 'player.state.money'],
+            ['本局击杀 (player.state.round_kills)', 'player.state.round_kills'],
+            ['被致盲度 (player.state.flashed)', 'player.state.flashed'],
+            ['燃烧伤害 (player.state.burning)', 'player.state.burning'],
+            ['当前回合 (map.round)', 'map.round']
+          ]
+        },
+        { type: 'input_value', name: 'DEFAULT', check: 'Number' }
+      ],
+      output: 'Number',
+      style: 'condition_blocks',
+      tooltip: '从 CS2 游戏遥测中提取原子数值',
+      helpUrl: ''
+    },
+    {
+      type: 'orch_gsi_str',
+      message0: '读取 GSI 文本 %1 缺省: %2',
+      args0: [
+        {
+          type: 'field_dropdown',
+          name: 'PATH',
+          options: [
+            ['C4状态 (round.bomb)', 'round.bomb'],
+            ['回合阶段 (round.phase)', 'round.phase'],
+            ['所属阵营 (player.team)', 'player.team'],
+            ['地图名称 (map.name)', 'map.name'],
+            ['游戏模式 (map.mode)', 'map.mode'],
+            ['玩家活动 (player.activity)', 'player.activity']
+          ]
+        },
+        { type: 'input_value', name: 'DEFAULT', check: 'String' }
+      ],
+      output: 'String',
+      style: 'condition_blocks',
+      tooltip: '从 CS2 游戏遥测中提取原子字符串',
+      helpUrl: ''
+    },
+    {
+      type: 'orch_gsi_bool',
+      message0: '读取 GSI 布尔值 %1 缺省: %2',
+      args0: [
+        {
+          type: 'field_dropdown',
+          name: 'PATH',
+          options: [
+            ['装备头盔 (player.state.helmet)', 'player.state.helmet'],
+            ['携带拆弹器 (player.state.defusekit)', 'player.state.defusekit']
+          ]
+        },
+        { type: 'input_value', name: 'DEFAULT', check: 'Boolean' }
+      ],
+      output: 'Boolean',
+      style: 'condition_blocks',
+      tooltip: '从 CS2 游戏遥测中提取原子布尔值',
+      helpUrl: ''
+    },
+    {
+      type: 'orch_text_equals',
+      message0: '文本 %1 等于 %2',
+      args0: [
+        { type: 'input_value', name: 'A', check: 'String' },
+        { type: 'input_value', name: 'B', check: 'String' }
+      ],
+      output: 'Boolean',
+      style: 'condition_blocks',
+      tooltip: '判断两个文本是否一致',
+      helpUrl: ''
     }
   ]);
 }
+

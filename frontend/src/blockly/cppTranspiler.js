@@ -103,6 +103,13 @@ extern "C" {
     }
 
     let statements = [];
+    if (workspace && typeof workspace.getAllVariables === 'function') {
+      for (const v of workspace.getAllVariables()) {
+        const cleanName = v.name.replace(/[^a-zA-Z0-9_]/g, '_');
+        statements.push(`        double var_${cleanName} = 0.0;`);
+      }
+    }
+
     for (const block of topBlocks) {
       const code = this.blockToCpp(block, '        ');
       if (code) {
@@ -159,11 +166,78 @@ extern "C" {
       }
 
       case 'controls_if': {
-        const cond = this.valueToCpp(block, 'IF0', 'true');
-        const doBlock = block.getInputTargetBlock('DO0');
+        let code = '';
+        let i = 0;
+        while (block.getInput(`IF${i}`)) {
+          const cond = this.valueToCpp(block, `IF${i}`, 'false');
+          const doBlock = block.getInputTargetBlock(`DO${i}`);
+          const doCode = doBlock ? this.blockToCpp(doBlock, indent + '    ') : '';
+          if (i === 0) {
+            code += `${indent}if (${cond}) {\n${doCode}\n${indent}}`;
+          } else {
+            code += ` else if (${cond}) {\n${doCode}\n${indent}}`;
+          }
+          i++;
+        }
+        const elseBlock = block.getInputTargetBlock('ELSE');
+        if (elseBlock) {
+          const elseCode = this.blockToCpp(elseBlock, indent + '    ');
+          code += ` else {\n${elseCode}\n${indent}}`;
+        }
+        const next = this.blockToCpp(block.getNextBlock(), indent);
+        return `${code}${next ? '\n' + next : ''}`;
+      }
+
+      case 'controls_repeat_ext': {
+        const times = this.valueToCpp(block, 'TIMES', '10');
+        const doBlock = block.getInputTargetBlock('DO');
         const doCode = doBlock ? this.blockToCpp(doBlock, indent + '    ') : '';
         const next = this.blockToCpp(block.getNextBlock(), indent);
-        return `${indent}if (${cond}) {\n${doCode}\n${indent}}${next ? '\n' + next : ''}`;
+        return `${indent}for (int _rpt = 0; _rpt < std::min(1000, std::max(0, static_cast<int>(${times}))); ++_rpt) {\n${doCode}\n${indent}}${next ? '\n' + next : ''}`;
+      }
+
+      case 'controls_whileUntil': {
+        const mode = block.getFieldValue('MODE') || 'WHILE';
+        let cond = this.valueToCpp(block, 'BOOL', 'false');
+        if (mode === 'UNTIL') cond = `!(${cond})`;
+        const doBlock = block.getInputTargetBlock('DO');
+        const doCode = doBlock ? this.blockToCpp(doBlock, indent + '    ') : '';
+        const next = this.blockToCpp(block.getNextBlock(), indent);
+        return `${indent}{\n` +
+               `${indent}    int _loop_guard = 0;\n` +
+               `${indent}    while (${cond}) {\n` +
+               `${indent}        if (++_loop_guard > 10000) break;\n` +
+               `${doCode}\n` +
+               `${indent}    }\n` +
+               `${indent}}${next ? '\n' + next : ''}`;
+      }
+
+      case 'controls_flow_statements': {
+        const flow = block.getFieldValue('FLOW') || 'BREAK';
+        return `${indent}${flow === 'BREAK' ? 'break;' : 'continue;'}\n`;
+      }
+
+      case 'effect_wait_ms': {
+        const next = this.blockToCpp(block.getNextBlock(), indent);
+        return next;
+      }
+
+      case 'variables_set': {
+        const varModel = block.getField('VAR')?.getVariable?.();
+        const varName = varModel ? varModel.name : (block.getFieldValue('VAR') || 'x');
+        const cleanName = varName.replace(/[^a-zA-Z0-9_]/g, '_');
+        const val = this.valueToCpp(block, 'VALUE', '0.0');
+        const next = this.blockToCpp(block.getNextBlock(), indent);
+        return `${indent}var_${cleanName} = static_cast<double>(${val});${next ? '\n' + next : ''}`;
+      }
+
+      case 'math_change': {
+        const varModel = block.getField('VAR')?.getVariable?.();
+        const varName = varModel ? varModel.name : (block.getFieldValue('VAR') || 'x');
+        const cleanName = varName.replace(/[^a-zA-Z0-9_]/g, '_');
+        const delta = this.valueToCpp(block, 'DELTA', '1.0');
+        const next = this.blockToCpp(block.getNextBlock(), indent);
+        return `${indent}var_${cleanName} += static_cast<double>(${delta});${next ? '\n' + next : ''}`;
       }
 
       default: {
@@ -338,6 +412,53 @@ extern "C" {
         else if (op === 'GT') opSym = '>';
         else if (op === 'GTE') opSym = '>=';
         return `(${a} ${opSym} ${b})`;
+      }
+
+      case 'variables_get': {
+        const varModel = target.getField('VAR')?.getVariable?.();
+        const varName = varModel ? varModel.name : (target.getFieldValue('VAR') || 'x');
+        const cleanName = varName.replace(/[^a-zA-Z0-9_]/g, '_');
+        return `var_${cleanName}`;
+      }
+
+      case 'math_single': {
+        const op = target.getFieldValue('OP') || 'ROOT';
+        const num = this.valueToCpp(target, 'NUM', '0.0');
+        if (op === 'ROOT') return `std::sqrt(static_cast<double>(${num}))`;
+        if (op === 'ABS') return `std::fabs(static_cast<double>(${num}))`;
+        if (op === 'NEG') return `(-static_cast<double>(${num}))`;
+        if (op === 'LN') return `std::log(static_cast<double>(${num}))`;
+        if (op === 'LOG10') return `std::log10(static_cast<double>(${num}))`;
+        if (op === 'EXP') return `std::exp(static_cast<double>(${num}))`;
+        if (op === 'POW10') return `std::pow(10.0, static_cast<double>(${num}))`;
+        return num;
+      }
+
+      case 'math_trig': {
+        const op = target.getFieldValue('OP') || 'SIN';
+        const num = this.valueToCpp(target, 'NUM', '0.0');
+        if (op === 'SIN') return `std::sin(static_cast<double>(${num}))`;
+        if (op === 'COS') return `std::cos(static_cast<double>(${num}))`;
+        if (op === 'TAN') return `std::tan(static_cast<double>(${num}))`;
+        if (op === 'ASIN') return `std::asin(static_cast<double>(${num}))`;
+        if (op === 'ACOS') return `std::acos(static_cast<double>(${num}))`;
+        if (op === 'ATAN') return `std::atan(static_cast<double>(${num}))`;
+        return num;
+      }
+
+      case 'math_round': {
+        const op = target.getFieldValue('OP') || 'ROUND';
+        const num = this.valueToCpp(target, 'NUM', '0.0');
+        if (op === 'ROUND') return `std::round(static_cast<double>(${num}))`;
+        if (op === 'ROUNDUP') return `std::ceil(static_cast<double>(${num}))`;
+        if (op === 'ROUNDDOWN') return `std::floor(static_cast<double>(${num}))`;
+        return num;
+      }
+
+      case 'math_modulo': {
+        const a = this.valueToCpp(target, 'DIVIDEND', '0.0');
+        const b = this.valueToCpp(target, 'DIVISOR', '1.0');
+        return `std::fmod(static_cast<double>(${a}), static_cast<double>(${b}))`;
       }
 
       default:

@@ -196,8 +196,66 @@ out_frame.Fill(r, g, 0);`,
 
 export const ORCHESTRATOR_PRESETS = [
   {
+    id: 'scratch_flow_preset',
+    name: 'Scratch 智能控制流',
+    description: '使用 Scratch「如果...那么...」语法块：匹配前台 cs2.exe 切换至竞技方案并叠加击杀光效',
+    blocklyJson: {
+      languageVersion: 0,
+      blocks: [
+        {
+          type: 'orch_root_flow',
+          x: 50,
+          y: 50,
+          fields: { FALLBACK_PROFILE: 'desktop' },
+          inputs: {
+            DO: {
+              block: {
+                type: 'controls_if',
+                inputs: {
+                  IF0: {
+                    block: {
+                      type: 'orch_text_equals',
+                      inputs: {
+                        A: { block: { type: 'orch_current_process' } },
+                        B: { shadow: { type: 'text', fields: { TEXT: 'cs2.exe' } } }
+                      }
+                    }
+                  },
+                  DO0: {
+                    block: {
+                      type: 'orch_action_switch_profile',
+                      fields: { PROFILE: 'cs2_gamer' },
+                      next: {
+                        block: {
+                          type: 'orch_action_set_dnd',
+                          fields: { DND: 'TRUE' },
+                          next: {
+                            block: {
+                              type: 'orch_action_overlay_pulse',
+                              fields: {
+                                EVENT: 'event.kill',
+                                EFFECT: 'rainbow_wave',
+                                DURATION: 1200,
+                                FADE: 400,
+                                PRIORITY: 20
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
     id: 'cs2_competitive_preset',
-    name: 'CS2 竞技全功能编排',
+    name: '经典进程编排',
     description: '前台 cs2.exe 自动切换至竞技方案，支持击杀金色脉冲与致盲白屏覆盖',
     blocklyJson: {
       languageVersion: 0,
