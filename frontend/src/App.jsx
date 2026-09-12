@@ -10,6 +10,7 @@ import ProfileManager from './components/ProfileManager';
 import Toast from './components/Toast';
 import GameModeModal from './components/GameModeModal';
 import { GRADIENT_PRESETS } from './constants/keyboardLayout';
+import { DEFAULT_KEYBOARD_BG, TACTICAL_PALETTE } from './tokens/keyboardPresets.tokens';
 import { rgbToHex, hexToRgb } from './utils/color';
 
 export default function App() {
@@ -29,8 +30,24 @@ export default function App() {
   const [gradientStops, setGradientStops] = useState(GRADIENT_PRESETS.default);
   const [selectedStopId, setSelectedStopId] = useState(1);
   const [isStarryRandom, setIsStarryRandom] = useState(false);
-  const [bgColor, setBgColor] = useState('#000000');
+  const [bgColor, setBgColor] = useState(DEFAULT_KEYBOARD_BG);
   const [fpsVal, setFpsVal] = useState(25);
+
+  // MD3E 主题模式 (默认暗黑)
+  const [theme, setTheme] = useState(() => {
+    return localStorage.getItem('aura-theme') || 'dark';
+  });
+
+  const toggleTheme = () => {
+    const nextTheme = theme === 'dark' ? 'light' : 'dark';
+    setTheme(nextTheme);
+    localStorage.setItem('aura-theme', nextTheme);
+    document.documentElement.setAttribute('data-theme', nextTheme);
+  };
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
 
   // 逐键涂装选中集合
   const [selectedKeyNames, setSelectedKeyNames] = useState(new Set());
@@ -78,7 +95,7 @@ export default function App() {
     } else if (profileData.type === 'reactive' || profileData.type === 'ripple') {
       setBgColor(rgbToHex([0, 5, 15]));
     } else {
-      setBgColor('#000000');
+      setBgColor(DEFAULT_KEYBOARD_BG);
     }
 
     if (typeof profileData.brightness === 'number' && Number.isFinite(profileData.brightness)) {
@@ -104,7 +121,7 @@ export default function App() {
       const c2 = profileData.color2;
       const nextStops = [
         { id: 1, pos: 0.15, color: rgbToHex(c1) },
-        { id: 2, pos: 0.85, color: c2 ? rgbToHex(c2) : '#0284C7' }
+        { id: 2, pos: 0.85, color: c2 ? rgbToHex(c2) : TACTICAL_PALETTE[1].hex }
       ];
       setGradientStops(nextStops);
       setSelectedStopId(1);
@@ -494,8 +511,8 @@ export default function App() {
   };
 
   return (
-    <div className="flex h-screen w-screen bg-slate-50 overflow-hidden font-sans select-none">
-      {/* 左侧可折叠伸缩栏 */}
+    <div className="flex h-screen w-screen bg-md-surface text-md-on-surface overflow-hidden font-sans select-none">
+      {/* 左侧 MD3E Navigation Rail / Drawer */}
       <Sidebar
         isCollapsed={isCollapsed}
         setIsCollapsed={setIsCollapsed}
@@ -507,6 +524,8 @@ export default function App() {
         defaultProfileName={config?.default_profile}
         isSaving={isSaving}
         isServiceOnline={isServiceOnline}
+        theme={theme}
+        onToggleTheme={toggleTheme}
       />
 
       {/* 右侧主工作区：上部常驻键盘 + 下部功能设置 */}
@@ -530,15 +549,15 @@ export default function App() {
           fpsVal={fpsVal}
         />
 
-        {/* 下方功能设置面板 (随侧边栏 Tab 切换平滑过渡) */}
+        {/* 下方功能设置面板 (随侧边栏 Tab 切换平滑物理弹簧过渡) */}
         <div className="flex-1">
           <AnimatePresence mode="wait">
             <motion.div
               key={activeTab}
-              initial={{ opacity: 0, y: 6 }}
+              initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -6 }}
-              transition={{ duration: 0.12 }}
+              exit={{ opacity: 0, y: -12 }}
+              transition={{ type: 'spring', stiffness: 380, damping: 28 }}
             >
               {activeTab === 'lighting' && (
                 <LightingSettings

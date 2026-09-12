@@ -3,13 +3,15 @@ import {
   Palette, 
   Keyboard, 
   Workflow, 
-  Crosshair,
+  Crosshair, 
   SlidersHorizontal, 
   PanelLeftClose, 
   PanelLeftOpen, 
   Radio, 
   Layers,
-  Cpu
+  Cpu,
+  Sun,
+  Moon
 } from 'lucide-react';
 
 export default function Sidebar({
@@ -22,7 +24,9 @@ export default function Sidebar({
   profiles,
   defaultProfileName,
   isSaving,
-  isServiceOnline
+  isServiceOnline,
+  theme = 'dark',
+  onToggleTheme
 }) {
   const navItems = [
     { id: 'lighting', label: '预设灯效', icon: Palette },
@@ -34,54 +38,63 @@ export default function Sidebar({
 
   return (
     <aside 
-      className={`relative flex flex-col bg-white border-r border-slate-200 transition-all duration-200 select-none z-30 ${
-        isCollapsed ? 'w-16' : 'w-56'
+      className={`relative flex flex-col bg-md-surface-container-low border-r border-md-outline-variant select-none z-30 transition-[width] duration-300 ease-out ${
+        isCollapsed ? 'w-24' : 'w-64'
       }`}
+      aria-label="主要导航"
     >
-      {/* 侧边栏头部 */}
-      <div className="flex items-center justify-between h-14 px-3.5 border-b border-slate-200">
-        <div className="flex items-center gap-2.5 overflow-hidden">
-          <div className="flex items-center justify-center w-8 h-8 aspect-square rounded-none bg-slate-900 text-white shrink-0">
-            <Cpu className="w-4 h-4" />
+      {/* 导航轨头部 */}
+      <div className="flex items-center justify-between h-16 px-4 border-b border-md-outline-variant">
+        <div className="flex items-center gap-3 overflow-hidden">
+          <div className="flex items-center justify-center w-10 h-10 aspect-square rounded-md-md bg-md-primary text-md-on-primary shrink-0 shadow-md-level1">
+            <Cpu className="w-5 h-5" />
           </div>
           {!isCollapsed && (
             <div className="flex flex-col overflow-hidden">
-              <span className="font-bold text-slate-900 text-xs tracking-tight truncate">ROG FALCHION</span>
-              <span className="text-[10px] font-semibold text-slate-500 truncate">Ace HFX 65%</span>
+              <span className="font-bold text-md-on-surface text-sm tracking-tight truncate">
+                ROG FALCHION
+              </span>
+              <span className="text-xs text-md-on-surface-variant truncate">
+                Ace HFX 65%
+              </span>
             </div>
           )}
         </div>
 
         <button
+          type="button"
           onClick={() => setIsCollapsed(!isCollapsed)}
-          className="w-7 h-7 aspect-square flex items-center justify-center text-slate-500 rounded-none border border-transparent hover:border-slate-300 hover:text-slate-900 hover:bg-slate-100 active:scale-95 transition-all cursor-pointer"
-          title={isCollapsed ? '展开' : '收起'}
-          aria-label={isCollapsed ? '展开' : '收起'}
+          className="w-10 h-10 min-w-[40px] min-h-[40px] flex items-center justify-center text-md-on-surface-variant rounded-md-full hover:bg-md-surface-container-high hover:text-md-on-surface active:scale-95 transition-transform cursor-pointer focus-visible:outline-none"
+          title={isCollapsed ? '展开导航轨' : '收起导航轨'}
+          aria-label={isCollapsed ? '展开导航轨' : '收起导航轨'}
         >
-          {isCollapsed ? <PanelLeftOpen className="w-3.5 h-3.5" /> : <PanelLeftClose className="w-3.5 h-3.5" />}
+          {isCollapsed ? <PanelLeftOpen className="w-5 h-5" /> : <PanelLeftClose className="w-5 h-5" />}
         </button>
       </div>
 
-      {/* 方案快速选择 */}
-      <div className="p-2.5 border-b border-slate-200">
+      {/* 方案快速选择区 */}
+      <div className="p-3 border-b border-md-outline-variant">
         {!isCollapsed ? (
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center justify-between text-[11px] font-bold text-slate-700">
-              <span className="flex items-center gap-1">
-                <Layers className="w-3 h-3" />
-                方案
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between text-xs font-medium text-md-on-surface-variant px-1">
+              <span className="flex items-center gap-1.5">
+                <Layers className="w-3.5 h-3.5 text-md-primary" />
+                当前方案
               </span>
               {currentProfileName === defaultProfileName && (
-                <span className="text-[9px] bg-slate-100 text-slate-700 border border-slate-300 px-1 py-0.5 rounded-none font-bold">默认</span>
+                <span className="text-xs px-2 py-0.5 rounded-md-full bg-md-primary-container text-md-on-primary-container font-semibold">
+                  默认
+                </span>
               )}
             </div>
             <select
               value={currentProfileName}
               onChange={(e) => onProfileChange(e.target.value)}
-              className="w-full h-7 px-2 text-[11px] font-bold text-slate-900 bg-white border border-slate-300 rounded-none cursor-pointer outline-none focus:border-slate-900"
+              className="w-full h-10 px-3 text-xs font-semibold text-md-on-surface bg-md-surface-container border border-md-outline rounded-md-sm cursor-pointer outline-none focus:border-md-primary focus:ring-1 focus:ring-md-primary transition-colors"
+              aria-label="选择灯效方案"
             >
               {Object.keys(profiles || {}).map((name) => (
-                <option key={name} value={name}>
+                <option key={name} value={name} className="bg-md-surface text-md-on-surface">
                   {name} {name === defaultProfileName ? '(默认)' : ''}
                 </option>
               ))}
@@ -89,52 +102,82 @@ export default function Sidebar({
           </div>
         ) : (
           <div className="flex justify-center" title={`当前方案: ${currentProfileName}`}>
-            <div className="flex items-center justify-center w-8 h-8 aspect-square rounded-none bg-slate-100 border border-slate-300 text-slate-900 text-[11px] font-bold">
+            <div className="flex items-center justify-center w-11 h-11 aspect-square rounded-md-md bg-md-surface-container-high border border-md-outline-variant text-md-on-surface text-xs font-bold shadow-md-level1">
               {currentProfileName.charAt(0).toUpperCase()}
             </div>
           </div>
         )}
       </div>
 
-      {/* 导航菜单列表 */}
-      <nav className="flex-1 p-1.5 space-y-1 overflow-y-auto">
+      {/* 核心导航条目列表 (MD3E 规范) */}
+      <nav className="flex-1 p-2 space-y-1.5 overflow-y-auto">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeTab === item.id;
           return (
             <button
               key={item.id}
+              type="button"
               onClick={() => setActiveTab(item.id)}
-              className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-none text-xs font-bold transition-all cursor-pointer ${
+              className={`w-full min-h-[48px] flex items-center gap-3 px-3 py-2.5 rounded-md-full text-xs font-medium transition-colors cursor-pointer group relative ${
                 isActive
-                  ? 'bg-slate-900 text-white shadow-xs'
-                  : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900 active:scale-98'
-              } ${isCollapsed ? 'justify-center px-0 h-10 aspect-square' : ''}`}
+                  ? 'bg-md-secondary-container text-md-on-secondary-container font-bold shadow-md-level1'
+                  : 'text-md-on-surface-variant hover:bg-md-surface-container hover:text-md-on-surface'
+              } ${isCollapsed ? 'flex-col justify-center py-2 h-14' : ''}`}
               title={isCollapsed ? item.label : undefined}
+              aria-label={item.label}
+              aria-current={isActive ? 'page' : undefined}
             >
-              <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-slate-700'}`} />
-              {!isCollapsed && <span className="truncate text-xs">{item.label}</span>}
+              <div className={`flex items-center justify-center w-6 h-6 shrink-0 transition-transform ${isActive ? 'scale-110 text-md-on-secondary-container' : 'text-md-on-surface-variant group-hover:text-md-on-surface'}`}>
+                <Icon className="w-5 h-5" />
+              </div>
+              <span className={`truncate text-xs ${isCollapsed ? 'text-[11px] leading-tight mt-0.5' : ''}`}>
+                {item.label}
+              </span>
             </button>
           );
         })}
       </nav>
 
-      {/* 底部服务心跳与实时生效状态 */}
-      <div className="p-2.5 border-t border-slate-200 flex flex-col gap-1.5 bg-slate-50">
-        <div className={`flex items-center gap-1.5 px-1 py-0.5 text-[11px] font-medium text-slate-600 ${isCollapsed ? 'justify-center px-0' : ''}`}>
-          <Radio className={`w-3.5 h-3.5 ${isServiceOnline ? 'text-emerald-600' : 'text-amber-500'}`} />
-          {!isCollapsed && (
-            <span className="truncate">
-              {isServiceOnline ? '服务运行中' : '离线'}
+      {/* 底部功能区：明暗切换与服务状态 */}
+      <div className="p-3 border-t border-md-outline-variant flex flex-col gap-2 bg-md-surface-container-lowest">
+        {/* 明暗切换按钮 */}
+        {onToggleTheme && (
+          <button
+            type="button"
+            onClick={onToggleTheme}
+            className={`w-full min-h-[48px] flex items-center justify-between px-3 py-2 rounded-md-full border border-md-outline-variant bg-md-surface-container hover:bg-md-surface-container-high text-md-on-surface text-xs font-medium cursor-pointer transition-colors ${
+              isCollapsed ? 'justify-center px-0' : ''
+            }`}
+            title={theme === 'dark' ? '切换为浅色主题' : '切换为深色主题'}
+            aria-label={theme === 'dark' ? '切换为浅色主题' : '切换为深色主题'}
+          >
+            <span className="flex items-center gap-2">
+              {theme === 'dark' ? <Moon className="w-4 h-4 text-md-primary" /> : <Sun className="w-4 h-4 text-md-primary" />}
+              {!isCollapsed && <span>{theme === 'dark' ? '暗黑模式' : '明亮模式'}</span>}
             </span>
+            {!isCollapsed && (
+              <span className="text-[11px] text-md-on-surface-variant">MD3E</span>
+            )}
+          </button>
+        )}
+
+        {/* 服务心跳与实时生效 */}
+        <div className={`flex items-center gap-2 px-2 py-1.5 rounded-md-md bg-md-surface-container text-xs text-md-on-surface-variant ${
+          isCollapsed ? 'justify-center px-0' : ''
+        }`}>
+          <Radio className={`w-4 h-4 shrink-0 ${isServiceOnline ? 'text-md-primary' : 'text-md-error'}`} />
+          {!isCollapsed && (
+            <div className="flex flex-col min-w-0">
+              <span className="font-semibold truncate text-md-on-surface">
+                {isServiceOnline ? '守护进程运行中' : '守护进程离线'}
+              </span>
+              <span className="text-[11px] text-md-on-surface-variant truncate">
+                {isSaving ? '正在同步硬件...' : '修改实时硬件生效'}
+              </span>
+            </div>
           )}
         </div>
-        {!isCollapsed && (
-          <div className="flex items-center gap-1.5 px-1 text-[10px] text-slate-500 font-medium">
-            <span className={`w-1.5 h-1.5 rounded-full ${isSaving ? 'bg-amber-500 animate-ping' : 'bg-emerald-500'}`} />
-            <span>{isSaving ? '正在同步...' : '修改实时生效'}</span>
-          </div>
-        )}
       </div>
     </aside>
   );

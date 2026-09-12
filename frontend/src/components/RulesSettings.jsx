@@ -19,33 +19,37 @@ export default function RulesSettings({
   ];
 
   return (
-    <div className="flex flex-col gap-4 p-2">
-      {/* 头部 */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-200">
+    <div className="flex flex-col gap-4 p-1">
+      {/* 头部标题与添加规则 */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-md-outline-variant">
         <div>
-          <h3 className="font-bold text-slate-900 text-sm">前台进程联动与游戏抑制规则</h3>
-          <p className="text-xs text-slate-500 mt-0.5">
-            根据前台窗口进程自动切换灯效，检测到游戏时自动挂起服务保障性能。
+          <h3 className="font-bold text-md-on-surface text-sm">前台进程联动与游戏抑制规则</h3>
+          <p className="text-xs text-md-on-surface-variant mt-0.5">
+            根据前台窗口进程自动切换对应灯效方案，检测到全屏游戏时可自动挂起网页服务保障微秒级性能。
           </p>
         </div>
 
         <button
+          type="button"
           onClick={onAddRule}
-          className="w-8 h-8 aspect-square flex items-center justify-center rounded-none bg-slate-900 text-white hover:bg-slate-800 active:scale-95 transition-all shadow-xs cursor-pointer"
+          className="min-h-[48px] px-4 flex items-center justify-center gap-2 rounded-md-full bg-md-primary text-md-on-primary hover:bg-md-primary/90 active:scale-95 transition-transform shadow-md-level1 cursor-pointer text-xs font-bold"
           title="添加新规则"
+          aria-label="添加新规则"
         >
           <Plus className="w-4 h-4" />
+          <span>添加新规则</span>
         </button>
       </div>
 
-      {/* 快捷推荐：紧凑按钮 */}
+      {/* 快捷推荐 (MD3E Assist Chips) */}
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs font-semibold text-slate-700">快速添加:</span>
+        <span className="text-xs font-semibold text-md-on-surface">常用预设:</span>
         {quickPresets.map((preset) => {
           const PresetIcon = preset.icon;
           return (
             <button
               key={preset.process}
+              type="button"
               onClick={() => {
                 const exists = rules.some((r) => r.process.toLowerCase() === preset.process.toLowerCase());
                 if (!exists) {
@@ -56,79 +60,85 @@ export default function RulesSettings({
                   });
                 }
               }}
-              className="h-8 px-2.5 flex items-center gap-1.5 rounded-none border border-slate-300 bg-white text-slate-800 hover:border-slate-500 hover:bg-slate-50 active:scale-95 transition-all text-xs font-semibold"
+              className="min-h-[40px] px-3.5 flex items-center gap-2 rounded-md-full border border-md-outline-variant bg-md-surface-container text-md-on-surface hover:bg-md-surface-container-high active:scale-95 transition-all text-xs font-medium cursor-pointer"
+              aria-label={`添加预设规则: ${preset.label}`}
             >
-              <PresetIcon className="w-3.5 h-3.5 text-slate-600" />
+              <PresetIcon className="w-4 h-4 text-md-primary" />
               <span>{preset.label}</span>
             </button>
           );
         })}
       </div>
 
-      {/* 规则数据表格 */}
-      <div className="overflow-x-auto border border-slate-300 rounded-none bg-white">
+      {/* 规则数据表格 (MD3E Surface Container) */}
+      <div className="overflow-x-auto border border-md-outline-variant rounded-md-lg bg-md-surface-container-low shadow-md-level1">
         <table className="w-full text-left text-xs border-collapse">
           <thead>
-            <tr className="bg-slate-100 border-b border-slate-300 text-slate-700 font-bold">
-              <th className="py-2.5 px-3.5">程序文件名 (EXE)</th>
-              <th className="py-2.5 px-3.5">关联灯效方案</th>
-              <th className="py-2.5 px-3.5">游戏免打扰与零占用</th>
-              <th className="py-2.5 px-3.5 text-right">操作</th>
+            <tr className="bg-md-surface-container-high border-b border-md-outline-variant text-md-on-surface font-bold">
+              <th className="py-3 px-4">程序文件名 (EXE)</th>
+              <th className="py-3 px-4">关联灯效方案</th>
+              <th className="py-3 px-4">竞技游戏免打扰与零占用</th>
+              <th className="py-3 px-4 text-right">操作</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-200">
+          <tbody className="divide-y divide-md-outline-variant/60">
             {rules.length === 0 ? (
               <tr>
-                <td colSpan={4} className="py-6 text-center text-slate-400 font-medium">
-                  尚未配置任何联动规则，点击右上方按钮添加
+                <td colSpan={4} className="py-8 text-center text-md-on-surface-variant font-medium">
+                  尚未配置任何联动规则，请点击右上角按钮添加
                 </td>
               </tr>
             ) : (
               rules.map((rule, idx) => (
-                <tr key={idx} className="hover:bg-slate-50 transition-colors">
-                  <td className="py-2.5 px-3.5">
+                <tr key={idx} className="hover:bg-md-surface-container/60 transition-colors">
+                  <td className="py-3 px-4">
                     <input
                       type="text"
                       value={rule.process || ''}
                       onChange={(e) => onUpdateRule(idx, { process: e.target.value.trim().toLowerCase() })}
                       placeholder="例如: cs2.exe"
-                      className="w-48 px-2.5 py-1 bg-white border border-slate-300 rounded-none text-slate-900 text-xs font-mono font-medium outline-none focus:border-slate-900"
+                      className="w-56 min-h-[40px] px-3 bg-md-surface-container border border-md-outline rounded-md-sm text-md-on-surface text-xs font-mono font-medium outline-none focus:border-md-primary focus:ring-1 focus:ring-md-primary"
+                      aria-label="程序文件名"
                     />
                   </td>
-                  <td className="py-2.5 px-3.5">
+                  <td className="py-3 px-4">
                     <select
                       value={rule.profile}
                       onChange={(e) => onUpdateRule(idx, { profile: e.target.value })}
-                      className="px-2.5 py-1 bg-white border border-slate-300 rounded-none text-slate-900 text-xs font-bold outline-none focus:border-slate-900 cursor-pointer"
+                      className="min-h-[40px] px-3 bg-md-surface-container border border-md-outline rounded-md-sm text-md-on-surface text-xs font-semibold outline-none focus:border-md-primary focus:ring-1 focus:ring-md-primary cursor-pointer"
+                      aria-label="关联灯效方案"
                     >
                       {profileList.map((p) => (
-                        <option key={p} value={p}>
+                        <option key={p} value={p} className="bg-md-surface text-md-on-surface">
                           {p}
                         </option>
                       ))}
                     </select>
                   </td>
-                  <td className="py-2.5 px-3.5">
-                    <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                  <td className="py-3 px-4">
+                    <label className="inline-flex items-center gap-2 cursor-pointer select-none">
                       <input
                         type="checkbox"
                         checked={!!rule.suppress_web_ui}
                         onChange={(e) => onUpdateRule(idx, { suppress_web_ui: e.target.checked })}
-                        className="w-3.5 h-3.5 accent-slate-900 rounded-none cursor-pointer"
+                        className="w-5 h-5 accent-[var(--md-sys-color-primary)] rounded-md-xs cursor-pointer"
+                        aria-label="竞技游戏免打扰与零占用选项"
                       />
-                      <span className="text-slate-700 font-medium flex items-center gap-1 text-[11px]">
-                        <ShieldAlert className="w-3.5 h-3.5 text-slate-500" />
+                      <span className="text-md-on-surface font-medium flex items-center gap-1.5 text-xs">
+                        <ShieldAlert className="w-4 h-4 text-md-primary" />
                         竞技游戏免打扰与零占用
                       </span>
                     </label>
                   </td>
-                  <td className="py-2.5 px-3.5 text-right">
+                  <td className="py-3 px-4 text-right">
                     <button
+                      type="button"
                       onClick={() => onDeleteRule(idx)}
-                      className="w-7 h-7 aspect-square inline-flex items-center justify-center text-slate-400 hover:text-slate-900 rounded-none border border-transparent hover:border-slate-300 hover:bg-slate-100 transition-colors cursor-pointer"
+                      className="w-10 h-10 min-w-[40px] min-h-[40px] inline-flex items-center justify-center text-md-on-surface-variant hover:text-md-error hover:bg-md-error-container/30 rounded-md-full transition-colors cursor-pointer"
                       title="删除规则"
+                      aria-label="删除规则"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   </td>
                 </tr>

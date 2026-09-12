@@ -23,9 +23,10 @@ import {
   Compass,
   Plus,
   Minus,
-  Gauge
+  Gauge,
+  Sparkles
 } from 'lucide-react';
-import { GRADIENT_PRESETS } from '../constants/keyboardLayout';
+import { GRADIENT_PRESETS, BG_PRESETS, TACTICAL_PALETTE, DEFAULT_KEYBOARD_BG } from '../tokens/keyboardPresets.tokens';
 
 export default function LightingSettings({
   currentEffect,
@@ -50,7 +51,7 @@ export default function LightingSettings({
   setIsStarryRandom,
   fpsVal = 25,
   setFpsVal,
-  bgColor = '#000000',
+  bgColor = DEFAULT_KEYBOARD_BG,
   setBgColor,
   setActiveTab
 }) {
@@ -82,7 +83,8 @@ export default function LightingSettings({
 
   const addStop = () => {
     const newId = Date.now();
-    const nextStops = [...gradientStops, { id: newId, pos: 0.5, color: '#0284C7' }];
+    const fallbackColor = TACTICAL_PALETTE[1]?.hex || (gradientStops[0]?.color || '#0284C7');
+    const nextStops = [...gradientStops, { id: newId, pos: 0.5, color: fallbackColor }];
     setGradientStops(nextStops);
     setSelectedStopId(newId);
   };
@@ -110,29 +112,36 @@ export default function LightingSettings({
     .join(', ')})`;
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 p-2">
-      {/* 左栏：10 款效果选择 (精致紧凑正方形按钮) */}
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 p-1">
+      {/* 左栏：11 款效果选择 (MD3E Expressive Grid) */}
       <div className="lg:col-span-2 flex flex-col gap-4">
-        <div className="flex items-center justify-between pb-2 border-b border-slate-200">
-          <h3 className="font-bold text-slate-900 text-sm">预设模式</h3>
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-slate-500">主灯</span>
+        {/* 标题栏与主灯开关 */}
+        <div className="flex items-center justify-between pb-3 border-b border-md-outline-variant">
+          <div>
+            <h3 className="font-bold text-md-on-surface text-sm">预设光效模式</h3>
+            <p className="text-xs text-md-on-surface-variant mt-0.5">选择并定制全局硬件推流光效矩阵</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-semibold text-md-on-surface-variant">主灯效</span>
             <button
+              type="button"
               onClick={() => setIsMasterLightOn(!isMasterLightOn)}
-              className={`w-7 h-7 aspect-square flex items-center justify-center rounded-none border transition-all cursor-pointer ${
+              className={`min-w-[48px] min-h-[48px] px-3.5 flex items-center justify-center gap-2 rounded-md-full border transition-colors cursor-pointer shadow-sm ${
                 isMasterLightOn
-                  ? 'bg-slate-900 text-white border-slate-900'
-                  : 'bg-white text-slate-400 border-slate-300 hover:text-slate-700'
+                  ? 'bg-md-primary text-md-on-primary border-md-primary font-bold'
+                  : 'bg-md-surface-container-high text-md-on-surface-variant border-md-outline hover:text-md-on-surface'
               }`}
               title={isMasterLightOn ? '主灯效: 开启' : '主灯效: 关闭'}
+              aria-label={isMasterLightOn ? '主灯效: 开启' : '主灯效: 关闭'}
             >
-              <Power className="w-3.5 h-3.5" />
+              <Power className="w-4 h-4" />
+              <span className="text-xs">{isMasterLightOn ? '已开启' : '已关闭'}</span>
             </button>
           </div>
         </div>
 
-        {/* 效果选择网格：紧凑精巧正方形尺寸 */}
-        <div className="grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-11 gap-1.5">
+        {/* 效果选择网格：MD3E 卡片矩阵 */}
+        <div className="grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-11 gap-2">
           {effects.map((eff) => {
             const Icon = eff.icon;
             const isSelected = currentEffect === eff.id;
@@ -141,92 +150,95 @@ export default function LightingSettings({
                 key={eff.id}
                 type="button"
                 onClick={() => setCurrentEffect(eff.id)}
-                className={`aspect-square flex flex-col items-center justify-center p-1.5 rounded-none border transition-all cursor-pointer select-none ${
+                className={`min-h-[64px] min-w-[48px] flex flex-col items-center justify-center p-2 rounded-md-md border transition-all cursor-pointer select-none ${
                   isSelected
-                    ? 'bg-slate-900 border-slate-900 text-white shadow-xs'
-                    : 'bg-white border-slate-300 text-slate-700 hover:border-slate-500 hover:bg-slate-50 active:scale-98'
+                    ? 'bg-md-secondary-container border-md-secondary text-md-on-secondary-container shadow-md-level1 font-bold ring-1 ring-md-secondary'
+                    : 'bg-md-surface-container border-md-outline-variant/60 text-md-on-surface-variant hover:border-md-outline hover:bg-md-surface-container-high hover:text-md-on-surface'
                 }`}
                 title={eff.id === 'custom_keymap' ? '自定义逐键 (custom_keymap)' : eff.label}
+                aria-label={eff.label}
               >
-                <Icon className={`w-4 h-4 mb-1 ${isSelected ? 'text-white' : 'text-slate-700'}`} />
-                <span className="text-[10px] font-bold tracking-tight leading-none">{eff.label}</span>
+                <Icon className={`w-5 h-5 mb-1.5 transition-transform ${isSelected ? 'scale-110 text-md-on-secondary-container' : 'text-md-on-surface-variant'}`} />
+                <span className="text-xs tracking-tight leading-none">{eff.label}</span>
               </button>
             );
           })}
         </div>
 
-        {/* 响应/涟漪提示 */}
+        {/* 响应/涟漪提示卡片 */}
         {(currentEffect === 'reactive' || currentEffect === 'ripple') && (
-          <div className="p-3 rounded-none border border-emerald-300 bg-emerald-50/80 flex flex-col gap-1 text-emerald-900 text-xs">
-            <span className="font-bold flex items-center gap-1.5">
-              <Zap className="w-3.5 h-3.5 text-emerald-600" />
-              响应式光效已就绪：
+          <div className="p-4 rounded-md-lg border border-md-outline-variant bg-md-surface-container-high flex flex-col gap-1.5 text-md-on-surface shadow-md-level1">
+            <span className="font-bold flex items-center gap-2 text-xs text-md-primary">
+              <Zap className="w-4 h-4 text-md-primary" />
+              响应式光效已激活
             </span>
-            <p className="text-[11px] leading-relaxed text-emerald-800">
+            <p className="text-xs leading-relaxed text-md-on-surface-variant">
               敲击键盘任意实体按键（或点击上方虚拟按键），被按下的键位将瞬间触发高光并渐进式余晖衰减，所有参数修改均已自动实时生效至物理键盘！
             </p>
           </div>
         )}
 
-        {/* 自定义逐键提示 */}
+        {/* 自定义逐键提示卡片 */}
         {currentEffect === 'custom_keymap' && (
-          <div className="p-3 rounded-none border border-sky-300 bg-sky-50/80 flex flex-col gap-1.5 text-sky-900 text-xs">
+          <div className="p-4 rounded-md-lg border border-md-outline-variant bg-md-surface-container-high flex flex-col gap-2 text-md-on-surface shadow-md-level1">
             <div className="flex items-center justify-between">
-              <span className="font-bold flex items-center gap-1.5">
-                <Keyboard className="w-3.5 h-3.5 text-sky-600" />
-                自定义逐键模式已激活：
+              <span className="font-bold flex items-center gap-2 text-xs text-md-primary">
+                <Keyboard className="w-4 h-4 text-md-primary" />
+                自定义逐键模式已激活
               </span>
               {setActiveTab && (
                 <button
                   type="button"
                   onClick={() => setActiveTab('perkey')}
-                  className="px-2 py-0.5 text-[10px] font-bold rounded-none bg-sky-900 text-white hover:bg-sky-800 cursor-pointer"
+                  className="min-h-[48px] px-4 text-xs font-semibold rounded-md-full bg-md-primary text-md-on-primary hover:bg-md-primary/90 transition-colors cursor-pointer flex items-center gap-1.5"
+                  aria-label="前往逐键涂装工坊"
                 >
                   前往逐键涂装
                 </button>
               )}
             </div>
-            <p className="text-[11px] leading-relaxed text-sky-800">
+            <p className="text-xs leading-relaxed text-md-on-surface-variant">
               当前方案支持 68 个物理按键独立 RGB 色彩覆写。您可以在右侧配置未涂装按键的全局底色，或进入“逐键涂装”面板进行自定义涂色。
             </p>
           </div>
         )}
 
-        {/* 磁轴模拟灯效 */}
+        {/* 磁轴模拟行程卡片 */}
         {currentEffect === 'static' && (
-          <div className="p-3 rounded-none border border-slate-300 bg-white flex flex-col gap-1.5">
+          <div className="p-4 rounded-md-lg border border-md-outline-variant bg-md-surface-container flex flex-col gap-2 shadow-sm">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-900">磁轴模拟行程 (Analog)</span>
+              <div className="flex flex-col">
+                <span className="text-xs font-bold text-md-on-surface">磁轴模拟行程 (Analog)</span>
+                <span className="text-xs text-md-on-surface-variant">实时映射实体磁轴行程下压深度</span>
+              </div>
               <button
                 type="button"
                 onClick={() => setIsAnalogEnabled(!isAnalogEnabled)}
-                className={`w-7 h-7 aspect-square flex items-center justify-center rounded-none border text-[10px] font-bold transition-all cursor-pointer ${
+                className={`min-h-[48px] min-w-[72px] px-3 flex items-center justify-center rounded-md-full border text-xs font-bold transition-colors cursor-pointer ${
                   isAnalogEnabled
-                    ? 'bg-slate-900 text-white border-slate-900'
-                    : 'bg-white border-slate-300 text-slate-600 hover:border-slate-500'
+                    ? 'bg-md-primary text-md-on-primary border-md-primary shadow-sm'
+                    : 'bg-md-surface-container-high border-md-outline text-md-on-surface-variant hover:text-md-on-surface'
                 }`}
+                aria-label={isAnalogEnabled ? '关闭磁轴模拟' : '开启磁轴模拟'}
               >
-                {isAnalogEnabled ? 'ON' : 'OFF'}
+                {isAnalogEnabled ? '已开启' : '已关闭'}
               </button>
             </div>
-            <p className="text-[11px] text-slate-500 leading-relaxed">
-              实时映射实体磁轴行程下压深度，呈现白炽高亮及渐进式余晖衰减。
-            </p>
           </div>
         )}
       </div>
 
-      {/* 右栏：参数微调 */}
-      <div className="flex flex-col gap-4">
-        <h3 className="font-bold text-slate-900 text-sm pb-2 border-b border-slate-200">
-          参数调节
+      {/* 右栏：参数微调面板 (MD3E Card) */}
+      <div className="flex flex-col gap-4 bg-md-surface-container-low p-4 rounded-md-xl border border-md-outline-variant shadow-md-level1">
+        <h3 className="font-bold text-md-on-surface text-sm pb-2 border-b border-md-outline-variant">
+          参数微调
         </h3>
 
-        {/* 亮度 */}
-        <div className="flex flex-col gap-1.5">
-          <div className="flex items-center justify-between text-xs font-semibold text-slate-900">
+        {/* 亮度调节 */}
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between text-xs font-semibold text-md-on-surface">
             <span>亮度</span>
-            <span className="font-mono text-slate-600 text-[11px]">{Math.round(brightnessVal * 100)}%</span>
+            <span className="font-mono text-md-primary font-bold">{Math.round(brightnessVal * 100)}%</span>
           </div>
           <input
             type="range"
@@ -235,28 +247,29 @@ export default function LightingSettings({
             step="0.01"
             value={brightnessVal}
             onChange={(e) => setBrightnessVal(parseFloat(e.target.value))}
-            className="w-full h-1.5 bg-slate-200 rounded-none appearance-none cursor-pointer accent-slate-900"
+            className="w-full h-2 bg-md-surface-container-highest rounded-md-full appearance-none cursor-pointer accent-[var(--md-sys-color-primary)]"
+            aria-label="亮度调节"
           />
         </div>
 
         {/* 推流帧率 (FPS) */}
-        <div className="flex flex-col gap-1.5">
-          <div className="flex items-center justify-between text-xs font-semibold text-slate-900">
-            <span className="flex items-center gap-1">
-              <Activity className="w-3.5 h-3.5 text-slate-500" />
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between text-xs font-semibold text-md-on-surface">
+            <span className="flex items-center gap-1.5">
+              <Activity className="w-4 h-4 text-md-primary" />
               推流帧率 (FPS)
             </span>
-            <div className="flex items-center gap-1.5">
-              <span className={`text-[10px] px-1.5 py-0.2 rounded-none border font-medium ${
+            <div className="flex items-center gap-2">
+              <span className={`text-xs px-2 py-0.5 rounded-md-full border font-semibold ${
                 fpsVal >= 100 
-                  ? 'border-amber-400 bg-amber-50 text-amber-700' 
+                  ? 'border-md-error bg-md-error-container text-md-on-error-container' 
                   : fpsVal >= 60 
-                  ? 'border-emerald-400 bg-emerald-50 text-emerald-700' 
-                  : 'border-slate-300 bg-slate-50 text-slate-600'
+                  ? 'border-md-primary bg-md-primary-container text-md-on-primary-container' 
+                  : 'border-md-outline-variant bg-md-surface-container-high text-md-on-surface-variant'
               }`}>
                 {fpsVal >= 100 ? '硬件上限' : fpsVal >= 60 ? '高刷流畅' : '省电低耗'}
               </span>
-              <span className="font-mono text-slate-900 font-bold text-xs">{fpsVal} FPS</span>
+              <span className="font-mono text-md-on-surface font-bold text-xs">{fpsVal} FPS</span>
             </div>
           </div>
           <input
@@ -266,10 +279,12 @@ export default function LightingSettings({
             step="5"
             value={fpsVal}
             onChange={(e) => setFpsVal && setFpsVal(parseInt(e.target.value, 10))}
-            className="w-full h-1.5 bg-slate-200 rounded-none appearance-none cursor-pointer accent-slate-900"
+            className="w-full h-2 bg-md-surface-container-highest rounded-md-full appearance-none cursor-pointer accent-[var(--md-sys-color-primary)]"
+            aria-label="推流帧率调节"
           />
-          <div className="flex items-center justify-between">
-            <div className="flex gap-1">
+          {/* MD3E Connected Button Group */}
+          <div className="flex items-center justify-between pt-1">
+            <div className="inline-flex rounded-md-full p-1 bg-md-surface-container-highest border border-md-outline-variant/60">
               {[
                 { label: '25 默认', val: 25 },
                 { label: '60 流畅', val: 60 },
@@ -279,43 +294,45 @@ export default function LightingSettings({
                   key={p.val}
                   type="button"
                   onClick={() => setFpsVal && setFpsVal(p.val)}
-                  className={`px-1.5 py-0.5 text-[10px] font-mono rounded-none border transition-all cursor-pointer ${
+                  className={`min-h-[32px] px-3 py-1 text-xs font-mono rounded-md-full transition-colors cursor-pointer ${
                     fpsVal === p.val
-                      ? 'bg-slate-900 text-white border-slate-900'
-                      : 'bg-white border-slate-300 text-slate-600 hover:border-slate-400'
+                      ? 'bg-md-primary text-md-on-primary font-bold shadow-xs'
+                      : 'text-md-on-surface-variant hover:text-md-on-surface'
                   }`}
+                  aria-label={`设为 ${p.label}`}
                 >
                   {p.label}
                 </button>
               ))}
             </div>
-            <span className="text-[10px] text-slate-600 font-medium">硬件上限 100 FPS (10ms)</span>
+            <span className="text-xs text-md-on-surface-variant">硬件上限 100 FPS</span>
           </div>
         </div>
 
-        {/* 速度：紧凑正方形按钮 (仅具备周期动画的光效显示，静态与逐键隐藏) */}
+        {/* 速率微调 (仅周期动画光效显示) */}
         {currentEffect !== 'static' && currentEffect !== 'custom_keymap' && (
-          <div className="flex flex-col gap-1.5">
-            <div className="flex items-center justify-between text-xs font-semibold text-slate-900">
-              <span className="flex items-center gap-1">
-                <Gauge className="w-3.5 h-3.5 text-slate-500" />
-                速率
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between text-xs font-semibold text-md-on-surface">
+              <span className="flex items-center gap-1.5">
+                <Gauge className="w-4 h-4 text-md-primary" />
+                运动周期速率
               </span>
-              <span className="text-slate-500 font-mono text-[10px]">
+              <span className="text-md-on-surface-variant font-mono text-xs">
                 {speedIndex === 0 ? '5.5s' : speedIndex === 1 ? '3.2s' : '1.6s'}
               </span>
             </div>
-            <div className="flex gap-1.5">
-              {['慢', '中', '快'].map((label, idx) => (
+            <div className="inline-flex rounded-md-full p-1 bg-md-surface-container-highest border border-md-outline-variant/60 self-start">
+              {['慢速', '中速', '极速'].map((label, idx) => (
                 <button
                   key={label}
                   type="button"
                   onClick={() => setSpeedIndex(idx)}
-                  className={`w-8 h-8 aspect-square flex items-center justify-center text-xs font-bold rounded-none border transition-all cursor-pointer ${
+                  className={`min-h-[36px] px-4 py-1 text-xs font-semibold rounded-md-full transition-colors cursor-pointer ${
                     speedIndex === idx
-                      ? 'bg-slate-900 text-white border-slate-900'
-                      : 'bg-white border-slate-300 text-slate-700 hover:border-slate-500'
+                      ? 'bg-md-primary text-md-on-primary font-bold shadow-xs'
+                      : 'text-md-on-surface-variant hover:text-md-on-surface'
                   }`}
+                  aria-label={`设为 ${label}`}
                 >
                   {label}
                 </button>
@@ -324,11 +341,11 @@ export default function LightingSettings({
           </div>
         )}
 
-        {/* 方向罗盘：紧凑正方形网格 */}
+        {/* 行进方向 (wave / quicksand) */}
         {(currentEffect === 'wave' || currentEffect === 'quicksand') && (
-          <div className="flex flex-col gap-1.5">
-            <span className="text-xs font-semibold text-slate-900">行进方向</span>
-            <div className="flex flex-wrap gap-1.5 max-w-[200px]">
+          <div className="flex flex-col gap-2">
+            <span className="text-xs font-semibold text-md-on-surface">行进方向</span>
+            <div className="grid grid-cols-3 gap-2 max-w-[180px]">
               {directions.map((d) => {
                 const DirIcon = d.icon;
                 const isCurrent = currentDirection === d.id;
@@ -338,13 +355,14 @@ export default function LightingSettings({
                     type="button"
                     onClick={() => setCurrentDirection(d.id)}
                     title={d.label}
-                    className={`w-7 h-7 aspect-square flex items-center justify-center rounded-none border transition-all cursor-pointer ${
+                    aria-label={`方向: ${d.label}`}
+                    className={`min-w-[48px] min-h-[48px] flex items-center justify-center rounded-md-md border transition-colors cursor-pointer ${
                       isCurrent
-                        ? 'bg-slate-900 text-white border-slate-900'
-                        : 'bg-white border-slate-300 text-slate-700 hover:border-slate-500'
+                        ? 'bg-md-primary text-md-on-primary border-md-primary shadow-xs font-bold'
+                        : 'bg-md-surface-container border-md-outline-variant text-md-on-surface-variant hover:bg-md-surface-container-high hover:text-md-on-surface'
                     }`}
                   >
-                    <DirIcon className="w-3.5 h-3.5" />
+                    <DirIcon className="w-5 h-5" />
                   </button>
                 );
               })}
@@ -352,12 +370,12 @@ export default function LightingSettings({
           </div>
         )}
 
-        {/* 波束/波纹厚度 (wave, current, ripple, quicksand) */}
+        {/* 波束粗细 (wave, current, ripple, quicksand) */}
         {['wave', 'current', 'ripple', 'quicksand'].includes(currentEffect) && (
-          <div className="flex flex-col gap-1.5">
-            <div className="flex items-center justify-between text-xs font-semibold text-slate-900">
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between text-xs font-semibold text-md-on-surface">
               <span>{currentEffect === 'ripple' ? '波纹厚度' : '波束粗细'}</span>
-              <span className="font-mono text-slate-600 text-[11px]">{thicknessVal.toFixed(1)}x</span>
+              <span className="font-mono text-md-primary font-bold text-xs">{thicknessVal.toFixed(1)}x</span>
             </div>
             <input
               type="range"
@@ -366,30 +384,32 @@ export default function LightingSettings({
               step="0.1"
               value={thicknessVal}
               onChange={(e) => setThicknessVal(parseFloat(e.target.value))}
-              className="w-full h-1.5 bg-slate-200 rounded-none appearance-none cursor-pointer accent-slate-900"
+              className="w-full h-2 bg-md-surface-container-highest rounded-md-full appearance-none cursor-pointer accent-[var(--md-sys-color-primary)]"
+              aria-label="波束粗细调节"
             />
           </div>
         )}
 
-        {/* 星空随机 */}
+        {/* 星空全光谱随机闪烁 */}
         {currentEffect === 'starry_night' && (
-          <div className="flex items-center justify-between p-2 rounded-none border border-slate-300 bg-white">
-            <span className="text-xs font-semibold text-slate-800">全光谱闪烁</span>
+          <div className="flex items-center justify-between p-3 rounded-md-lg border border-md-outline-variant bg-md-surface-container">
+            <span className="text-xs font-semibold text-md-on-surface">全光谱随机闪烁</span>
             <input
               type="checkbox"
               checked={isStarryRandom}
               onChange={(e) => setIsStarryRandom(e.target.checked)}
-              className="w-4 h-4 accent-slate-900 rounded-none cursor-pointer"
+              className="w-5 h-5 accent-[var(--md-sys-color-primary)] rounded-md-xs cursor-pointer"
+              aria-label="全光谱随机闪烁开关"
             />
           </div>
         )}
 
-        {/* 背景底色 (reactive / ripple) */}
+        {/* 背景底色配置 (reactive / ripple) */}
         {(currentEffect === 'reactive' || currentEffect === 'ripple') && (
-          <div className="flex flex-col gap-1.5 p-2 rounded-none border border-slate-300 bg-white">
-            <div className="flex items-center justify-between text-xs font-semibold text-slate-900">
-              <span>背景底色 (Base Color)</span>
-              <span className="font-mono text-slate-600 text-[11px] uppercase">{bgColor}</span>
+          <div className="flex flex-col gap-2 p-3 rounded-md-lg border border-md-outline-variant bg-md-surface-container">
+            <div className="flex items-center justify-between text-xs font-semibold text-md-on-surface">
+              <span>常驻背景底色</span>
+              <span className="font-mono text-md-primary font-bold uppercase">{bgColor}</span>
             </div>
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
@@ -397,21 +417,19 @@ export default function LightingSettings({
                   type="color"
                   value={bgColor}
                   onChange={(e) => setBgColor && setBgColor(e.target.value)}
-                  className="w-6 h-6 rounded-none border border-slate-300 p-0 cursor-pointer bg-transparent"
+                  className="w-8 h-8 rounded-md-xs border border-md-outline p-0 cursor-pointer bg-transparent"
+                  aria-label="选择背景颜色"
                 />
-                <span className="text-[11px] text-slate-500">未触发按键常驻底色</span>
+                <span className="text-xs text-md-on-surface-variant">未击中键位常驻底色</span>
               </div>
-              <div className="flex gap-1">
-                {[
-                  { label: '纯黑', val: '#000000' },
-                  { label: '深蓝', val: '#00050F' },
-                  { label: '深灰', val: '#111827' }
-                ].map((p) => (
+              <div className="flex gap-1.5">
+                {BG_PRESETS.map((p) => (
                   <button
                     key={p.val}
                     type="button"
                     onClick={() => setBgColor && setBgColor(p.val)}
-                    className="px-1.5 py-0.5 text-[10px] rounded-none border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 cursor-pointer"
+                    className="min-h-[32px] px-2.5 py-1 text-xs rounded-md-full border border-md-outline-variant bg-md-surface-container-high hover:bg-md-surface-container-highest text-md-on-surface cursor-pointer"
+                    aria-label={`底色设为 ${p.label}`}
                   >
                     {p.label}
                   </button>
@@ -421,12 +439,12 @@ export default function LightingSettings({
           </div>
         )}
 
-        {/* 未涂装底色设置 (custom_keymap) */}
+        {/* 未覆写底色配置 (custom_keymap) */}
         {currentEffect === 'custom_keymap' && (
-          <div className="flex flex-col gap-1.5 p-2 rounded-none border border-slate-300 bg-white">
-            <div className="flex items-center justify-between text-xs font-semibold text-slate-900">
+          <div className="flex flex-col gap-2 p-3 rounded-md-lg border border-md-outline-variant bg-md-surface-container">
+            <div className="flex items-center justify-between text-xs font-semibold text-md-on-surface">
               <span>未覆写按键底色</span>
-              <span className="font-mono text-slate-600 text-[11px] uppercase">{bgColor}</span>
+              <span className="font-mono text-md-primary font-bold uppercase">{bgColor}</span>
             </div>
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
@@ -434,21 +452,19 @@ export default function LightingSettings({
                   type="color"
                   value={bgColor}
                   onChange={(e) => setBgColor && setBgColor(e.target.value)}
-                  className="w-6 h-6 rounded-none border border-slate-300 p-0 cursor-pointer bg-transparent"
+                  className="w-8 h-8 rounded-md-xs border border-md-outline p-0 cursor-pointer bg-transparent"
+                  aria-label="选择未覆写按键底色"
                 />
-                <span className="text-[11px] text-slate-500">全局基底色彩</span>
+                <span className="text-xs text-md-on-surface-variant">全局基底色彩</span>
               </div>
-              <div className="flex gap-1">
-                {[
-                  { label: '纯黑', val: '#000000' },
-                  { label: '深蓝', val: '#00050F' },
-                  { label: '深灰', val: '#111827' }
-                ].map((p) => (
+              <div className="flex gap-1.5">
+                {BG_PRESETS.map((p) => (
                   <button
                     key={p.val}
                     type="button"
                     onClick={() => setBgColor && setBgColor(p.val)}
-                    className="px-1.5 py-0.5 text-[10px] rounded-none border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 cursor-pointer"
+                    className="min-h-[32px] px-2.5 py-1 text-xs rounded-md-full border border-md-outline-variant bg-md-surface-container-high hover:bg-md-surface-container-highest text-md-on-surface cursor-pointer"
+                    aria-label={`底色设为 ${p.label}`}
                   >
                     {p.label}
                   </button>
@@ -458,47 +474,49 @@ export default function LightingSettings({
           </div>
         )}
 
-        {/* 色彩搭配 / 渐变轨分流 */}
+        {/* 色彩渐变色标调节器 */}
         {currentEffect === 'color_cycle' ? (
-          <div className="flex flex-col gap-1 p-3 rounded-none border border-slate-200 bg-slate-50 text-slate-700 text-xs">
-            <span className="font-bold text-slate-900">全光谱自动彩虹循环</span>
-            <p className="text-[11px] text-slate-500 leading-relaxed">
-              循环模式由 C++ 引擎实时推流连续彩虹色相，无需手动配置色彩。
+          <div className="flex flex-col gap-1 p-3 rounded-md-lg border border-md-outline-variant bg-md-surface-container text-xs">
+            <span className="font-bold text-md-on-surface">全光谱自动彩虹循环</span>
+            <p className="text-xs text-md-on-surface-variant leading-relaxed">
+              循环模式由硬件引擎实时推流全色域连续彩虹渐变，无需手动指定色标。
             </p>
           </div>
         ) : currentEffect === 'custom_keymap' ? (
-          <div className="flex flex-col gap-2 p-3 rounded-none border border-slate-200 bg-slate-50 text-slate-700 text-xs">
-            <span className="font-bold text-slate-900">逐键独立色彩配置</span>
-            <p className="text-[11px] text-slate-500 leading-relaxed">
-              已选定自定义逐键模式。进入“逐键涂装”面板可为 68 个物理按键分别指定独立色彩。
+          <div className="flex flex-col gap-2 p-3 rounded-md-lg border border-md-outline-variant bg-md-surface-container text-xs">
+            <span className="font-bold text-md-on-surface">逐键独立色彩涂装</span>
+            <p className="text-xs text-md-on-surface-variant leading-relaxed">
+              当前为自定义逐键模式。进入“逐键涂装”面板可针对 68 个物理按键分别指定专属独立色彩。
             </p>
             {setActiveTab && (
               <button
                 type="button"
                 onClick={() => setActiveTab('perkey')}
-                className="self-start px-2.5 py-1 text-xs font-bold rounded-none bg-slate-900 text-white hover:bg-slate-800 transition-all cursor-pointer flex items-center gap-1.5"
+                className="min-h-[48px] self-start px-4 py-2 text-xs font-semibold rounded-md-full bg-md-secondary-container text-md-on-secondary-container hover:bg-md-secondary-container/90 transition-colors cursor-pointer flex items-center gap-2"
+                aria-label="前往逐键涂装工坊"
               >
-                <Keyboard className="w-3.5 h-3.5" />
-                进入逐键涂装面板
+                <Keyboard className="w-4 h-4" />
+                进入逐键涂装工坊
               </button>
             )}
           </div>
         ) : (currentEffect === 'starry_night' && isStarryRandom) ? (
-          <div className="flex flex-col gap-1 p-3 rounded-none border border-slate-200 bg-slate-50 text-slate-700 text-xs">
-            <span className="font-bold text-slate-900">全光谱随机闪烁已开启</span>
-            <p className="text-[11px] text-slate-500 leading-relaxed">
-              繁星以随机光谱在夜空中绽放。若需指定单一色彩，请取消勾选上方“全光谱闪烁”。
+          <div className="flex flex-col gap-1 p-3 rounded-md-lg border border-md-outline-variant bg-md-surface-container text-xs">
+            <span className="font-bold text-md-on-surface">全光谱随机星空已开启</span>
+            <p className="text-xs text-md-on-surface-variant leading-relaxed">
+              繁星以随机光谱在夜空中交替绽放。若需指定单一色彩，请取消上方“全光谱随机闪烁”。
             </p>
           </div>
         ) : (
-          <div className="flex flex-col gap-2 pt-2 border-t border-slate-200">
+          <div className="flex flex-col gap-3 pt-3 border-t border-md-outline-variant">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-900">
-                {currentEffect === 'reactive' || currentEffect === 'ripple' ? '触发高光色' : '色彩搭配'}
+              <span className="text-xs font-semibold text-md-on-surface">
+                {currentEffect === 'reactive' || currentEffect === 'ripple' ? '触发高光色' : '色彩搭配预设'}
               </span>
               <select
                 onChange={(e) => handlePresetSelect(e.target.value)}
-                className="text-xs bg-white border border-slate-300 rounded-none px-2 py-1 outline-none text-slate-800 cursor-pointer"
+                className="text-xs bg-md-surface-container border border-md-outline rounded-md-sm px-3 py-1.5 outline-none text-md-on-surface cursor-pointer focus:border-md-primary"
+                aria-label="选择色彩搭配预设"
               >
                 <option value="default">深邃黑白</option>
                 <option value="mono">经典黑白</option>
@@ -508,9 +526,10 @@ export default function LightingSettings({
               </select>
             </div>
 
-            <div className="relative flex items-center h-6 my-0.5">
+            {/* 渐变指示条 */}
+            <div className="relative flex items-center h-8 my-1 px-1">
               <div
-                className="w-full h-3 rounded-none border border-slate-400"
+                className="w-full h-4 rounded-md-full border border-md-outline-variant shadow-inner"
                 style={{ background: gradientCss }}
               />
               {gradientStops.map((stop) => (
@@ -519,20 +538,22 @@ export default function LightingSettings({
                   type="button"
                   onClick={() => setSelectedStopId(stop.id)}
                   style={{ left: `${Math.round(stop.pos * 100)}%` }}
-                  className={`absolute -translate-x-1/2 w-3.5 h-4.5 rounded-none border-2 transition-transform cursor-pointer ${
+                  className={`absolute -translate-x-1/2 w-5 h-6 rounded-md-xs border-2 shadow-md-level1 transition-transform cursor-pointer ${
                     stop.id === selectedStopId
-                      ? 'border-slate-900 scale-110 z-10'
-                      : 'border-white'
+                      ? 'border-md-primary scale-125 z-10 ring-2 ring-md-primary'
+                      : 'border-white hover:scale-110'
                   }`}
+                  aria-label={`色标位置 ${Math.round(stop.pos * 100)}%`}
                 >
                   <span
-                    className="block w-full h-full rounded-none"
+                    className="block w-full h-full rounded-md-xs"
                     style={{ backgroundColor: stop.color }}
                   />
                 </button>
               ))}
             </div>
 
+            {/* 色标编辑与增删 */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <input
@@ -544,30 +565,33 @@ export default function LightingSettings({
                     );
                     setGradientStops(updated);
                   }}
-                  className="w-6 h-6 rounded-none border border-slate-300 p-0 cursor-pointer bg-transparent"
+                  className="w-8 h-8 rounded-md-xs border border-md-outline p-0 cursor-pointer bg-transparent"
+                  aria-label="指定色标色彩"
                 />
-                <span className="text-[11px] font-mono font-bold text-slate-800 uppercase">
+                <span className="text-xs font-mono font-bold text-md-on-surface uppercase">
                   {currentStop.color}
                 </span>
               </div>
 
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={removeStop}
                   disabled={gradientStops.length <= 1}
-                  className="w-6 h-6 aspect-square flex items-center justify-center rounded-none bg-white border border-slate-300 text-slate-700 hover:border-slate-500 disabled:opacity-30 cursor-pointer"
-                  title="删除色标"
+                  className="min-w-[48px] min-h-[48px] flex items-center justify-center rounded-md-full bg-md-surface-container border border-md-outline-variant text-md-on-surface-variant hover:text-md-on-surface hover:bg-md-surface-container-high disabled:opacity-30 cursor-pointer transition-colors"
+                  title="删除当前色标"
+                  aria-label="删除当前色标"
                 >
-                  <Minus className="w-3 h-3" />
+                  <Minus className="w-4 h-4" />
                 </button>
                 <button
                   type="button"
                   onClick={addStop}
-                  className="w-6 h-6 aspect-square flex items-center justify-center rounded-none bg-white border border-slate-300 text-slate-700 hover:border-slate-500 cursor-pointer"
+                  className="min-w-[48px] min-h-[48px] flex items-center justify-center rounded-md-full bg-md-surface-container border border-md-outline-variant text-md-on-surface-variant hover:text-md-on-surface hover:bg-md-surface-container-high cursor-pointer transition-colors"
                   title="新增色标"
+                  aria-label="新增色标"
                 >
-                  <Plus className="w-3 h-3" />
+                  <Plus className="w-4 h-4" />
                 </button>
               </div>
             </div>

@@ -373,19 +373,20 @@ export default function KeyboardVisualizer({
   return (
     <div 
       ref={containerRef}
-      className="w-full bg-transparent flex flex-col items-center justify-center shrink-0 overflow-hidden pt-8 pb-4"
+      className="w-full bg-transparent flex flex-col items-center justify-center shrink-0 overflow-hidden pt-6 pb-2"
     >
-      {/* 键盘主体缩放容器：往下移动并放大 */}
+      {/* 键盘主体缩放容器：自适应居中与缩放 */}
       <div 
-        className="transition-transform duration-200 ease-out origin-top flex justify-center mt-2"
+        className="origin-top flex justify-center mt-1"
         style={{
           width: baseWidth,
           transform: `scale(${scale})`,
-          marginBottom: `-${Math.round((1 - scale) * 310)}px`
+          marginBottom: `-${Math.round((1 - scale) * 310)}px`,
+          transition: 'transform var(--md-sys-motion-default-spatial)'
         }}
       >
-        <div className="relative w-[980px] p-3.5 bg-slate-100 border border-slate-300 rounded-none shadow-2xs select-none">
-          <div className="flex flex-col gap-2 p-1.5 bg-slate-200/80 border border-slate-300 rounded-none">
+        <div className="relative w-[980px] p-4 bg-md-surface-container border border-md-outline-variant rounded-md-xl shadow-md-level2 select-none">
+          <div className="flex flex-col gap-2 p-2 bg-md-surface-container-highest/50 border border-md-outline-variant/40 rounded-md-lg">
             {KEYBOARD_LAYOUT.map((row, rIdx) => (
               <div key={rIdx} className="flex gap-2 h-[50px]">
                 {row.map((k) => {
@@ -401,28 +402,30 @@ export default function KeyboardVisualizer({
                   return (
                     <button
                       key={k.name}
+                      type="button"
+                      aria-label={`${k.name} 按键`}
                       ref={(el) => {
                         if (el) keysDomRef.current[k.name] = el;
                       }}
                       onClick={() => triggerKeyAction(k.name)}
                       style={{ width: `calc(${widthPct}% - 8px)` }}
-                      className={`relative h-full flex flex-col items-center justify-center rounded-none border transition-all duration-75 text-xs font-bold select-none cursor-pointer outline-none ${
-                        isPressed ? 'translate-y-0.5 shadow-inner' : 'hover:border-slate-500'
+                      className={`relative h-full flex flex-col items-center justify-center rounded-md-xs border transition-transform text-xs font-bold select-none cursor-pointer outline-none shadow-xs ${
+                        isPressed ? 'scale-95 shadow-inner' : 'hover:scale-[1.02]'
                       } ${
                         isSelected
-                          ? 'ring-2 ring-slate-900 border-slate-900 z-10'
-                          : 'border-slate-300'
+                          ? 'ring-2 ring-md-primary border-md-primary z-10'
+                          : 'border-md-outline-variant/70'
                       }`}
                     >
                       {hasCustom && (
-                        <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-slate-900 rounded-none" />
+                        <span className="absolute top-1 right-1 w-2 h-2 bg-md-primary rounded-md-full shadow-xs" />
                       )}
                       {k.sub && (
-                        <span className="text-[10px] opacity-60 pointer-events-none -mb-0.5 leading-none">
+                        <span className="text-[11px] opacity-75 pointer-events-none -mb-0.5 leading-none">
                           {k.sub}
                         </span>
                       )}
-                      <span className="pointer-events-none text-xs leading-tight">
+                      <span className="pointer-events-none text-xs leading-tight font-medium">
                         {k.label}
                       </span>
                     </button>

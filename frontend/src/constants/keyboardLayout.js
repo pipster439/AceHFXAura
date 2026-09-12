@@ -115,33 +115,4 @@ export const DIR_VECTORS = {
   spread: { x: 0.0, y: 0.0 }
 };
 
-export const GRADIENT_PRESETS = {
-  default: [
-    { id: 1, pos: 0.15, color: '#0F172A' },
-    { id: 2, pos: 0.55, color: '#0284C7' },
-    { id: 3, pos: 0.85, color: '#38BDF8' }
-  ],
-  mono: [
-    { id: 1, pos: 0.00, color: '#FFFFFF' },
-    { id: 2, pos: 0.50, color: '#94A3B8' },
-    { id: 3, pos: 1.00, color: '#0F172A' }
-  ],
-  rainbow: [
-    { id: 1, pos: 0.00, color: '#EF4444' },
-    { id: 2, pos: 0.20, color: '#F97316' },
-    { id: 3, pos: 0.40, color: '#EAB308' },
-    { id: 4, pos: 0.60, color: '#22C55E' },
-    { id: 5, pos: 0.80, color: '#06B6D4' },
-    { id: 6, pos: 1.00, color: '#A855F7' }
-  ],
-  aurora: [
-    { id: 1, pos: 0.20, color: '#10B981' },
-    { id: 2, pos: 0.55, color: '#0EA5E9' },
-    { id: 3, pos: 0.85, color: '#8B5CF6' }
-  ],
-  ocean: [
-    { id: 1, pos: 0.20, color: '#0284C7' },
-    { id: 2, pos: 0.60, color: '#06B6D4' },
-    { id: 3, pos: 0.90, color: '#38BDF8' }
-  ]
-};
+export { GRADIENT_PRESETS } from '../tokens/keyboardPresets.tokens';

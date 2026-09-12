@@ -1,0 +1,515 @@
+/* ============================================================================
+ * md3e-tokens.css — Material 3 Expressive design tokens for the web
+ * ----------------------------------------------------------------------------
+ * Source of truth: https://m3.material.io  (Material 3 + M3 Expressive, May 2025
+ * update; type/colour/shape spec revisions through 2026).
+ *
+ * Baseline scheme, seeded from #6750A4 (the Material baseline purple).
+ * A real product should regenerate from its own seed with Material Theme
+ * Builder, or read Dynamic Color on Android/Chrome. These values are the
+ * reference so the rest of the system has something correct to render against.
+ *
+ * Layering — keep this order, it mirrors the official token tiers:
+ *   md.ref.*      reference palette  ->  --md-ref-*
+ *   md.sys.*      system roles       ->  --md-sys-*
+ *   md.comp.*     component tokens   ->  --md-*-button-*  (see references/components.md)
+ *
+ * Golden rule: components consume --md-sys-* roles, never --md-ref-* tones and
+ * never raw hex.
+ * ========================================================================== */
+
+:root {
+  /* ==========================================================================
+   * 1. REFERENCE PALETTE
+   * Six tonal palettes, tones 0 -> 100. Tones encode luminance, not lightness:
+   * tone 0 is black, tone 100 is white. Colour roles are just pointers into
+   * these scales, which is why light and dark themes share the same palettes.
+   * ======================================================================== */
+  --md-ref-palette-primary-0: #000000;
+  --md-ref-palette-primary-10: #21005D;
+  --md-ref-palette-primary-20: #381E72;
+  --md-ref-palette-primary-30: #4F378B;
+  --md-ref-palette-primary-40: #6750A4;
+  --md-ref-palette-primary-50: #7F67BE;
+  --md-ref-palette-primary-60: #9A82DB;
+  --md-ref-palette-primary-70: #B69DF8;
+  --md-ref-palette-primary-80: #D0BCFF;
+  --md-ref-palette-primary-90: #EADDFF;
+  --md-ref-palette-primary-95: #F6EDFF;
+  --md-ref-palette-primary-99: #FFFBFE;
+  --md-ref-palette-primary-100: #FFFFFF;
+
+  --md-ref-palette-secondary-0: #000000;
+  --md-ref-palette-secondary-10: #1D192B;
+  --md-ref-palette-secondary-20: #332D41;
+  --md-ref-palette-secondary-30: #4A4458;
+  --md-ref-palette-secondary-40: #625B71;
+  --md-ref-palette-secondary-50: #7A7289;
+  --md-ref-palette-secondary-60: #958DA5;
+  --md-ref-palette-secondary-70: #B0A7C0;
+  --md-ref-palette-secondary-80: #CCC2DC;
+  --md-ref-palette-secondary-90: #E8DEF8;
+  --md-ref-palette-secondary-95: #F6EDFF;
+  --md-ref-palette-secondary-99: #FFFBFE;
+  --md-ref-palette-secondary-100: #FFFFFF;
+
+  --md-ref-palette-tertiary-0: #000000;
+  --md-ref-palette-tertiary-10: #31111D;
+  --md-ref-palette-tertiary-20: #492532;
+  --md-ref-palette-tertiary-30: #633B48;
+  --md-ref-palette-tertiary-40: #7D5260;
+  --md-ref-palette-tertiary-50: #986977;
+  --md-ref-palette-tertiary-60: #B58392;
+  --md-ref-palette-tertiary-70: #D29DAC;
+  --md-ref-palette-tertiary-80: #EFB8C8;
+  --md-ref-palette-tertiary-90: #FFD8E4;
+  --md-ref-palette-tertiary-95: #FFECF1;
+  --md-ref-palette-tertiary-99: #FFFBFA;
+  --md-ref-palette-tertiary-100: #FFFFFF;
+
+  --md-ref-palette-neutral-0: #000000;
+  --md-ref-palette-neutral-10: #1C1B1F;
+  --md-ref-palette-neutral-20: #313033;
+  --md-ref-palette-neutral-30: #484649;
+  --md-ref-palette-neutral-40: #605D62;
+  --md-ref-palette-neutral-50: #787579;
+  --md-ref-palette-neutral-60: #939094;
+  --md-ref-palette-neutral-70: #AEAAAE;
+  --md-ref-palette-neutral-80: #C9C5CA;
+  --md-ref-palette-neutral-90: #E6E1E5;
+  --md-ref-palette-neutral-95: #F4EFF4;
+  --md-ref-palette-neutral-99: #FFFBFE;
+  --md-ref-palette-neutral-100: #FFFFFF;
+
+  --md-ref-palette-neutral-variant-0: #000000;
+  --md-ref-palette-neutral-variant-10: #1D1A22;
+  --md-ref-palette-neutral-variant-20: #322F37;
+  --md-ref-palette-neutral-variant-30: #49454F;
+  --md-ref-palette-neutral-variant-40: #605D66;
+  --md-ref-palette-neutral-variant-50: #79747E;
+  --md-ref-palette-neutral-variant-60: #938F99;
+  --md-ref-palette-neutral-variant-70: #AEA9B4;
+  --md-ref-palette-neutral-variant-80: #CAC4D0;
+  --md-ref-palette-neutral-variant-90: #E7E0EC;
+  --md-ref-palette-neutral-variant-95: #F5EEFA;
+  --md-ref-palette-neutral-variant-99: #FFFBFE;
+  --md-ref-palette-neutral-variant-100: #FFFFFF;
+
+  --md-ref-palette-error-0: #000000;
+  --md-ref-palette-error-10: #410E0B;
+  --md-ref-palette-error-20: #601410;
+  --md-ref-palette-error-30: #8C1D18;
+  --md-ref-palette-error-40: #B3261E;
+  --md-ref-palette-error-50: #DC362E;
+  --md-ref-palette-error-60: #E46962;
+  --md-ref-palette-error-70: #EC928E;
+  --md-ref-palette-error-80: #F2B8B5;
+  --md-ref-palette-error-90: #F9DEDC;
+  --md-ref-palette-error-95: #FCEEEE;
+  --md-ref-palette-error-99: #FFFBF9;
+  --md-ref-palette-error-100: #FFFFFF;
+
+  /* ==========================================================================
+   * 2. COLOUR ROLES (light theme)
+   * 37 roles. Use the role that names the *job*, not the colour you like.
+   * Never pair a role with a colour that is not its matching "on" role.
+   * ======================================================================== */
+  --md-sys-color-primary: #6750A4;
+  --md-sys-color-on-primary: #FFFFFF;
+  --md-sys-color-primary-container: #EADDFF;
+  --md-sys-color-on-primary-container: #21005D;
+  --md-sys-color-primary-fixed: #EADDFF;
+  --md-sys-color-primary-fixed-dim: #D0BCFF;
+  --md-sys-color-on-primary-fixed: #21005D;
+  --md-sys-color-on-primary-fixed-variant: #4F378B;
+
+  --md-sys-color-secondary: #625B71;
+  --md-sys-color-on-secondary: #FFFFFF;
+  --md-sys-color-secondary-container: #E8DEF8;
+  --md-sys-color-on-secondary-container: #1D192B;
+  --md-sys-color-secondary-fixed: #E8DEF8;
+  --md-sys-color-secondary-fixed-dim: #CCC2DC;
+  --md-sys-color-on-secondary-fixed: #1D192B;
+  --md-sys-color-on-secondary-fixed-variant: #4A4458;
+
+  --md-sys-color-tertiary: #7D5260;
+  --md-sys-color-on-tertiary: #FFFFFF;
+  --md-sys-color-tertiary-container: #FFD8E4;
+  --md-sys-color-on-tertiary-container: #31111D;
+  --md-sys-color-tertiary-fixed: #FFD8E4;
+  --md-sys-color-tertiary-fixed-dim: #EFB8C8;
+  --md-sys-color-on-tertiary-fixed: #31111D;
+  --md-sys-color-on-tertiary-fixed-variant: #633B48;
+
+  --md-sys-color-error: #B3261E;
+  --md-sys-color-on-error: #FFFFFF;
+  --md-sys-color-error-container: #F9DEDC;
+  --md-sys-color-on-error-container: #410E0B;
+
+  /* Surfaces read as one continuous stack, lowest -> highest. Pick by the
+   * elevation the surface should communicate, not by its visual weight. */
+  --md-sys-color-surface: #FFFBFE;
+  --md-sys-color-on-surface: #1C1B1F;
+  --md-sys-color-surface-variant: #E7E0EC;
+  --md-sys-color-on-surface-variant: #49454F;
+  --md-sys-color-surface-dim: #DED8E1;
+  --md-sys-color-surface-bright: #FFFBFE;
+  --md-sys-color-surface-container-lowest: #FFFFFF;
+  --md-sys-color-surface-container-low: #F7F2FA;
+  --md-sys-color-surface-container: #F3EDF7;
+  --md-sys-color-surface-container-high: #ECE6F0;
+  --md-sys-color-surface-container-highest: #E6E0E9;
+
+  --md-sys-color-outline: #79747E;
+  --md-sys-color-outline-variant: #CAC4D0;
+  --md-sys-color-inverse-surface: #313033;
+  --md-sys-color-inverse-on-surface: #F4EFF4;
+  --md-sys-color-inverse-primary: #D0BCFF;
+  --md-sys-color-scrim: #000000;
+  --md-sys-color-shadow: #000000;
+  /* Legacy. M3 2023+ expresses elevation with surface-container roles; keep
+   * this only for implementations that still tint elevated surfaces. */
+  --md-sys-color-surface-tint: #6750A4;
+
+  /* ==========================================================================
+   * 3. ELEVATION
+   * In M3 elevation is communicated by *tonal surface colour*, not shadow.
+   * Shadows exist only to keep a surface legible over busy content.
+   * Reach for --md-sys-color-surface-container-* first; these are the backup.
+   * ======================================================================== */
+  --md-sys-elevation-level0: none;
+  --md-sys-elevation-level1: 0 1px 2px 0 rgba(0, 0, 0, 0.30),
+                             0 1px 3px 1px rgba(0, 0, 0, 0.15);
+  --md-sys-elevation-level2: 0 1px 2px 0 rgba(0, 0, 0, 0.30),
+                             0 2px 6px 2px rgba(0, 0, 0, 0.15);
+  --md-sys-elevation-level3: 0 1px 3px 0 rgba(0, 0, 0, 0.30),
+                             0 4px 8px 3px rgba(0, 0, 0, 0.15);
+  --md-sys-elevation-level4: 0 2px 3px 0 rgba(0, 0, 0, 0.30),
+                             0 6px 10px 4px rgba(0, 0, 0, 0.15);
+  --md-sys-elevation-level5: 0 4px 4px 0 rgba(0, 0, 0, 0.30),
+                             0 8px 12px 6px rgba(0, 0, 0, 0.15);
+
+  /* ==========================================================================
+   * 4. STATE LAYERS
+   * One semi-transparent overlay in the content's "on" colour. Only one state
+   * layer may be active at a time. State layer is 40px; the touch target
+   * around it is still 48px.
+   * ======================================================================== */
+  --md-sys-state-hover-state-layer-opacity: 0.08;
+  --md-sys-state-focus-state-layer-opacity: 0.10;
+  --md-sys-state-pressed-state-layer-opacity: 0.10;
+  --md-sys-state-dragged-state-layer-opacity: 0.16;
+
+  --md-sys-state-disabled-container-opacity: 0.12;
+  --md-sys-state-disabled-content-opacity: 0.38;
+
+  /* ==========================================================================
+   * 5. SHAPE
+   * Ten steps, named for how rounded the corner is — not for component size.
+   * That naming change is the point: any component can take any step.
+   * "full" replaces the old "50% of component size" hack.
+   * ======================================================================== */
+  --md-sys-shape-corner-none: 0px;
+  --md-sys-shape-corner-extra-small: 4px;
+  --md-sys-shape-corner-small: 8px;
+  --md-sys-shape-corner-medium: 12px;
+  --md-sys-shape-corner-large: 16px;
+  --md-sys-shape-corner-large-increased: 20px;      /* Expressive */
+  --md-sys-shape-corner-extra-large: 28px;
+  --md-sys-shape-corner-extra-large-increased: 32px; /* Expressive */
+  --md-sys-shape-corner-extra-extra-large: 48px;     /* Expressive */
+  --md-sys-shape-corner-full: 9999px;
+
+  /* Asymmetric variants — one corner rounded, used for menus, split buttons,
+   * FAB menus and other grouped controls. Inner corners of a group always
+   * read as one continuous silhouette. */
+  --md-sys-shape-corner-extra-small-top: 4px 4px 0 0;
+  --md-sys-shape-corner-large-top: 16px 16px 0 0;
+  --md-sys-shape-corner-large-end: 0 16px 16px 0;
+  --md-sys-shape-corner-large-start: 16px 0 0 16px;
+
+  /* ==========================================================================
+   * 6. TYPOGRAPHY — 30 styles (15 baseline + 15 emphasized)
+   * Baseline and emphasized share size and line-height exactly, so swapping
+   * one for the other never reflows the layout. Only weight (and, at the
+   * smallest sizes, tracking) changes.
+   *
+   * Emphasized weight rule: baseline 400 -> 500; baseline 500 -> 700.
+   *
+   * Line-height note: the spec adapts line height to language script height.
+   * Latin/Cyrillic/Greek = small (base). Chinese, Japanese, Korean, Arabic,
+   * Hindi, Thai and most other scripts = medium (~7% taller). Burmese and
+   * Telugu = large (~30%). Nastaliq = extra large (~100%). If a product ships
+   * CJK, bump the line-height tokens; ignoring this collides text.
+   * ======================================================================== */
+  --md-sys-typescale-brand-font: "Roboto Flex", "Roboto", system-ui, sans-serif;
+  --md-sys-typescale-plain-font: "Roboto Flex", "Roboto", system-ui, sans-serif;
+
+  /* --- Display: hero text and large numbers. Never for body copy. --- */
+  --md-sys-typescale-display-large-font: var(--md-sys-typescale-brand-font);
+  --md-sys-typescale-display-large-size: 57px;
+  --md-sys-typescale-display-large-line-height: 64px;
+  --md-sys-typescale-display-large-weight: 400;
+  --md-sys-typescale-display-large-tracking: -0.25px;
+  --md-sys-typescale-display-large-emphasized-weight: 500;
+  --md-sys-typescale-display-large-emphasized-tracking: 0px;
+
+  --md-sys-typescale-display-medium-font: var(--md-sys-typescale-brand-font);
+  --md-sys-typescale-display-medium-size: 45px;
+  --md-sys-typescale-display-medium-line-height: 52px;
+  --md-sys-typescale-display-medium-weight: 400;
+  --md-sys-typescale-display-medium-tracking: 0px;
+  --md-sys-typescale-display-medium-emphasized-weight: 500;
+  --md-sys-typescale-display-medium-emphasized-tracking: 0px;
+
+  --md-sys-typescale-display-small-font: var(--md-sys-typescale-brand-font);
+  --md-sys-typescale-display-small-size: 36px;
+  --md-sys-typescale-display-small-line-height: 44px;
+  --md-sys-typescale-display-small-weight: 400;
+  --md-sys-typescale-display-small-tracking: 0px;
+  --md-sys-typescale-display-small-emphasized-weight: 500;
+  --md-sys-typescale-display-small-emphasized-tracking: 0px;
+
+  /* --- Headline: section and screen-level headings. Editorial territory. --- */
+  --md-sys-typescale-headline-large-font: var(--md-sys-typescale-brand-font);
+  --md-sys-typescale-headline-large-size: 32px;
+  --md-sys-typescale-headline-large-line-height: 40px;
+  --md-sys-typescale-headline-large-weight: 400;
+  --md-sys-typescale-headline-large-tracking: 0px;
+  --md-sys-typescale-headline-large-emphasized-weight: 500;
+  --md-sys-typescale-headline-large-emphasized-tracking: 0px;
+
+  --md-sys-typescale-headline-medium-font: var(--md-sys-typescale-brand-font);
+  --md-sys-typescale-headline-medium-size: 28px;
+  --md-sys-typescale-headline-medium-line-height: 36px;
+  --md-sys-typescale-headline-medium-weight: 400;
+  --md-sys-typescale-headline-medium-tracking: 0px;
+  --md-sys-typescale-headline-medium-emphasized-weight: 500;
+  --md-sys-typescale-headline-medium-emphasized-tracking: 0px;
+
+  --md-sys-typescale-headline-small-font: var(--md-sys-typescale-brand-font);
+  --md-sys-typescale-headline-small-size: 24px;
+  --md-sys-typescale-headline-small-line-height: 32px;
+  --md-sys-typescale-headline-small-weight: 400;
+  --md-sys-typescale-headline-small-tracking: 0px;
+  --md-sys-typescale-headline-small-emphasized-weight: 500;
+  --md-sys-typescale-headline-small-emphasized-tracking: 0px;
+
+  /* --- Title: card titles, list headers, dialog titles. --- */
+  --md-sys-typescale-title-large-font: var(--md-sys-typescale-brand-font);
+  --md-sys-typescale-title-large-size: 22px;
+  --md-sys-typescale-title-large-line-height: 28px;
+  --md-sys-typescale-title-large-weight: 400;
+  --md-sys-typescale-title-large-tracking: 0px;
+  --md-sys-typescale-title-large-emphasized-weight: 500;
+  --md-sys-typescale-title-large-emphasized-tracking: 0px;
+
+  --md-sys-typescale-title-medium-font: var(--md-sys-typescale-plain-font);
+  --md-sys-typescale-title-medium-size: 16px;
+  --md-sys-typescale-title-medium-line-height: 24px;
+  --md-sys-typescale-title-medium-weight: 500;
+  --md-sys-typescale-title-medium-tracking: 0.15px;
+  --md-sys-typescale-title-medium-emphasized-weight: 700; /* wght 600 on a variable font */
+  --md-sys-typescale-title-medium-emphasized-tracking: 0px;
+
+  --md-sys-typescale-title-small-font: var(--md-sys-typescale-plain-font);
+  --md-sys-typescale-title-small-size: 14px;
+  --md-sys-typescale-title-small-line-height: 20px;
+  --md-sys-typescale-title-small-weight: 500;
+  --md-sys-typescale-title-small-tracking: 0.1px;
+  --md-sys-typescale-title-small-emphasized-weight: 700;
+  --md-sys-typescale-title-small-emphasized-tracking: 0px;
+
+  /* --- Body: all paragraph text. --- */
+  --md-sys-typescale-body-large-font: var(--md-sys-typescale-plain-font);
+  --md-sys-typescale-body-large-size: 16px;
+  --md-sys-typescale-body-large-line-height: 24px;
+  --md-sys-typescale-body-large-weight: 400;
+  --md-sys-typescale-body-large-tracking: 0.5px;
+  --md-sys-typescale-body-large-emphasized-weight: 500;
+  --md-sys-typescale-body-large-emphasized-tracking: 0px;
+
+  --md-sys-typescale-body-medium-font: var(--md-sys-typescale-plain-font);
+  --md-sys-typescale-body-medium-size: 14px;
+  --md-sys-typescale-body-medium-line-height: 20px;
+  --md-sys-typescale-body-medium-weight: 400;
+  --md-sys-typescale-body-medium-tracking: 0.25px;
+  --md-sys-typescale-body-medium-emphasized-weight: 500;
+  --md-sys-typescale-body-medium-emphasized-tracking: 0px;
+
+  --md-sys-typescale-body-small-font: var(--md-sys-typescale-plain-font);
+  --md-sys-typescale-body-small-size: 12px;
+  --md-sys-typescale-body-small-line-height: 16px;
+  --md-sys-typescale-body-small-weight: 400;
+  --md-sys-typescale-body-small-tracking: 0.4px;
+  --md-sys-typescale-body-small-emphasized-weight: 500;
+  --md-sys-typescale-body-small-emphasized-tracking: 0.1px;
+
+  /* --- Label: buttons, chips, tabs, captions. --- */
+  --md-sys-typescale-label-large-font: var(--md-sys-typescale-plain-font);
+  --md-sys-typescale-label-large-size: 14px;
+  --md-sys-typescale-label-large-line-height: 20px;
+  --md-sys-typescale-label-large-weight: 500;
+  --md-sys-typescale-label-large-tracking: 0.1px;
+  --md-sys-typescale-label-large-emphasized-weight: 700;
+  --md-sys-typescale-label-large-emphasized-tracking: 0px;
+
+  --md-sys-typescale-label-medium-font: var(--md-sys-typescale-plain-font);
+  --md-sys-typescale-label-medium-size: 12px;
+  --md-sys-typescale-label-medium-line-height: 16px;
+  --md-sys-typescale-label-medium-weight: 500;
+  --md-sys-typescale-label-medium-tracking: 0.5px;
+  --md-sys-typescale-label-medium-emphasized-weight: 700;
+  --md-sys-typescale-label-medium-emphasized-tracking: 0.1px;
+
+  --md-sys-typescale-label-small-font: var(--md-sys-typescale-plain-font);
+  --md-sys-typescale-label-small-size: 11px;
+  --md-sys-typescale-label-small-line-height: 16px;
+  --md-sys-typescale-label-small-weight: 500;
+  --md-sys-typescale-label-small-tracking: 0.5px;
+  --md-sys-typescale-label-small-emphasized-weight: 700;
+  --md-sys-typescale-label-small-emphasized-tracking: 0.1px;
+
+  /* ==========================================================================
+   * 7. LAYOUT
+   * Five breakpoints. Design for the breakpoint, never for a device.
+   * ======================================================================== */
+  --md-sys-breakpoint-compact: 600px;
+  --md-sys-breakpoint-medium: 840px;
+  --md-sys-breakpoint-expanded: 1200px;
+  --md-sys-breakpoint-large: 1600px;
+
+  --md-sys-layout-margin-compact: 16px;
+  --md-sys-layout-margin-medium: 24px;
+  --md-sys-layout-margin-expanded: 24px;
+  --md-sys-layout-gutter-compact: 16px;
+  --md-sys-layout-gutter-medium: 24px;
+  --md-sys-layout-gutter-expanded: 24px;
+
+  /* 4px base grid. A pragmatic scale, not an official md.sys token set. */
+  --md-sys-spacing-1: 4px;
+  --md-sys-spacing-2: 8px;
+  --md-sys-spacing-3: 12px;
+  --md-sys-spacing-4: 16px;
+  --md-sys-spacing-5: 20px;
+  --md-sys-spacing-6: 24px;
+  --md-sys-spacing-8: 32px;
+  --md-sys-spacing-10: 40px;
+  --md-sys-spacing-12: 48px;
+  --md-sys-spacing-16: 64px;
+  --md-sys-spacing-20: 80px;
+
+  --md-sys-touch-target-min: 48px;
+  --md-sys-icon-size: 24px;
+  --md-sys-focus-ring-width: 2px;
+  --md-sys-focus-ring-gap: 2px;
+}
+
+/* ============================================================================
+ * DARK THEME
+ * Only colour roles and shadows change. Type, shape, spacing and motion are
+ * theme-independent — if you find yourself rewriting them here, something is
+ * wrong. Roles map to *different tones*, never to inverted hex values.
+ * ========================================================================== */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { color-scheme: dark; }
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --md-sys-color-primary: #D0BCFF;
+  --md-sys-color-on-primary: #381E72;
+  --md-sys-color-primary-container: #4F378B;
+  --md-sys-color-on-primary-container: #EADDFF;
+  --md-sys-color-primary-fixed: #EADDFF;
+  --md-sys-color-primary-fixed-dim: #D0BCFF;
+  --md-sys-color-on-primary-fixed: #21005D;
+  --md-sys-color-on-primary-fixed-variant: #4F378B;
+
+  --md-sys-color-secondary: #CCC2DC;
+  --md-sys-color-on-secondary: #332D41;
+  --md-sys-color-secondary-container: #4A4458;
+  --md-sys-color-on-secondary-container: #E8DEF8;
+  --md-sys-color-secondary-fixed: #E8DEF8;
+  --md-sys-color-secondary-fixed-dim: #CCC2DC;
+  --md-sys-color-on-secondary-fixed: #1D192B;
+  --md-sys-color-on-secondary-fixed-variant: #4A4458;
+
+  --md-sys-color-tertiary: #EFB8C8;
+  --md-sys-color-on-tertiary: #492532;
+  --md-sys-color-tertiary-container: #633B48;
+  --md-sys-color-on-tertiary-container: #FFD8E4;
+  --md-sys-color-tertiary-fixed: #FFD8E4;
+  --md-sys-color-tertiary-fixed-dim: #EFB8C8;
+  --md-sys-color-on-tertiary-fixed: #31111D;
+  --md-sys-color-on-tertiary-fixed-variant: #633B48;
+
+  --md-sys-color-error: #F2B8B5;
+  --md-sys-color-on-error: #601410;
+  --md-sys-color-error-container: #8C1D18;
+  --md-sys-color-on-error-container: #F9DEDC;
+
+  --md-sys-color-surface: #1C1B1F;
+  --md-sys-color-on-surface: #E6E1E5;
+  --md-sys-color-surface-variant: #49454F;
+  --md-sys-color-on-surface-variant: #CAC4D0;
+  --md-sys-color-surface-dim: #141218;
+  --md-sys-color-surface-bright: #3B383E;
+  --md-sys-color-surface-container-lowest: #0F0D13;
+  --md-sys-color-surface-container-low: #1D1B20;
+  --md-sys-color-surface-container: #211F26;
+  --md-sys-color-surface-container-high: #2B2930;
+  --md-sys-color-surface-container-highest: #36343B;
+
+  --md-sys-color-outline: #938F99;
+  --md-sys-color-outline-variant: #49454F;
+  --md-sys-color-inverse-surface: #E6E1E5;
+  --md-sys-color-inverse-on-surface: #313033;
+  --md-sys-color-inverse-primary: #6750A4;
+  --md-sys-color-surface-tint: #D0BCFF;
+}
+
+/* ============================================================================
+ * HIGH CONTRAST
+ * M3 standardises three contrast levels: standard, medium, high. They are
+ * tonal shifts of the same roles, not a different palette. High contrast
+ * pushes emphasis roles darker (light theme) and surfaces further apart.
+ * ========================================================================== */
+@media (prefers-contrast: more) {
+  :root {
+    --md-sys-color-primary: var(--md-ref-palette-primary-30);
+    --md-sys-color-primary-container: var(--md-ref-palette-primary-90);
+    --md-sys-color-on-surface-variant: var(--md-ref-palette-neutral-variant-30);
+    --md-sys-color-outline: var(--md-ref-palette-neutral-variant-30);
+    --md-sys-color-outline-variant: var(--md-ref-palette-neutral-variant-50);
+  }
+  [data-theme="dark"] {
+    --md-sys-color-primary: var(--md-ref-palette-primary-90);
+    --md-sys-color-on-surface-variant: var(--md-ref-palette-neutral-variant-90);
+    --md-sys-color-outline: var(--md-ref-palette-neutral-variant-90);
+  }
+}
+
+/* ============================================================================
+ * OPTIONAL: vibrant / "expressive" palettes
+ * The Expressive update widens the usable colour range and deepens surface
+ * tones so primary / secondary / tertiary separate cleanly. Applied by
+ * shifting the emphasis roles one tone step away from the surface.
+ * Opt in with <html data-color-variant="vibrant">.
+ * ========================================================================== */
+[data-color-variant="vibrant"] {
+  --md-sys-color-primary: var(--md-ref-palette-primary-40);
+  --md-sys-color-primary-container: var(--md-ref-palette-primary-90);
+  --md-sys-color-secondary: var(--md-ref-palette-secondary-40);
+  --md-sys-color-secondary-container: var(--md-ref-palette-secondary-90);
+  --md-sys-color-tertiary: var(--md-ref-palette-tertiary-30);
+  --md-sys-color-tertiary-container: var(--md-ref-palette-tertiary-90);
+}
+[data-theme="dark"][data-color-variant="vibrant"] {
+  --md-sys-color-primary: var(--md-ref-palette-primary-80);
+  --md-sys-color-primary-container: var(--md-ref-palette-primary-30);
+  --md-sys-color-secondary: var(--md-ref-palette-secondary-80);
+  --md-sys-color-secondary-container: var(--md-ref-palette-secondary-30);
+  --md-sys-color-tertiary: var(--md-ref-palette-tertiary-80);
+  --md-sys-color-tertiary-container: var(--md-ref-palette-tertiary-30);
+}
