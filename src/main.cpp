@@ -114,11 +114,34 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    // 1. 预先设置 DLL 搜索路径并加载华硕 HAL (必须在创建驱动实例前完成，确保其依赖项正常解析)
-    SetDllDirectoryW(L"C:\\Program Files\\ASUS\\Aac_Keyboard");
-    HMODULE hHalPreload = LoadLibraryW(L"C:\\Program Files\\ASUS\\Aac_Keyboard\\AacKbHal_x64.dll");
+    // 1. 探测并预加载 AacKbHal_x64.dll (支持免奥创独立便携发布包)
+    wchar_t current_mod[MAX_PATH];
+    std::filesystem::path current_exe_dir;
+    if (GetModuleFileNameW(nullptr, current_mod, MAX_PATH)) {
+        current_exe_dir = std::filesystem::path(current_mod).parent_path();
+    }
+    std::vector<std::filesystem::path> preload_candidates = {
+        current_exe_dir / "AacKbHal_x64.dll",
+        current_exe_dir / "drivers" / "AacKbHal_x64.dll",
+        current_exe_dir / ".." / "drivers" / "AacKbHal_x64.dll",
+        std::filesystem::current_path() / "AacKbHal_x64.dll",
+        std::filesystem::current_path() / "drivers" / "AacKbHal_x64.dll",
+        L"C:\\Program Files\\ASUS\\Aac_Keyboard\\AacKbHal_x64.dll"
+    };
+    HMODULE hHalPreload = nullptr;
+    for (const auto& cand : preload_candidates) {
+        std::error_code ec;
+        if (std::filesystem::exists(cand, ec) && !std::filesystem::is_directory(cand, ec)) {
+            SetDllDirectoryW(cand.parent_path().c_str());
+            hHalPreload = LoadLibraryW(cand.c_str());
+            if (hHalPreload) {
+                LOG_INFO("底层硬件驱动预加载成功: " + cand.string());
+                break;
+            }
+        }
+    }
     if (!hHalPreload) {
-        LOG_WARN("未能在默认路径预加载 AacKbHal_x64.dll (非华硕默认安装路径或驱动未安装，硬件连接时将尝试常规 COM 解析)");
+        LOG_WARN("未能在本地或候选路径预加载 AacKbHal_x64.dll，后续硬件连接时将尝试系统注册表 COM 解析");
     }
 
     // 2. 解析命令行参数
@@ -229,6 +252,12 @@ int main(int argc, char* argv[]) {
         SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
 
         LOG_INFO("[Probe] 正在执行硬件隔离探测与通道复位...");
+        if (!std::filesystem::exists(keymap_path) && !current_exe_dir.empty()) {
+            auto cand = current_exe_dir / keymap_path;
+            if (std::filesystem::exists(cand)) {
+                keymap_path = cand.string();
+            }
+        }
         aura::Keymap probe_keymap;
         if (!probe_keymap.LoadFromJson(keymap_path)) {
             LOG_ERROR("[Probe] 无法加载键位表: " + keymap_path);
@@ -286,12 +315,32 @@ int main(int argc, char* argv[]) {
     }
 
     // 7. 加载权威键位表与配置文件
+    if (!std::filesystem::exists(keymap_path) && !current_exe_dir.empty()) {
+        auto cand_km = current_exe_dir / keymap_path;
+        if (std::filesystem::exists(cand_km)) {
+            keymap_path = cand_km.string();
+        }
+    }
+
     aura::Keymap keymap;
     if (!keymap.LoadFromJson(keymap_path)) {
         LOG_ERROR("FATAL: 无法加载键位表: " + keymap_path);
         DeleteFileA(g_state_file.c_str());
         if (hMutex) CloseHandle(hMutex);
         return 1;
+    }
+
+    if (!std::filesystem::exists(config_path) && !current_exe_dir.empty()) {
+        auto cand_cfg = current_exe_dir / config_path;
+        if (std::filesystem::exists(cand_cfg)) {
+            config_path = cand_cfg.string();
+        } else {
+            auto cand_ex = current_exe_dir / "config.example.json";
+            if (std::filesystem::exists(cand_ex)) {
+                std::error_code ec;
+                std::filesystem::copy_file(cand_ex, config_path, std::filesystem::copy_options::overwrite_existing, ec);
+            }
+        }
     }
 
     aura::RuleEngine rule_engine;

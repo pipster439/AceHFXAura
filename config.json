@@ -1,5 +1,5 @@
 {
-  "default_profile": "desktop",
+  "default_profile": "static",
   "fps": 100,
   "gsi_bindings": [
     {
@@ -13,11 +13,17 @@
       "operator": "==",
       "profile": "bomb_pulse",
       "value": "planted"
+    },
+    {
+      "field": "event.kill",
+      "operator": "==",
+      "profile": "rainbow_wave",
+      "value": true
     }
   ],
   "profiles": {
     "bomb_pulse": {
-      "brightness": 1.0,
+      "brightness": 1,
       "color1": [
         255,
         80,
@@ -33,7 +39,7 @@
       "type": "breathing"
     },
     "breathing": {
-      "brightness": 1.0,
+      "brightness": 1,
       "color1": [
         0,
         100,
@@ -49,7 +55,7 @@
       "type": "breathing"
     },
     "coding": {
-      "brightness": 1.0,
+      "brightness": 1,
       "color": [
         10,
         30,
@@ -76,7 +82,7 @@
       "type": "static"
     },
     "color_cycle": {
-      "brightness": 1.0,
+      "brightness": 1,
       "fps": 100,
       "period_ms": 3500,
       "type": "color_cycle"
@@ -87,7 +93,7 @@
         0,
         0
       ],
-      "brightness": 1.0,
+      "brightness": 1,
       "fps": 100,
       "keys": {
         "ARROWS": [
@@ -114,7 +120,7 @@
       "type": "custom_keymap"
     },
     "current": {
-      "brightness": 1.0,
+      "brightness": 1,
       "color": [
         0,
         240,
@@ -122,7 +128,7 @@
       ],
       "fps": 100,
       "period_ms": 2000,
-      "thickness": 1.0,
+      "thickness": 1,
       "type": "current"
     },
     "custom_keymap": {
@@ -131,7 +137,7 @@
         0,
         0
       ],
-      "brightness": 1.0,
+      "brightness": 1,
       "fps": 100,
       "keys": {
         "ESC": [
@@ -158,7 +164,7 @@
         0,
         20
       ],
-      "brightness": 1.0,
+      "brightness": 1,
       "fps": 100,
       "keys": {
         "ARROWS": [
@@ -185,7 +191,7 @@
       "type": "custom_keymap"
     },
     "danger_red": {
-      "brightness": 1.0,
+      "brightness": 1,
       "color1": [
         255,
         0,
@@ -201,23 +207,37 @@
       "type": "breathing"
     },
     "desktop": {
-      "brightness": 1.0,
-      "color1": [
+      "analog": false,
+      "bg": [
         0,
-        80,
-        200
+        0,
+        0
+      ],
+      "brightness": 1,
+      "color": [
+        232,
+        158,
+        142
+      ],
+      "color1": [
+        232,
+        158,
+        142
       ],
       "color2": [
-        0,
-        10,
-        40
+        56,
+        189,
+        248
       ],
+      "direction": "diag_dl",
       "fps": 100,
-      "period_ms": 3500,
-      "type": "breathing"
+      "period_ms": 1600,
+      "speed_index": 2,
+      "thickness": 0.2,
+      "type": "ripple"
     },
     "office": {
-      "brightness": 1.0,
+      "brightness": 1,
       "color": [
         40,
         40,
@@ -234,7 +254,7 @@
       "type": "static"
     },
     "quicksand": {
-      "brightness": 1.0,
+      "brightness": 1,
       "color1": [
         255,
         25,
@@ -248,19 +268,36 @@
       "direction": "diag_dl",
       "fps": 100,
       "period_ms": 3500,
-      "thickness": 1.0,
+      "thickness": 1,
       "type": "quicksand"
     },
     "rainbow_wave": {
-      "brightness": 1.0,
+      "analog": false,
+      "brightness": 1,
+      "color": [
+        232,
+        158,
+        142
+      ],
+      "color1": [
+        232,
+        158,
+        142
+      ],
+      "color2": [
+        56,
+        189,
+        248
+      ],
       "direction": "diag_dl",
       "fps": 100,
-      "period_ms": 3500,
-      "thickness": 1.0,
+      "period_ms": 3200,
+      "speed_index": 1,
+      "thickness": 1,
       "type": "wave"
     },
     "raindrop": {
-      "brightness": 1.0,
+      "brightness": 1,
       "color": [
         0,
         240,
@@ -276,7 +313,7 @@
         5,
         15
       ],
-      "brightness": 1.0,
+      "brightness": 1,
       "color": [
         255,
         25,
@@ -292,7 +329,7 @@
         0,
         0
       ],
-      "brightness": 1.0,
+      "brightness": 1,
       "color": [
         0,
         240,
@@ -300,11 +337,11 @@
       ],
       "fps": 100,
       "period_ms": 2500,
-      "thickness": 1.0,
+      "thickness": 1,
       "type": "ripple"
     },
     "starry_night": {
-      "brightness": 1.0,
+      "brightness": 1,
       "color": [
         0,
         240,
@@ -316,22 +353,41 @@
       "type": "starry_night"
     },
     "static": {
-      "analog": true,
-      "brightness": 1.0,
+      "analog": false,
+      "bg": [
+        0,
+        0,
+        0
+      ],
+      "brightness": 1,
       "color": [
         0,
         80,
         200
       ],
+      "color1": [
+        0,
+        80,
+        200
+      ],
+      "color2": [
+        2,
+        132,
+        199
+      ],
+      "direction": "diag_dl",
       "fps": 100,
+      "period_ms": 1600,
+      "speed_index": 2,
+      "thickness": 1,
       "type": "static"
     },
     "wave": {
-      "brightness": 1.0,
+      "brightness": 1,
       "direction": "diag_dl",
       "fps": 100,
       "period_ms": 3500,
-      "thickness": 1.0,
+      "thickness": 1,
       "type": "wave"
     }
   },

@@ -1,6 +1,7 @@
 #include "aura/aura_adapter.h"
 #include "utils/logger.h"
 #include "utils/system_info.h"
+#include <filesystem>
 #include <thread>
 #include <sstream>
 #include <iomanip>
@@ -113,21 +114,76 @@ bool AuraAdapter::ConnectHardwareInternal() {
     CLSIDFromString(L"{AE9DB4C8-4F2A-4756-9B11-2F6D78C61F1A}", &clsid_hal);
     CLSIDFromString(L"{F2C8D5B4-3854-4325-8A4F-FD7C5072E3BA}", &iid_hal);
 
-    LOG_INFO("正在尝试创建 CLSID_ClaymoreHal COM 实例...");
-
     void* hal_ptr = nullptr;
-    HRESULT hr = CoCreateInstance(
-        clsid_hal,
-        nullptr,
-        CLSCTX_INPROC_SERVER,
-        iid_hal,
-        &hal_ptr
-    );
 
-    if (FAILED(hr) || !hal_ptr) {
-        LOG_WARN("CoCreateInstance(CLSID_ClaymoreHal) 失败: " + FormatHex(hr));
-        state_ = AdapterState::Disconnected;
-        return false;
+    // 1. 优先尝试从本地路径/驱动目录加载 AacKbHal_x64.dll 并免注册表调用 DllGetClassObject
+    if (!hHalMod_) {
+        std::vector<std::filesystem::path> candidates;
+        wchar_t mod_path[MAX_PATH];
+        if (GetModuleFileNameW(nullptr, mod_path, MAX_PATH)) {
+            std::filesystem::path exe_dir = std::filesystem::path(mod_path).parent_path();
+            candidates.push_back(exe_dir / "AacKbHal_x64.dll");
+            candidates.push_back(exe_dir / "drivers" / "AacKbHal_x64.dll");
+            candidates.push_back(exe_dir / ".." / "drivers" / "AacKbHal_x64.dll");
+            candidates.push_back(exe_dir / ".." / "AacKbHal_x64.dll");
+        }
+        candidates.push_back(std::filesystem::current_path() / "AacKbHal_x64.dll");
+        candidates.push_back(std::filesystem::current_path() / "drivers" / "AacKbHal_x64.dll");
+        candidates.push_back(L"C:\\Program Files\\ASUS\\Aac_Keyboard\\AacKbHal_x64.dll");
+
+        std::error_code ec;
+        for (const auto& p : candidates) {
+            if (std::filesystem::exists(p, ec) && !std::filesystem::is_directory(p, ec)) {
+                SetDllDirectoryW(p.parent_path().c_str());
+                hHalMod_ = LoadLibraryW(p.c_str());
+                if (hHalMod_) {
+                    LOG_INFO("成功加载底层驱动库: " + p.string());
+                    break;
+                }
+            }
+        }
+    }
+
+    if (hHalMod_) {
+        using PFN_DllGetClassObject = HRESULT (__stdcall *)(REFCLSID, REFIID, LPVOID*);
+        PFN_DllGetClassObject fn_get_class_obj = reinterpret_cast<PFN_DllGetClassObject>(
+            GetProcAddress(hHalMod_, "DllGetClassObject")
+        );
+        if (fn_get_class_obj) {
+            if (pFactory_) {
+                pFactory_->Release();
+                pFactory_ = nullptr;
+            }
+            HRESULT hr_fac = fn_get_class_obj(clsid_hal, IID_IClassFactory, reinterpret_cast<void**>(&pFactory_));
+            if (SUCCEEDED(hr_fac) && pFactory_) {
+                HRESULT hr_inst = pFactory_->CreateInstance(nullptr, iid_hal, &hal_ptr);
+                if (SUCCEEDED(hr_inst) && hal_ptr) {
+                    LOG_INFO("成功通过免注册 COM (DllGetClassObject) 实例化 CLSID_ClaymoreHal");
+                } else {
+                    LOG_WARN("IClassFactory::CreateInstance 失败: " + FormatHex(hr_inst));
+                }
+            } else {
+                LOG_WARN("DllGetClassObject 获取工厂失败: " + FormatHex(hr_fac));
+            }
+        }
+    }
+
+    // 2. 若免注册加载未成功，回退至系统 COM 注册表解析 (兼容已安装奥创的标准环境)
+    if (!hal_ptr) {
+        LOG_INFO("尝试通过系统注册表 CoCreateInstance 创建 CLSID_ClaymoreHal 实例...");
+        HRESULT hr = CoCreateInstance(
+            clsid_hal,
+            nullptr,
+            CLSCTX_INPROC_SERVER,
+            iid_hal,
+            &hal_ptr
+        );
+        if (FAILED(hr) || !hal_ptr) {
+            LOG_WARN("CoCreateInstance(CLSID_ClaymoreHal) 失败: " + FormatHex(hr) + " (驱动未就绪或未找到硬件组件)");
+            state_ = AdapterState::Disconnected;
+            return false;
+        }
+        LOG_INFO("成功通过系统注册表 CoCreateInstance 实例化 CLSID_ClaymoreHal");
     }
 
     pHal_ = hal_ptr;
@@ -404,6 +460,10 @@ void AuraAdapter::Shutdown() {
     }
 
     ReleaseHardwareInternal();
+    if (hHalMod_) {
+        FreeLibrary(hHalMod_);
+        hHalMod_ = nullptr;
+    }
 
     state_ = AdapterState::Uninitialized;
     LOG_INFO("[+] AuraAdapter 已安全关闭并释放所有 COM 资源");

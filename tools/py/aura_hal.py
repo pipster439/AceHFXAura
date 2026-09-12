@@ -522,18 +522,68 @@ class AuraHal:
         clsid = to_guid(CLSID_CLAYMORE_HAL)
         iid = to_guid(IID_IASUS_AAC_LED_DEVICE_HAL)
 
-        hr = ole32.CoCreateInstance(
-            ctypes.byref(clsid),
-            None,
-            1,  # CLSCTX_INPROC_SERVER
-            ctypes.byref(iid),
-            ctypes.byref(self.pHal)
-        )
-        if hr != 0 or not self.pHal.value:
-            if self._com_initialized:
-                ole32.CoUninitialize()
-                self._com_initialized = False
-            raise RuntimeError(f"无法创建 CLSID_ClaymoreHal COM 实例 (0x{hr & 0xFFFFFFFF:08X})")
+        # 优先尝试免注册表直接加载 AacKbHal_x64.dll 并调用 DllGetClassObject
+        self._hHalMod = None
+        candidates = [
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "AacKbHal_x64.dll"),
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "AacKbHal_x64.dll"),
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "drivers", "AacKbHal_x64.dll"),
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "AacKbHal_x64.dll"),
+            os.path.join(os.getcwd(), "drivers", "AacKbHal_x64.dll"),
+            os.path.join(os.getcwd(), "AacKbHal_x64.dll"),
+            r"C:\Program Files\ASUS\Aac_Keyboard\AacKbHal_x64.dll"
+        ]
+        k32 = ctypes.windll.kernel32
+        k32.LoadLibraryW.restype = ctypes.c_void_p
+        k32.LoadLibraryW.argtypes = [ctypes.c_wchar_p]
+        k32.GetProcAddress.restype = ctypes.c_void_p
+        k32.GetProcAddress.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+
+        for cand in candidates:
+            cand = os.path.abspath(cand)
+            if os.path.isfile(cand):
+                ctypes.windll.kernel32.SetDllDirectoryW(os.path.dirname(cand))
+                h = k32.LoadLibraryW(cand)
+                if h:
+                    self._hHalMod = h
+                    break
+
+        if self._hHalMod:
+            p_fn = k32.GetProcAddress(self._hHalMod, b"DllGetClassObject")
+            if p_fn:
+                fn_get_class_obj = ctypes.WINFUNCTYPE(
+                    wintypes.LONG,
+                    ctypes.POINTER(GUID),
+                    ctypes.POINTER(GUID),
+                    ctypes.POINTER(ctypes.c_void_p)
+                )(p_fn)
+                pFactory = ctypes.c_void_p()
+                IID_IClassFactory = to_guid("{00000001-0000-0000-C000-000000000046}")
+                hr_fac = fn_get_class_obj(ctypes.byref(clsid), ctypes.byref(IID_IClassFactory), ctypes.byref(pFactory))
+                if hr_fac == 0 and pFactory.value:
+                    fac_vtable = ctypes.cast(ctypes.cast(pFactory.value, ctypes.POINTER(ctypes.c_void_p))[0], ctypes.POINTER(ctypes.c_void_p))
+                    fn_create_inst = ctypes.WINFUNCTYPE(
+                        wintypes.LONG,
+                        ctypes.c_void_p, ctypes.c_void_p, ctypes.POINTER(GUID), ctypes.POINTER(ctypes.c_void_p)
+                    )(fac_vtable[3])
+                    fn_create_inst(pFactory.value, None, ctypes.byref(iid), ctypes.byref(self.pHal))
+                    fn_fac_rel = ctypes.WINFUNCTYPE(wintypes.ULONG, ctypes.c_void_p)(fac_vtable[2])
+                    fn_fac_rel(pFactory.value)
+
+        # 若免注册未成功，回退至系统 CoCreateInstance (兼容已安装奥创的标准环境)
+        if not self.pHal.value:
+            hr = ole32.CoCreateInstance(
+                ctypes.byref(clsid),
+                None,
+                1,  # CLSCTX_INPROC_SERVER
+                ctypes.byref(iid),
+                ctypes.byref(self.pHal)
+            )
+            if hr != 0 or not self.pHal.value:
+                if self._com_initialized:
+                    ole32.CoUninitialize()
+                    self._com_initialized = False
+                raise RuntimeError(f"无法创建 CLSID_ClaymoreHal COM 实例 (0x{hr & 0xFFFFFFFF:08X})")
 
         self.hal_vtable = ctypes.cast(
             ctypes.cast(self.pHal.value, ctypes.POINTER(ctypes.c_void_p))[0],
