@@ -209,13 +209,7 @@ export const ORCHESTRATOR_STUDIO_TOOLBOX = {
       contents: [
         { kind: 'block', type: 'orch_root_flow' },
         { kind: 'block', type: 'controls_if' },
-        {
-          kind: 'block',
-          type: 'orch_action_wait_ms',
-          inputs: {
-            MS: { shadow: { type: 'math_number', fields: { NUM: 1000 } } }
-          }
-        }
+        { kind: 'block', type: 'orch_action_wait_ms' }
       ]
     },
     {
@@ -278,15 +272,7 @@ export const ORCHESTRATOR_STUDIO_TOOLBOX = {
       colour: '#9966FF',
       contents: [
         { kind: 'block', type: 'orch_action_switch_profile' },
-        {
-          kind: 'block',
-          type: 'orch_action_overlay_pulse',
-          inputs: {
-            DURATION: { shadow: { type: 'math_number', fields: { NUM: 1200 } } },
-            FADE: { shadow: { type: 'math_number', fields: { NUM: 400 } } },
-            PRIORITY: { shadow: { type: 'math_number', fields: { NUM: 20 } } }
-          }
-        },
+        { kind: 'block', type: 'orch_action_overlay_pulse' },
         { kind: 'block', type: 'orch_action_set_dnd' }
       ]
     },

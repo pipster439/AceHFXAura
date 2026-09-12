@@ -157,5 +157,41 @@ class TestGsiDictionaryAndBlocks(unittest.TestCase):
         self.assertEqual(rule_ast["conditions"][1]["field"], "player.state.health")
         self.assertEqual(rule_ast["conditions"][1]["value"], 20)
 
+    def test_toolbox_flyout_blocks_append_cleanly(self):
+        # Verify that EVERY block in both toolboxes can be appended to a Blockly workspace without missing connection errors
+        node_script = """
+        import('./src/blockly/index.js').then(async m => {
+          const Blockly = m.default;
+          const { registerCustomBlocks } = await import('./src/blockly/customBlocks.js');
+          const { ORCHESTRATOR_STUDIO_TOOLBOX, EFFECT_STUDIO_TOOLBOX } = await import('./src/blockly/toolboxes.js');
+          registerCustomBlocks();
+          
+          const ws = new Blockly.Workspace();
+          for (const tb of [ORCHESTRATOR_STUDIO_TOOLBOX, EFFECT_STUDIO_TOOLBOX]) {
+            for (const cat of tb.contents) {
+              if (!cat.contents) continue;
+              for (const item of cat.contents) {
+                if (item.kind === 'block') {
+                  Blockly.serialization.blocks.append(item, ws);
+                }
+              }
+            }
+          }
+          console.log('ALL_BLOCKS_APPENDED_OK');
+        }).catch(err => {
+          console.error(err);
+          process.exit(1);
+        });
+        """
+        res = subprocess.run(
+            ["node", "--input-type=module", "-e", node_script],
+            cwd=FRONTEND_DIR,
+            capture_output=True,
+            text=True
+        )
+        self.assertEqual(res.returncode, 0, f"Toolbox flyout block serialization failed: {res.stderr}")
+        self.assertIn("ALL_BLOCKS_APPENDED_OK", res.stdout)
+
 if __name__ == "__main__":
     unittest.main()
+
