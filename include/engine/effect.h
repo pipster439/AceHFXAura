@@ -27,6 +27,7 @@ struct KeyOverride {
 
 struct Profile {
     std::string name;
+    std::string plugin_name;
     std::shared_ptr<Effect> base_effect;
     std::vector<KeyOverride> key_overrides;
     uint8_t brightness = 255;

@@ -1,3 +1,5 @@
+import { canonicalConfig } from '../utils/orchestration.js';
+import { stageEffect, effectConfig } from '../utils/applyEffect.js';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Blockly, { loadSafeWorkspaceJson } from '../blockly/index.js';
 import { registerCustomBlocks } from '../blockly/customBlocks';
@@ -34,6 +36,8 @@ export default function EffectStudio({
   const blocklyDivRef = useRef(null);
   const workspaceRef = useRef(null);
   const [effectName, setEffectName] = useState('custom_rainbow');
+  const effectNameRef = useRef(effectName);
+  effectNameRef.current = effectName;
   const [isPlaying, setIsPlaying] = useState(true);
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
   const [cppCode, setCppCode] = useState('');
@@ -42,6 +46,8 @@ export default function EffectStudio({
   const [compilerLog, setCompilerLog] = useState(null);
   const [compilerSuccess, setCompilerSuccess] = useState(null);
   const [isCopied, setIsCopied] = useState(false);
+  const [editError, setEditError] = useState(null);
+  const previewClockRef = useRef({ elapsed: 0, last: null });
 
   // 模拟游戏遥测状态 (供用户调试 GSI 积木)
   const [simHealth, setSimHealth] = useState(100);
@@ -65,18 +71,27 @@ export default function EffectStudio({
     });
     workspaceRef.current = ws;
 
+    let localDraft;
+    try { localDraft = JSON.parse(sessionStorage.getItem('aura-effect-draft')); } catch {}
     // 默认加载第一个样例模板
     const defaultPreset = EFFECT_PRESETS[0];
-    if (defaultPreset?.blocklyJson) {
+    if (localDraft?.json) {
+      loadSafeWorkspaceJson(localDraft.json, ws); setEffectName(localDraft.name); effectNameRef.current = localDraft.name;
+    } else if (defaultPreset?.blocklyJson) {
       loadSafeWorkspaceJson(defaultPreset.blocklyJson, ws);
     }
 
-    const onWorkspaceChange = () => {
-      // 重新编译 JS 闭包供实时预览
-      compiledJsRef.current = JsTranspiler.compile(ws);
-      // 同步生成 C++ 源码
-      const code = CppTranspiler.transpile(effectName, ws);
-      setCppCode(code);
+    const onWorkspaceChange = (event) => {
+      if (event?.isUiEvent) return;
+      try {
+        compiledJsRef.current = JsTranspiler.compile(ws);
+        previewClockRef.current = { elapsed: 0, last: null };
+        setCppCode(CppTranspiler.transpile(effectNameRef.current, ws));
+        setEditError(null);
+      } catch (err) {
+        compiledJsRef.current = null;
+        setEditError(err.message);
+      }
     };
 
     ws.addChangeListener(onWorkspaceChange);
@@ -87,6 +102,7 @@ export default function EffectStudio({
 
     return () => {
       window.removeEventListener('resize', handleResize);
+      try { sessionStorage.setItem('aura-effect-draft', JSON.stringify({ name: effectNameRef.current, json: Blockly.serialization.workspaces.save(ws) })); } catch {}
       ws.dispose();
       workspaceRef.current = null;
     };
@@ -95,13 +111,14 @@ export default function EffectStudio({
   // 当 effectName 改变时更新 C++ 源码
   useEffect(() => {
     if (workspaceRef.current) {
-      const code = CppTranspiler.transpile(effectName, workspaceRef.current);
-      setCppCode(code);
+      try { setCppCode(CppTranspiler.transpile(effectName, workspaceRef.current)); setEditError(null); }
+      catch (err) { setEditError(err.message); }
     }
   }, [effectName]);
 
   // 25~60 FPS 实时渲染循环
   useEffect(() => {
+    previewClockRef.current.last = null;
     if (!isPlaying) return;
 
     let lastTime = 0;
@@ -132,7 +149,12 @@ export default function EffectStudio({
             }
           };
 
-          const frame = compiledJsRef.current(time, gsiMock, decaysRef.current);
+          const clock = previewClockRef.current;
+          if (clock.last !== null) clock.elapsed += time - clock.last;
+          clock.last = time;
+          let frame;
+          try { frame = compiledJsRef.current(clock.elapsed, gsiMock, decaysRef.current); }
+          catch (err) { setEditError(err.message); setIsPlaying(false); return; }
           setCurrentFrame(frame);
 
           if (onPreviewFrameUpdate) {
@@ -184,95 +206,32 @@ export default function EffectStudio({
     showToast?.(`已导出 effect_${effectName}.cpp`, 'success');
   };
 
-  // 一键后台动态编译 DLL 并热重载至守护进程
-  const handleCompileAndReload = async () => {
-    if (!effectName.trim()) {
-      showToast?.('请输入合法的插件名称', 'error');
-      return;
+  const saveWorkspace = async (apply) => {
+    if (!workspaceRef.current || !onSaveConfig || isCompiling) return;
+    const name = effectName.trim();
+    if (!/^[a-zA-Z_][a-zA-Z0-9_]{0,47}$/.test(name)) {
+      showToast?.('名称需以字母或下划线开头，最多 48 个字符', 'error'); return;
     }
-    const cleanName = effectName.replace(/[^a-zA-Z0-9_]/g, '_');
-
     setIsCompiling(true);
-    setCompilerLog('正在调用 MSVC cl.exe 编译独立动态链接库...\n');
-    setCompilerSuccess(null);
-
     try {
-      // 1. 调用 POST /api/compile_effect
-      const compileRes = await fetch('/api/compile_effect', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: cleanName,
-          code: cppCode
-        })
-      });
-
-      const compileData = await compileRes.json();
-      setCompilerLog(compileData.compiler_output || compileData.log || compileData.message);
-
-      if (!compileRes.ok || !compileData.success) {
-        setCompilerSuccess(false);
-        showToast?.('编译失败，请查看编译器诊断日志', 'error');
-        return;
+      const json = Blockly.serialization.workspaces.save(workspaceRef.current);
+      let build;
+      if (apply) {
+        setCompilerLog('正在准备光效…');
+        build = await stageEffect(name, workspaceRef.current, CppTranspiler, setCompilerLog);
       }
-
+      const next = effectConfig(config, name, json, build);
+      const ok = await onSaveConfig(next);
+      if (!ok) throw new Error('配置保存失败，请重试；原有应用版本保留');
       setCompilerSuccess(true);
-      showToast?.(`编译成功: ${compileData.dll_path} (${compileData.duration_ms}ms)`, 'success');
-
-      // 2. 调用 POST /api/reload_plugin 热加载至守护进程
-      const reloadRes = await fetch('/api/reload_plugin', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: cleanName
-        })
-      });
-
-      if (reloadRes.ok) {
-        showToast?.(`守护进程已即时热加载: ${cleanName}，推流管线无缝切入！`, 'success');
-      }
+      if (apply) setIsPlaying(false);
+      showToast?.(apply ? '光效已保存并应用，联动将使用这一版本' : '草稿已保存，正在运行的版本保持不变', 'success');
     } catch (err) {
-      setCompilerLog(`网络或请求异常: ${err.message}`);
-      setCompilerSuccess(false);
-      showToast?.(`编译执行异常: ${err.message}`, 'error');
-    } finally {
-      setIsCompiling(false);
-    }
+      setCompilerSuccess(false); setCompilerLog(err.message); showToast?.(err.message, 'error');
+    } finally { setIsCompiling(false); }
   };
-
-  // 保存当前积木工作区至 config.json 并注册为可用方案
-  const handleSaveToConfig = () => {
-    if (!workspaceRef.current || !onSaveConfig) return;
-    const wsJson = Blockly.serialization.workspaces.save(workspaceRef.current);
-    const cleanName = effectName.replace(/[^a-zA-Z0-9_]/g, '_');
-
-    const nextConfig = {
-      ...config,
-      blockly_effects: {
-        ...(config?.blockly_effects || {}),
-        [cleanName]: {
-          version: 1,
-          name: cleanName,
-          blockly_json: wsJson,
-          updated_at: Date.now()
-        }
-      },
-      profiles: {
-        ...(config?.profiles || {}),
-        [cleanName]: {
-          type: "plugin",
-          plugin_name: cleanName,
-          title: cleanName,
-          fps: 25,
-          color: [255, 255, 255],
-          bg: [0, 0, 0]
-        }
-      }
-    };
-
-    onSaveConfig(nextConfig);
-    showToast?.(`已将光效工作区「${cleanName}」保存并同步至可用方案库`, 'success');
-  };
+  const handleCompileAndReload = () => saveWorkspace(true);
+  const handleSaveToConfig = () => saveWorkspace(false);
 
   // 光效管理中心操作逻辑
   const handleSelectEffect = (name, blocklyJson) => {
@@ -285,7 +244,7 @@ export default function EffectStudio({
     showToast?.(`已载入光效: ${name}`, 'info');
   };
 
-  const handleCreateEffect = (name, templateKey) => {
+  const handleCreateEffect = async (name, templateKey) => {
     if (!workspaceRef.current) return;
     const clean = name.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_');
     if (!clean) return;
@@ -303,60 +262,17 @@ export default function EffectStudio({
     setEffectName(clean);
 
     const wsJson = templateJson || Blockly.serialization.workspaces.save(workspaceRef.current);
-    const nextConfig = {
-      ...config,
-      blockly_effects: {
-        ...(config?.blockly_effects || {}),
-        [clean]: {
-          version: 1,
-          name: clean,
-          blockly_json: wsJson,
-          updated_at: Date.now()
-        }
-      },
-      profiles: {
-        ...(config?.profiles || {}),
-        [clean]: {
-          type: "plugin",
-          plugin_name: clean,
-          title: clean,
-          fps: 25,
-          color: [255, 255, 255],
-          bg: [0, 0, 0]
-        }
-      }
-    };
-    onSaveConfig?.(nextConfig);
-    showToast?.(`已新建光效「${clean}」并加入方案库`, 'success');
+    const nextConfig = effectConfig(config, clean, wsJson);
+    if (onSaveConfig && !await onSaveConfig(nextConfig)) return;
+    showToast?.(`已新建光效草稿「${clean}」，应用后可用于联动`, 'success');
   };
 
-  const handleCloneEffect = (sourceName, cloneName) => {
+  const handleCloneEffect = async (sourceName, cloneName) => {
     const srcData = config?.blockly_effects?.[sourceName];
     if (!srcData) return;
 
-    const nextConfig = {
-      ...config,
-      blockly_effects: {
-        ...(config?.blockly_effects || {}),
-        [cloneName]: {
-          ...srcData,
-          name: cloneName,
-          updated_at: Date.now()
-        }
-      },
-      profiles: {
-        ...(config?.profiles || {}),
-        [cloneName]: {
-          type: "plugin",
-          plugin_name: cloneName,
-          title: cloneName,
-          fps: 25,
-          color: [255, 255, 255],
-          bg: [0, 0, 0]
-        }
-      }
-    };
-    onSaveConfig?.(nextConfig);
+    const nextConfig = effectConfig(config, cloneName, srcData.blockly_json);
+    if (onSaveConfig && !await onSaveConfig(nextConfig)) return;
     setEffectName(cloneName);
     if (workspaceRef.current && srcData.blockly_json) {
       workspaceRef.current.clear();
@@ -365,7 +281,7 @@ export default function EffectStudio({
     showToast?.(`已克隆生成光效副本: ${cloneName}`, 'success');
   };
 
-  const handleRenameEffect = (oldName, newName) => {
+  const handleRenameEffect = async (oldName, newName) => {
     if (oldName === newName) return;
     const effects = { ...(config?.blockly_effects || {}) };
     const profiles = { ...(config?.profiles || {}) };
@@ -379,26 +295,39 @@ export default function EffectStudio({
     delete effects[oldName];
 
     if (profiles[oldName]) {
-      profiles[newName] = { ...profiles[oldName], plugin_name: newName, title: newName };
+      profiles[newName] = { ...profiles[oldName], title: newName };
       delete profiles[oldName];
     }
 
-    const nextConfig = { ...config, blockly_effects: effects, profiles };
-    onSaveConfig?.(nextConfig);
+    const canonical = canonicalConfig(config);
+    const nextConfig = { ...canonical, blockly_effects: effects, profiles,
+      default_profile: canonical.default_profile === oldName ? newName : canonical.default_profile,
+      blockly_orchestrator: undefined,
+      orchestration: { ...canonical.orchestration,
+        fallback_profile: canonical.orchestration.fallback_profile === oldName ? newName : canonical.orchestration.fallback_profile,
+        rules: canonical.orchestration.rules.map(r => ({ ...r, target_profile: r.target_profile === oldName ? newName : r.target_profile })),
+        event_overlays: canonical.orchestration.event_overlays.map(r => ({ ...r, effect: r.effect === oldName ? newName : r.effect }))
+      }
+    };
+    if (onSaveConfig && !await onSaveConfig(nextConfig)) return;
     if (effectName === oldName) {
       setEffectName(newName);
     }
     showToast?.(`已将光效重命名为: ${newName}`, 'success');
   };
 
-  const handleDeleteEffect = (name) => {
+  const handleDeleteEffect = async (name) => {
+    const c = canonicalConfig(config);
+    if (c.default_profile === name || c.orchestration.fallback_profile === name || c.orchestration.rules.some(r => r.target_profile === name) || c.orchestration.event_overlays.some(r => r.effect === name)) {
+      showToast?.('此光效正在被方案或联动引用，请先更换引用再删除', 'error'); return;
+    }
     const effects = { ...(config?.blockly_effects || {}) };
     const profiles = { ...(config?.profiles || {}) };
     delete effects[name];
     delete profiles[name];
 
     const nextConfig = { ...config, blockly_effects: effects, profiles };
-    onSaveConfig?.(nextConfig);
+    if (onSaveConfig && !await onSaveConfig(nextConfig)) return;
 
     if (effectName === name) {
       const remaining = Object.keys(effects);
@@ -425,36 +354,14 @@ export default function EffectStudio({
     showToast?.(`已导出光效配置文件: effect_${name}.json`, 'success');
   };
 
-  const handleImportEffect = (parsed) => {
+  const handleImportEffect = async (parsed) => {
     if (!parsed || !parsed.name) {
       showToast?.('导入的文件不是合法的光效配置文件', 'error');
       return;
     }
     const clean = parsed.name.replace(/[^a-zA-Z0-9_]/g, '_');
-    const nextConfig = {
-      ...config,
-      blockly_effects: {
-        ...(config?.blockly_effects || {}),
-        [clean]: {
-          version: 1,
-          name: clean,
-          blockly_json: parsed.blockly_json || parsed,
-          updated_at: Date.now()
-        }
-      },
-      profiles: {
-        ...(config?.profiles || {}),
-        [clean]: {
-          type: "plugin",
-          plugin_name: clean,
-          title: clean,
-          fps: 25,
-          color: [255, 255, 255],
-          bg: [0, 0, 0]
-        }
-      }
-    };
-    onSaveConfig?.(nextConfig);
+    const nextConfig = effectConfig(config, clean, parsed.blockly_json || parsed);
+    if (onSaveConfig && !await onSaveConfig(nextConfig)) return;
     handleSelectEffect(clean, parsed.blockly_json || parsed);
     showToast?.(`已导入并切换至光效: ${clean}`, 'success');
   };
@@ -508,7 +415,7 @@ export default function EffectStudio({
               </button>
             </div>
             <span className="text-[11px] text-md-on-surface-variant">
-              输出路径: plugins/effect_{effectName || 'custom'}.dll
+              等待会保留当前灯光；积木执行完毕后，下一帧从头开始
             </span>
           </div>
         </div>
@@ -539,7 +446,7 @@ export default function EffectStudio({
             title={isPlaying ? '暂停实时计算' : '恢复实时计算'}
           >
             {isPlaying ? <Square className="w-3.5 h-3.5 fill-current" /> : <Play className="w-3.5 h-3.5 fill-current" />}
-            <span>{isPlaying ? '实时生效中' : '已暂停'}</span>
+            <span>{isPlaying ? '预览中' : '预览已暂停'}</span>
           </button>
 
           <button
@@ -547,7 +454,7 @@ export default function EffectStudio({
             className="h-9 px-3.5 flex items-center gap-1.5 rounded-md-full bg-md-surface-container border border-md-outline-variant text-md-on-surface hover:bg-md-surface-container-high active:scale-95 transition-all text-xs font-semibold cursor-pointer"
           >
             <Code className="w-4 h-4 text-md-tertiary" />
-            <span>查看 C++ 源码</span>
+            <span>开发详情</span>
           </button>
 
           <button
@@ -555,16 +462,16 @@ export default function EffectStudio({
             className="h-9 px-3.5 flex items-center gap-1.5 rounded-md-full bg-md-surface-container border border-md-outline-variant text-md-on-surface hover:bg-md-surface-container-high active:scale-95 transition-all text-xs font-semibold cursor-pointer"
           >
             <Save className="w-4 h-4 text-md-primary" />
-            <span>保存积木</span>
+            <span>保存草稿</span>
           </button>
 
           <button
             onClick={handleCompileAndReload}
-            disabled={isCompiling}
+            disabled={isCompiling || !!editError}
             className="h-9 px-4 flex items-center gap-2 rounded-md-full bg-md-primary text-md-on-primary hover:bg-md-primary/90 active:scale-95 transition-all text-xs font-bold shadow-md-level1 cursor-pointer disabled:opacity-50"
           >
             {isCompiling ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Cpu className="w-4 h-4" />}
-            <span>{isCompiling ? '编译热插拔中...' : '编译为原生 DLL'}</span>
+            <span>{isCompiling ? '正在应用…' : '保存并应用'}</span>
           </button>
         </div>
       </div>
@@ -633,6 +540,7 @@ export default function EffectStudio({
         </div>
       </div>
 
+      {editError && <p role="alert" className="text-sm text-md-error">{editError}</p>}
       {/* Google Blockly 主画布 */}
       <div className="flex-1 w-full h-full relative rounded-md-lg overflow-hidden border border-md-outline-variant shadow-md-level1 bg-md-surface-container-low">
         <div ref={blocklyDivRef} className="absolute inset-0 w-full h-full" />

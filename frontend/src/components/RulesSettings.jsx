@@ -31,7 +31,7 @@ export default function RulesSettings({
 
         <button
           type="button"
-          onClick={onAddRule}
+          onClick={() => onAddRule()}
           className="min-h-[48px] px-4 flex items-center justify-center gap-2 rounded-md-full bg-md-primary text-md-on-primary hover:bg-md-primary/90 active:scale-95 transition-transform shadow-md-level1 cursor-pointer text-xs font-bold"
           title="添加新规则"
           aria-label="添加新规则"

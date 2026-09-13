@@ -209,7 +209,7 @@ export const ORCHESTRATOR_STUDIO_TOOLBOX = {
       contents: [
         { kind: 'block', type: 'orch_root_flow' },
         { kind: 'block', type: 'controls_if' },
-        { kind: 'block', type: 'orch_action_wait_ms' }
+        // Timing belongs to effect scripts; orchestration is declarative.
       ]
     },
     {
@@ -273,6 +273,7 @@ export const ORCHESTRATOR_STUDIO_TOOLBOX = {
       contents: [
         { kind: 'block', type: 'orch_action_switch_profile' },
         { kind: 'block', type: 'orch_action_overlay_pulse' },
+        { kind: 'block', type: 'orch_action_overlay_state' },
         { kind: 'block', type: 'orch_action_set_dnd' }
       ]
     },

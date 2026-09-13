@@ -1,9 +1,10 @@
+import { compileSequence } from './sequenceCompiler.js';
 /**
  * JavaScript Runtime & Transpiler for Real-Time Google Blockly Live Preview
  * Executes within browser animation loop (60 FPS) with sub-millisecond execution budget.
  */
 
-import { KEYBOARD_LAYOUT } from '../constants/keyboardLayout';
+import { KEYBOARD_LAYOUT } from '../constants/keyboardLayout.js';
 
 // Build the standard 68-key topological map for the preview engine
 export const PREVIEW_68_KEYS = [];
@@ -43,42 +44,40 @@ export class JsTranspiler {
       return () => PREVIEW_68_KEYS.map(() => [0, 0, 0]);
     }
 
-    try {
-      const code = this.generateJsFunctionBody(topBlocks);
-      // Construct pure evaluation closure
-      const fn = new Function('elapsed_ms', 'keymap', 'gsi', 'decays', code);
-      return (elapsed_ms, gsi, decays) => {
-        try {
-          return fn(elapsed_ms, PREVIEW_68_KEYS, gsi || {}, decays || {});
-        } catch (err) {
-          // Return safe default on error
-          return PREVIEW_68_KEYS.map(() => [0, 0, 0]);
-        }
-      };
-    } catch (e) {
-      console.warn('Blockly JS compilation error:', e);
-      return () => PREVIEW_68_KEYS.map(() => [0, 0, 0]);
-    }
+    const code = this.generateJsFunctionBody(topBlocks);
+    const fn = new Function('elapsed_ms', 'keymap', 'gsi', 'decays', 'state', code);
+    const state = {};
+    return (elapsed_ms, gsi, decays) => fn(elapsed_ms, PREVIEW_68_KEYS, gsi || {}, decays || {}, state);
   }
 
   static generateJsFunctionBody(topBlocks) {
-    let statements = [];
-    statements.push('const frame = new Array(keymap.length).fill(null).map(() => [0, 0, 0]);');
-
-    const ws = topBlocks[0]?.workspace;
-    if (ws && typeof ws.getAllVariables === 'function') {
-      for (const v of ws.getAllVariables()) {
-        const cleanName = v.name.replace(/[^a-zA-Z0-9_]/g, '_');
-        statements.push(`let var_${cleanName} = 0;`);
+    const ws = topBlocks[0]?.workspace || { getTopBlocks: () => topBlocks };
+    const program = compileSequence(ws, { language: 'js', value: this.valueToJs.bind(this), statement: this.blockToJs.bind(this) });
+    const variables = (ws.getAllVariables?.() || []).map(v => `var_${v.name.replace(/[^a-zA-Z0-9_]/g, '_')}`);
+    return `
+      if (!state.frame || elapsed_ms < state.last) {
+        state.frame = keymap.map(() => [0, 0, 0]);
+        state.pc = ${program.entry}; state.wake = 0;
+        state.indices = new Array(${program.slots}).fill(0);
+        state.limits = new Array(${program.slots}).fill(0);
+        state.vars = {};
       }
-    }
-
-    for (const block of topBlocks) {
-      statements.push(this.blockToJs(block));
-    }
-
-    statements.push('return frame;');
-    return statements.join('\n');
+      state.last = elapsed_ms;
+      const frame = state.frame, info = null;
+      let _pc = state.pc, _wake = state.wake;
+      const _indices = state.indices, _limits = state.limits;
+      ${variables.map(v => `let ${v} = state.vars.${v} ?? 0;`).join('\n')}
+      try {
+        if (elapsed_ms < _wake) return frame;
+        for (let _budget = 0; _budget < 4096; _budget++) {
+          switch (_pc) { ${program.code} }
+        }
+        return frame;
+      } finally {
+        state.pc = _pc; state.wake = _wake;
+        ${variables.map(v => `state.vars.${v} = ${v};`).join('\n')}
+      }
+    `;
   }
 
   static blockToJs(block) {

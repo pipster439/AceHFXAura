@@ -30,7 +30,7 @@ struct GsiBinding {
 
 // 3. ConditionNode AST for recursive continuous GSI state tree
 enum class LogicOp { None, And, Or, Not };
-enum class CompareOp { Eq, Ne, Lt, Le, Gt, Ge };
+enum class CompareOp { Eq, Ne, Lt, Le, Gt, Ge, Contains };
 
 struct ConditionNode {
     LogicOp logic_op{LogicOp::None};
@@ -64,6 +64,10 @@ struct OrchestrationRule {
 
 // 5. CS2 Transient event overlay definition
 struct EventOverlayRule {
+    std::string id;
+    ConditionNode condition;
+    std::string trigger{"event"}; // event: pulse; state: active while condition holds
+    int priority{10};
     std::string event;                 // e.g. "event.kill", "event.flash"
     std::string name;
     std::string effect;                // Profile or plugin effect name

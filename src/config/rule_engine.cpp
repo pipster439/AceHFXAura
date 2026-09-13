@@ -20,6 +20,7 @@ std::string ConditionNode::CompareOpToString(CompareOp op) {
         case CompareOp::Le: return "<=";
         case CompareOp::Gt: return ">";
         case CompareOp::Ge: return ">=";
+        case CompareOp::Contains: return "contains";
         default: return "==";
     }
 }
@@ -31,6 +32,7 @@ CompareOp ConditionNode::StringToCompareOp(const std::string& op_str) {
     if (op_str == "<=" || op_str == "le" || op_str == "lte") return CompareOp::Le;
     if (op_str == ">" || op_str == "gt") return CompareOp::Gt;
     if (op_str == ">=" || op_str == "ge" || op_str == "gte") return CompareOp::Ge;
+    if (op_str == "contains") return CompareOp::Contains;
     return CompareOp::Eq;
 }
 
@@ -571,6 +573,7 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
                         valid = false;
                         continue;
                     }
+                    if (!item.value("enabled", true)) continue;
                     OrchestrationRule r;
                     r.id = item.value("id", "");
                     r.name = item.value("name", "");
@@ -596,6 +599,10 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
                         continue;
                     }
                     EventOverlayRule ev;
+                    ev.id = item.value("id", "overlay_" + std::to_string(new_orchestration.event_overlays.size()));
+                    ev.condition = ConditionNode::FromJson(item.value("condition", nlohmann::json::object()));
+                    ev.trigger = item.value("trigger", "event");
+                    ev.priority = item.value("priority", 10);
                     ev.event = item.value("event", "");
                     ev.name = item.value("name", "");
                     ev.effect = item.value("effect", item.value("profile", ""));
@@ -603,7 +610,7 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
                     ev.fade_out_ms = item.value("fade_ms", item.value("fade_out_ms", 400ULL));
                     ev.attack_ms = item.value("attack_ms", 0ULL);
                     ev.blend_mode = item.value("blend_mode", "blend");
-                    if (ev.event.empty()) {
+                    if (ev.event.empty() && ev.trigger != "state") {
                         LOG_ERROR("事件覆盖规则缺少有效的 event 字段: " << item.dump());
                         valid = false;
                         continue;
@@ -631,6 +638,7 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
                 }
                 auto prof = std::make_shared<Profile>();
                 prof->name = pname;
+                prof->plugin_name = pval.value("plugin_name", "");
                 prof->brightness = ParseBrightness(pname, pval);
                 int prof_fps = new_fps;
                 if (pval.contains("fps") && pval["fps"].is_number()) {

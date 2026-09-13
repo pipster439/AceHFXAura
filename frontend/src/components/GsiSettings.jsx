@@ -319,7 +319,7 @@ export default function GsiSettings({
       <div className="flex flex-col gap-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-md-outline-variant">
           <div>
-            <h4 className="font-bold text-md-on-surface text-sm">GSI 事件与灯效方案绑定规则 (gsi_bindings)</h4>
+            <h4 className="font-bold text-md-on-surface text-sm">简单 GSI 条件（与工作室共用规则）</h4>
             <p className="text-xs text-md-on-surface-variant mt-0.5">
               当 CS2 处于前台时，按从上到下的优先级匹配下列条件，由守护进程自动切换为对应 Profile。
             </p>

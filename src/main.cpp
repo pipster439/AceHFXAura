@@ -502,6 +502,12 @@ int main(int argc, char* argv[]) {
         om.ClearBindings();
         for (const auto& r : rule_engine.GetEventOverlayRules()) {
             aura::OverlayBinding b;
+            b.id = r.id;
+            b.trigger = r.trigger;
+            b.priority = r.priority;
+            b.condition = [condition = r.condition](const aura::GsiState* gsi, const std::string& proc) {
+                return condition.Evaluate(gsi, proc);
+            };
             b.event_name = r.event;
             b.effect_name = r.effect;
             b.duration_ms = r.duration_ms;
@@ -515,6 +521,10 @@ int main(int argc, char* argv[]) {
             } else {
                 b.effect = aura::PluginManager::Instance().CreateEffect(r.effect);
             }
+            b.make_effect = [name = (prof && !prof->plugin_name.empty()) ? prof->plugin_name : r.effect, fallback = b.effect]() {
+                auto instance = aura::PluginManager::Instance().CreateEffect(name);
+                return instance ? instance : fallback;
+            };
             if (b.effect) {
                 om.RegisterBinding(b);
             }
@@ -668,14 +678,16 @@ int main(int argc, char* argv[]) {
         // SetSuppressed 内部为原子交换，且仅在值真正变化时才 notify，重复调用无副作用。
         if (cur_proc != last_proc_seen) {
             last_proc_seen = cur_proc;
-            bool suppress = rule_engine.ShouldSuppressWebUi(cur_proc);
+            bool suppress = rule_engine.ShouldSuppressWebUi(cur_proc, &gsi_adapter.GetState());
             web_supervisor.SetSuppressed(suppress);
             LOG_INFO("前台进程变更 -> [" + (cur_proc.empty() ? "桌面/未知" : cur_proc) + "]" +
                      (suppress ? " (网页服务已抑制)" : ""));
         }
 
+        web_supervisor.SetSuppressed(rule_engine.ShouldSuppressWebUi(cur_proc, &gsi_adapter.GetState()));
+
         // 零分配计算当前帧 (包含 GSI 原子读取与瞬态事件叠加)
-        effect_engine.GetOverlayManager().UpdateBindingsFromGsi(&gsi_adapter.GetState(), effect_engine.GetElapsedMs());
+        effect_engine.GetOverlayManager().UpdateBindingsFromGsi(&gsi_adapter.GetState(), effect_engine.GetElapsedMs(), aura::RuleEngine::ToLower(cur_proc));
         effect_engine.Tick(frame_buf, keymap, &gsi_adapter.GetState());
 
         // 推流至硬件

@@ -33,10 +33,8 @@ export default function Sidebar({
   const navItems = [
     { id: 'lighting', label: '预设灯效', icon: Palette },
     { id: 'perkey', label: '逐键涂装', icon: Keyboard },
-    { id: 'blockly_effect', label: '光效工坊', icon: Sparkles },
-    { id: 'blockly_orchestrator', label: '方案编排', icon: GitBranch },
-    { id: 'rules', label: '进程规则', icon: Workflow },
-    { id: 'gsi', label: 'CS2 GSI', icon: Crosshair },
+    { id: 'blockly_effect', label: '工作室', icon: Sparkles },
+    { id: 'gsi', label: 'CS2 连接与数据', icon: Crosshair },
     { id: 'profiles', label: '方案管理', icon: SlidersHorizontal }
   ];
 
@@ -117,7 +115,7 @@ export default function Sidebar({
       <nav className="flex-1 p-2 space-y-1.5 overflow-y-auto">
         {navItems.map((item) => {
           const Icon = item.icon;
-          const isActive = activeTab === item.id;
+          const isActive = (activeTab === item.id || (item.id === 'blockly_effect' && ['blockly_orchestrator', 'rules'].includes(activeTab)));
           return (
             <button
               key={item.id}

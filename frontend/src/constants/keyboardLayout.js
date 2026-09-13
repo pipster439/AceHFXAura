@@ -115,4 +115,4 @@ export const DIR_VECTORS = {
   spread: { x: 0.0, y: 0.0 }
 };
 
-export { GRADIENT_PRESETS } from '../tokens/keyboardPresets.tokens';
+export { GRADIENT_PRESETS } from '../tokens/keyboardPresets.tokens.js';

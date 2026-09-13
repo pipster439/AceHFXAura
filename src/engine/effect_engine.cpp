@@ -1,4 +1,5 @@
 #include "engine/effect_engine.h"
+#include "engine/plugin_manager.h"
 
 namespace aura {
 
@@ -10,6 +11,13 @@ EffectEngine::EffectEngine()
 
 void EffectEngine::SetActiveProfile(std::shared_ptr<const Profile> profile) {
     std::lock_guard<std::mutex> lock(profile_mutex_);
+    if (profile && !profile->plugin_name.empty()) {
+        auto copy = std::make_shared<Profile>(*profile);
+        auto instance = PluginManager::Instance().CreateEffect(profile->plugin_name);
+        if (instance) copy->base_effect = instance;
+        profile = copy;
+    }
+    profile_started_ms_ = GetElapsedMs();
     active_profile_ = std::move(profile);
 }
 
@@ -62,9 +70,11 @@ void EffectEngine::Tick(FrameBuffer& out_frame, const Keymap& keymap, const IGsi
         // Copy the shared_ptr under the lock, then render without holding it:
         // the profile stays alive for the whole render even if a hot reload swaps
         // the active profile concurrently. Zero tearing, zero frame drops!
-        std::shared_ptr<const Profile> profile = GetActiveProfileCopy();
+        std::shared_ptr<const Profile> profile;
+        uint64_t started;
+        { std::lock_guard<std::mutex> lock(profile_mutex_); profile = active_profile_; started = profile_started_ms_; }
         if (profile) {
-            profile->Render(elapsed_ms, out_frame, keymap, gsi);
+            profile->Render(elapsed_ms >= started ? elapsed_ms - started : 0, out_frame, keymap, gsi);
         } else {
             out_frame.Clear();
         }

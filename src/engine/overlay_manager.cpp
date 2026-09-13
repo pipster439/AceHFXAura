@@ -9,6 +9,7 @@ namespace aura {
 
 double ActiveOverlay::ComputeWeight(uint64_t current_ms) const {
     if (current_ms < start_ms) return 0.0;
+    if (persistent) return 1.0;
     uint64_t delta_t = current_ms - start_ms;
     if (delta_t >= duration_ms) return 0.0;
 
@@ -32,7 +33,7 @@ double ActiveOverlay::ComputeWeight(uint64_t current_ms) const {
 }
 
 bool ActiveOverlay::IsExpired(uint64_t current_ms) const {
-    return (current_ms >= start_ms && (current_ms - start_ms) >= duration_ms);
+    return !persistent && (current_ms >= start_ms && (current_ms - start_ms) >= duration_ms);
 }
 
 OverlayManager::OverlayManager() {
@@ -52,7 +53,7 @@ void OverlayManager::TriggerOverlay(const std::string& event_name,
     // Check if an overlay for this same event already exists; if so, refresh/extend it
     for (auto& existing : active_overlays_) {
         if (existing.event_name == event_name) {
-            existing.start_ms = 0; // Will be set on next render or current clock
+            existing.pending_start = true;
             existing.duration_ms = duration_ms;
             existing.fade_out_ms = fade_out_ms;
             existing.blend_mode = blend_mode;
@@ -65,7 +66,7 @@ void OverlayManager::TriggerOverlay(const std::string& event_name,
     ActiveOverlay overlay;
     overlay.event_name = event_name;
     overlay.effect = effect;
-    overlay.start_ms = 0; // 0 indicates needs initialization to current_ms on first tick
+    overlay.pending_start = true;
     overlay.duration_ms = duration_ms;
     overlay.fade_out_ms = fade_out_ms;
     overlay.attack_ms = attack_ms;
@@ -84,40 +85,57 @@ void OverlayManager::ClearBindings() {
     std::lock_guard<std::mutex> lock(mutex_);
     bindings_.clear();
     prev_event_states_.clear();
+    prev_event_sequences_.clear();
+    active_overlays_.clear();
+    in_game_ = false;
 }
 
-void OverlayManager::UpdateBindingsFromGsi(const GsiState* gsi, uint64_t current_ms) {
-    if (!gsi) return;
-
+void OverlayManager::UpdateBindingsFromGsi(const GsiState* gsi, uint64_t current_ms,
+                                           const std::string& foreground) {
     std::lock_guard<std::mutex> lock(mutex_);
-    for (const auto& binding : bindings_) {
-        bool active = gsi->GetBool(binding.event_name.c_str(), false);
-        bool prev = prev_event_states_[binding.event_name];
+    const bool enabled = gsi && gsi->IsActive() &&
+        (foreground == "cs2.exe" || foreground == "cs2" || foreground == "csgo.exe" || foreground == "csgo");
+    const bool entering = enabled && !in_game_;
+    in_game_ = enabled;
+    if (!enabled) active_overlays_.clear();
+    for (size_t i = 0; i < bindings_.size(); ++i) {
+        const auto& binding = bindings_[i];
+        const std::string id = binding.id.empty() ? "binding_" + std::to_string(i) : binding.id;
+        const bool event_active = gsi && gsi->GetBool(binding.event_name.c_str(), false);
+        const double sequence = gsi ? gsi->GetNumber(("event_sequence." + binding.event_name).c_str(), 0.0) : 0.0;
+        const bool occurred = !entering && ((sequence > 0 && sequence != prev_event_sequences_[id]) ||
+                              (sequence == 0 && event_active && !prev_event_states_[id]));
+        prev_event_sequences_[id] = sequence;
+        prev_event_states_[id] = event_active;
+        const bool matches = enabled && (!binding.condition || binding.condition(gsi, foreground));
+        auto existing = std::find_if(active_overlays_.begin(), active_overlays_.end(),
+            [&id](const ActiveOverlay& o) { return o.binding_id == id; });
+        if (binding.trigger == "state") {
+            if (!matches) {
+                if (existing != active_overlays_.end()) active_overlays_.erase(existing);
+                continue;
+            }
+            if (existing != active_overlays_.end()) continue;
+        } else if (!matches || !occurred) continue;
 
-        // Rising edge detection (false -> true)
-        if (active && !prev && binding.effect) {
-            // Trigger overlay
-            ActiveOverlay overlay;
-            overlay.event_name = binding.event_name;
-            overlay.effect = binding.effect;
-            overlay.start_ms = current_ms;
-            overlay.duration_ms = binding.duration_ms;
-            overlay.fade_out_ms = binding.fade_out_ms;
-            overlay.attack_ms = binding.attack_ms;
-            overlay.blend_mode = binding.blend_mode.empty() ? "blend" : binding.blend_mode;
-
-            // Remove any existing active overlay for this event
-            active_overlays_.erase(
-                std::remove_if(active_overlays_.begin(), active_overlays_.end(),
-                    [&binding](const ActiveOverlay& o) { return o.event_name == binding.event_name; }),
-                active_overlays_.end());
-
-            active_overlays_.push_back(std::move(overlay));
-            LOG_INFO("[OverlayManager] GSI 事件跃迁触发覆盖: " << binding.event_name);
-        }
-
-        prev_event_states_[binding.event_name] = active;
+        ActiveOverlay overlay;
+        overlay.binding_id = id;
+        overlay.event_name = binding.event_name;
+        overlay.effect = binding.make_effect ? binding.make_effect() : binding.effect;
+        if (!overlay.effect) continue;
+        overlay.start_ms = current_ms;
+        overlay.duration_ms = binding.duration_ms;
+        overlay.fade_out_ms = binding.fade_out_ms;
+        overlay.attack_ms = binding.attack_ms;
+        overlay.blend_mode = binding.blend_mode;
+        overlay.priority = binding.priority;
+        overlay.persistent = binding.trigger == "state";
+        // Repeated events restart their own layer, even within the GSI pulse window.
+        if (existing != active_overlays_.end()) *existing = std::move(overlay);
+        else active_overlays_.push_back(std::move(overlay));
     }
+    std::stable_sort(active_overlays_.begin(), active_overlays_.end(),
+        [](const ActiveOverlay& a, const ActiveOverlay& b) { return a.priority < b.priority; });
 }
 
 void OverlayManager::ApplyOverlays(uint64_t current_ms,
@@ -128,7 +146,8 @@ void OverlayManager::ApplyOverlays(uint64_t current_ms,
 
     // 1. Initialize newly triggered overlays (start_ms == 0)
     for (auto& overlay : active_overlays_) {
-        if (overlay.start_ms == 0) {
+        if (overlay.pending_start) {
+            overlay.pending_start = false;
             overlay.start_ms = current_ms;
         }
     }
@@ -149,7 +168,7 @@ void OverlayManager::ApplyOverlays(uint64_t current_ms,
         if (w <= 0.0001) continue;
 
         temp_overlay_buf_.Clear();
-        EffectContext ctx(current_ms, keymap, gsi);
+        EffectContext ctx(current_ms - overlay.start_ms, keymap, gsi);
         overlay.effect->RenderWithContext(ctx, temp_overlay_buf_);
 
         const std::string& mode = overlay.blend_mode;

@@ -1,4 +1,5 @@
 import Blockly, { loadSafeWorkspaceJson } from './index.js';
+import { canonicalConfig } from '../utils/orchestration.js';
 
 /**
  * Serializer & Deserializer for Profile & GSI Event Orchestrator
@@ -68,6 +69,7 @@ export class OrchestratorSerializer {
 
             rules.push({
               id: `rule_${proc.replace(/[^a-zA-Z0-9_]/g, '')}_${ruleIdx++}`,
+              source: 'process', enabled: !!proc,
               process: proc,
               dnd: dnd,
               condition: conditionAst,
@@ -79,20 +81,16 @@ export class OrchestratorSerializer {
       }
     }
 
-    // Synthesize backward-compatible rules array for older daemon engines
-    const legacyRules = rules.map((r) => ({
-      process: r.process,
-      profile: r.target_profile,
-      suppress_web_ui: r.dnd
-    }));
 
     return {
       orchestration: {
+        version: 2,
         rules,
         event_overlays: eventOverlays,
         fallback_profile: foundFallback
       },
-      rules: legacyRules,
+      rules: [],
+      gsi_bindings: [],
       blockly_orchestrator: {
         version: 1,
         blockly_json: blocklyJson
@@ -104,6 +102,8 @@ export class OrchestratorSerializer {
     let curr = startBlock;
 
     while (curr) {
+      if (curr.isEnabled?.() === false) { curr = curr.getNextBlock(); continue; }
+      if (curr.type === 'orch_action_wait_ms') throw new Error('联动按条件持续评估；请把等待和顺序播放放进所调用的光效里');
       if (curr.type === 'controls_if') {
         let i = 0;
         let cumulativeElse = [];
@@ -111,9 +111,11 @@ export class OrchestratorSerializer {
           const branchTarget = curr.getInputTargetBlock(`IF${i}`);
           const rawCond = this.parseConditionAst(branchTarget);
           
-          let branchCond = rawCond;
+          let branchCond = cumulativeElse.length
+            ? { type: 'and', conditions: [rawCond, { type: 'not', conditions: [{ type: 'or', conditions: [...cumulativeElse] }] }] }
+            : rawCond;
           if (inheritedCond && Object.keys(inheritedCond).length > 0) {
-            branchCond = { type: 'and', conditions: [inheritedCond, rawCond] };
+            branchCond = { type: 'and', conditions: [inheritedCond, branchCond] };
           }
           
           const doBlock = curr.getInputTargetBlock(`DO${i}`);
@@ -140,7 +142,7 @@ export class OrchestratorSerializer {
         }
       } else if (curr.type === 'orch_action_switch_profile') {
         const targetProfile = (curr.getFieldValue('PROFILE') || 'default').trim();
-        const proc = this.extractProcessFromCondition(inheritedCond) || '';
+        const proc = ''; // Keep OR/NOT process predicates entirely in the condition AST.
         rules.push({
           id: `flow_rule_${rules.length}_${proc.replace(/[^a-zA-Z0-9_]/g, '')}`,
           process: proc,
@@ -148,19 +150,22 @@ export class OrchestratorSerializer {
           condition: inheritedCond || {},
           target_profile: targetProfile
         });
-      } else if (curr.type === 'orch_action_overlay_pulse') {
+      } else if (curr.type === 'orch_action_overlay_pulse' || curr.type === 'orch_action_overlay_state') {
         eventOverlays.push({
+          id: `overlay_${eventOverlays.length}`,
+          trigger: curr.type === 'orch_action_overlay_state' ? 'state' : 'event',
+          condition: inheritedCond || {},
+          blend_mode: curr.getFieldValue('BLEND') || 'blend',
           event: curr.getFieldValue('EVENT') || 'event.kill',
           effect: (curr.getFieldValue('EFFECT') || 'rainbow_wave').trim(),
           duration_ms: Number(curr.getFieldValue('DURATION')) || 1200,
-          fade_ms: Number(curr.getFieldValue('FADE')) || 400,
+          fade_ms: Number(curr.getFieldValue('FADE') ?? 400),
           priority: Number(curr.getFieldValue('PRIORITY')) || 20
         });
       } else if (curr.type === 'orch_action_set_dnd') {
         const isDnd = curr.getFieldValue('DND') === 'TRUE';
-        if (rules.length > 0) {
-          rules[rules.length - 1].dnd = isDnd;
-        }
+        if (!rules.length || JSON.stringify(rules[rules.length - 1].condition) !== JSON.stringify(inheritedCond || {})) throw new Error('免打扰设置请紧跟同一条件下的切换方案积木');
+        rules[rules.length - 1].dnd = isDnd;
       } else if (curr.type === 'match_process') {
         const proc = (curr.getFieldValue('PROCESS') || '').trim();
         const targetProfile = (curr.getFieldValue('TARGET_PROFILE') || '').trim();
@@ -170,17 +175,22 @@ export class OrchestratorSerializer {
 
         rules.push({
           id: `rule_${proc.replace(/[^a-zA-Z0-9_]/g, '')}_${rules.length}`,
+          source: 'process', enabled: !!proc,
           process: proc,
           dnd: dnd,
-          condition: conditionAst,
+          condition: inheritedCond ? { type: 'and', conditions: [inheritedCond, conditionAst] } : conditionAst,
           target_profile: targetProfile
         });
       } else if (curr.type === 'event_overlay') {
         eventOverlays.push({
+          id: `overlay_${eventOverlays.length}`,
+          trigger: curr.type === 'orch_action_overlay_state' ? 'state' : 'event',
+          condition: inheritedCond || {},
+          blend_mode: curr.getFieldValue('BLEND') || 'blend',
           event: curr.getFieldValue('EVENT') || 'event.kill',
           effect: curr.getFieldValue('EFFECT') || 'kill_pulse',
           duration_ms: Number(curr.getFieldValue('DURATION')) || 1200,
-          fade_ms: Number(curr.getFieldValue('FADE')) || 400,
+          fade_ms: Number(curr.getFieldValue('FADE') ?? 400),
           priority: Number(curr.getFieldValue('PRIORITY')) || 10
         });
       }
@@ -222,6 +232,7 @@ export class OrchestratorSerializer {
 
   static parseConditionAst(block) {
     if (!block) return {};
+    if (block.type === 'logic_boolean') return { type: block.getFieldValue('BOOL') === 'TRUE' ? 'and' : 'or', conditions: [] };
 
     if (block.type === 'gsi_state_match') {
       const field = block.getFieldValue('STATE') || 'round.bomb';
@@ -288,7 +299,7 @@ export class OrchestratorSerializer {
     if (block.type === 'logic_compare') {
       const opMap = { EQ: '==', NEQ: '!=', LT: '<', LTE: '<=', GT: '>', GTE: '>=' };
       const opKey = block.getFieldValue('OP') || 'EQ';
-      const op = opMap[opKey] || '==';
+      let op = opMap[opKey] || '==';
       const targetA = block.getInputTargetBlock('A');
       const targetB = block.getInputTargetBlock('B');
 
@@ -310,9 +321,9 @@ export class OrchestratorSerializer {
       ) {
         field = targetB.getFieldValue('PATH') || 'player.state.health';
         val = this.extractBlockValue(targetA, 0);
+        op = ({ '<': '>', '<=': '>=', '>': '<', '>=': '<=' })[op] || op;
       } else {
-        field = 'player.state.health';
-        val = this.extractBlockValue(targetB, 0);
+        throw new Error('联动比较需要一个 GSI 字段和一个常量；复杂运算请放在光效内');
       }
       return { field, op, value: val };
     }
@@ -332,7 +343,7 @@ export class OrchestratorSerializer {
       return { field, op, value: val };
     }
 
-    return {};
+    throw new Error(`不支持的联动条件：${block.type}`);
   }
 
   /**
@@ -346,7 +357,7 @@ export class OrchestratorSerializer {
       if (b.type === 'orch_action_switch_profile') {
         const p = b.getFieldValue('PROFILE');
         if (p) used.add(p.trim());
-      } else if (b.type === 'orch_action_overlay_pulse') {
+      } else if (b.type === 'orch_action_overlay_pulse' || b.type === 'orch_action_overlay_state') {
         const ef = b.getFieldValue('EFFECT');
         if (ef) used.add(ef.trim());
       } else if (b.type === 'match_process') {
@@ -391,55 +402,26 @@ export class OrchestratorSerializer {
       return;
     }
 
-    // Auto-create default root block with legacy rules
-    const rootBlock = workspace.newBlock('orchestrator_root');
-    rootBlock.initSvg();
-    rootBlock.render();
-    rootBlock.setFieldValue(config?.orchestration?.fallback_profile || config?.default_profile || 'desktop', 'FALLBACK_PROFILE');
-    rootBlock.moveBy(50, 50);
-
-    const rules = config?.orchestration?.rules || (config?.rules || []).map((r, idx) => ({
-      id: `rule_${idx}`,
-      process: r.process,
-      target_profile: r.profile,
-      dnd: r.suppress_web_ui !== false
-    }));
-
-    let prevRule = null;
-    rules.forEach((r, idx) => {
-      const ruleBlock = workspace.newBlock('match_process');
-      ruleBlock.initSvg();
-      ruleBlock.render();
-      ruleBlock.setFieldValue(r.process || 'cs2.exe', 'PROCESS');
-      ruleBlock.setFieldValue(r.target_profile || r.profile || 'cs2_gamer', 'TARGET_PROFILE');
-      ruleBlock.setFieldValue(r.dnd ? 'TRUE' : 'FALSE', 'DND');
-
-      if (idx === 0) {
-        rootBlock.getInput('RULES').connection.connect(ruleBlock.previousConnection);
-      } else if (prevRule) {
-        prevRule.nextConnection.connect(ruleBlock.previousConnection);
+    const canonical = canonicalConfig(config);
+    const statements = [];
+    const conditionBlock = (ast) => {
+      if (!ast || Object.keys(ast).length === 0) return { type: 'logic_boolean', fields: { BOOL: 'TRUE' } };
+      if (ast.type === 'not') return { type: 'logic_negate', inputs: { BOOL: { block: conditionBlock(ast.conditions?.[0]) } } };
+      if (ast.type === 'and' || ast.type === 'or') {
+        const children = ast.conditions || [];
+        if (!children.length) return { type: 'logic_boolean', fields: { BOOL: ast.type === 'and' ? 'TRUE' : 'FALSE' } };
+        return children.slice(1).reduce((left, right) => ({ type: 'logic_operation', fields: { OP: ast.type.toUpperCase() }, inputs: { A: { block: left }, B: { block: conditionBlock(right) } } }), conditionBlock(children[0]));
       }
-      prevRule = ruleBlock;
-    });
-
-    const overlays = config?.orchestration?.event_overlays || [];
-    let prevOv = null;
-    overlays.forEach((ov, idx) => {
-      const ovBlock = workspace.newBlock('event_overlay');
-      ovBlock.initSvg();
-      ovBlock.render();
-      ovBlock.setFieldValue(ov.event || 'event.kill', 'EVENT');
-      ovBlock.setFieldValue(ov.effect || 'kill_pulse', 'EFFECT');
-      ovBlock.setFieldValue(ov.duration_ms || 1200, 'DURATION');
-      ovBlock.setFieldValue(ov.fade_ms || 400, 'FADE');
-      ovBlock.setFieldValue(ov.priority || 10, 'PRIORITY');
-
-      if (idx === 0) {
-        rootBlock.getInput('OVERLAYS').connection.connect(ovBlock.previousConnection);
-      } else if (prevOv) {
-        prevOv.nextConnection.connect(ovBlock.previousConnection);
-      }
-      prevOv = ovBlock;
-    });
+      return { type: 'condition_compare', fields: { FIELD: ast.field, OP: ast.op || '==', VALUE: String(ast.value ?? '') } };
+    };
+    for (const r of canonical.orchestration.rules) {
+      statements.push({ type: 'match_process', fields: { PROCESS: r.process || '', TARGET_PROFILE: r.target_profile, DND: r.dnd ? 'TRUE' : 'FALSE' }, inputs: Object.keys(r.condition || {}).length ? { CONDITION: { block: conditionBlock(r.condition) } } : {} });
+    }
+    for (const ov of canonical.orchestration.event_overlays) {
+      const action = { type: ov.trigger === 'state' ? 'orch_action_overlay_state' : 'orch_action_overlay_pulse', fields: { EFFECT: ov.effect, PRIORITY: ov.priority ?? 10, BLEND: ov.blend_mode || 'blend', ...(ov.trigger === 'state' ? {} : { EVENT: ov.event || 'event.kill', DURATION: ov.duration_ms ?? 1200, FADE: ov.fade_ms ?? ov.fade_out_ms ?? 400 }) } };
+      statements.push({ type: 'controls_if', inputs: { IF0: { block: conditionBlock(ov.condition) }, DO0: { block: action } } });
+    }
+    for (let i = statements.length - 2; i >= 0; --i) statements[i].next = { block: statements[i + 1] };
+    loadSafeWorkspaceJson({ blocks: { languageVersion: 0, blocks: [{ type: 'orch_root_flow', x: 40, y: 40, fields: { FALLBACK_PROFILE: canonical.orchestration.fallback_profile }, inputs: statements.length ? { DO: { block: statements[0] } } : {} }] } }, workspace);
   }
 }

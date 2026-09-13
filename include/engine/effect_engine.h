@@ -37,6 +37,7 @@ private:
 
     mutable std::mutex profile_mutex_;
     std::shared_ptr<const Profile> active_profile_;
+    uint64_t profile_started_ms_{0};
     std::chrono::steady_clock::time_point start_time_;
 
     OverlayManager overlay_manager_;

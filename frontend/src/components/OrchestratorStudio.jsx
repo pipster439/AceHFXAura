@@ -1,3 +1,6 @@
+import { studioExample } from '../blockly/studioExample.js';
+import { stageEffect, effectConfig } from '../utils/applyEffect.js';
+import { canonicalConfig } from '../utils/orchestration.js';
 import React, { useState, useEffect, useRef } from 'react';
 import Blockly, { loadSafeWorkspaceJson } from '../blockly/index.js';
 import { registerCustomBlocks } from '../blockly/customBlocks';
@@ -36,34 +39,14 @@ export default function OrchestratorStudio({
   const [orchestrationData, setOrchestrationData] = useState(null);
   const [isJsonModalOpen, setIsJsonModalOpen] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
-  const [compiledPlugins, setCompiledPlugins] = useState([]);
-  const [uncompiledEffects, setUncompiledEffects] = useState([]);
   const [isBatchCompiling, setIsBatchCompiling] = useState(false);
-
-  const fetchPlugins = async () => {
-    try {
-      const res = await fetch('/api/plugins');
-      if (res.ok) {
-        const data = await res.json();
-        const names = (data.plugins || []).map(p => p.name);
-        setCompiledPlugins(names);
-        if (workspaceRef.current) {
-          const uncompiled = OrchestratorSerializer.getUncompiledEffects(
-            workspaceRef.current,
-            config,
-            names
-          );
-          setUncompiledEffects(uncompiled);
-        }
-      }
-    } catch (e) {
-      console.warn('Failed to fetch plugins:', e);
-    }
-  };
-
-  useEffect(() => {
-    fetchPlugins();
-  }, [config]);
+  const [editError, setEditError] = useState(null);
+  const [exampleAssets, setExampleAssets] = useState(null);
+  const configRef = useRef(config);
+  configRef.current = config;
+  const assetsRef = useRef(exampleAssets);
+  assetsRef.current = exampleAssets;
+  const draftBaseRef = useRef(JSON.stringify(config?.orchestration || { rules: config?.rules, gsi_bindings: config?.gsi_bindings }));
 
   // 初始化 Blockly 画布
   useEffect(() => {
@@ -77,21 +60,18 @@ export default function OrchestratorStudio({
     workspaceRef.current = ws;
 
     // 恢复积木状态或从现有 config 自动迁移
-    OrchestratorSerializer.restoreWorkspace(ws, config);
+    let draft;
+    try { draft = JSON.parse(sessionStorage.getItem('aura-orchestration-draft')); } catch {}
+    if (draft?.base === draftBaseRef.current && draft?.json) {
+      loadSafeWorkspaceJson(draft.json, ws); setExampleAssets(draft.assets);
+    } else OrchestratorSerializer.restoreWorkspace(ws, canonicalConfig(config));
 
-    const onWorkspaceChange = () => {
-      const serialized = OrchestratorSerializer.serializeWorkspace(
-        ws, 
-        config?.orchestration?.fallback_profile || config?.default_profile || 'desktop'
-      );
-      setOrchestrationData(serialized);
-
-      const uncompiled = OrchestratorSerializer.getUncompiledEffects(
-        ws,
-        config,
-        compiledPlugins
-      );
-      setUncompiledEffects(uncompiled);
+    const onWorkspaceChange = (event) => {
+      if (event?.isUiEvent) return;
+      try {
+        setOrchestrationData(OrchestratorSerializer.serializeWorkspace(ws, configRef.current?.orchestration?.fallback_profile || configRef.current?.default_profile || 'desktop'));
+        setEditError(null);
+      } catch (err) { setEditError(err.message); }
     };
 
     ws.addChangeListener(onWorkspaceChange);
@@ -102,6 +82,7 @@ export default function OrchestratorStudio({
 
     return () => {
       window.removeEventListener('resize', handleResize);
+      try { sessionStorage.setItem('aura-orchestration-draft', JSON.stringify({ base: draftBaseRef.current, json: Blockly.serialization.workspaces.save(ws), assets: assetsRef.current })); } catch {}
       ws.dispose();
       workspaceRef.current = null;
     };
@@ -110,79 +91,38 @@ export default function OrchestratorStudio({
   // 加载预设模板
   const handleLoadPreset = (preset) => {
     if (!workspaceRef.current || !preset.blocklyJson) return;
+    setExampleAssets(null);
     workspaceRef.current.clear();
     loadSafeWorkspaceJson(preset.blocklyJson, workspaceRef.current);
     showToast?.(`已加载预设编排: ${preset.name}`, 'info');
   };
 
-  // 保存编排至 config.json
-  const handleSaveOrchestration = () => {
-    if (!workspaceRef.current || !onSaveConfig) return;
-
-    const serialized = OrchestratorSerializer.serializeWorkspace(
-      workspaceRef.current, 
-      config?.orchestration?.fallback_profile || config?.default_profile || 'desktop'
-    );
-
-    const nextConfig = {
-      ...config,
-      orchestration: serialized.orchestration,
-      rules: serialized.rules,
-      blockly_orchestrator: serialized.blockly_orchestrator
-    };
-
-    onSaveConfig(nextConfig);
-    if (uncompiledEffects.length > 0) {
-      showToast?.(`编排已保存！检测到 ${uncompiledEffects.length} 款引用的光效尚未编译，点击上方黄色横幅可一键生成 DLL`, 'warning');
-    } else {
-      showToast?.('方案与 GSI 事件编排已保存，守护进程秒级热生效！', 'success');
-    }
-  };
-
-  // 批量转译并编译未编译的工坊光效
-  const handleBatchCompile = async () => {
-    if (uncompiledEffects.length === 0) return;
+  // Compile all referenced drafts before committing the authoritative rule set.
+  const handleSaveOrchestration = async () => {
+    if (!workspaceRef.current || isBatchCompiling) return;
     setIsBatchCompiling(true);
-
-    let successCount = 0;
-    for (const effName of uncompiledEffects) {
-      const effData = config?.blockly_effects?.[effName];
-      if (!effData || !effData.blockly_json) continue;
-
-      try {
-        const headlessWs = new Blockly.Workspace();
-        loadSafeWorkspaceJson(effData.blockly_json, headlessWs);
-        const code = CppTranspiler.transpile(effName, headlessWs);
-        headlessWs.dispose();
-
-        const compileRes = await fetch('/api/compile_effect', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: effName, code })
-        });
-        const compileData = await compileRes.json();
-
-        if (compileRes.ok && compileData.success) {
-          successCount++;
-          await fetch('/api/reload_plugin', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: effName })
-          });
-        }
-      } catch (err) {
-        console.error(`Batch compile error for ${effName}:`, err);
+    try {
+      const serialized = OrchestratorSerializer.serializeWorkspace(workspaceRef.current, config?.orchestration?.fallback_profile || config?.default_profile || 'desktop');
+      let next = canonicalConfig(config);
+      if (exampleAssets) next = { ...next, profiles: { ...next.profiles, ...exampleAssets.profiles }, blockly_effects: { ...next.blockly_effects, ...exampleAssets.effects } };
+      const references = new Set([serialized.orchestration.fallback_profile, ...serialized.orchestration.rules.map(r => r.target_profile), ...serialized.orchestration.event_overlays.map(r => r.effect)]);
+      for (const name of references) {
+        const draft = next.blockly_effects?.[name];
+        if (draft?.blockly_json) {
+          const ws = new Blockly.Workspace();
+          try {
+            loadSafeWorkspaceJson(draft.blockly_json, ws, true);
+            const build = await stageEffect(name, ws, CppTranspiler);
+            next = effectConfig(next, name, draft.blockly_json, build);
+          } finally { ws.dispose(); }
+        } else if (!next.profiles?.[name]) throw new Error(`光效“${name}”不存在，请先制作或选择已有光效`);
       }
-    }
-
-    setIsBatchCompiling(false);
-    await fetchPlugins();
-
-    if (successCount === uncompiledEffects.length) {
-      showToast?.(`全部 ${successCount} 款引用的工坊光效已成功编译并切入推流管线！`, 'success');
-    } else {
-      showToast?.(`已成功编译 ${successCount}/${uncompiledEffects.length} 款光效`, 'info');
-    }
+      next = { ...next, ...serialized };
+      if (!await onSaveConfig(next)) throw new Error('联动配置保存失败，原有配置仍保留');
+      draftBaseRef.current = JSON.stringify(next.orchestration);
+      showToast?.('联动已保存并应用，所引用的光效已一并更新', 'success');
+    } catch (err) { showToast?.(err.message, 'error'); setEditError(err.message); }
+    finally { setIsBatchCompiling(false); }
   };
 
   // 复制 JSON 规则树
@@ -211,10 +151,10 @@ export default function OrchestratorStudio({
           </div>
           <div className="flex flex-col">
             <span className="text-xs font-bold text-md-on-surface">
-              方案与 GSI 事件编排工作台
+              设置联动：何时播放光效
             </span>
             <span className="text-[11px] text-md-on-surface-variant">
-              支持持续进程匹配、多条件 GSI 状态分支判断与瞬态游戏事件脉冲覆盖
+              事件发生时播放一次；条件成立期间持续叠加。优先级数值越大越靠上；切回桌面结束游戏叠加。
             </span>
           </div>
         </div>
@@ -237,6 +177,12 @@ export default function OrchestratorStudio({
 
         {/* 预设与操作 */}
         <div className="flex items-center gap-2">
+          <button className="h-8 px-3 text-xs rounded-full bg-md-secondary-container text-md-on-secondary-container" onClick={() => {
+            const example = studioExample(config?.default_profile || 'desktop');
+            setExampleAssets(example);
+            loadSafeWorkspaceJson(example.blocklyJson, workspaceRef.current);
+            showToast?.('已载入示例草稿：血量底色、击杀扩散、低血量呼吸；保存后应用', 'info');
+          }}>载入 CS2 完整示例</button>
           {ORCHESTRATOR_PRESETS.map((p) => (
             <button
               key={p.id}
@@ -268,36 +214,17 @@ export default function OrchestratorStudio({
 
           <button
             onClick={handleSaveOrchestration}
+            disabled={isBatchCompiling}
             className="h-9 px-4 flex items-center gap-2 rounded-md-full bg-md-primary text-md-on-primary hover:bg-md-primary/90 active:scale-95 transition-all text-xs font-bold shadow-md-level1 cursor-pointer"
           >
             <Save className="w-4 h-4" />
-            <span>保存并生效</span>
+            <span>{isBatchCompiling ? '正在应用…' : '保存并应用'}</span>
           </button>
         </div>
       </div>
 
-      {/* 未编译工坊光效检测与一键批量编译横幅 */}
-      {uncompiledEffects.length > 0 && (
-        <div className="flex items-center justify-between gap-3 px-4 py-2.5 bg-amber-500/10 border border-amber-500/30 rounded-md-md text-xs text-amber-200 animate-in fade-in duration-150">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
-            <span>
-              检测到当前方案编排引用了 <strong>{uncompiledEffects.length}</strong> 款未编译为 DLL 的工坊光效 (
-              <span className="font-mono text-amber-300 font-bold">{uncompiledEffects.join(', ')}</span>
-              )。未编译光效将无法接入 25 FPS 原生推流管线。
-            </span>
-          </div>
-          <button
-            onClick={handleBatchCompile}
-            disabled={isBatchCompiling}
-            className="h-7 px-3.5 flex items-center gap-1.5 rounded-md-full bg-amber-500 text-slate-950 hover:bg-amber-400 active:scale-95 text-xs font-bold transition-all cursor-pointer disabled:opacity-50 shrink-0 shadow-xs"
-            title="一键在后台调用 MSVC cl.exe 将所引用的光效编译为 plugins/*.dll 并热重载至守护进程"
-          >
-            {isBatchCompiling ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Cpu className="w-3.5 h-3.5" />}
-            <span>{isBatchCompiling ? '批量编译中...' : '一键全部编译'}</span>
-          </button>
-        </div>
-      )}
+      {editError && <p role="alert" className="text-sm text-md-error">{editError}</p>}
+      <p className="text-xs text-md-on-surface-variant">等待、循环播放在“制作光效”内设置。这里的基础方案按从上到下首个命中生效；不同叠加层可以同时运行。</p>
 
       {/* Google Blockly 主编排画布 */}
       <div className="flex-1 w-full h-full relative rounded-md-lg overflow-hidden border border-md-outline-variant shadow-md-level1 bg-md-surface-container-low">

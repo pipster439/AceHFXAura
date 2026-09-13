@@ -127,6 +127,7 @@ private:
     // 完整游戏事件历史与脉冲时钟
     std::deque<GameEventRecord> recent_events_;
     std::unordered_map<std::string, uint64_t> event_timestamps_;
+    std::unordered_map<std::string, uint64_t> event_sequences_;
     std::string last_event_name_;
     std::string last_event_label_;
 

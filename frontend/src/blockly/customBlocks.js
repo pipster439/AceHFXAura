@@ -418,7 +418,7 @@ export function registerCustomBlocks() {
         {
           type: 'input_value',
           name: 'CONDITION',
-          check: 'Condition'
+          check: ['Condition', 'Boolean']
         }
       ],
       previousStatement: null,
@@ -431,10 +431,10 @@ export function registerCustomBlocks() {
       type: 'condition_and',
       message0: '条件与 (AND) 条件A: %1 条件B: %2',
       args0: [
-        { type: 'input_value', name: 'COND0', check: 'Condition' },
-        { type: 'input_value', name: 'COND1', check: 'Condition' }
+        { type: 'input_value', name: 'COND0', check: ['Condition', 'Boolean'] },
+        { type: 'input_value', name: 'COND1', check: ['Condition', 'Boolean'] }
       ],
-      output: 'Condition',
+      output: ['Condition', 'Boolean'],
       style: 'condition_blocks',
       tooltip: '逻辑与：两个子条件同时为真时判定为命中',
       helpUrl: ''
@@ -443,10 +443,10 @@ export function registerCustomBlocks() {
       type: 'condition_or',
       message0: '条件或 (OR) 条件A: %1 条件B: %2',
       args0: [
-        { type: 'input_value', name: 'COND0', check: 'Condition' },
-        { type: 'input_value', name: 'COND1', check: 'Condition' }
+        { type: 'input_value', name: 'COND0', check: ['Condition', 'Boolean'] },
+        { type: 'input_value', name: 'COND1', check: ['Condition', 'Boolean'] }
       ],
-      output: 'Condition',
+      output: ['Condition', 'Boolean'],
       style: 'condition_blocks',
       tooltip: '逻辑或：任一子条件为真时即判定为命中',
       helpUrl: ''
@@ -455,9 +455,9 @@ export function registerCustomBlocks() {
       type: 'condition_not',
       message0: '条件非 (NOT) %1',
       args0: [
-        { type: 'input_value', name: 'COND', check: 'Condition' }
+        { type: 'input_value', name: 'COND', check: ['Condition', 'Boolean'] }
       ],
-      output: 'Condition',
+      output: ['Condition', 'Boolean'],
       style: 'condition_blocks',
       tooltip: '逻辑非：反转子条件判断结果',
       helpUrl: ''
@@ -498,7 +498,7 @@ export function registerCustomBlocks() {
           text: '50'
         }
       ],
-      output: 'Condition',
+      output: ['Condition', 'Boolean'],
       style: 'condition_blocks',
       tooltip: '判断 GSI 字段或进程状态是否满足比较运算',
       helpUrl: ''
@@ -559,7 +559,7 @@ export function registerCustomBlocks() {
     },
     {
       type: 'orch_action_overlay_pulse',
-      message0: '临时叠加光效 %1 持续: %2 ms 淡出: %3 ms 优先级: %4',
+      message0: '当事件 %5 发生时，播放 %1 持续 %2 ms 淡出 %3 ms 优先级 %4 混合 %6',
       args0: [
         {
           type: 'field_input',
@@ -587,12 +587,25 @@ export function registerCustomBlocks() {
           min: 1,
           max: 100
         }
+        ,{ type: 'field_input', name: 'EVENT', text: 'event.kill' },
+        { type: 'field_dropdown', name: 'BLEND', options: [['混合', 'blend'], ['叠加亮度', 'add'], ['覆盖', 'replace']] }
       ],
       previousStatement: null,
       nextStatement: null,
       style: 'overlay_blocks',
       tooltip: '非阻塞触发瞬态事件光效覆盖，超时后平滑线性淡出',
       helpUrl: ''
+    },
+    {
+      type: 'orch_action_overlay_state',
+      message0: '条件成立期间叠加 %1 优先级 %2 混合 %3',
+      args0: [
+        { type: 'field_input', name: 'EFFECT', text: 'danger_red' },
+        { type: 'field_number', name: 'PRIORITY', value: 10, min: 1, max: 100 },
+        { type: 'field_dropdown', name: 'BLEND', options: [['混合', 'blend'], ['叠加亮度', 'add'], ['覆盖', 'replace']] }
+      ],
+      previousStatement: null, nextStatement: null, style: 'overlay_blocks',
+      tooltip: '放在如果积木中；条件变为假时立即结束这一层。数值越大越靠上。'
     },
     {
       type: 'orch_action_set_dnd',

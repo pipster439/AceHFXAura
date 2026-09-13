@@ -35,7 +35,7 @@ if (Blockly.Msg && typeof Blockly.Msg === 'object') {
   }
 }
 
-export function loadSafeWorkspaceJson(jsonState, ws) {
+export function loadSafeWorkspaceJson(jsonState, ws, strict = false) {
   if (!jsonState || !ws) return;
   try {
     const state = (jsonState.blocks && !Array.isArray(jsonState.blocks))
@@ -43,6 +43,7 @@ export function loadSafeWorkspaceJson(jsonState, ws) {
       : { blocks: jsonState };
     Blockly.serialization.workspaces.load(state, ws);
   } catch (err) {
+    if (strict) throw new Error('积木数据无法完整加载：' + err.message);
     console.warn('Error loading workspace JSON:', err);
   }
 }

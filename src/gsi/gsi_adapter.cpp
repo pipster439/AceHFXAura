@@ -358,6 +358,31 @@ void GsiState::TriggerEvent(const std::string& name,
     last_event_name_ = name;
     last_event_label_ = label;
     last_event_sync_ms_ = 0;
+    static const std::unordered_map<std::string, std::string> aliases = {
+        {"PlayerGotKill", "event_sequence.event.kill"},
+        {"PlayerGotHeadshotKill", "event_sequence.event.headshot"},
+        {"PlayerAce", "event_sequence.event.ace"},
+        {"PlayerTookDamage", "event_sequence.event.damage"},
+        {"PlayerDied", "event_sequence.event.death"},
+        {"PlayerRespawned", "event_sequence.event.respawn"},
+        {"PlayerFlashed", "event_sequence.event.flashed"},
+        {"PlayerBurning", "event_sequence.event.burning"},
+        {"BombPlanting", "event_sequence.event.bomb_planting"},
+        {"BombPlanted", "event_sequence.event.bomb_planted"},
+        {"BombDefusing", "event_sequence.event.bomb_defusing"},
+        {"BombDefused", "event_sequence.event.bomb_defused"},
+        {"BombExploded", "event_sequence.event.bomb_exploded"},
+        {"BombDropped", "event_sequence.event.bomb_dropped"},
+        {"BombPickedup", "event_sequence.event.bomb_pickedup"},
+        {"FreezetimeStarted", "event_sequence.event.freezetime"},
+        {"RoundStarted", "event_sequence.event.round_started"},
+        {"TeamRoundVictory", "event_sequence.event.round_victory"},
+        {"TeamRoundLoss", "event_sequence.event.round_loss"},
+        {"WarmupStarted", "event_sequence.event.warmup"},
+        {"Gameover", "event_sequence.event.gameover"}
+    };
+    auto alias = aliases.find(name);
+    if (alias != aliases.end()) flat_state_[alias->second] = GsiValue(static_cast<double>(++event_sequences_[name]));
 
     GameEventRecord rec;
     rec.name = name;
@@ -808,7 +833,9 @@ void GsiAdapter::SetupRoutes() {
 
     // 查询当前扁平化状态
     auto gsi_get_handler = [this](const httplib::Request&, httplib::Response& res) {
-        std::string json_str = state_.ToJson().dump();
+        auto snapshot = state_.ToJson();
+        snapshot["studio_runtime"] = 2;
+        std::string json_str = snapshot.dump();
         res.set_content(json_str, "application/json; charset=utf-8");
     };
 

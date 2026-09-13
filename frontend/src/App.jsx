@@ -1,3 +1,5 @@
+import { ensureStudioRuntime } from './utils/applyEffect.js';
+import { processRows, gsiRows, replaceSimpleRows } from './utils/orchestration.js';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import Sidebar from './components/Sidebar';
@@ -81,6 +83,8 @@ export default function App() {
   const isInitializedRef = useRef(false);
   const isSwitchingProfileRef = useRef(false);
   const saveTimeoutRef = useRef(null);
+  const saveChainRef = useRef(Promise.resolve());
+  const saveSeqRef = useRef(0);
   const configRef = useRef(null);
   configRef.current = config;
 
@@ -213,9 +217,15 @@ export default function App() {
 
   // 直接保存配置到后端（无阻断静默提交）
   const saveConfigDirectly = useCallback(async (newConfig) => {
-    if (!newConfig) return;
+    if (!newConfig) return false;
+    const seq = ++saveSeqRef.current;
+    const previous = saveChainRef.current;
+    let release;
+    saveChainRef.current = new Promise(resolve => { release = resolve; });
+    await previous;
     try {
       setIsSaving(true);
+      if (newConfig.orchestration?.version === 2) await ensureStudioRuntime();
       const res = await fetch('/api/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -223,12 +233,17 @@ export default function App() {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        console.warn('实时配置保存失败:', data.message);
+        showToast(data.message || '配置保存失败', 'error');
+        return false;
       }
+      if (seq === saveSeqRef.current) { configRef.current = newConfig; setConfig(newConfig); }
+      return true;
     } catch (err) {
-      console.warn('实时配置保存网络异常:', err.message);
+      showToast('配置保存失败：' + err.message, 'error');
+      return false;
     } finally {
-      setIsSaving(false);
+      release();
+      if (seq === saveSeqRef.current) setIsSaving(false);
     }
   }, []);
 
@@ -242,6 +257,8 @@ export default function App() {
 
     const nextConfig = {
       ...configRef.current,
+      orchestration: configRef.current.orchestration ? { ...configRef.current.orchestration, fallback_profile: pname } : undefined,
+      blockly_orchestrator: undefined,
       default_profile: pname
     };
     setConfig(nextConfig);
@@ -254,8 +271,8 @@ export default function App() {
 
   // 防抖自动同步当前 UI 状态到后端与内存
   const queueAutoSync = useCallback(() => {
-    if (!isInitializedRef.current || isSwitchingProfileRef.current) return;
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    if (!isInitializedRef.current || isSwitchingProfileRef.current || !['lighting', 'perkey'].includes(activeTab)) return;
 
     saveTimeoutRef.current = setTimeout(() => {
       const baseConfig = configRef.current;
@@ -324,9 +341,11 @@ export default function App() {
     saveConfigDirectly
   ]);
 
+  useEffect(() => { if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current); }, [activeTab]);
+
   // 监听所有调光与硬件参数，自动实时推流生效
   useEffect(() => {
-    if (!isInitializedRef.current || isSwitchingProfileRef.current) return;
+    if (!isInitializedRef.current || isSwitchingProfileRef.current || !['lighting', 'perkey'].includes(activeTab)) return;
     queueAutoSync();
   }, [
     currentEffect,
@@ -428,22 +447,22 @@ export default function App() {
   const handleAddRule = (newRule = { process: '', profile: currentProfileName, suppress_web_ui: false }) => {
     const updated = {
       ...configRef.current,
-      rules: [...(configRef.current?.rules || []), newRule]
+      ...replaceSimpleRows(configRef.current, 'process', [...processRows(configRef.current), newRule])
     };
     setConfig(updated);
     saveConfigDirectly(updated);
   };
 
   const handleDeleteRule = (idx) => {
-    const updatedRules = (configRef.current?.rules || []).filter((_, i) => i !== idx);
-    const updated = { ...configRef.current, rules: updatedRules };
+    const updatedRules = processRows(configRef.current).filter((_, i) => i !== idx);
+    const updated = replaceSimpleRows(configRef.current, 'process', updatedRules);
     setConfig(updated);
     saveConfigDirectly(updated);
   };
 
   const handleUpdateRule = (idx, patch) => {
-    const updatedRules = (configRef.current?.rules || []).map((r, i) => (i === idx ? { ...r, ...patch } : r));
-    const updated = { ...configRef.current, rules: updatedRules };
+    const updatedRules = processRows(configRef.current).map((r, i) => (i === idx ? { ...r, ...patch } : r));
+    const updated = replaceSimpleRows(configRef.current, 'process', updatedRules);
     setConfig(updated);
     saveConfigDirectly(updated);
   };
@@ -451,14 +470,14 @@ export default function App() {
   // GSI 规则操作 (过滤空字段并实时同步)
   const handleUpdateGsiBindings = (updatedBindings) => {
     const cleaned = updatedBindings.filter(b => b && b.field && b.field.trim() !== '');
-    const updated = { ...configRef.current, gsi_bindings: cleaned };
+    const updated = replaceSimpleRows(configRef.current, 'gsi', cleaned);
     setConfig(updated);
     saveConfigDirectly(updated);
   };
 
   // 方案管理操作 (设为默认立即同步至硬件)
   const handleSetDefaultProfile = (name) => {
-    const nextConfig = { ...configRef.current, default_profile: name };
+    const nextConfig = { ...configRef.current, default_profile: name, orchestration: configRef.current.orchestration ? { ...configRef.current.orchestration, fallback_profile: name } : undefined, blockly_orchestrator: undefined };
     setConfig(nextConfig);
     saveConfigDirectly(nextConfig);
     showToast(`已将 [${name}] 设为默认方案并实时生效！`);
@@ -570,6 +589,14 @@ export default function App() {
           blocklyFrame={blocklyFrame}
         />
 
+        {['blockly_effect', 'blockly_orchestrator', 'rules'].includes(activeTab) && (
+          <div className="flex flex-wrap gap-2 px-1 py-3" role="tablist" aria-label="工作室">
+            {[['blockly_effect', '制作光效'], ['blockly_orchestrator', '设置联动'], ['rules', '进程规则表']].map(([id, label]) => (
+              <button key={id} role="tab" aria-selected={activeTab === id} onClick={() => setActiveTab(id)} className={`px-4 py-2 rounded-full text-sm ${activeTab === id ? 'bg-md-primary text-md-on-primary' : 'bg-md-surface-container text-md-on-surface'}`}>{label}</button>
+            ))}
+          </div>
+        )}
+        {activeTab === 'rules' && <p className="text-sm text-md-on-surface-variant mb-3">这里编辑无附加条件的进程规则；复杂条件与事件在“设置联动”中编辑，两处使用同一份规则。</p>}
         {/* 下方功能设置面板 (随侧边栏 Tab 切换平滑物理弹簧过渡) */}
         <div className="flex-1">
           <AnimatePresence mode="wait">
@@ -645,7 +672,7 @@ export default function App() {
 
               {activeTab === 'rules' && (
                 <RulesSettings
-                  rules={config?.rules || []}
+                  rules={processRows(config || {})}
                   onAddRule={handleAddRule}
                   onDeleteRule={handleDeleteRule}
                   onUpdateRule={handleUpdateRule}
@@ -656,7 +683,7 @@ export default function App() {
 
               {activeTab === 'gsi' && (
                 <GsiSettings
-                  config={config}
+                  config={{ ...config, gsi_bindings: gsiRows(config || {}) }}
                   onUpdateGsiBindings={handleUpdateGsiBindings}
                   profiles={config?.profiles}
                   currentProfileName={currentProfileName}

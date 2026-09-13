@@ -6,6 +6,7 @@
 #include <mutex>
 #include <unordered_map>
 #include <cstdint>
+#include <functional>
 
 #include "aura/aura_types.h"
 #include "aura/keymap.h"
@@ -20,6 +21,9 @@ class GsiState;
  * @brief Represents an active transient event pulse overlay.
  */
 struct ActiveOverlay {
+    std::string binding_id;
+    bool persistent{false};
+    bool pending_start{false};
     std::string event_name;
     std::shared_ptr<Effect> effect;
     uint64_t start_ms{0};
@@ -38,6 +42,11 @@ struct ActiveOverlay {
  * @brief Configured event-to-overlay binding definition.
  */
 struct OverlayBinding {
+    std::string id;
+    std::string trigger{"event"};
+    int priority{10};
+    std::function<bool(const GsiState*, const std::string&)> condition;
+    std::function<std::shared_ptr<Effect>()> make_effect;
     std::string event_name;          // e.g. "event.kill", "event.flash"
     std::string effect_name;         // Effect or plugin identifier
     std::shared_ptr<Effect> effect;  // Resolved effect instance
@@ -71,7 +80,7 @@ public:
     void ClearBindings();
 
     // Checks GSI state for event rising edges and triggers registered overlays
-    void UpdateBindingsFromGsi(const GsiState* gsi, uint64_t current_ms);
+    void UpdateBindingsFromGsi(const GsiState* gsi, uint64_t current_ms, const std::string& foreground = "cs2.exe");
 
     // Renders active overlays on top of in_out_frame with zero heap allocation
     void ApplyOverlays(uint64_t current_ms,
@@ -90,6 +99,8 @@ private:
     std::vector<ActiveOverlay> active_overlays_;
     std::vector<OverlayBinding> bindings_;
     std::unordered_map<std::string, bool> prev_event_states_;
+    std::unordered_map<std::string, double> prev_event_sequences_;
+    bool in_game_{false};
     FrameBuffer temp_overlay_buf_; // Preallocated frame buffer to guarantee 0 heap allocation
 };
 
