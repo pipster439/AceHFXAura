@@ -10,7 +10,8 @@ import { JsTranspiler } from '../src/blockly/jsTranspiler.js';
 import { CppTranspiler } from '../src/blockly/cppTranspiler.js';
 import { OrchestratorSerializer as S } from '../src/blockly/orchestratorSerializer.js';
 import { canonicalConfig, processRows, replaceSimpleRows } from '../src/utils/orchestration.js';
-import { stageEffect, effectConfig } from '../src/utils/applyEffect.js';
+import { stageEffect, effectConfig, getEffectLifecycleStatus } from '../src/utils/applyEffect.js';
+import { EFFECT_STUDIO_TOOLBOX } from '../src/blockly/toolboxes.js';
 registerCustomBlocks();
 const num = n => ({ type: 'math_number', fields: { NUM: n } });
 const color = (r,g,b) => ({ type: 'color_rgb', inputs: { R: { block: num(r) }, G: { block: num(g) }, B: { block: num(b) } } });
@@ -66,7 +67,16 @@ test('failed compile or reload cannot change an applied profile; drafts retain p
   assert.equal(original.profiles.demo.plugin_name,'good');
  } finally {globalThis.fetch=oldFetch;w.dispose();}
 });
-test('generated native C++ executes the same wait sequence (portable frame harness)', () => {
+const hasGpp = (() => {
+  try {
+    execFileSync('g++', ['--version'], { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+})();
+
+(hasGpp ? test : test.skip)('generated native C++ executes the same wait sequence (portable frame harness)', () => {
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'aura-sequence-'));
  const w=sequence();
  try {
@@ -78,7 +88,7 @@ test('generated native C++ executes the same wait sequence (portable frame harne
  } finally {w.dispose();fs.rmSync(dir,{recursive:true,force:true});}
 });
 
-test('actual native overlay manager: gating, repeat events, state lifetime and desktop cleanup', () => {
+(hasGpp ? test : test.skip)('actual native overlay manager: gating, repeat events, state lifetime and desktop cleanup', () => {
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'aura-overlay-'));
  try {
   fs.mkdirSync(path.join(dir,'gsi'));fs.mkdirSync(path.join(dir,'utils'));
@@ -117,7 +127,7 @@ int main(){
  } finally {fs.rmSync(dir,{recursive:true,force:true});}
 });
 
-test('complete CS2 example previews and generates valid C++ for per-key wave and health', async () => {
+(hasGpp ? test : test.skip)('complete CS2 example previews and generates valid C++ for per-key wave and health', async () => {
  const {studioExample}=await import('../src/blockly/studioExample.js');
  const example=studioExample(); const dir=fs.mkdtempSync(path.join(os.tmpdir(),'aura-example-'));
  try {
@@ -133,4 +143,64 @@ test('complete CS2 example previews and generates valid C++ for per-key wave and
   const w=new Blockly.Workspace();Blockly.serialization.workspaces.load(example.blocklyJson,w);const config=S.serializeWorkspace(w).orchestration;
   assert.equal(config.event_overlays[0].duration_ms,800);assert.equal(config.event_overlays[1].trigger,'state');assert.equal(config.rules[0].condition.value,'cs2.exe');w.dispose();
  } finally {fs.rmSync(dir,{recursive:true,force:true});}
+});
+
+test('effect lifecycle: draft, unpublished changes, and published states', () => {
+  // 1. Initial draft without published_at
+  const draft = { name: 'test_draft', blockly_json: {} };
+  assert.equal(getEffectLifecycleStatus(draft).status, 'draft');
+
+  // 2. Published effect
+  const now = Date.now();
+  const published = {
+    name: 'test_pub',
+    published_at: now,
+    source_updated_at: now,
+    applied_plugin_name: 'studio_test_pub_123'
+  };
+  assert.equal(getEffectLifecycleStatus(published).status, 'published');
+
+  // 3. Modified after publishing
+  const modified = {
+    ...published,
+    source_updated_at: now + 5000
+  };
+  assert.equal(getEffectLifecycleStatus(modified).status, 'modified');
+
+  // 4. effectConfig updating timestamps
+  const base = { blockly_effects: {}, profiles: {} };
+  const savedDraft = effectConfig(base, 'fx1', { blocks: [] });
+  assert.ok(savedDraft.blockly_effects.fx1.source_updated_at > 0);
+  assert.equal(savedDraft.blockly_effects.fx1.published_at, undefined);
+  assert.equal(getEffectLifecycleStatus(savedDraft.blockly_effects.fx1).status, 'draft');
+
+  const pubBuild = { pluginName: 'fx1_dll', revision: 'abc' };
+  const publishedCfg = effectConfig(savedDraft, 'fx1', { blocks: [] }, pubBuild);
+  assert.ok(publishedCfg.blockly_effects.fx1.published_at > 0);
+  assert.equal(getEffectLifecycleStatus(publishedCfg.blockly_effects.fx1).status, 'published');
+
+  // Modify draft on top of published
+  const modifiedDraft = effectConfig(publishedCfg, 'fx1', { blocks: [{ id: 1 }] });
+  assert.ok(modifiedDraft.blockly_effects.fx1.source_updated_at >= modifiedDraft.blockly_effects.fx1.published_at);
+  assert.equal(modifiedDraft.blockly_effects.fx1.applied_plugin_name, 'fx1_dll');
+});
+
+test('simplified EFFECT_STUDIO_TOOLBOX has 5 core categories and Advanced group', () => {
+  const categories = EFFECT_STUDIO_TOOLBOX.contents.filter(c => c.kind === 'category');
+  const names = categories.map(c => c.name);
+  assert.ok(names.some(n => n.includes('按键')));
+  assert.ok(names.some(n => n.includes('颜色')));
+  assert.ok(names.some(n => n.includes('时间')));
+  assert.ok(names.some(n => n.includes('条件')));
+  assert.ok(names.some(n => n.includes('游戏状态')));
+  assert.ok(names.some(n => n.includes('高级')));
+
+  const advCategory = categories.find(c => c.name.includes('高级'));
+  assert.ok(advCategory);
+  assert.ok(Array.isArray(advCategory.contents));
+  const advSubNames = advCategory.contents.filter(c => c.kind === 'category').map(c => c.name);
+  assert.ok(advSubNames.some(n => n.includes('几何')));
+  assert.ok(advSubNames.some(n => n.includes('数学')));
+  assert.ok(advSubNames.some(n => n.includes('变量')));
+  assert.ok(advSubNames.some(n => n.includes('复杂循环')));
 });

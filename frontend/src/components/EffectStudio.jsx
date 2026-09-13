@@ -1,5 +1,5 @@
 import { canonicalConfig } from '../utils/orchestration.js';
-import { stageEffect, effectConfig } from '../utils/applyEffect.js';
+import { stageEffect, effectConfig, getEffectLifecycleStatus } from '../utils/applyEffect.js';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Blockly, { loadSafeWorkspaceJson } from '../blockly/index.js';
 import { registerCustomBlocks } from '../blockly/customBlocks';
@@ -31,11 +31,13 @@ export default function EffectStudio({
   config,
   onSaveConfig,
   showToast,
-  onPreviewFrameUpdate
+  onPreviewFrameUpdate,
+  activeEffectName,
+  onEffectNameChange
 }) {
   const blocklyDivRef = useRef(null);
   const workspaceRef = useRef(null);
-  const [effectName, setEffectName] = useState('custom_rainbow');
+  const [effectName, setEffectName] = useState(activeEffectName || 'custom_rainbow');
   const effectNameRef = useRef(effectName);
   effectNameRef.current = effectName;
   const [isPlaying, setIsPlaying] = useState(true);
@@ -108,6 +110,25 @@ export default function EffectStudio({
     };
   }, []);
 
+  // 当 activeEffectName 从外部改变时载入
+  useEffect(() => {
+    if (activeEffectName && activeEffectName !== effectNameRef.current && workspaceRef.current) {
+      const effectData = config?.blockly_effects?.[activeEffectName];
+      workspaceRef.current.clear();
+      if (effectData?.blockly_json) {
+        loadSafeWorkspaceJson(effectData.blockly_json, workspaceRef.current);
+      }
+      setEffectName(activeEffectName);
+      effectNameRef.current = activeEffectName;
+    }
+  }, [activeEffectName, config]);
+
+  const updateEffectName = (newName) => {
+    setEffectName(newName);
+    effectNameRef.current = newName;
+    onEffectNameChange?.(newName);
+  };
+
   // 当 effectName 改变时更新 C++ 源码
   useEffect(() => {
     if (workspaceRef.current) {
@@ -178,7 +199,7 @@ export default function EffectStudio({
     if (!workspaceRef.current || !preset.blocklyJson) return;
     workspaceRef.current.clear();
     loadSafeWorkspaceJson(preset.blocklyJson, workspaceRef.current);
-    setEffectName(preset.id);
+    updateEffectName(preset.id);
     showToast?.(`已加载预设: ${preset.name}`, 'info');
   };
 
@@ -217,15 +238,15 @@ export default function EffectStudio({
       const json = Blockly.serialization.workspaces.save(workspaceRef.current);
       let build;
       if (apply) {
-        setCompilerLog('正在准备光效…');
+        setCompilerLog('正在准备发布光效…');
         build = await stageEffect(name, workspaceRef.current, CppTranspiler, setCompilerLog);
       }
       const next = effectConfig(config, name, json, build);
       const ok = await onSaveConfig(next);
-      if (!ok) throw new Error('配置保存失败，请重试；原有应用版本保留');
+      if (!ok) throw new Error('配置保存失败，请重试；原有运行版本保留');
       setCompilerSuccess(true);
       if (apply) setIsPlaying(false);
-      showToast?.(apply ? '光效已保存并应用，联动将使用这一版本' : '草稿已保存，正在运行的版本保持不变', 'success');
+      showToast?.(apply ? '光效已发布并生效至硬件！' : '草稿已保存，正在运行的版本保持不变', 'success');
     } catch (err) {
       setCompilerSuccess(false); setCompilerLog(err.message); showToast?.(err.message, 'error');
     } finally { setIsCompiling(false); }
@@ -240,7 +261,7 @@ export default function EffectStudio({
     if (blocklyJson) {
       loadSafeWorkspaceJson(blocklyJson, workspaceRef.current);
     }
-    setEffectName(name);
+    updateEffectName(name);
     showToast?.(`已载入光效: ${name}`, 'info');
   };
 
@@ -367,9 +388,11 @@ export default function EffectStudio({
   };
 
   const customEffectKeys = Object.keys(config?.blockly_effects || {});
+  const currentEffectData = config?.blockly_effects?.[effectName];
+  const lifecycle = getEffectLifecycleStatus(currentEffectData);
 
   return (
-    <div className="flex flex-col gap-4 p-1 h-[calc(100vh-280px)] min-h-[600px]">
+    <div className="flex flex-col gap-4 p-1 h-full min-h-[560px]">
       {/* 顶部控制栏 (MD3E Top App Bar) */}
       <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-md-surface-container-low border border-md-outline-variant rounded-md-lg shadow-md-level1">
         <div className="flex items-center gap-3">
@@ -382,10 +405,17 @@ export default function EffectStudio({
               <input
                 type="text"
                 value={effectName}
-                onChange={(e) => setEffectName(e.target.value.trim().toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+                onChange={(e) => updateEffectName(e.target.value.trim().toLowerCase().replace(/[^a-z0-9_]/g, ''))}
                 placeholder="effect_name"
                 className="w-32 h-8 px-2.5 bg-md-surface-container border border-md-outline rounded-md-sm text-xs font-mono font-bold text-md-primary outline-none focus:border-md-primary"
               />
+
+              <span
+                className={`px-2.5 py-0.5 text-xs font-bold rounded-md-full border ${lifecycle.badgeClass}`}
+                title={`生命周期状态: ${lifecycle.label}`}
+              >
+                {lifecycle.label}
+              </span>
 
               {customEffectKeys.length > 0 && (
                 <select
@@ -415,7 +445,7 @@ export default function EffectStudio({
               </button>
             </div>
             <span className="text-[11px] text-md-on-surface-variant">
-              等待会保留当前灯光；积木执行完毕后，下一帧从头开始
+              保存草稿仅保存源码；发布后即转译并加载至硬件生效
             </span>
           </div>
         </div>
@@ -452,6 +482,7 @@ export default function EffectStudio({
           <button
             onClick={() => setIsCodeModalOpen(true)}
             className="h-9 px-3.5 flex items-center gap-1.5 rounded-md-full bg-md-surface-container border border-md-outline-variant text-md-on-surface hover:bg-md-surface-container-high active:scale-95 transition-all text-xs font-semibold cursor-pointer"
+            title="查看生成的原生 C++17 源码"
           >
             <Code className="w-4 h-4 text-md-tertiary" />
             <span>开发详情</span>
@@ -459,7 +490,9 @@ export default function EffectStudio({
 
           <button
             onClick={handleSaveToConfig}
-            className="h-9 px-3.5 flex items-center gap-1.5 rounded-md-full bg-md-surface-container border border-md-outline-variant text-md-on-surface hover:bg-md-surface-container-high active:scale-95 transition-all text-xs font-semibold cursor-pointer"
+            disabled={isCompiling}
+            className="h-9 px-3.5 flex items-center gap-1.5 rounded-md-full bg-md-surface-container border border-md-outline-variant text-md-on-surface hover:bg-md-surface-container-high active:scale-95 transition-all text-xs font-semibold cursor-pointer disabled:opacity-50"
+            title="保存当前积木草稿，保持正在运行的硬件版本不变"
           >
             <Save className="w-4 h-4 text-md-primary" />
             <span>保存草稿</span>
@@ -469,9 +502,10 @@ export default function EffectStudio({
             onClick={handleCompileAndReload}
             disabled={isCompiling || !!editError}
             className="h-9 px-4 flex items-center gap-2 rounded-md-full bg-md-primary text-md-on-primary hover:bg-md-primary/90 active:scale-95 transition-all text-xs font-bold shadow-md-level1 cursor-pointer disabled:opacity-50"
+            title="发布光效：编译原生插件并实时应用至键盘硬件"
           >
-            {isCompiling ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Cpu className="w-4 h-4" />}
-            <span>{isCompiling ? '正在应用…' : '保存并应用'}</span>
+            {isCompiling ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+            <span>{isCompiling ? '正在发布…' : '发布'}</span>
           </button>
         </div>
       </div>

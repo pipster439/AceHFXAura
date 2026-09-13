@@ -142,7 +142,7 @@ export default function OrchestratorStudio({
   const fallbackProfile = orchestrationData?.orchestration?.fallback_profile || 'desktop';
 
   return (
-    <div className="flex flex-col gap-4 p-1 h-[calc(100vh-280px)] min-h-[600px]">
+    <div className="flex flex-col gap-4 p-1 h-full min-h-[560px]">
       {/* 顶部控制栏 (MD3E Top App Bar) */}
       <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-md-surface-container-low border border-md-outline-variant rounded-md-lg shadow-md-level1">
         <div className="flex items-center gap-3">

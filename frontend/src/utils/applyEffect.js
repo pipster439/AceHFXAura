@@ -29,11 +29,37 @@ export async function stageEffect(name, workspace, transpiler, onLog = () => {})
   return { pluginName, revision };
 }
 
+export function getEffectLifecycleStatus(effect) {
+  if (!effect) {
+    return { status: 'draft', label: '草稿', color: 'amber', badgeClass: 'bg-amber-500/15 text-amber-400 border-amber-500/30' };
+  }
+  const hasPublished = Boolean(effect.published_at || effect.applied_plugin_name);
+  if (!hasPublished) {
+    return { status: 'draft', label: '草稿', color: 'amber', badgeClass: 'bg-amber-500/15 text-amber-400 border-amber-500/30' };
+  }
+  const publishedAt = effect.published_at || 0;
+  const sourceUpdatedAt = effect.source_updated_at || effect.updated_at || 0;
+  if (sourceUpdatedAt > publishedAt) {
+    return { status: 'modified', label: '未发布修改', color: 'sky', badgeClass: 'bg-sky-500/15 text-sky-400 border-sky-500/30' };
+  }
+  return { status: 'published', label: '已发布', color: 'emerald', badgeClass: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' };
+}
+
 export function effectConfig(config, name, blocklyJson, build) {
   const previous = config.blockly_effects?.[name] || {};
-  const effect = { ...previous, name, version: 2, blockly_json: blocklyJson, updated_at: Date.now() };
+  const now = Date.now();
+  const effect = {
+    ...previous,
+    name,
+    version: 2,
+    blockly_json: blocklyJson,
+    source_updated_at: now,
+    updated_at: now
+  };
   const profiles = { ...config.profiles };
   if (build) {
+    effect.published_at = now;
+    effect.source_updated_at = now;
     effect.applied_revision = build.revision;
     effect.applied_blockly_json = blocklyJson;
     effect.applied_plugin_name = build.pluginName;

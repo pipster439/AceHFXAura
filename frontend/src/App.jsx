@@ -13,6 +13,7 @@ import Toast from './components/Toast';
 import GameModeModal from './components/GameModeModal';
 import EffectStudio from './components/EffectStudio';
 import OrchestratorStudio from './components/OrchestratorStudio';
+import Studio from './components/Studio';
 import { GRADIENT_PRESETS } from './constants/keyboardLayout';
 import { DEFAULT_KEYBOARD_BG, TACTICAL_PALETTE } from './tokens/keyboardPresets.tokens';
 import { rgbToHex, hexToRgb } from './utils/color';
@@ -567,36 +568,30 @@ export default function App() {
         onToggleTheme={toggleTheme}
       />
 
-      {/* 右侧主工作区：上部常驻键盘 + 下部功能设置 */}
-      <div className="flex-1 flex flex-col h-full overflow-y-auto overflow-x-hidden p-6 gap-6">
-        {/* 常驻键盘可视化舞台 */}
-        <KeyboardVisualizer
-          activeTab={activeTab}
-          currentEffect={currentEffect}
-          isMasterLightOn={isMasterLightOn}
-          isAnalogEnabled={isAnalogEnabled}
-          brightnessVal={brightnessVal}
-          speedIndex={speedIndex}
-          currentDirection={currentDirection}
-          thicknessVal={thicknessVal}
-          gradientStops={gradientStops}
-          isStarryRandom={isStarryRandom}
-          currentProfile={config?.profiles?.[currentProfileName]}
-          selectedKeyNames={selectedKeyNames}
-          onToggleKeySelection={handleToggleKeySelection}
-          bgColor={bgColor}
-          fpsVal={fpsVal}
-          blocklyFrame={blocklyFrame}
-        />
-
-        {['blockly_effect', 'blockly_orchestrator', 'rules'].includes(activeTab) && (
-          <div className="flex flex-wrap gap-2 px-1 py-3" role="tablist" aria-label="工作室">
-            {[['blockly_effect', '制作光效'], ['blockly_orchestrator', '设置联动'], ['rules', '进程规则表']].map(([id, label]) => (
-              <button key={id} role="tab" aria-selected={activeTab === id} onClick={() => setActiveTab(id)} className={`px-4 py-2 rounded-full text-sm ${activeTab === id ? 'bg-md-primary text-md-on-primary' : 'bg-md-surface-container text-md-on-surface'}`}>{label}</button>
-            ))}
-          </div>
+      {/* 右侧主工作区：工作室自包含右侧键盘与工作台；其他 Tab 保持顶部常驻键盘 */}
+      <div className={`flex-1 flex flex-col h-full overflow-y-auto overflow-x-hidden ${['studio', 'blockly_effect', 'blockly_orchestrator'].includes(activeTab) ? 'p-3' : 'p-6 gap-6'}`}>
+        {/* 常驻键盘可视化舞台 (仅在非工作室 Tab 下显示，工作室由内部工作台自包含) */}
+        {!['studio', 'blockly_effect', 'blockly_orchestrator'].includes(activeTab) && (
+          <KeyboardVisualizer
+            activeTab={activeTab}
+            currentEffect={currentEffect}
+            isMasterLightOn={isMasterLightOn}
+            isAnalogEnabled={isAnalogEnabled}
+            brightnessVal={brightnessVal}
+            speedIndex={speedIndex}
+            currentDirection={currentDirection}
+            thicknessVal={thicknessVal}
+            gradientStops={gradientStops}
+            isStarryRandom={isStarryRandom}
+            currentProfile={config?.profiles?.[currentProfileName]}
+            selectedKeyNames={selectedKeyNames}
+            onToggleKeySelection={handleToggleKeySelection}
+            bgColor={bgColor}
+            fpsVal={fpsVal}
+            blocklyFrame={blocklyFrame}
+          />
         )}
-        {activeTab === 'rules' && <p className="text-sm text-md-on-surface-variant mb-3">这里编辑无附加条件的进程规则；复杂条件与事件在“设置联动”中编辑，两处使用同一份规则。</p>}
+
         {/* 下方功能设置面板 (随侧边栏 Tab 切换平滑物理弹簧过渡) */}
         <div className="flex-1">
           <AnimatePresence mode="wait">
@@ -650,23 +645,29 @@ export default function App() {
                 />
               )}
 
-              {activeTab === 'blockly_effect' && (
-                <EffectStudio
+              {['studio', 'blockly_effect', 'blockly_orchestrator'].includes(activeTab) && (
+                <Studio
                   config={config}
                   onSaveConfig={saveConfigDirectly}
-                  showToast={showToast}
-                  onPreviewFrameUpdate={handleBlocklyPreviewFrame}
-                />
-              )}
-
-              {activeTab === 'blockly_orchestrator' && (
-                <OrchestratorStudio
-                  config={config}
-                  onSaveConfig={saveConfigDirectly}
-                  profiles={config?.profiles}
                   currentProfileName={currentProfileName}
                   showToast={showToast}
+                  blocklyFrame={blocklyFrame}
+                  onPreviewFrameUpdate={handleBlocklyPreviewFrame}
+                  currentEffect={currentEffect}
+                  isMasterLightOn={isMasterLightOn}
+                  isAnalogEnabled={isAnalogEnabled}
+                  brightnessVal={brightnessVal}
+                  speedIndex={speedIndex}
+                  currentDirection={currentDirection}
+                  thicknessVal={thicknessVal}
+                  gradientStops={gradientStops}
+                  isStarryRandom={isStarryRandom}
+                  selectedKeyNames={selectedKeyNames}
+                  onToggleKeySelection={handleToggleKeySelection}
+                  bgColor={bgColor}
+                  fpsVal={fpsVal}
                   onSwitchToLegacyRules={() => setActiveTab('rules')}
+                  onSwitchToLegacyGsi={() => setActiveTab('gsi')}
                 />
               )}
 

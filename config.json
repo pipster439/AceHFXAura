@@ -286,7 +286,7 @@
       "period_ms": 3200,
       "speed_index": 1,
       "thickness": 1,
-      "type": "static"
+      "type": "custom_keymap"
     },
     "office": {
       "analog": false,

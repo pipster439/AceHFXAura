@@ -144,6 +144,18 @@ export default function GsiSettings({
 
   return (
     <div className="flex flex-col gap-6 p-1">
+      {/* 兼容模式提示横幅 */}
+      <div className="p-3 bg-md-surface-container-high border border-md-outline-variant rounded-md-lg flex items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-2">
+          <span className="px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 font-bold text-[11px] border border-amber-500/30 shrink-0">
+            高级 / 兼容模式
+          </span>
+          <span className="text-md-on-surface">
+            新版推荐在<strong>「工作室」</strong>中通过传感器积木统一编排 CS2 联动。此处提供 Valve 官方全量数据字典探查与 CFG 配置文件一键部署。
+          </span>
+        </div>
+      </div>
+
       {/* 头部区域 */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-md-outline-variant">
         <div>

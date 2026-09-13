@@ -20,6 +20,18 @@ export default function RulesSettings({
 
   return (
     <div className="flex flex-col gap-4 p-1">
+      {/* 兼容模式提示横幅 */}
+      <div className="p-3 bg-md-surface-container-high border border-md-outline-variant rounded-md-lg flex items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-2">
+          <span className="px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 font-bold text-[11px] border border-amber-500/30 shrink-0">
+            兼容视图
+          </span>
+          <span className="text-md-on-surface">
+            新版推荐在<strong>「工作室」</strong>中通过积木统一编排联动规则。此处为传统表格视图，用于快速查验或兼容性批量修改。
+          </span>
+        </div>
+      </div>
+
       {/* 头部标题与添加规则 */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-md-outline-variant">
         <div>
