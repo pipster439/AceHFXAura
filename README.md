@@ -1,357 +1,218 @@
-# ROG FALCHION ACE HFX - Aura Lighting Daemon & Web Configurator
+# Aura for ROG Falchion Ace HFX
 
-高性能、极轻量的 ROG FALCHION ACE HFX 键盘硬件灯效守护进程与轻量网页配置服务（Windows 11 原生 C++17 实现）。
+Aura 是面向 **ROG Falchion Ace HFX** 的 Windows 灯光控制器。它通过 ASUS 键盘 HAL 向 68 个已标定按键推送 RGB 帧，并提供一个本地 Web Studio，用 Blockly 制作光效、编排前台程序与 CS2 Game State Integration（GSI）自动化。
 
-针对 ROG FALCHION ACE HFX 的专属硬件架构深度优化，通过直接调用华硕底层驱动 `AacKbHal_x64.dll` 的直通推流接口，绕过高层 SDK 的多重转发与功能冲突，实现低延迟（约 25 FPS / 40ms）、零内存泄漏、零轮询 CPU 占用的前台自适应灯光同步，并提供随游戏前台自动智能启停的轻量网页配置中心。
+当前版本的完整链路已经过真机验证：启动 daemon、打开 Studio、预览与发布 Blockly 光效、接收 CS2 GSI、按规则切换基础方案并叠加事件/状态光效。
 
----
+## 你可以做什么
 
-## 目录
-1. [核心技术基础](#核心技术基础)
-2. [双进程架构设计](#双进程架构设计)
-3. [构建与编译](#构建与编译)
-4. [配置中心与网页服务 (Phase 2)](#配置中心与网页服务-phase-2)
-5. [配置说明与热重载](#配置说明与热重载)
-6. [命令行使用](#命令行使用)
-7. [严谨测试与硬性验收证据](#严谨测试与硬性验收证据)
+- **在 Studio 制作光效**：用 Blockly 组合全键填色、单键控制、波纹、颜色运算、时间、变量、循环、按键状态和 GSI 数据。
+- **直接预览到键盘**：浏览器中的 JS 运行时与原生插件共享同一套顺序控制语义；停止预览后，键盘恢复显示当前已应用方案。
+- **编排自动化**：按前台进程和 GSI 条件选择基础方案，也可以在击杀等事件发生时播放一次叠加，或在低血量等条件成立期间持续叠加。
+- **自动部署 CS2 GSI**：检测 Steam 库中的 CS2 `cfg` 目录，经界面确认后写入 `gamestate_integration_aura.cfg`，并在诊断页显示连接状态、字段与事件。
+- **动态发布插件**：Studio 将积木转译为 C++17、调用本机 MSVC 生成独立 DLL，再让 daemon 热加载，不需要重启灯光服务。
+- **保留可回退的运行版本**：编辑源码、编译插件、加载 DLL 和切换配置引用是分开的；发布失败时继续运行上一版。
 
----
+## 系统要求
 
-## 核心技术基础
+- Windows 11 x64
+- ROG Falchion Ace HFX
+- ASUS 键盘 HAL：通常由 Armoury Crate / `Aac_Keyboard` 驱动包安装
+- Visual Studio 2022 Build Tools 或 Visual Studio 2022，安装“使用 C++ 的桌面开发”、x64 MSVC 工具集和 Windows SDK
+- CMake 3.20 或更新版本
+- Node.js 与 npm（构建 Web Studio 时需要）
 
-本项目严格遵循硬件实测确认的真实控制链路（详见 `AGENT.md` 第 12 节，已排除所有高层 SDK 与通用接口冲突路径）：
+> Studio 的“发布”会在运行时查找 `vcvars64.bat` 和 `cl.exe`，并使用仓库的 `include/` 头文件编译插件。只查看、编辑和保存草稿不触发 C++ 编译。
 
-- **底层驱动模块**: `C:\Program Files\ASUS\Aac_Keyboard\AacKbHal_x64.dll`
-- **COM 核心标识符**:
-  - `CLSID_ClaymoreHal` = `{AE9DB4C8-4F2A-4756-9B11-2F6D78C61F1A}`
-  - `IID_IAsusAacLedDeviceHal` = `{F2C8D5B4-3854-4325-8A4F-FD7C5072E3BA}`
-- **虚函数调用序列**:
-  1. `Access()` (`hal_vtable[4]`): 锁定驱动与硬件互斥控制权。
-  2. `CreateLedDevice(&vec)` (`hal_vtable[5]`): 获取设备对象指针。
-     - *内存安全机制*：反汇编证实底层通过 `cmp [vec.end], vec.last` 检查容量，未满时直接追加指针，完全不调用跨模块 CRT 内存分配器；本工程预分配 64 槽安全缓冲区，彻底杜绝堆崩溃。
-  3. 硬件寻址映射：在设备对象偏移 `+0x6C` 写入通道数 128，在 `+0x74` 写入 0..127 的硬件寻址表。
-  4. 推流接口：以约 25 FPS（40ms 定时对齐）持续调用 `Set_L_STD_SINGLE_XY` (`dev_vtable[19]`)。
-- **68 键物理映射**: 直接使用通过全键位点亮标定生成的权威数据 `calibrated_keymap.json`（68 键无冲突）。
+## 从源码构建
 
----
-
-## 双进程架构设计
-
-系统遵循严格的职责隔离设计：**硬件推流与网页服务完全分为独立进程**，避免 HTTP 依赖侵入高稳定性要求的硬件 daemon。
-
-```
-                     ┌─────────────────────────┐
-                     │      Windows 系统       │
-                     └───────────┬─────────────┘
-                                 │ WinEventHook (EVENT_SYSTEM_FOREGROUND)
-                                 ▼
- ┌─────────────────────────────────────────────────────────────┐
- │ ForegroundMonitor (前台窗口监控线程)                          │
- │  - 事件驱动、零轮询，阻塞式 Win32 消息循环 (0% CPU)           │
- │  - 解析 HWND -> EXE 进程名 (含 Windows 11 UWP 自动解包)      │
- └──────────────────────────────┬──────────────────────────────┘
-                                │ 原子通知前台进程名 (微秒级)
-                                ▼
- ┌─────────────────────────────────────────────────────────────┐
- │ RuleEngine (规则引擎) & EffectEngine (效果引擎)               │
- │  - JSON 进程名 -> Profile 匹配 (支持前缀匹配与默认兜底)       │
- │  - suppress_web_ui 规则判断 (游戏模式判断)                   │
- │  - 自动基于文件时间戳热重载配置                                │
- │  - 25 FPS 时钟驱动，无内存分配逐帧渲染                         │
- └──────────────┬──────────────────────────────┬───────────────┘
-                │ 384 字节 RGB 帧缓冲          │ 抑制状态通知 (0 阻塞)
-                ▼                              ▼
- ┌───────────────────────────┐  ┌──────────────────────────────┐
- │ AuraAdapter (Aura 适配层) │  │ WebUiSupervisor (独立监护工线程) │
- │ - 主线程封闭拥有 COM/HAL   │  │ - 独立于主推流时钟，绝不卡帧    │
- │ - SEH 结构化异常防护       │  │ - Windows Job Object 防孤儿 │
- │ - 异常退出复位与防呆标记   │  │ - 命名 Event 平滑通知 (500ms)│
- └──────────────┬────────────┘  │ - TerminateProcess 强杀兜底  │
-                │ HID Report    └──────────────┬───────────────┘
-                ▼                              │ 跨进程监护
- ┌───────────────────────────┐                 ▼
- │ ROG FALCHION ACE HFX 键盘 │  ┌──────────────────────────────┐
- └───────────────────────────┘  │ aura_web_ui.exe (独立子进程) │
-                                │ - 仅监听 127.0.0.1:19898     │
-                                │ - SO_REUSEADDR 端口快速复用  │
-                                │ - 原子覆写 config.json       │
-                                │ - 前端心跳与优雅降级游戏遮罩 │
-                                └──────────────────────────────┘
-```
-
----
-
-## 构建与编译
-
-### 环境要求
-- **操作系统**: Windows 11 x64
-- **编译器**: Visual Studio 2022/2026 或 Build Tools，安装“使用 C++ 的桌面开发”工作负载（x64 MSVC 工具集及 Windows SDK）。Studio 的“发布”会在运行时再次调用 `vcvars64.bat` 和 `cl.exe`。
-- **构建工具**: CMake >= 3.20；Visual Studio 2026 生成器需要能识别 `Visual Studio 18 2026` 的较新 CMake。
-- **硬件驱动**: 安装 Armoury Crate / ASUS Aac_Keyboard 驱动支持包
-
-### 编译步骤
-从全新 clone 的仓库根目录打开 Visual Studio 的 `x64 Native Tools Command Prompt`。以下命令以 VS 2026 为例；VS 2022 请将生成器改为 `Visual Studio 17 2022`：
+在 **x64 Native Tools Command Prompt for VS 2022** 中执行：
 
 ```cmd
 git clone https://github.com/pipster439/AceHFXAura.git
 cd AceHFXAura
-cmake -S . -B build -G "Visual Studio 18 2026" -A x64
+
+cd frontend
+npm ci
+npm test
+npm run build
+cd ..
+
+cmake -S . -B build -G "Visual Studio 17 2022" -A x64
 cmake --build build --config Release
-build\Release\aura_daemon.exe
 ```
 
-编译产物：
-- `build/Release/aura_daemon.exe`: 核心硬件推流与自适应守护进程。
-- `build/Release/aura_web_ui.exe`: 独立轻量网页配置服务。
+`npm run build` 会把 React/Blockly 应用打包为单文件 `web/index.html`。CMake 会构建：
 
-启动 daemon 后访问 `http://127.0.0.1:19898/`。daemon 会启动同目录的 `aura_web_ui.exe`；仓库已提供 `config.json`、`web/index.html` 和键位表，若 `config.json` 缺失则会从 `config.example.json` 初始化。Studio 可直接保存草稿。发布要求本机仍保有 MSVC x64 编译环境和仓库的 `include/` 目录。修改前端源码后，在 `frontend/` 运行 `npm ci`、`npm run build`，再刷新浏览器；更新两个 EXE 后须退出旧 daemon 再启动（单实例保护不会替换正在运行的旧进程）。
+- `aura_daemon.exe`：硬件推流、规则执行、插件管理、GSI 接收和 Web UI 监护；
+- `aura_web_ui.exe`：仅绑定本机回环地址的配置与 Studio 服务；
+- `test_gsi_rules.exe`：原生规则、GSI 和叠加行为测试。
 
----
+构建完成后，CMake 还会把两个运行程序复制到仓库根目录。后续命令都应在仓库根目录执行。
 
-## 配置中心与网页服务 (Phase 2)
+如果使用 Visual Studio 2026，请把生成器替换为本机 CMake 支持的 `Visual Studio 18 2026`。
 
-### 1. 访问方式
-启动 `aura_daemon.exe` 后，在桌面环境下浏览器直接访问：
-👉 **`http://127.0.0.1:19898`**
+## 首次运行
 
-### 2. 安全与性能防护
-- **端口绑定**: 严格限定在 `127.0.0.1:19898` 本地环回接口，拒绝 `0.0.0.0` 外网监听。
-- **端口快速复用**: `aura_web_ui.exe` 设置了 `SO_REUSEADDR`，避免游戏与桌面频繁切换时遭遇 `TIME_WAIT` 导致端口占用错误。
-- **监护双重保险（先礼后兵）**:
-  1. `daemon` 优先通过系统命名同步事件（`Local\Aura_Web_UI_Shutdown_<PID>_<Seq>`）通知 `aura_web_ui.exe` 平滑断开 HTTP 监听并安全释放端口（给 500ms 宽限期）。
-  2. 若超时，调用 `TerminateProcess` 强杀兜底。
-  3. 内核级 Windows Job Object（`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`）作为最终安全网，即使 `daemon` 异常崩溃被强杀，操作系统内核也会立即自动收割 `aura_web_ui.exe`，绝无孤儿后台残留。
-- **前端优雅降级**: 浏览器页面每 1.5 秒通过 `/api/status` 探测心跳。当游戏前台启动、子进程被停用时，前端平滑切入半透明遮罩：“🎮 游戏模式已激活 - 配置服务已暂停”，不暴露底层网络错误；切回桌面后自动重新拉起并刷新数据。
-- **退避防风暴**: 连续 3 次拉起失败将自动进入 30 秒静默退避期，避免频繁切屏触发创建进程风暴。
+1. 确认键盘已连接，并关闭可能正在控制同一灯光通道的软件效果。
+2. 在仓库根目录启动：
 
----
+   ```cmd
+   aura_daemon.exe
+   ```
 
-## 配置说明与热重载
+3. daemon 会自动启动同目录的 `aura_web_ui.exe`。浏览器访问 [http://127.0.0.1:19898](http://127.0.0.1:19898)。
+4. 打开“工作室”。可以先选择已有方案，也可以新建光效草稿；点击播放按钮即可预览。
+5. 需要 CS2 自动化时，打开“CS2 遥测诊断”，确认检测到的 CS2 `cfg` 目录并安装 GSI 配置。启动 CS2 后，页面应显示 GSI 在线。
+6. 回到“工作室 → 自动化”，可以载入“CS2 完整示例”，检查规则后点击“保存并应用”。
 
-配置文件 `config.json` 位于工作区根目录，支持运行时双向热重载（网页界面保存时立即生效，外部手动修改文件时 1 秒内自动重载）：
+如果根目录没有 `config.json`，daemon 会自动从 `config.example.json` 创建它。这个文件只是首次启动模板；进入 Studio 并保存自动化后，前端会把旧的 `rules` / `gsi_bindings` 迁移到当前的 `orchestration.version = 2` 统一规则列表，所以不建议照旧 README 手工拼接配置片段。
 
-```json
-{
-  "default_profile": "desktop",
-  "rules": [
-    {
-      "process": "cs2.exe",
-      "profile": "cs2_gamer",
-      "suppress_web_ui": true
-    },
-    {
-      "process": "code.exe",
-      "profile": "coding"
-    },
-    {
-      "process": "notepad.exe",
-      "profile": "office"
-    },
-    {
-      "process": "chrome.exe",
-      "profile": "cyberpunk"
-    }
-  ],
-  "profiles": {
-    "desktop": {
-      "type": "breathing",
-      "color1": [0, 80, 200],
-      "color2": [0, 10, 40],
-      "period_ms": 3500
-    },
-    "cs2_gamer": {
-      "type": "custom_keymap",
-      "bg": [0, 0, 0],
-      "keys": {
-        "WASD": [0, 255, 0],
-        "ESC": [255, 0, 0],
-        "SPACE": [0, 200, 255],
-        "ARROWS": [255, 255, 0]
-      }
-    },
-    "coding": {
-      "type": "static",
-      "color": [10, 30, 50],
-      "keys": {
-        "ESC": [255, 120, 0],
-        "ENTER": [0, 255, 120]
-      }
-    }
-  }
-}
+第二次启动同一程序时，单实例保护会保留正在运行的 daemon，并打开现有 Web UI。
+
+## Studio 工作流
+
+### 制作 Blockly 光效
+
+“制作光效”负责定义一个方案每一帧怎样着色。积木按画布顺序执行；多个顶层积木堆按位置排序，目前不作为彼此独立的并发脚本运行。
+
+脚本可以使用：
+
+- 全键、单键、遍历按键和波纹效果；
+- RGB/HSV、亮度、插值、周期颜色和几何坐标；
+- 数学、逻辑、变量、循环与流程控制；
+- 已用时间、阶段、按键按下状态；
+- 玩家血量、C4 状态及其他 GSI 数值或枚举字段。
+
+“等待”是可跨帧继续的控制流。它会保留当前颜色、变量、循环位置和下一条指令，不会阻塞 daemon 的硬件推流线程。脚本到末尾后会在下一帧重新从头执行；变量会一直保留到该光效重新启动。单帧最多执行 4096 条指令，重复次数上限为 10000，单次等待上限为 60000 ms。
+
+### 草稿与发布
+
+每个 Blockly 光效有三个可见状态：
+
+- **草稿**：只有 `blockly_json` 源码，没有已发布插件；
+- **未发布修改**：草稿已变化，键盘仍运行上次发布的版本；
+- **已发布**：当前源码已经转译、编译并被 daemon 确认加载。
+
+“保存草稿”只更新 `config.json` 中的编辑源码。“发布”执行以下事务式流程：
+
+1. 检查 Web API v2 和 Studio Runtime v2；
+2. 从同一 Blockly 工作区生成用于版本摘要和编译的 C++；
+3. 用唯一名称生成 `plugins/src/effect_studio_<name>_<id>.cpp` 和对应 DLL；
+4. 请求 daemon 加载该 DLL 并等待成功确认；
+5. 最后更新 Profile 的 `plugin_name` 和光效的已发布元数据。
+
+编译、加载或配置保存失败时，旧 DLL 和旧 Profile 引用仍可继续使用。发布产生的历史版本暂时保留在 `plugins/`，当前版本不会自动清理它们。
+
+### 设置自动化
+
+“自动化”负责决定何时使用一个光效：
+
+- **基础方案**按规则从上到下评估，第一个匹配项生效；没有规则命中时使用兜底方案。
+- **事件叠加**在事件发生时播放一次，例如击杀扩散。相同事件再次发生会重新开始自己的叠加；一个渲染周期内的多次同类事件合并为最新一次。
+- **状态叠加**在条件成立期间持续运行，例如生命值低于 20 时的红色呼吸；条件失效后立即移除。
+- 多个叠加可以共存，优先级数值越大越晚合成。事件和状态外层的组合条件会完整保留。
+- 离开 CS2 前台或 GSI 离线后，游戏叠加会被清理并恢复匹配的桌面/程序方案；离开期间的事件不会在返回游戏时补播。
+
+点击“保存并应用”时，Studio 会先发布自动化所引用的 Blockly 草稿，再提交统一规则。画布在切换页面时还会暂存到当前浏览器标签页的 `sessionStorage`；它不是持久发布，关闭标签页前仍应保存。
+
+更详细的积木执行与联动语义见 [docs/STUDIO_WORKFLOW.md](docs/STUDIO_WORKFLOW.md)。
+
+## GSI 自动化
+
+daemon 在 `127.0.0.1:19897` 接收 Valve GSI POST，并把嵌套数据转换为可供规则与光效读取的字段。Web UI 通过 `127.0.0.1:19898` 代理状态、配置安装、预览、编译和插件重载请求；两个服务都只绑定本机回环地址。
+
+GSI 自动化只在 CS2/CS:GO 进程位于前台且最近 10 秒内收到数据时启用。适配器还会根据连续状态推导击杀、爆头、受伤、死亡、复活、炸弹、回合和比赛阶段等 `event.*` 字段。新 payload 会清理对应节点的旧瞬态值，避免把上一回合状态错误带入下一回合。
+
+Studio 的条件可以组合进程、GSI 字段、`and`、`or` 和 `not`。常用比较运算包括 `==`、`!=`、`<`、`<=`、`>`、`>=` 与 `contains`。第一人称对局中可用字段仍受 CS2 实际发送的数据限制；观战/GOTV 字段不会凭空补全。
+
+## 动态插件系统
+
+内置方案和动态插件使用相同的 `IEffect` 渲染接口。daemon 启动时扫描 `plugins/` 中的 DLL（惯例文件名为 `effect_*.dll`），也接受 Studio 发出的单插件热重载请求。
+
+插件管理器会先把 DLL 复制到 `plugins/.cache` 再加载，因此 Windows 不会锁住原文件，Studio 可以继续生成新版本。每次发布使用不可变的唯一插件名；正在运行的实例通过共享所有权保持有效，加载失败不会破坏旧实例。
+
+Profile 只保存逻辑方案名与当前 `plugin_name` 引用。自动化引用 Profile，而不是直接引用某个临时 DLL 文件名，因此发布新版本后无需重写所有规则。
+
+## 当前运行结构
+
+```text
+浏览器 Studio (127.0.0.1:19898)
+        │ 配置 / 编译 / 预览 / GSI 诊断
+        ▼
+aura_web_ui.exe
+        │ 本机 HTTP 转发
+        ▼
+aura_daemon.exe (127.0.0.1:19897)
+        ├─ ForegroundMonitor：前台进程事件
+        ├─ GsiAdapter：CS2 状态与派生事件
+        ├─ RuleEngine：统一规则、兜底方案、配置热重载
+        ├─ EffectEngine + OverlayManager：基础方案与多层叠加
+        ├─ PluginManager：插件发现、影子加载与热重载
+        └─ AuraAdapter：将 128 通道帧推送到 ASUS 键盘 HAL
 ```
 
-### 规则字段说明
-- `process`: 目标前台进程可执行文件名（不区分大小写，如 `cs2.exe`）。
-- `profile`: 匹配生效的灯效方案名称。
-- `suppress_web_ui`: 可选布尔值。若设为 `true`，当该程序处于前台时，daemon 将自动挂起/关闭 `aura_web_ui.exe`，释放端口并压降系统开销。
+硬件调用只发生在 daemon 主推流路径；GSI 和 Web 请求线程只更新内存状态或转发请求。配置写入后由 daemon 按文件时间戳热重载。全局与 Profile 帧率会被限制在 10–100 FPS；配置没有指定帧率时回退到 25 FPS，仓库的首次启动模板当前设为 100 FPS。
 
----
+`suppress_web_ui`（Studio 中的“免打扰”）仍是可选的运行规则：命中时 daemon 会暂时停止 Web UI 子进程，灯光与 GSI 服务继续运行；离开该规则后 Web UI 会自动恢复。因此在启用免打扰的游戏前台，浏览器页面暂时不可访问属于预期行为。
 
-## 命令行使用
+## 常用命令
 
 ```cmd
-# 1. 正常启动（硬件推流 + 自动监护 Web 配置服务）
+:: 正常运行
 aura_daemon.exe
 
-# 2. Dry-Run 模式（虚拟硬件，不挂载实际 DLL，仅测试推流与 Web 监护）
+:: 不加载硬件驱动，用于检查规则、Web UI 和 GSI
 aura_daemon.exe --dry-run
 
-# 3. 硬件稳定性验收测试（以 25 FPS 持续推流 N 分钟后优雅退出）
-aura_daemon.exe --test-stability 1
+:: 指定配置和键位表
+aura_daemon.exe --config config.json --keymap calibrated_keymap.json
 
-# 4. 单独调试运行 Web 配置服务
+:: 硬件初始化/释放循环
+aura_daemon.exe --test-init 100
+
+:: 持续推流稳定性测试，参数单位为分钟
+aura_daemon.exe --test-stability 30
+
+:: 查看完整参数
+aura_daemon.exe --help
+```
+
+只调试 Web 服务时可以运行：
+
+```cmd
 aura_web_ui.exe --port 19898 --config config.json
 ```
 
----
+此模式没有 daemon，因此硬件预览、插件加载确认和 GSI 实时状态不可用。
 
-## 严谨测试与硬性验收证据
+## 构建发布包
 
-### 1. WebUiSupervisor 自动化 5 项集成测试
-执行独立的综合回归测试，实测数据如下：
-- **SetSuppressed 调用开销**: **3 ~ 4 微秒**（完全零阻塞主推流时钟）。
-- **平滑关闭耗时**: **14 毫秒**（命名 Event 触发 `server.Stop()` 平滑收割）。
-- **端口快速复用**: 连续 3 轮高速频繁切屏（Suppress / Resume），`SO_REUSEADDR` 生效，0 碰撞，全部恢复 200 OK。
-- **内核级孤儿防护**: 父进程退出时，操作系统内核立即自动收割 `aura_web_ui.exe`，进程表中 0 残留。
+在仓库根目录执行：
 
-### 2. 真实硬件 25 FPS 推流稳定性复测
-在集成 `WebUiSupervisor` 后，对 ROG FALCHION ACE HFX 键盘进行带载推流验收：
-```log
-[2026-08-30 01:12:27.393] [INFO ] [+] 成功获取硬件控制权，ROG FALCHION ACE HFX 驱动通道已就绪！
-[2026-08-30 01:12:27.707] [INFO ] [+] 硬件强制复位完成，残余光效已清理
-[2026-08-30 01:12:27.708] [INFO ] [WebUI 监护] 网页服务后台监护线程已就绪
-[2026-08-30 01:12:27.714] [INFO ] [WebUI 监护] 网页配置服务进程已启动 (PID: 31356, 绑定端口: 127.0.0.1:19898)
-[2026-08-30 01:13:27.739] [INFO ] [Hardware] [推流稳定性报告 第 1 分钟] 累计帧数: 1501, 瞬时FPS: 25.00, 平均FPS: 25.01, 物理内存WorkingSet: 12.82 MB, 提交内存PrivateBytes: 3.36 MB
-[2026-08-30 01:13:27.739] [INFO ] 正在停止网页配置服务监护器...
-[2026-08-30 01:13:27.739] [INFO ] [WebUI 监护] 正在通知网页服务平滑退出 (PID: 31356)...
-[2026-08-30 01:13:27.753] [INFO ] [WebUI 监护] [+] 网页配置服务已平滑关闭 (PID: 31356)
-[2026-08-30 01:13:27.925] [INFO ] [+] 守护进程已优雅退出，所有资源已安全释放。
-```
-- **推流帧率**: **25.01 FPS**，0 掉帧。
-- **内存占用**: 物理工作集 **12.82 MB**，私有提交 **3.36 MB**，无任何内存泄漏。
-- **安全退出**: 网页服务 14ms 内平滑收割，底层驱动通道安全关闭。
-
-### 3. Web UI API 与配置热重载验证
-- 通过 HTTP `POST /api/config` 写入新配置，返回值：`{"status":"ok","message":"配置已保存，daemon 已通过热重载自动生效"}`。
-- daemon 经 `total_frames % 25 == 0` 时钟秒级捕获，并在 `01:08:21.135` 自动更新渲染色彩（从蓝色即刻过渡为热粉色），无需重启。
-
----
-
-## CS2 GSI 深度联动与遥测管道 (Phase 3)
-
-### 1. 原生架构与严密线程隔离
-遵循 Valve 官方 Game State Integration (GSI) 规范，通过本地 HTTP POST 管道接收完整的游戏状态数据：
-- **监听地址**: 固定绑定 `127.0.0.1:19897`，拒绝外部网络监听。
-- **严格线程解耦**: 处理 GSI HTTP 请求的线程（`httplib::Server` 独立 I/O 线程）**绝对不碰任何 COM/HAL 驱动调用**。主推流线程在每个 40ms（25 FPS）周期原子获取快照并执行仲裁，COM 推流完全封闭在主线程，无线程竞争、零阻塞。
-- **通用数据管道**: 适配器将 Valve 下发的复杂 JSON 递归扁平化为通用键值对，并生成兼容官方字段名与点号路径的双向别名（如同时提供 `player.state.health` 与 `player_state.health`）。
-- **生命周期与超时清理**: 瞬态事件（如 `round.bomb` 仅在安放后出现）在进入下一阶段时自动清除；GSI 心跳超过 10 秒未更新时自动转入离线状态，杜绝跨局假阳性。
-
-### 2. GSI 字段分类与观战模式限制说明
-| 字段路径 (Path) | 字段含义与取值范围 | 场景限制说明 |
-| :--- | :--- | :--- |
-| `player_state.health` | 当前玩家生命值 (`0 - 100`) | 🎮 **正常对局**（第一视角可用） |
-| `player_state.armor` | 当前玩家护甲值 (`0 - 100`) | 🎮 **正常对局**（第一视角可用） |
-| `player_state.flashed` | 闪光弹致盲程度 (`0 - 255`) | 🎮 **正常对局**（第一视角可用） |
-| `player_state.burning` | 燃烧受损程度 (`0 - 255`) | 🎮 **正常对局**（第一视角可用） |
-| `round.bomb` | C4 炸弹状态 (`planted / defused / exploded`) | 🎮 **正常对局**（仅安放时出现） |
-| `round.phase` | 回合阶段 (`freezetime / live / over`) | 🎮 **正常对局**（第一视角可用） |
-| `map.phase` | 比赛阶段 (`warmup / live / intermission / gameover`) | 🎮 **正常对局**（第一视角可用） |
-| `phase_countdowns.*` | 阶段与炸弹剩余秒数倒计时 | 👁️ **【仅观战/GOTV】** 正常游戏中 Valve 官方不推送，恒为空 |
-| `allplayers_state.*` | 全场所有选手的血量与护甲 | 👁️ **【仅观战/GOTV】** 正常游戏中 Valve 官方防作弊不开放 |
-| `allplayers_weapons.*` | 全场所有选手的武器配置与弹药 | 👁️ **【仅观战/GOTV】** 正常游戏中 Valve 官方防作弊不开放 |
-| `allgrenades.*` | 全场正在飞行投掷物坐标与倒计时 | 👁️ **【仅观战/GOTV】** 正常游戏中 Valve 官方防作弊不开放 |
-
-> [!NOTE]
-> 标记为 **👁️ 【仅观战/GOTV】** 的字段并非软件故障，而是 Valve 官方防作弊规范所限制。在第一视角竞技/休闲模式中，服务器不发送全景信息。
-
-### 3. CFG 部署与安全确认
-- **CFG 文件路径**: 存放在 `[Steam安装目录]\steamapps\common\Counter-Strike Global Offensive\game\csgo\cfg\gamestate_integration_aura.cfg`。
-- **杜绝静默写入**: 网页配置中心提供一键自动探测与部署功能，必须经过用户在弹窗中确认目标路径后才执行写入。同时提供一键复制与本地文件下载功能。
-
-### 4. 绑定规则、完整游戏事件与仲裁机制
-在 `config.json` 中配置 `gsi_bindings`，不仅支持静态数值判断，更原生支持由 [CounterStrike2GSI](https://github.com/antonpup/CounterStrike2GSI) 规范推导的**完整游戏事件脉冲**：
-```json
-"gsi_bindings": [
-  {
-    "field": "event.kill",
-    "operator": "==",
-    "value": true,
-    "profile": "rainbow_wave"
-  },
-  {
-    "field": "event.damage",
-    "operator": "==",
-    "value": true,
-    "profile": "danger_red"
-  },
-  {
-    "field": "event.bomb_planted",
-    "operator": "==",
-    "value": true,
-    "profile": "bomb_pulse"
-  },
-  {
-    "field": "player_state.health",
-    "operator": "<",
-    "value": 20,
-    "profile": "danger_red"
-  }
-]
+```cmd
+package_release.bat
 ```
 
-- **完整游戏事件体系 (Game Events Engine)**:
-  1. **战斗事件 (Combat)**: `event.kill` (击杀 1.5s 脉冲), `event.headshot` (爆头 1.5s 脉冲), `event.ace` (五杀 3.0s 脉冲), `event.damage` (受伤 1.0s 脉冲), `event.death` (阵亡常驻), `event.respawn` (复活 1.5s 脉冲), `event.flashed` (闪光致盲), `event.burning` (燃烧灼伤)。
-  2. **炸弹事件 (Bomb)**: `event.bomb_planting` (安放中), `event.bomb_planted` (已安放脉冲), `event.bomb_defusing` (拆包中), `event.bomb_defused` (拆除成功 3.0s), `event.bomb_exploded` (爆炸 3.0s), `event.bomb_dropped` (掉落), `event.bomb_pickedup` (拾起)。
-  3. **回合与比赛 (Round & Match)**: `event.round_started` (正式交火 2.0s), `event.freezetime` (购买整备时间), `event.round_victory` (回合胜利 4.0s 荣耀脉冲), `event.round_loss` (回合落败 4.0s), `event.warmup` (热身赛), `event.gameover` (比赛结算)。
-  4. **最新事件元数据**: `event.last_event` (如 `"PlayerGotKill"`), `event.last_label` (如 `"☠️ 击杀敌人"`), `event.time_since_ms`。
-- **仲裁逻辑**:
-  1. **前台严格隔离红线**：GSI 效果绑定**仅在当前前台活动程序为 `cs2.exe` 时生效**。
-  2. 当切换至桌面（`explorer.exe`）、浏览器（`chrome.exe`）、编辑器（`code.exe`）等其它任何程序时，GSI 绑定**绝对不生效**，自动无缝恢复该程序匹配的专属方案或桌面默认方案。
-  3. 当处于 `cs2.exe` 时，按配置顺序自顶向下优先匹配首个满足条件的 GSI 规则并立即激活对应 Profile。
-  4. 若所有 GSI 规则均未满足，平滑回退至 `cs2.exe` 进程绑定的基础 Profile（如 `cs2_gamer`）。
-  5. 支持 `<`、`<=`、`==`、`!=`、`>=`、`>` 以及 `contains` 匹配。
+脚本当前按 Visual Studio 2026 Community 的默认安装路径调用工具链，构建两个 Release 进程、校验前端与驱动资源，并生成 `dist/Aura.exe` 和便携 ZIP。如果本机使用其他 Visual Studio 版本或安装位置，需要先修改 `tools/package_release.py` 中的 `VS_PATH`。
 
-### 5. GSI 自动化综合测试证据
-通过 `python test_cs2_gsi.py` 执行包含 8 项自动化综合测试的完整测试套件（含 GSI 进程隔离与游戏事件单元测试 `test_gsi_rules.exe`）：
+源码开发和 Studio 发布建议使用仓库根目录的两个构建产物，因为运行时编译需要同一 checkout 中的 `include/`。单文件 `Aura.exe` 主要用于运行已经构建好的 daemon、Web UI 和光效资源。
+
+## 验证
+
+前端测试与生产构建：
+
+```cmd
+cd frontend
+npm test
+npm run build
 ```
-=========================================================
- CS2 Game State Integration (GSI) 自动化综合测试
-=========================================================
 
-[测试 1] 验证 GSI 接收端监听与心跳接口...
-  [PASS] 成功连接 127.0.0.1:19897，当前状态: connected=True
+原生测试：
 
-[测试 2] 推送满血数据包并验证扁平化与别名映射...
-  [PASS] 双路径别名映射全部正确 (player.state.health: 100, player_state.health: 100)
-
-[测试 3] 验证瞬态字段生命周期清理 (round.bomb 安放与拆除)...
-  -> C4 安放数据已成功置入
-  [PASS] 瞬态字段 round.bomb 在新回合数据中已被自动清理，杜绝跨回合警报假阳性
-
-[测试 4] 验证 WebUI 代理接口 (/api/gsi/current 与 /api/gsi/cfg)...
-  [PASS] WebUI /api/gsi/current 代理成功获取 GSI 状态
-  [PASS] WebUI /api/gsi/cfg 接口返回正常 (自动检测到路径: D:\SteamLibrary\steamapps\common\Counter-Strike Global Offensive\game\csgo\cfg)
-  [PASS] CFG 模板已集成 CounterStrike2GSI 规范 (含 'bomb' 节点)
-
-[测试 5] 验证多规则并发命中时的优先级仲裁...
-  [PASS] 双重条件同时满足时，数据已精准入库
-
-[测试 6] 验证完整游戏事件状态机推导与事件流输出...
-  [PASS] 成功捕获并派发完整游戏事件流: ['PlayerGotKill', 'PlayerTookDamage', 'PlayerTookDamage']
-  [PASS] 事件时效脉冲已精准置位 (event.kill: True, event.damage: True)
-
-[测试 7] 验证前台不是 cs2.exe 时 GSI 绑定绝对不生效...
-  [PASS] 进程隔离与单元测试断言 100% 通过
-
-[测试 8] 执行 50 次高频 GSI 突发推送压测 (模拟密集交火网络包)...
-  [PASS] 完成 50 次高频突发推送，耗时 0.578s，吞吐量: 86.5 req/s
-  [PASS] 压测后当前累计接收数据包数: 61
-
-=========================================================
- ✅ 所有 8 项 GSI 自动化综合测试全部顺利通过！
-=========================================================
+```cmd
+cmake --build build --config Release
+ctest --test-dir build -C Release --output-on-failure
 ```
-- **推流帧率稳定性**: 压测期间 daemon 日志记录：
-  `[2026-08-30 11:26:23.935] [INFO ] 灯效方案动态切换 -> [danger_red] (前台: cs2.exe, GSI在线)`
-  推流帧率稳定保持在 **25.00 FPS**，每秒恒定 25 帧，网络并发吞吐达 **86.5 req/s** 且零内存泄漏。
+
+仓库还包含 GSI、编译接口、插件压力与端到端脚本，位于 `tests/`。涉及真实键盘、ASUS HAL、CS2 前台切换或运行时 MSVC 发布的检查必须在 Windows 真机环境完成；当前最终版本已经完成这条真机工作流验证。
