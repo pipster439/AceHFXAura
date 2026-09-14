@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { 
   Sparkles, 
   GitBranch, 
@@ -16,10 +16,16 @@ import {
   Radio, 
   ExternalLink,
   Search,
-  Filter
+  Filter,
+  Download,
+  Upload,
+  Edit3,
+  Check,
+  X
 } from 'lucide-react';
 import EffectStudio from './EffectStudio';
 import OrchestratorStudio from './OrchestratorStudio';
+import OrchestrationInspector from './OrchestrationInspector';
 import KeyboardVisualizer from './KeyboardVisualizer';
 import { getEffectLifecycleStatus, effectConfig } from '../utils/applyEffect';
 import { EFFECT_PRESETS } from '../blockly/presets';
@@ -64,6 +70,11 @@ export default function Studio({
   const [newEffectName, setNewEffectName] = useState('');
   const [newEffectTemplate, setNewEffectTemplate] = useState('blank');
 
+  // 编辑名称状态 (重命名)
+  const [editingEffectName, setEditingEffectName] = useState(null);
+  const [renameInputValue, setRenameInputValue] = useState('');
+  const fileInputRef = useRef(null);
+
   // 获取所有光效列表
   const effectKeys = useMemo(() => {
     return Object.keys(config?.blockly_effects || {});
@@ -103,7 +114,7 @@ export default function Studio({
 
   // 处理删除光效
   const handleDeleteEffect = async (name, e) => {
-    e.stopPropagation();
+    e?.stopPropagation?.();
     const c = canonicalConfig(config);
     if (
       c.default_profile === name || 
@@ -137,7 +148,7 @@ export default function Studio({
 
   // 处理克隆光效
   const handleCloneEffect = async (srcName, e) => {
-    e.stopPropagation();
+    e?.stopPropagation?.();
     const src = config?.blockly_effects?.[srcName];
     if (!src) return;
     const cloneName = `${srcName}_copy`;
@@ -147,6 +158,133 @@ export default function Studio({
       showToast?.(`已克隆光效: ${cloneName}`, 'success');
       setActiveEffectName(cloneName);
       setActiveWorkType('effect');
+    }
+  };
+
+  // 处理重命名光效
+  const handleRenameEffect = async (oldName, newName) => {
+    const clean = newName.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_');
+    if (!clean) {
+      showToast?.('名称不能为空', 'error');
+      return;
+    }
+    if (clean === oldName) {
+      setEditingEffectName(null);
+      return;
+    }
+    if (config?.blockly_effects?.[clean]) {
+      showToast?.('目标名称已存在', 'error');
+      return;
+    }
+
+    const effects = { ...(config?.blockly_effects || {}) };
+    const oldEffect = effects[oldName];
+    if (!oldEffect) return;
+
+    delete effects[oldName];
+    effects[clean] = oldEffect;
+
+    const profiles = { ...(config?.profiles || {}) };
+    if (profiles[oldName]) {
+      profiles[clean] = profiles[oldName];
+      delete profiles[oldName];
+    }
+
+    // 级联更新联动与方案中的引用
+    const orch = JSON.parse(JSON.stringify(config?.orchestration || {}));
+    if (orch.fallback_profile === oldName) orch.fallback_profile = clean;
+    if (Array.isArray(orch.rules)) {
+      orch.rules.forEach(r => {
+        if (r.target_profile === oldName) r.target_profile = clean;
+      });
+    }
+    if (Array.isArray(orch.event_overlays)) {
+      orch.event_overlays.forEach(ov => {
+        if (ov.effect === oldName) ov.effect = clean;
+      });
+    }
+
+    let defaultProfile = config?.default_profile;
+    if (defaultProfile === oldName) defaultProfile = clean;
+
+    const nextConfig = {
+      ...config,
+      default_profile: defaultProfile,
+      blockly_effects: effects,
+      profiles,
+      orchestration: orch
+    };
+
+    const ok = await onSaveConfig(nextConfig);
+    if (ok) {
+      showToast?.(`已将「${oldName}」重命名为「${clean}」`, 'success');
+      if (activeEffectName === oldName) {
+        setActiveEffectName(clean);
+      }
+      setEditingEffectName(null);
+    }
+  };
+
+  // 处理导出光效
+  const handleExportEffect = (name, e) => {
+    e?.stopPropagation?.();
+    const effectData = config?.blockly_effects?.[name];
+    if (!effectData) return;
+    const payload = {
+      type: 'acehfx_aura_effect',
+      version: 2,
+      name,
+      effect: effectData
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `effect_${name}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast?.(`已导出光效「${name}」配置`, 'success');
+  };
+
+  // 处理导入光效
+  const handleImportFile = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+
+      let targetName = file.name.replace(/\.[^/.]+$/, '').toLowerCase().replace(/[^a-z0-9_]/g, '_');
+      let blocklyJson = null;
+
+      if (data.type === 'acehfx_aura_effect' && data.effect) {
+        targetName = data.name || targetName;
+        blocklyJson = data.effect.blockly_json || data.effect;
+      } else if (data.blocks) {
+        blocklyJson = data;
+      } else if (data.blockly_json) {
+        blocklyJson = data.blockly_json;
+      } else {
+        throw new Error('未识别的文件格式');
+      }
+
+      let finalName = targetName;
+      let counter = 1;
+      while (config?.blockly_effects?.[finalName]) {
+        finalName = `${targetName}_${counter++}`;
+      }
+
+      const nextConfig = effectConfig(config, finalName, blocklyJson);
+      const ok = await onSaveConfig(nextConfig);
+      if (ok) {
+        showToast?.(`已成功导入光效「${finalName}」`, 'success');
+        setActiveEffectName(finalName);
+        setActiveWorkType('effect');
+      }
+    } catch (err) {
+      showToast?.(`导入失败: ${err.message}`, 'error');
+    } finally {
+      if (e.target) e.target.value = '';
     }
   };
 
@@ -168,14 +306,33 @@ export default function Studio({
               </div>
               <span className="font-bold text-xs text-md-on-surface">作品列表</span>
             </div>
-            <button
-              onClick={() => setIsNewModalOpen(true)}
-              className="h-7 px-2.5 flex items-center gap-1 rounded-md-full bg-md-primary text-md-on-primary hover:bg-md-primary/90 text-xs font-bold transition-transform active:scale-95 cursor-pointer shadow-xs"
-              title="新建光效草稿"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>新建光效</span>
-            </button>
+            <div className="flex items-center gap-1.5">
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleImportFile}
+                accept=".json"
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="h-7 px-2 flex items-center gap-1 rounded-md-full bg-md-surface-container-high text-md-on-surface hover:bg-md-surface-container-highest text-xs font-medium transition-colors cursor-pointer border border-md-outline-variant"
+                title="导入光效配置 (.json)"
+              >
+                <Upload className="w-3 h-3" />
+                <span>导入</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsNewModalOpen(true)}
+                className="h-7 px-2.5 flex items-center gap-1 rounded-md-full bg-md-primary text-md-on-primary hover:bg-md-primary/90 text-xs font-bold transition-transform active:scale-95 cursor-pointer shadow-xs"
+                title="新建光效草稿"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>新建</span>
+              </button>
+            </div>
           </div>
 
           {/* 搜索与类型过滤 */}
@@ -258,13 +415,16 @@ export default function Studio({
                   const effectData = config?.blockly_effects?.[name];
                   const lifecycle = getEffectLifecycleStatus(effectData);
                   const isSelected = activeWorkType === 'effect' && activeEffectName === name;
+                  const isEditing = editingEffectName === name;
 
                   return (
                     <div
                       key={name}
                       onClick={() => {
-                        setActiveEffectName(name);
-                        setActiveWorkType('effect');
+                        if (!isEditing) {
+                          setActiveEffectName(name);
+                          setActiveWorkType('effect');
+                        }
                       }}
                       className={`group flex items-center justify-between p-2.5 rounded-md-lg border transition-all cursor-pointer ${
                         isSelected
@@ -279,7 +439,39 @@ export default function Studio({
                           <Sparkles className="w-4 h-4" />
                         </div>
                         <div className="flex flex-col min-w-0 flex-1">
-                          <span className="font-bold text-xs truncate" title={name}>{name}</span>
+                          {isEditing ? (
+                            <div className="flex items-center gap-1 my-0.5" onClick={(e) => e.stopPropagation()}>
+                              <input
+                                type="text"
+                                value={renameInputValue}
+                                onChange={(e) => setRenameInputValue(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') handleRenameEffect(name, renameInputValue);
+                                  if (e.key === 'Escape') setEditingEffectName(null);
+                                }}
+                                className="h-6 px-1.5 bg-md-surface-container-lowest border border-md-primary rounded text-xs text-md-on-surface font-mono outline-none w-28"
+                                autoFocus
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleRenameEffect(name, renameInputValue)}
+                                className="w-5 h-5 rounded hover:bg-emerald-500/20 text-emerald-400 flex items-center justify-center cursor-pointer"
+                                title="确认重命名"
+                              >
+                                <Check className="w-3 h-3" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingEffectName(null)}
+                                className="w-5 h-5 rounded hover:bg-md-surface-container-highest text-md-on-surface-variant flex items-center justify-center cursor-pointer"
+                                title="取消"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="font-bold text-xs truncate" title={name}>{name}</span>
+                          )}
                           <div className="flex items-center gap-1.5 mt-0.5">
                             <span className="text-[10px] px-1.5 py-0.2 rounded bg-md-surface-container-highest text-md-on-surface-variant font-semibold">
                               光效
@@ -292,24 +484,46 @@ export default function Studio({
                       </div>
 
                       {/* 悬停快捷按钮 */}
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                          type="button"
-                          onClick={(e) => handleCloneEffect(name, e)}
-                          className="w-6 h-6 rounded flex items-center justify-center hover:bg-md-surface-container-high text-md-on-surface-variant hover:text-md-on-surface"
-                          title="克隆此光效"
-                        >
-                          <Copy className="w-3 h-3" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => handleDeleteEffect(name, e)}
-                          className="w-6 h-6 rounded flex items-center justify-center hover:bg-md-error-container/40 text-md-on-surface-variant hover:text-md-error"
-                          title="删除此光效"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                      </div>
+                      {!isEditing && (
+                        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 ml-1">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingEffectName(name);
+                              setRenameInputValue(name);
+                            }}
+                            className="w-6 h-6 rounded flex items-center justify-center hover:bg-md-surface-container-high text-md-on-surface-variant hover:text-md-on-surface cursor-pointer"
+                            title="重命名此光效"
+                          >
+                            <Edit3 className="w-3 h-3" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => handleExportEffect(name, e)}
+                            className="w-6 h-6 rounded flex items-center justify-center hover:bg-md-surface-container-high text-md-on-surface-variant hover:text-md-on-surface cursor-pointer"
+                            title="导出为 JSON"
+                          >
+                            <Download className="w-3 h-3" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => handleCloneEffect(name, e)}
+                            className="w-6 h-6 rounded flex items-center justify-center hover:bg-md-surface-container-high text-md-on-surface-variant hover:text-md-on-surface cursor-pointer"
+                            title="克隆此光效"
+                          >
+                            <Copy className="w-3 h-3" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => handleDeleteEffect(name, e)}
+                            className="w-6 h-6 rounded flex items-center justify-center hover:bg-md-error-container/40 text-md-on-surface-variant hover:text-md-error cursor-pointer"
+                            title="删除此光效"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      )}
                     </div>
                   );
                 })
@@ -371,83 +585,90 @@ export default function Studio({
         )}
       </div>
 
-      {/* 3. 右侧：键盘预览与调试状态工作台 (Right Preview & Debug Station) */}
+      {/* 3. 右侧：键盘预览或自动化检查器工作台 */}
       <div className="w-84 shrink-0 flex flex-col bg-md-surface-container-low border border-md-outline-variant rounded-md-xl shadow-md-level1 p-3 gap-3 overflow-y-auto">
-        {/* 顶部标题与状态指示 */}
-        <div className="flex items-center justify-between pb-2 border-b border-md-outline-variant">
-          <div className="flex items-center gap-2">
-            <Radio className="w-4 h-4 text-md-primary" />
-            <span className="font-bold text-xs text-md-on-surface">键盘实时推流预览</span>
-          </div>
-          <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-md-primary/10 text-md-primary font-bold">
-            {fpsVal || 25} FPS
-          </span>
-        </div>
-
-        {/* 键盘实时微型舞台 (自适应容器宽度) */}
-        <div className="flex flex-col items-center justify-center p-1 bg-black/20 rounded-md-lg border border-md-outline-variant/60 overflow-hidden">
-          <KeyboardVisualizer
-            activeTab="blockly_effect"
-            currentEffect={currentEffect}
-            isMasterLightOn={isMasterLightOn}
-            isAnalogEnabled={isAnalogEnabled}
-            brightnessVal={brightnessVal}
-            speedIndex={speedIndex}
-            currentDirection={currentDirection}
-            thicknessVal={thicknessVal}
-            gradientStops={gradientStops}
-            isStarryRandom={isStarryRandom}
-            currentProfile={config?.profiles?.[currentProfileName]}
-            selectedKeyNames={selectedKeyNames}
-            onToggleKeySelection={onToggleKeySelection}
-            bgColor={bgColor}
-            fpsVal={fpsVal}
-            blocklyFrame={blocklyFrame}
-          />
-        </div>
-
-        {/* 当前作品信息小结 */}
-        <div className="p-2.5 bg-md-surface-container rounded-md-md border border-md-outline-variant flex flex-col gap-1.5 text-xs">
-          <div className="flex items-center justify-between">
-            <span className="text-md-on-surface-variant font-medium">当前作品:</span>
-            <span className="font-mono font-bold text-md-on-surface truncate">
-              {activeWorkType === 'effect' ? activeEffectName : '主联动规则'}
-            </span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-md-on-surface-variant font-medium">作品类型:</span>
-            <span className="font-semibold text-md-primary">
-              {activeWorkType === 'effect' ? '独立光效 (Effect)' : '状态联动 (Orchestration)'}
-            </span>
-          </div>
-          {activeWorkType === 'effect' && (
-            <div className="flex items-center justify-between">
-              <span className="text-md-on-surface-variant font-medium">当前状态:</span>
-              {(() => {
-                const lc = getEffectLifecycleStatus(config?.blockly_effects?.[activeEffectName]);
-                return (
-                  <span className={`px-2 py-0.5 rounded border text-[11px] font-bold ${lc.badgeClass}`}>
-                    {lc.label}
-                  </span>
-                );
-              })()}
+        {activeWorkType === 'effect' ? (
+          <>
+            {/* 顶部标题与状态指示 */}
+            <div className="flex items-center justify-between pb-2 border-b border-md-outline-variant">
+              <div className="flex items-center gap-2">
+                <Radio className="w-4 h-4 text-md-primary" />
+                <span className="font-bold text-xs text-md-on-surface">键盘实时推流预览</span>
+              </div>
+              <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-md-primary/10 text-md-primary font-bold">
+                {fpsVal || 25} FPS
+              </span>
             </div>
-          )}
-        </div>
 
-        {/* 调试说明与提示 */}
-        <div className="p-3 bg-md-surface-container-lowest border border-md-outline-variant rounded-md-md flex flex-col gap-1.5 text-[11px] text-md-on-surface-variant leading-relaxed">
-          <div className="flex items-center gap-1.5 font-bold text-md-on-surface">
-            <CheckCircle2 className="w-3.5 h-3.5 text-md-primary" />
-            <span>实时调试提示</span>
-          </div>
-          <p>
-            • 在中间 Blockly 中拼装积木，右侧虚拟键盘将以 ~25 FPS 保持帧同步。
-          </p>
-          <p>
-            • 点击「保存草稿」记录源码；点击「发布」转译为原生动态链接库，直接推送到硬件。
-          </p>
-        </div>
+            {/* 键盘实时微型舞台 (自适应容器宽度) */}
+            <div className="flex flex-col items-center justify-center p-1 bg-black/20 rounded-md-lg border border-md-outline-variant/60 overflow-hidden">
+              <KeyboardVisualizer
+                activeTab="blockly_effect"
+                currentEffect={currentEffect}
+                isMasterLightOn={isMasterLightOn}
+                isAnalogEnabled={isAnalogEnabled}
+                brightnessVal={brightnessVal}
+                speedIndex={speedIndex}
+                currentDirection={currentDirection}
+                thicknessVal={thicknessVal}
+                gradientStops={gradientStops}
+                isStarryRandom={isStarryRandom}
+                currentProfile={config?.profiles?.[currentProfileName]}
+                selectedKeyNames={selectedKeyNames}
+                onToggleKeySelection={onToggleKeySelection}
+                bgColor={bgColor}
+                fpsVal={fpsVal}
+                blocklyFrame={blocklyFrame}
+              />
+            </div>
+
+            {/* 当前作品信息小结 */}
+            <div className="p-2.5 bg-md-surface-container rounded-md-md border border-md-outline-variant flex flex-col gap-1.5 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-md-on-surface-variant font-medium">当前作品:</span>
+                <span className="font-mono font-bold text-md-on-surface truncate">
+                  {activeEffectName}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-md-on-surface-variant font-medium">作品类型:</span>
+                <span className="font-semibold text-md-primary">
+                  独立光效 (Effect)
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-md-on-surface-variant font-medium">当前状态:</span>
+                {(() => {
+                  const lc = getEffectLifecycleStatus(config?.blockly_effects?.[activeEffectName]);
+                  return (
+                    <span className={`px-2 py-0.5 rounded border text-[11px] font-bold ${lc.badgeClass}`}>
+                      {lc.label}
+                    </span>
+                  );
+                })()}
+              </div>
+            </div>
+
+            {/* 调试说明与提示 */}
+            <div className="p-3 bg-md-surface-container-lowest border border-md-outline-variant rounded-md-md flex flex-col gap-1.5 text-[11px] text-md-on-surface-variant leading-relaxed">
+              <div className="flex items-center gap-1.5 font-bold text-md-on-surface">
+                <CheckCircle2 className="w-3.5 h-3.5 text-md-primary" />
+                <span>实时调试提示</span>
+              </div>
+              <p>
+                • 在中间 Blockly 中拼装积木，右侧虚拟键盘将以 ~25 FPS 保持帧同步。
+              </p>
+              <p>
+                • 点击「保存草稿」记录源码；点击「发布」转译为原生动态链接库，直接推送到硬件。
+              </p>
+            </div>
+          </>
+        ) : (
+          <OrchestrationInspector
+            config={config}
+            currentProfileName={currentProfileName}
+          />
+        )}
       </div>
 
       {/* 新建光效模态弹窗 */}

@@ -14,7 +14,35 @@ export const EFFECT_STUDIO_TOOLBOX = {
       contents: [
         {
           kind: 'block',
-          type: 'key_fill_all'
+          type: 'key_fill_all',
+          inputs: {
+            COLOR: {
+              shadow: {
+                type: 'color_rgb',
+                inputs: {
+                  R: { shadow: { type: 'math_number', fields: { NUM: 0 } } },
+                  G: { shadow: { type: 'math_number', fields: { NUM: 150 } } },
+                  B: { shadow: { type: 'math_number', fields: { NUM: 255 } } }
+                }
+              }
+            }
+          }
+        },
+        {
+          kind: 'block',
+          type: 'key_ripple_effect',
+          inputs: {
+            COLOR: {
+              shadow: {
+                type: 'color_rgb',
+                inputs: {
+                  R: { shadow: { type: 'math_number', fields: { NUM: 0 } } },
+                  G: { shadow: { type: 'math_number', fields: { NUM: 220 } } },
+                  B: { shadow: { type: 'math_number', fields: { NUM: 255 } } }
+                }
+              }
+            }
+          }
         },
         {
           kind: 'block',
@@ -32,6 +60,33 @@ export const EFFECT_STUDIO_TOOLBOX = {
       name: '🎨 颜色 (Color)',
       colour: '#E91E63',
       contents: [
+        {
+          kind: 'block',
+          type: 'color_cycle',
+          inputs: {
+            COLOR_A: {
+              shadow: {
+                type: 'color_rgb',
+                inputs: {
+                  R: { shadow: { type: 'math_number', fields: { NUM: 0 } } },
+                  G: { shadow: { type: 'math_number', fields: { NUM: 180 } } },
+                  B: { shadow: { type: 'math_number', fields: { NUM: 255 } } }
+                }
+              }
+            },
+            COLOR_B: {
+              shadow: {
+                type: 'color_rgb',
+                inputs: {
+                  R: { shadow: { type: 'math_number', fields: { NUM: 255 } } },
+                  G: { shadow: { type: 'math_number', fields: { NUM: 0 } } },
+                  B: { shadow: { type: 'math_number', fields: { NUM: 100 } } }
+                }
+              }
+            },
+            PERIOD_SEC: { shadow: { type: 'math_number', fields: { NUM: 2 } } }
+          }
+        },
         {
           kind: 'block',
           type: 'color_rgb',
@@ -112,6 +167,8 @@ export const EFFECT_STUDIO_TOOLBOX = {
       name: '🎮 游戏状态 (Game State)',
       colour: '#4CBFE6',
       contents: [
+        { kind: 'block', type: 'gsi_player_health_condition' },
+        { kind: 'block', type: 'gsi_c4_state_condition' },
         { kind: 'block', type: 'gsi_state_match' },
         { kind: 'block', type: 'gsi_numeric_compare' },
         { kind: 'block', type: 'gsi_enum_constant' }
@@ -260,6 +317,8 @@ export const ORCHESTRATOR_STUDIO_TOOLBOX = {
       name: '🔍 侦测与条件 (Sensing & Conditions)',
       colour: '#4CBFE6',
       contents: [
+        { kind: 'block', type: 'gsi_player_health_condition' },
+        { kind: 'block', type: 'gsi_c4_state_condition' },
         { kind: 'block', type: 'gsi_state_match' },
         { kind: 'block', type: 'gsi_numeric_compare' },
         { kind: 'block', type: 'gsi_enum_constant' },

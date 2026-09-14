@@ -4,14 +4,15 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import Blockly from '../src/blockly/index.js';
+import Blockly, { loadSafeWorkspaceJson } from '../src/blockly/index.js';
 import { registerCustomBlocks } from '../src/blockly/customBlocks.js';
 import { JsTranspiler } from '../src/blockly/jsTranspiler.js';
 import { CppTranspiler } from '../src/blockly/cppTranspiler.js';
 import { OrchestratorSerializer as S } from '../src/blockly/orchestratorSerializer.js';
 import { canonicalConfig, processRows, replaceSimpleRows } from '../src/utils/orchestration.js';
 import { stageEffect, effectConfig, getEffectLifecycleStatus } from '../src/utils/applyEffect.js';
-import { EFFECT_STUDIO_TOOLBOX } from '../src/blockly/toolboxes.js';
+import { EFFECT_STUDIO_TOOLBOX, ORCHESTRATOR_STUDIO_TOOLBOX } from '../src/blockly/toolboxes.js';
+import { EFFECT_PRESETS } from '../src/blockly/presets.js';
 registerCustomBlocks();
 const num = n => ({ type: 'math_number', fields: { NUM: n } });
 const color = (r,g,b) => ({ type: 'color_rgb', inputs: { R: { block: num(r) }, G: { block: num(g) }, B: { block: num(b) } } });
@@ -203,4 +204,295 @@ test('simplified EFFECT_STUDIO_TOOLBOX has 5 core categories and Advanced group'
   assert.ok(advSubNames.some(n => n.includes('数学')));
   assert.ok(advSubNames.some(n => n.includes('变量')));
   assert.ok(advSubNames.some(n => n.includes('复杂循环')));
+});
+
+test('semantic blocks round-trip serialization and deserialization', () => {
+  // Test gsi_player_health_condition
+  const w1 = workspace([{
+    type: 'orch_root_flow',
+    inputs: {
+      DO: {
+        block: {
+          type: 'controls_if',
+          inputs: {
+            IF0: {
+              block: {
+                type: 'gsi_player_health_condition',
+                fields: { OP: '<', VALUE: '25' }
+              }
+            },
+            DO0: {
+              block: {
+                type: 'orch_action_overlay_pulse',
+                fields: { EVENT: 'event.kill', EFFECT: 'wave', FADE: 0 }
+              }
+            }
+          }
+        }
+      }
+    }
+  }]);
+  const data1 = S.serializeWorkspace(w1);
+  assert.deepEqual(data1.orchestration.event_overlays[0].condition, {
+    field: 'player.state.health',
+    op: '<',
+    value: 25
+  });
+
+  const restored1 = new Blockly.Workspace();
+  S.restoreWorkspace(restored1, data1);
+  const data1Restored = S.serializeWorkspace(restored1);
+  assert.deepEqual(data1Restored.orchestration.event_overlays[0].condition, {
+    field: 'player.state.health',
+    op: '<',
+    value: 25
+  });
+  w1.dispose();
+  restored1.dispose();
+
+  // Test gsi_c4_state_condition
+  const w2 = workspace([{
+    type: 'orch_root_flow',
+    inputs: {
+      DO: {
+        block: {
+          type: 'controls_if',
+          inputs: {
+            IF0: {
+              block: {
+                type: 'gsi_c4_state_condition',
+                fields: { STATE: 'planted' }
+              }
+            },
+            DO0: {
+              block: {
+                type: 'orch_action_overlay_state',
+                fields: { EFFECT: 'bomb_warning', BLEND: 'replace' }
+              }
+            }
+          }
+        }
+      }
+    }
+  }]);
+  const data2 = S.serializeWorkspace(w2);
+  assert.deepEqual(data2.orchestration.event_overlays[0].condition, {
+    field: 'round.bomb',
+    op: '==',
+    value: 'planted'
+  });
+  w2.dispose();
+});
+
+test('semantic blocks JS transpilation execution and output validity', () => {
+  // 1. color_cycle block plugged into key_fill_all
+  const wColor = workspace([{
+    type: 'key_fill_all',
+    inputs: {
+      COLOR: {
+        block: {
+          type: 'color_cycle',
+          inputs: {
+            COLOR_A: { block: color(255, 0, 0) },
+            COLOR_B: { block: color(0, 0, 255) },
+            PERIOD_SEC: { block: num(2) }
+          }
+        }
+      }
+    }
+  }]);
+  const runColor = JsTranspiler.compile(wColor);
+  const frame0 = runColor(0).map(c => [...c]);
+  assert.equal(frame0.length, 68);
+  assert.ok(frame0[0][0] > 200 && frame0[0][2] < 50);
+
+  const frame1000 = runColor(1000).map(c => [...c]);
+  assert.equal(frame1000.length, 68);
+  assert.ok(frame1000[0][2] > 200 && frame1000[0][0] < 50);
+  wColor.dispose();
+
+  // 2. key_ripple_effect block
+  const wRipple = workspace([
+    chain(
+      fill([0, 0, 0]),
+      {
+        type: 'key_ripple_effect',
+        fields: {
+          KEY: 'SPACE',
+          SPEED: '2.5'
+        },
+        inputs: {
+          COLOR: { block: color(0, 255, 255) }
+        }
+      }
+    )
+  ]);
+  const runRipple = JsTranspiler.compile(wRipple);
+  const ripple0 = runRipple(0).map(c => [...c]);
+  const ripple200 = runRipple(200).map(c => [...c]);
+  assert.equal(ripple0.length, 68);
+  assert.equal(ripple200.length, 68);
+  wRipple.dispose();
+});
+
+test('semantic blocks C++ transpilation generates zero-heap code without allocations in render loop', () => {
+  const wColor = workspace([{
+    type: 'key_fill_all',
+    inputs: {
+      COLOR: {
+        block: {
+          type: 'color_cycle',
+          inputs: {
+            COLOR_A: { block: color(255, 0, 0) },
+            COLOR_B: { block: color(0, 255, 0) },
+            PERIOD_SEC: { block: num(1.5) }
+          }
+        }
+      }
+    }
+  }]);
+  const cppColor = CppTranspiler.transpile('color_test', wColor);
+  assert.ok(cppColor.includes('cos('));
+  assert.ok(cppColor.includes('LerpRGB'));
+  const renderLoopColor = cppColor.slice(cppColor.indexOf('void RenderInternal'), cppColor.indexOf('extern "C"'));
+  assert.ok(!renderLoopColor.includes('malloc'));
+  assert.ok(!renderLoopColor.includes('new '));
+  assert.ok(!renderLoopColor.includes('std::vector'));
+  wColor.dispose();
+
+  const wRipple = workspace([
+    chain(
+      fill([0, 0, 0]),
+      {
+        type: 'key_ripple_effect',
+        fields: {
+          KEY: 'SPACE',
+          SPEED: '2.5'
+        },
+        inputs: {
+          COLOR: { block: color(255, 0, 255) }
+        }
+      }
+    )
+  ]);
+  const cppRipple = CppTranspiler.transpile('ripple_test', wRipple);
+  assert.ok(cppRipple.includes('ScaleBrightness'));
+  assert.ok(cppRipple.includes('hypot') || cppRipple.includes('sqrt'));
+  const renderLoopRipple = cppRipple.slice(cppRipple.indexOf('void RenderInternal'), cppRipple.indexOf('extern "C"'));
+  assert.ok(!renderLoopRipple.includes('malloc'));
+  assert.ok(!renderLoopRipple.includes('new '));
+  assert.ok(!renderLoopRipple.includes('std::vector'));
+  wRipple.dispose();
+});
+
+test('preset templates deserialize and compile cleanly in JS and C++', () => {
+  const templateIds = ['template_smooth_breath', 'template_low_health_warning', 'kill_wave', 'cs2_health_bar'];
+  for (const id of templateIds) {
+    const preset = EFFECT_PRESETS.find(p => p.id === id);
+    assert.ok(preset, `Preset ${id} should exist`);
+    assert.ok(preset.blocklyJson, `Preset ${id} should have blocklyJson`);
+
+    const w = new Blockly.Workspace();
+    loadSafeWorkspaceJson(preset.blocklyJson, w, true);
+    
+    // JS Transpiler
+    const run = JsTranspiler.compile(w);
+    const frame = run(100);
+    assert.equal(frame.length, 68);
+    for (let k = 0; k < 68; k++) {
+      assert.ok(Array.isArray(frame[k]) && frame[k].length === 3);
+    }
+
+    // C++ Transpiler
+    const cpp = CppTranspiler.transpile(preset.id, w);
+    assert.ok(cpp.includes(`class Effect_${preset.id}`));
+    assert.ok(cpp.includes('void Render('));
+    const renderLoop = cpp.slice(cpp.indexOf('void RenderInternal'), cpp.indexOf('extern "C"'));
+    assert.ok(!renderLoop.includes('malloc'));
+    assert.ok(!renderLoop.includes('new '));
+
+    w.dispose();
+  }
+});
+
+test('studio cascade rename, reference safety on deletion, and clone behavior', () => {
+  const config = {
+    default_profile: 'old_effect',
+    profiles: {
+      old_effect: { type: 'plugin', plugin_name: 'old_plugin' },
+      other_profile: {}
+    },
+    blockly_effects: {
+      old_effect: {
+        blockly_json: { blocks: [] },
+        applied_plugin_name: 'old_plugin'
+      },
+      referenced_effect: {
+        blockly_json: { blocks: [] }
+      }
+    },
+    orchestration: {
+      fallback_profile: 'old_effect',
+      rules: [
+        { process: 'cs2.exe', target_profile: 'referenced_effect', enabled: true }
+      ],
+      event_overlays: [
+        { trigger: 'state', effect: 'referenced_effect', priority: 10 }
+      ]
+    }
+  };
+
+  // 1. Reference check prevents deleting referenced effect
+  const c = canonicalConfig(config);
+  const isReferenced = (name) => (
+    c.default_profile === name || 
+    c.orchestration?.fallback_profile === name || 
+    c.orchestration?.rules?.some(r => r.target_profile === name) || 
+    c.orchestration?.event_overlays?.some(r => r.effect === name)
+  );
+  assert.equal(isReferenced('old_effect'), true);
+  assert.equal(isReferenced('referenced_effect'), true);
+  assert.equal(isReferenced('unrelated_effect'), false);
+
+  // 2. Cascade rename
+  const oldName = 'old_effect';
+  const clean = 'new_renamed_effect';
+  const effects = { ...config.blockly_effects };
+  effects[clean] = effects[oldName];
+  delete effects[oldName];
+
+  const profiles = { ...config.profiles };
+  profiles[clean] = profiles[oldName];
+  delete profiles[oldName];
+
+  const orch = JSON.parse(JSON.stringify(config.orchestration));
+  if (orch.fallback_profile === oldName) orch.fallback_profile = clean;
+  orch.rules.forEach(r => { if (r.target_profile === oldName) r.target_profile = clean; });
+  orch.event_overlays.forEach(ov => { if (ov.effect === oldName) ov.effect = clean; });
+
+  assert.equal(orch.fallback_profile, clean);
+  assert.ok(effects[clean]);
+  assert.equal(effects[oldName], undefined);
+  assert.ok(profiles[clean]);
+  assert.equal(profiles[oldName], undefined);
+
+  // 3. Clone
+  const cloneName = `${clean}_copy`;
+  const clonedConfig = effectConfig({ ...config, blockly_effects: effects, profiles }, cloneName, effects[clean].blockly_json);
+  assert.ok(clonedConfig.blockly_effects[cloneName]);
+  assert.deepEqual(clonedConfig.blockly_effects[cloneName].blockly_json, effects[clean].blockly_json);
+});
+
+test('orchestration studio toolbox and semantic condition blocks exist', () => {
+  const categories = ORCHESTRATOR_STUDIO_TOOLBOX.contents.filter(c => c.kind === 'category');
+  const names = categories.map(c => c.name);
+  assert.ok(names.some(n => n.includes('侦测与条件')));
+
+  const allBlocks = JSON.stringify(ORCHESTRATOR_STUDIO_TOOLBOX);
+  assert.ok(allBlocks.includes('gsi_player_health_condition'));
+  assert.ok(allBlocks.includes('gsi_c4_state_condition'));
+
+  const effectBlocks = JSON.stringify(EFFECT_STUDIO_TOOLBOX);
+  assert.ok(effectBlocks.includes('color_cycle'));
+  assert.ok(effectBlocks.includes('key_ripple_effect'));
 });

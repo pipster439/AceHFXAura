@@ -4,6 +4,167 @@
 
 export const EFFECT_PRESETS = [
   {
+    id: 'template_smooth_breath',
+    name: '双色平滑呼吸 (Breath)',
+    description: '独立光效：全键盘在青色与紫红之间平滑呼吸往复循环（不依赖游戏）',
+    blocklyJson: {
+      languageVersion: 0,
+      blocks: [
+        {
+          type: 'key_fill_all',
+          x: 60,
+          y: 60,
+          inputs: {
+            COLOR: {
+              block: {
+                type: 'color_cycle',
+                inputs: {
+                  COLOR_A: {
+                    block: {
+                      type: 'color_rgb',
+                      inputs: {
+                        R: { shadow: { type: 'math_number', fields: { NUM: 0 } } },
+                        G: { shadow: { type: 'math_number', fields: { NUM: 180 } } },
+                        B: { shadow: { type: 'math_number', fields: { NUM: 255 } } }
+                      }
+                    }
+                  },
+                  COLOR_B: {
+                    block: {
+                      type: 'color_rgb',
+                      inputs: {
+                        R: { shadow: { type: 'math_number', fields: { NUM: 220 } } },
+                        G: { shadow: { type: 'math_number', fields: { NUM: 0 } } },
+                        B: { shadow: { type: 'math_number', fields: { NUM: 160 } } }
+                      }
+                    }
+                  },
+                  PERIOD_SEC: {
+                    shadow: { type: 'math_number', fields: { NUM: 3 } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    id: 'template_low_health_warning',
+    name: 'CS2 低血量警戒 (Health Warning)',
+    description: '血量正常时全盘深海蓝，血量低于 25 时转为急促红黑呼吸闪烁',
+    blocklyJson: {
+      languageVersion: 0,
+      blocks: [
+        {
+          type: 'controls_if',
+          x: 60,
+          y: 60,
+          extraState: {
+            hasElse: true
+          },
+          inputs: {
+            IF0: {
+              block: {
+                type: 'gsi_player_health_condition',
+                fields: {
+                  OP: '<',
+                  VALUE: 25
+                }
+              }
+            },
+            DO0: {
+              block: {
+                type: 'key_fill_all',
+                inputs: {
+                  COLOR: {
+                    block: {
+                      type: 'color_cycle',
+                      inputs: {
+                        COLOR_A: {
+                          block: {
+                            type: 'color_rgb',
+                            inputs: {
+                              R: { shadow: { type: 'math_number', fields: { NUM: 255 } } },
+                              G: { shadow: { type: 'math_number', fields: { NUM: 0 } } },
+                              B: { shadow: { type: 'math_number', fields: { NUM: 0 } } }
+                            }
+                          }
+                        },
+                        COLOR_B: {
+                          block: {
+                            type: 'color_rgb',
+                            inputs: {
+                              R: { shadow: { type: 'math_number', fields: { NUM: 0 } } },
+                              G: { shadow: { type: 'math_number', fields: { NUM: 0 } } },
+                              B: { shadow: { type: 'math_number', fields: { NUM: 0 } } }
+                            }
+                          }
+                        },
+                        PERIOD_SEC: {
+                          shadow: { type: 'math_number', fields: { NUM: 0.8 } }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            ELSE: {
+              block: {
+                type: 'key_fill_all',
+                inputs: {
+                  COLOR: {
+                    block: {
+                      type: 'color_rgb',
+                      inputs: {
+                        R: { shadow: { type: 'math_number', fields: { NUM: 0 } } },
+                        G: { shadow: { type: 'math_number', fields: { NUM: 120 } } },
+                        B: { shadow: { type: 'math_number', fields: { NUM: 255 } } }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    id: 'kill_wave',
+    name: '击杀金色波纹 (Kill Wave)',
+    description: '以空格为中心向外迅速扩散的金色冲击波，用于击杀事件叠加',
+    blocklyJson: {
+      languageVersion: 0,
+      blocks: [
+        {
+          type: 'key_ripple_effect',
+          x: 60,
+          y: 60,
+          fields: {
+            KEY: 'SPACE',
+            SPEED: '5.0'
+          },
+          inputs: {
+            COLOR: {
+              block: {
+                type: 'color_rgb',
+                inputs: {
+                  R: { shadow: { type: 'math_number', fields: { NUM: 255 } } },
+                  G: { shadow: { type: 'math_number', fields: { NUM: 200 } } },
+                  B: { shadow: { type: 'math_number', fields: { NUM: 0 } } }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
     id: 'cs2_health_bar',
     name: 'CS2 动态血条联动',
     description: '通过 GSI 读取玩家实时血量：满血亮绿，残血变红，红光闪烁',
@@ -195,6 +356,59 @@ out_frame.Fill(r, g, 0);`,
 ];
 
 export const ORCHESTRATOR_PRESETS = [
+  {
+    id: 'cs2_kill_pulse_template',
+    name: 'CS2 击杀高亮脉冲 (Kill Pulse)',
+    description: '前台识别 cs2.exe 自动切换竞技方案；击杀敌人时触发金色高亮扩散叠加层 1000ms',
+    blocklyJson: {
+      languageVersion: 0,
+      blocks: [
+        {
+          type: 'orch_root_flow',
+          x: 50,
+          y: 50,
+          fields: { FALLBACK_PROFILE: 'desktop' },
+          inputs: {
+            DO: {
+              block: {
+                type: 'controls_if',
+                inputs: {
+                  IF0: {
+                    block: {
+                      type: 'orch_text_equals',
+                      inputs: {
+                        A: { block: { type: 'orch_current_process' } },
+                        B: { shadow: { type: 'text', fields: { TEXT: 'cs2.exe' } } }
+                      }
+                    }
+                  },
+                  DO0: {
+                    block: {
+                      type: 'orch_action_switch_profile',
+                      fields: { PROFILE: 'cs2_gamer' },
+                      next: {
+                        block: {
+                          type: 'orch_action_overlay_pulse',
+                          fields: {
+                            EVENT: 'event.kill',
+                            EFFECT: 'kill_wave',
+                            DURATION: 1000,
+                            FADE: 300,
+                            PRIORITY: 25,
+                            BLEND: 'add'
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
   {
     id: 'scratch_flow_preset',
     name: 'Scratch 智能控制流',

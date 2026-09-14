@@ -176,13 +176,26 @@ export function registerCustomBlocks() {
       tooltip: '将指定色彩的各通道乘以亮度系数 (0.0 ~ 1.0)',
       helpUrl: ''
     },
+    {
+      type: 'color_cycle',
+      message0: '在 %1 和 %2 之间循环，周期 %3 秒',
+      args0: [
+        { type: 'input_value', name: 'COLOR_A', check: 'Color' },
+        { type: 'input_value', name: 'COLOR_B', check: 'Color' },
+        { type: 'input_value', name: 'PERIOD_SEC', check: 'Number' }
+      ],
+      output: 'Color',
+      style: 'color_blocks',
+      tooltip: '在两色之间往复呼吸/渐变循环，周期以秒为单位',
+      helpUrl: ''
+    },
 
     // =========================================================================
     // 4. KEYBOARD OPERATIONS BLOCKS
     // =========================================================================
     {
       type: 'key_fill_all',
-      message0: '整盘填充色彩 %1',
+      message0: '将全部按键设为 %1',
       args0: [
         { type: 'input_value', name: 'COLOR', check: 'Color' }
       ],
@@ -190,6 +203,47 @@ export function registerCustomBlocks() {
       nextStatement: null,
       style: 'keyboard_blocks',
       tooltip: '将键盘全部 68 颗按键快速填充为指定颜色',
+      helpUrl: ''
+    },
+    {
+      type: 'key_ripple_effect',
+      message0: '从按键 %1 向外扩散色彩 %2 速度 %3',
+      args0: [
+        {
+          type: 'field_dropdown',
+          name: 'KEY',
+          options: [
+            ['W 键', 'W'],
+            ['A 键', 'A'],
+            ['S 键', 'S'],
+            ['D 键', 'D'],
+            ['空格 (SPACE)', 'SPACE'],
+            ['ESC 键', 'ESC'],
+            ['回车 (ENTER)', 'ENTER'],
+            ['Q 键', 'Q'],
+            ['E 键', 'E'],
+            ['R 键', 'R'],
+            ['F 键', 'F'],
+            ['G 键', 'G'],
+            ['中心 (H 键)', 'H']
+          ]
+        },
+        { type: 'input_value', name: 'COLOR', check: 'Color' },
+        {
+          type: 'field_dropdown',
+          name: 'SPEED',
+          options: [
+            ['慢速', '1.0'],
+            ['中速', '2.5'],
+            ['快速', '5.0'],
+            ['极速', '8.0']
+          ]
+        }
+      ],
+      previousStatement: null,
+      nextStatement: null,
+      style: 'keyboard_blocks',
+      tooltip: '以指定按键为中心，向外扩散周期性动态波纹光效',
       helpUrl: ''
     },
     {
@@ -309,6 +363,55 @@ export function registerCustomBlocks() {
       output: 'Boolean',
       style: 'gsi_blocks',
       tooltip: '从 CS2 GSI 提取布尔状态',
+      helpUrl: ''
+    },
+    {
+      type: 'gsi_player_health_condition',
+      message0: '玩家血量 %1 %2',
+      args0: [
+        {
+          type: 'field_dropdown',
+          name: 'OP',
+          options: [
+            ['低于 (<)', '<'],
+            ['低于等于 (<=)', '<='],
+            ['高于 (>)', '>'],
+            ['高于等于 (>=)', '>='],
+            ['等于 (==)', '==']
+          ]
+        },
+        {
+          type: 'field_number',
+          name: 'VALUE',
+          value: 25,
+          min: 0,
+          max: 100
+        }
+      ],
+      output: ['Boolean', 'Condition'],
+      style: 'condition_blocks',
+      tooltip: '判定 CS2 玩家血量是否满足阈值条件 (底层映射 player.state.health)',
+      helpUrl: ''
+    },
+    {
+      type: 'gsi_c4_state_condition',
+      message0: 'C4 状态是 %1',
+      args0: [
+        {
+          type: 'field_dropdown',
+          name: 'STATE',
+          options: [
+            ['已安放 (planted)', 'planted'],
+            ['随身携带 (carried)', 'carried'],
+            ['掉落 (dropped)', 'dropped'],
+            ['已拆除 (defused)', 'defused'],
+            ['已引爆 (exploded)', 'exploded']
+          ]
+        }
+      ],
+      output: ['Boolean', 'Condition'],
+      style: 'condition_blocks',
+      tooltip: '判定 CS2 炸弹当前状态 (底层映射 round.bomb)',
       helpUrl: ''
     },
 

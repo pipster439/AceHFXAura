@@ -34,7 +34,7 @@ export function compileSequence(workspace, target) {
       return node({ kind: 'jump', next: loop[block.getFieldValue('FLOW') === 'CONTINUE' ? 'continue' : 'break'] });
     }
     if (type === 'effect_wait_ms') return node({ kind: 'wait', next: after });
-    if (!['key_fill_all', 'key_set_color', 'variables_set', 'math_change'].includes(type)) {
+    if (!['key_fill_all', 'key_set_color', 'variables_set', 'math_change', 'key_ripple_effect'].includes(type)) {
       throw new Error(`此积木不能独立执行：${type}`);
     }
     return node({ kind: 'action', next: after });

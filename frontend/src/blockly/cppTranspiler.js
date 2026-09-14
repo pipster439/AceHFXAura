@@ -173,6 +173,27 @@ extern "C" {
         return `${indent}out_frame.SetKey(static_cast<size_t>(${ledId}), ${color});${next ? '\n' + next : ''}`;
       }
 
+      case 'key_ripple_effect': {
+        const centerKey = block.getFieldValue('KEY') || 'W';
+        const color = this.valueToCpp(block, 'COLOR', 'ColorRGB{0, 200, 255}');
+        const speed = parseFloat(block.getFieldValue('SPEED') || '2.5') || 2.5;
+        const next = this.blockToCpp(block.getNextBlock(), indent);
+        return `${indent}{\n` +
+               `${indent}    double _cx = 7.5, _cy = 3.0;\n` +
+               `${indent}    auto _it = keymap.GetAllKeys().find("${centerKey}");\n` +
+               `${indent}    if (_it != keymap.GetAllKeys().end()) { _cx = _it->second.physical_x; _cy = _it->second.physical_y; }\n` +
+               `${indent}    const ColorRGB _base_col = ${color};\n` +
+               `${indent}    const double _sp = ${speed};\n` +
+               `${indent}    for (size_t _i = 0; _i < 68; ++_i) {\n` +
+               `${indent}        if (!_keys[_i]) continue;\n` +
+               `${indent}        const double _dist = std::hypot(_keys[_i]->physical_x - _cx, _keys[_i]->physical_y - _cy);\n` +
+               `${indent}        const double _phase = std::fmod(std::fmod(_dist - (static_cast<double>(elapsed_ms) / 1000.0) * _sp, 4.0) + 4.0, 4.0);\n` +
+               `${indent}        const double _wave = std::max(0.0, 1.0 - std::fabs(_phase - 1.0));\n` +
+               `${indent}        out_frame.SetKey(_i, ScaleBrightness(_base_col, _wave));\n` +
+               `${indent}    }\n` +
+               `${indent}}${next ? '\n' + next : ''}`;
+      }
+
       case 'key_for_each': {
         const zone = block.getFieldValue('ZONE') || 'all';
         const doBlock = block.getInputTargetBlock('DO');
@@ -382,6 +403,18 @@ extern "C" {
         return `ScaleBrightness(${c}, ${scale})`;
       }
 
+      case 'color_cycle': {
+        const ca = this.valueToCpp(target, 'COLOR_A', 'ColorRGB{0, 180, 255}');
+        const cb = this.valueToCpp(target, 'COLOR_B', 'ColorRGB{255, 0, 128}');
+        const periodSec = this.valueToCpp(target, 'PERIOD_SEC', '2.0');
+        return `[&]() -> ColorRGB {
+            const double _p_ms = std::max(100.0, static_cast<double>(${periodSec}) * 1000.0);
+            const double _phase = std::fmod(static_cast<double>(elapsed_ms), _p_ms) / _p_ms;
+            const double _ratio = 0.5 - 0.5 * std::cos(_phase * 6.283185307179586);
+            return LerpRGB(${ca}, ${cb}, _ratio);
+        }()`;
+      }
+
       case 'key_is_pressed':
         return 'false';
 
@@ -424,6 +457,23 @@ extern "C" {
         else if (op === '>=') opSym = '>=';
         else if (op === '!=') opSym = '!=';
         return `((gsi ? gsi->GetNumber("${fieldKey}", 0.0) : 0.0) ${opSym} ${expectedNum})`;
+      }
+
+      case 'gsi_player_health_condition': {
+        const op = target.getFieldValue('OP') || '<';
+        const rawVal = target.getFieldValue('VALUE');
+        const expectedNum = (rawVal !== null && rawVal !== undefined && !isNaN(Number(rawVal))) ? Number(rawVal) : 25.0;
+        let opSym = '<';
+        if (op === '<=') opSym = '<=';
+        else if (op === '>') opSym = '>';
+        else if (op === '>=') opSym = '>=';
+        else if (op === '==') opSym = '==';
+        return `((gsi ? gsi->GetNumber("player.state.health", 100.0) : 100.0) ${opSym} ${expectedNum})`;
+      }
+
+      case 'gsi_c4_state_condition': {
+        const expectedVal = target.getFieldValue('STATE') || 'planted';
+        return `(std::string_view(gsi ? gsi->GetString("round.bomb", "") : "") == ${JSON.stringify(expectedVal)})`;
       }
 
       case 'gsi_enum_constant': {

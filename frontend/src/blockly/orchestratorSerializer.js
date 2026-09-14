@@ -249,6 +249,21 @@ export class OrchestratorSerializer {
       return { field, op, value };
     }
 
+    if (block.type === 'gsi_player_health_condition') {
+      const field = 'player.state.health';
+      const op = block.getFieldValue('OP') || '<';
+      const rawVal = block.getFieldValue('VALUE');
+      const value = (rawVal !== null && rawVal !== undefined && !isNaN(Number(rawVal))) ? Number(rawVal) : 25;
+      return { field, op, value };
+    }
+
+    if (block.type === 'gsi_c4_state_condition') {
+      const field = 'round.bomb';
+      const op = '==';
+      const value = block.getFieldValue('STATE') || 'planted';
+      return { field, op, value };
+    }
+
     if (block.type === 'condition_and' || (block.type === 'logic_operation' && block.getFieldValue('OP') === 'AND')) {
       const c0 = this.parseConditionAst(block.getInputTargetBlock('COND0') || block.getInputTargetBlock('A'));
       const c1 = this.parseConditionAst(block.getInputTargetBlock('COND1') || block.getInputTargetBlock('B'));

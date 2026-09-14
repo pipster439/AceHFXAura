@@ -107,6 +107,24 @@ export class JsTranspiler {
         })();\n${next}`;
       }
 
+      case 'key_ripple_effect': {
+        const centerKey = block.getFieldValue('KEY') || 'W';
+        const color = this.valueToJs(block, 'COLOR', '[0, 200, 255]');
+        const speed = parseFloat(block.getFieldValue('SPEED') || '2.5') || 2.5;
+        const next = this.blockToJs(block.getNextBlock());
+        return `(() => {
+          const center = keymap.find(k => k.name === ${JSON.stringify(centerKey)}) || { physical_x: 7.5, physical_y: 3.0 };
+          const c = ${color};
+          const sp = ${speed};
+          for (let i = 0; i < frame.length; i++) {
+            const k = keymap[i];
+            const dist = Math.hypot(k.physical_x - center.physical_x, k.physical_y - center.physical_y);
+            const wave = Math.max(0, 1.0 - Math.abs(((dist - (elapsed_ms / 1000.0) * sp) % 4.0 + 4.0) % 4.0 - 1.0));
+            frame[i] = [Math.round(c[0] * wave), Math.round(c[1] * wave), Math.round(c[2] * wave)];
+          }
+        })();\n${next}`;
+      }
+
       case 'key_for_each': {
         const zone = block.getFieldValue('ZONE') || 'all';
         const doBlock = block.getInputTargetBlock('DO');
@@ -321,6 +339,23 @@ export class JsTranspiler {
         })()`;
       }
 
+      case 'color_cycle': {
+        const ca = this.valueToJs(target, 'COLOR_A', '[0, 180, 255]');
+        const cb = this.valueToJs(target, 'COLOR_B', '[255, 0, 128]');
+        const periodSec = this.valueToJs(target, 'PERIOD_SEC', '2.0');
+        return `(() => {
+          const pMs = Math.max(100, (${periodSec}) * 1000);
+          const phase = (elapsed_ms % pMs) / pMs;
+          const ratio = 0.5 - 0.5 * Math.cos(phase * 6.283185307179586);
+          const a = ${ca}, b = ${cb};
+          return [
+            Math.round(a[0] * (1 - ratio) + b[0] * ratio),
+            Math.round(a[1] * (1 - ratio) + b[1] * ratio),
+            Math.round(a[2] * (1 - ratio) + b[2] * ratio)
+          ];
+        })()`;
+      }
+
       case 'key_is_pressed':
         return 'Boolean(decays && decays[info ? info.name : ""] > 0.05)';
 
@@ -384,6 +419,31 @@ export class JsTranspiler {
           const n = Number(curr);
           const actualNum = Number.isFinite(n) ? n : 0;
           return actualNum ${opSym} ${expectedNum};
+        })()`;
+      }
+
+      case 'gsi_player_health_condition': {
+        const op = target.getFieldValue('OP') || '<';
+        const rawVal = target.getFieldValue('VALUE');
+        const expectedNum = (rawVal !== null && rawVal !== undefined && !isNaN(Number(rawVal))) ? Number(rawVal) : 25;
+        let opSym = '<';
+        if (op === '<=') opSym = '<=';
+        else if (op === '>') opSym = '>';
+        else if (op === '>=') opSym = '>=';
+        else if (op === '==') opSym = '===';
+        return `(() => {
+          if (!gsi) return false;
+          const h = Number(gsi?.player?.state?.health ?? 100);
+          return h ${opSym} ${expectedNum};
+        })()`;
+      }
+
+      case 'gsi_c4_state_condition': {
+        const expectedVal = target.getFieldValue('STATE') || 'planted';
+        return `(() => {
+          if (!gsi) return false;
+          const actualStr = String(gsi?.round?.bomb ?? "");
+          return actualStr === ${JSON.stringify(expectedVal)};
         })()`;
       }
 
