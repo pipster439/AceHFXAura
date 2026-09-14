@@ -85,24 +85,26 @@
 
 ### 环境要求
 - **操作系统**: Windows 11 x64
-- **编译器**: MSVC v143 / v144（支持 C++17，推荐 Visual Studio 2022 或 2026 Community）
-- **构建工具**: CMake >= 3.20
+- **编译器**: Visual Studio 2022/2026 或 Build Tools，安装“使用 C++ 的桌面开发”工作负载（x64 MSVC 工具集及 Windows SDK）。Studio 的“发布”会在运行时再次调用 `vcvars64.bat` 和 `cl.exe`。
+- **构建工具**: CMake >= 3.20；Visual Studio 2026 生成器需要能识别 `Visual Studio 18 2026` 的较新 CMake。
 - **硬件驱动**: 安装 Armoury Crate / ASUS Aac_Keyboard 驱动支持包
 
 ### 编译步骤
-打开 Visual Studio 的 `x64 Native Tools Command Prompt`:
+从全新 clone 的仓库根目录打开 Visual Studio 的 `x64 Native Tools Command Prompt`。以下命令以 VS 2026 为例；VS 2022 请将生成器改为 `Visual Studio 17 2022`：
 
 ```cmd
-cd G:\Aura
-mkdir build
-cd build
-cmake -G "Visual Studio 18 2026" -A x64 ..
-cmake --build . --config Release
+git clone https://github.com/pipster439/AceHFXAura.git
+cd AceHFXAura
+cmake -S . -B build -G "Visual Studio 18 2026" -A x64
+cmake --build build --config Release
+build\Release\aura_daemon.exe
 ```
 
 编译产物：
 - `build/Release/aura_daemon.exe`: 核心硬件推流与自适应守护进程。
 - `build/Release/aura_web_ui.exe`: 独立轻量网页配置服务。
+
+启动 daemon 后访问 `http://127.0.0.1:19898/`。daemon 会启动同目录的 `aura_web_ui.exe`；仓库已提供 `config.json`、`web/index.html` 和键位表，若 `config.json` 缺失则会从 `config.example.json` 初始化。Studio 可直接保存草稿。发布要求本机仍保有 MSVC x64 编译环境和仓库的 `include/` 目录。修改前端源码后，在 `frontend/` 运行 `npm ci`、`npm run build`，再刷新浏览器；更新两个 EXE 后须退出旧 daemon 再启动（单实例保护不会替换正在运行的旧进程）。
 
 ---
 

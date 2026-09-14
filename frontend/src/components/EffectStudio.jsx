@@ -243,9 +243,9 @@ export default function EffectStudio({
       if (!ok) throw new Error('配置保存失败，请重试；原有运行版本保留');
       setCompilerSuccess(true);
       if (apply) setIsPlaying(false);
-      showToast?.(apply ? '光效已发布并生效至硬件！' : '草稿已保存，正在运行的版本保持不变', 'success');
+      showToast?.(apply ? '光效已发布，配置已写入；daemon 将在下次热重载后应用' : '草稿已保存，正在运行的版本保持不变', 'success');
     } catch (err) {
-      setCompilerSuccess(false); setCompilerLog(err.message); showToast?.(err.message, 'error');
+      setCompilerSuccess(false); setCompilerLog([err.message, err.detail].filter(Boolean).join('\n\n')); showToast?.(err.message, 'error');
     } finally { setIsCompiling(false); }
   };
   const handleCompileAndReload = () => saveWorkspace(true);

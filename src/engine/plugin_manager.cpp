@@ -80,7 +80,10 @@ std::shared_ptr<PluginEntry> PluginManager::LoadPluginInternal(const std::filesy
     }
 
     // 2. 加载影子副本
-    HMODULE hMod = LoadLibraryW(shadow_path.c_str());
+    // LoadLibraryW may search DLL directories instead of resolving a relative
+    // subpath against CWD after the ASUS HAL changes the process DLL directory.
+    const auto absolute_shadow_path = std::filesystem::absolute(shadow_path);
+    HMODULE hMod = LoadLibraryW(absolute_shadow_path.c_str());
     if (!hMod) {
         DWORD err = GetLastError();
         LOG_ERROR("[PluginManager] LoadLibraryW 失败 (错误码: " << err << ") 路径: " << shadow_path.string());

@@ -10,7 +10,7 @@ import { JsTranspiler } from '../src/blockly/jsTranspiler.js';
 import { CppTranspiler } from '../src/blockly/cppTranspiler.js';
 import { OrchestratorSerializer as S } from '../src/blockly/orchestratorSerializer.js';
 import { canonicalConfig, processRows, replaceSimpleRows, evalCondition, evaluateOverlayStatus } from '../src/utils/orchestration.js';
-import { stageEffect, effectConfig, getEffectLifecycleStatus, sanitizeEffectName, getNextCloneName, renameEffectInConfig } from '../src/utils/applyEffect.js';
+import { stageEffect, ensureStudioRuntime, effectConfig, getEffectLifecycleStatus, sanitizeEffectName, getNextCloneName, renameEffectInConfig } from '../src/utils/applyEffect.js';
 import { EFFECT_STUDIO_TOOLBOX, ORCHESTRATOR_STUDIO_TOOLBOX } from '../src/blockly/toolboxes.js';
 import { EFFECT_PRESETS } from '../src/blockly/presets.js';
 registerCustomBlocks();
@@ -61,12 +61,23 @@ test('failed compile or reload cannot change an applied profile; drafts retain p
  assert.equal(effectConfig(original,'demo',{blocks:[]}).profiles.demo.plugin_name,'good');
  const oldFetch=globalThis.fetch; const w=sequence();
  try {
-  globalThis.fetch=async url=>url==='/api/gsi/current'?{ok:true,json:async()=>({studio_runtime:2})}:{ok:false,json:async()=>({success:false,message:'compile failed'})};
+  globalThis.fetch=async url=>url==='/api/status'?{ok:true,json:async()=>({web_api_version:2})}:url==='/api/gsi/current'?{ok:true,json:async()=>({studio_runtime:2})}:{ok:false,json:async()=>({success:false,message:'compile failed'})};
   await assert.rejects(stageEffect('demo',w,CppTranspiler),/compile failed/);
-  let count=0; globalThis.fetch=async url=>url==='/api/gsi/current'?{ok:true,json:async()=>({studio_runtime:2})}:{ok:true,json:async()=>++count===1?{success:true}:{success:true,daemon_synced:false}};
+  let count=0; globalThis.fetch=async url=>url==='/api/status'?{ok:true,json:async()=>({web_api_version:2})}:url==='/api/gsi/current'?{ok:true,json:async()=>({studio_runtime:2})}:{ok:true,json:async()=>++count===1?{success:true}:{success:true,daemon_synced:false}};
   await assert.rejects(stageEffect('demo',w,CppTranspiler),/尚未确认/);
   assert.equal(original.profiles.demo.plugin_name,'good');
  } finally {globalThis.fetch=oldFetch;w.dispose();}
+});
+test('publish guard distinguishes an old Web UI, old daemon, and offline daemon before compiling', async () => {
+ const oldFetch=globalThis.fetch;
+ try {
+  globalThis.fetch=async()=>({ok:true,json:async()=>({status:'ok'})});
+  await assert.rejects(ensureStudioRuntime(),/Web UI 版本不兼容/);
+  globalThis.fetch=async url=>({ok:true,json:async()=>url==='/api/status'?{web_api_version:2}:{studio_runtime:1}});
+  await assert.rejects(ensureStudioRuntime(),/Studio Runtime.*当前 v1.*要求 v2/);
+  globalThis.fetch=async url=>({ok:true,json:async()=>url==='/api/status'?{web_api_version:2}:{daemon_running:false}});
+  await assert.rejects(ensureStudioRuntime(),/daemon 不在线/);
+ } finally {globalThis.fetch=oldFetch;}
 });
 const hasGpp = (() => {
   try {

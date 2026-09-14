@@ -1,31 +1,74 @@
 export async function ensureStudioRuntime() {
-  const res = await fetch('/api/gsi/current');
-  const data = await res.json();
-  if (!res.ok || data.studio_runtime !== 2) throw new Error('请先重新编译并启动本分支的守护进程，再应用新版工作室配置');
+  let web, daemon;
+  try {
+    const res = await fetch('/api/status', { cache: 'no-store' });
+    web = await res.json();
+    if (!res.ok) throw new Error('Web UI 未响应');
+  } catch (err) {
+    throw new Error(`无法连接 Web UI：${err.message}`);
+  }
+  if (web.web_api_version !== 2) {
+    throw new Error(`Web UI 版本不兼容：当前 API v${web.web_api_version ?? '未知'}，要求 v2。请重新构建并启动 aura_web_ui.exe，然后刷新页面。`);
+  }
+  try {
+    const res = await fetch('/api/gsi/current', { cache: 'no-store' });
+    daemon = await res.json();
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  } catch (err) {
+    throw new Error(`无法连接 daemon：${err.message}`);
+  }
+  if (daemon.studio_runtime !== 2) {
+    throw new Error(daemon.daemon_running === false
+      ? 'daemon 不在线：请启动最新的 aura_daemon.exe 后重试。'
+      : `未检测到兼容的 Studio Runtime：当前 v${daemon.studio_runtime ?? '未知'}，要求 v2。请关闭旧 daemon，启动最新构建。`);
+  }
 }
 
 export async function requestJson(url, body) {
-  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-  const data = await res.json();
-  if (!res.ok || data.success === false || data.status === 'error') throw new Error(data.compiler_output || data.message || `请求失败 (${res.status})`);
+  let res;
+  try {
+    res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  } catch (err) {
+    throw new Error(`无法连接 Web UI：${err.message}`);
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data.success === false || data.status === 'error') {
+    const err = new Error(data.message || `请求失败 (${res.status})`);
+    err.stage = data.stage || (url.includes('compile') ? 'msvc_compile' : 'daemon_reload');
+    err.detail = data.compiler_output || data.log || '';
+    throw err;
+  }
   return data;
 }
 
 // Stage an immutable build before switching any profile references. Failed
 // compilation, daemon reload or config save leaves the previous version usable.
 export async function stageEffect(name, workspace, transpiler, onLog = () => {}) {
-  // Snapshot both sources before the first await; editing during a build cannot
-  // silently pair a newer program with an older saved Blockly workspace.
-  const canonicalCode = transpiler.transpile(name, workspace);
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]{0,47}$/.test(name)) throw new Error('插件名非法：须以字母或下划线开头，最多 48 个字符。');
+  let progress = '';
+  const report = line => { progress += `${line}\n`; onLog(progress); };
+  report('1/5 检查运行环境…');
+  await ensureStudioRuntime();
+  // The editor is locked during publishing; both transpilations happen before
+  // the compile request so the revision and generated plugin share one source.
+  report('2/5 生成 C++ 源码…');
+  let canonicalCode, code;
   const pluginName = `studio_${name.slice(0, 20)}_${crypto.randomUUID().replaceAll('-', '').slice(0, 20)}`;
-  const code = transpiler.transpile(pluginName, workspace);
+  try {
+    canonicalCode = transpiler.transpile(name, workspace);
+    code = transpiler.transpile(pluginName, workspace);
+  } catch (err) {
+    throw new Error(`C++ 源码生成失败：${err.message}`);
+  }
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonicalCode));
   const revision = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
-  await ensureStudioRuntime();
+  report('3/5 调用 MSVC 编译…');
   const compiled = await requestJson('/api/compile_effect', { name: pluginName, code });
-  onLog(compiled.compiler_output || '光效生成完成');
+  report(`MSVC 输出：\n${compiled.compiler_output || '(无输出)'}`);
+  report('4/5 加载 DLL 并等待 daemon 确认…');
   const loaded = await requestJson('/api/reload_plugin', { name: pluginName });
   if (loaded.daemon_synced !== true) throw new Error('守护进程尚未确认加载，当前方案仍使用上一版。请确认后台已启动后重试。');
+  report('5/5 daemon 已确认插件加载，正在保存配置…');
   return { pluginName, revision };
 }
 

@@ -1,9 +1,241 @@
 {
   "blockly_effects": {
     "cs2_health": {
+      "applied_blockly_json": {
+        "blocks": {
+          "blocks": [
+            {
+              "extraState": {
+                "hasElse": true
+              },
+              "id": "@=,LgMeD+w4!}O-47U?l",
+              "inputs": {
+                "DO0": {
+                  "block": {
+                    "id": "1*8f[3]laeW6Gup~q/ul",
+                    "inputs": {
+                      "COLOR": {
+                        "shadow": {
+                          "id": "uGB)AwF:7#fn5?D?S22A",
+                          "inputs": {
+                            "B": {
+                              "shadow": {
+                                "fields": {
+                                  "NUM": 0
+                                },
+                                "id": "pRFTOAJoBql.FmV:ixpJ",
+                                "type": "math_number"
+                              }
+                            },
+                            "G": {
+                              "shadow": {
+                                "fields": {
+                                  "NUM": 0
+                                },
+                                "id": "%4yWnBE7,iBQoX~0`*{D",
+                                "type": "math_number"
+                              }
+                            },
+                            "R": {
+                              "shadow": {
+                                "fields": {
+                                  "NUM": 255
+                                },
+                                "id": "S[UqSP-7d~QGq^H6YEH2",
+                                "type": "math_number"
+                              }
+                            }
+                          },
+                          "type": "color_rgb"
+                        }
+                      }
+                    },
+                    "type": "key_fill_all"
+                  }
+                },
+                "ELSE": {
+                  "block": {
+                    "id": ",qJqoG^]Xa(#8FdoFEzy",
+                    "inputs": {
+                      "COLOR": {
+                        "shadow": {
+                          "id": "c).MS?S!B:rf%Sm+}ve%",
+                          "inputs": {
+                            "B": {
+                              "shadow": {
+                                "fields": {
+                                  "NUM": 255
+                                },
+                                "id": ".Vx5ML:W.PKxg.Mi1P6B",
+                                "type": "math_number"
+                              }
+                            },
+                            "G": {
+                              "shadow": {
+                                "fields": {
+                                  "NUM": 150
+                                },
+                                "id": "u^QmEDyBK{}qxsS~5Lu6",
+                                "type": "math_number"
+                              }
+                            },
+                            "R": {
+                              "shadow": {
+                                "fields": {
+                                  "NUM": 0
+                                },
+                                "id": "pUzlzpHlbS9fXRZ[1zN$",
+                                "type": "math_number"
+                              }
+                            }
+                          },
+                          "type": "color_rgb"
+                        }
+                      }
+                    },
+                    "type": "key_fill_all"
+                  }
+                },
+                "IF0": {
+                  "block": {
+                    "fields": {
+                      "OP": "<",
+                      "VALUE": 25
+                    },
+                    "id": "Ri?C!/-O*oxIV_R8]fD3",
+                    "type": "gsi_player_health_condition"
+                  }
+                }
+              },
+              "type": "controls_if",
+              "x": 410,
+              "y": 190
+            }
+          ],
+          "languageVersion": 0
+        }
+      },
+      "applied_plugin_name": "studio_cs2_health_d6c40fe81cb54d87a84a",
+      "applied_revision": "6d961704e4e748d0cb8b98536110a7a13d7e44dae3afc78cdcb3e07135ddc4d4",
+      "blockly_json": {
+        "blocks": {
+          "blocks": [
+            {
+              "extraState": {
+                "hasElse": true
+              },
+              "id": "@=,LgMeD+w4!}O-47U?l",
+              "inputs": {
+                "DO0": {
+                  "block": {
+                    "id": "1*8f[3]laeW6Gup~q/ul",
+                    "inputs": {
+                      "COLOR": {
+                        "shadow": {
+                          "id": "uGB)AwF:7#fn5?D?S22A",
+                          "inputs": {
+                            "B": {
+                              "shadow": {
+                                "fields": {
+                                  "NUM": 0
+                                },
+                                "id": "pRFTOAJoBql.FmV:ixpJ",
+                                "type": "math_number"
+                              }
+                            },
+                            "G": {
+                              "shadow": {
+                                "fields": {
+                                  "NUM": 0
+                                },
+                                "id": "%4yWnBE7,iBQoX~0`*{D",
+                                "type": "math_number"
+                              }
+                            },
+                            "R": {
+                              "shadow": {
+                                "fields": {
+                                  "NUM": 255
+                                },
+                                "id": "S[UqSP-7d~QGq^H6YEH2",
+                                "type": "math_number"
+                              }
+                            }
+                          },
+                          "type": "color_rgb"
+                        }
+                      }
+                    },
+                    "type": "key_fill_all"
+                  }
+                },
+                "ELSE": {
+                  "block": {
+                    "id": ",qJqoG^]Xa(#8FdoFEzy",
+                    "inputs": {
+                      "COLOR": {
+                        "shadow": {
+                          "id": "c).MS?S!B:rf%Sm+}ve%",
+                          "inputs": {
+                            "B": {
+                              "shadow": {
+                                "fields": {
+                                  "NUM": 255
+                                },
+                                "id": ".Vx5ML:W.PKxg.Mi1P6B",
+                                "type": "math_number"
+                              }
+                            },
+                            "G": {
+                              "shadow": {
+                                "fields": {
+                                  "NUM": 150
+                                },
+                                "id": "u^QmEDyBK{}qxsS~5Lu6",
+                                "type": "math_number"
+                              }
+                            },
+                            "R": {
+                              "shadow": {
+                                "fields": {
+                                  "NUM": 0
+                                },
+                                "id": "pUzlzpHlbS9fXRZ[1zN$",
+                                "type": "math_number"
+                              }
+                            }
+                          },
+                          "type": "color_rgb"
+                        }
+                      }
+                    },
+                    "type": "key_fill_all"
+                  }
+                },
+                "IF0": {
+                  "block": {
+                    "fields": {
+                      "OP": "<",
+                      "VALUE": 25
+                    },
+                    "id": "Ri?C!/-O*oxIV_R8]fD3",
+                    "type": "gsi_player_health_condition"
+                  }
+                }
+              },
+              "type": "controls_if",
+              "x": 410,
+              "y": 190
+            }
+          ],
+          "languageVersion": 0
+        }
+      },
       "name": "cs2_health",
-      "updated_at": 1773360000000,
-      "version": 1
+      "published_at": 1789402353548,
+      "source_updated_at": 1789402353548,
+      "updated_at": 1789402353548,
+      "version": 2
     }
   },
   "blockly_orchestrator": {
@@ -202,7 +434,8 @@
       ],
       "brightness": 1,
       "fps": 25,
-      "plugin_name": "cs2_health",
+      "plugin_name": "studio_cs2_health_d6c40fe81cb54d87a84a",
+      "title": "cs2_health",
       "type": "plugin"
     },
     "cyberpunk": {

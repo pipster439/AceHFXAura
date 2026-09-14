@@ -89,9 +89,13 @@ inline std::string EnsureUtf8(const std::string& input) {
 std::filesystem::path FindVcvars64Bat() {
     std::vector<std::filesystem::path> candidates = {
         L"C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Auxiliary\\Build\\vcvars64.bat",
+        L"C:\\Program Files\\Microsoft Visual Studio\\18\\Professional\\VC\\Auxiliary\\Build\\vcvars64.bat",
+        L"C:\\Program Files\\Microsoft Visual Studio\\18\\Enterprise\\VC\\Auxiliary\\Build\\vcvars64.bat",
+        L"C:\\Program Files\\Microsoft Visual Studio\\18\\BuildTools\\VC\\Auxiliary\\Build\\vcvars64.bat",
         L"C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\Build\\vcvars64.bat",
         L"C:\\Program Files\\Microsoft Visual Studio\\2022\\Professional\\VC\\Auxiliary\\Build\\vcvars64.bat",
         L"C:\\Program Files\\Microsoft Visual Studio\\2022\\Enterprise\\VC\\Auxiliary\\Build\\vcvars64.bat",
+        L"C:\\Program Files\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Auxiliary\\Build\\vcvars64.bat",
         L"C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Community\\VC\\Auxiliary\\Build\\vcvars64.bat",
         L"C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Professional\\VC\\Auxiliary\\Build\\vcvars64.bat",
         L"C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Enterprise\\VC\\Auxiliary\\Build\\vcvars64.bat"
@@ -107,7 +111,7 @@ std::filesystem::path FindVcvars64Bat() {
     // Try finding via vswhere.exe
     std::filesystem::path vswhere = L"C:\\Program Files (x86)\\Microsoft Visual Studio\\Installer\\vswhere.exe";
     if (std::filesystem::exists(vswhere, ec)) {
-        FILE* pipe = _popen("\"\"C:\\Program Files (x86)\\Microsoft Visual Studio\\Installer\\vswhere.exe\" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath\"", "r");
+        FILE* pipe = _popen("\"\"C:\\Program Files (x86)\\Microsoft Visual Studio\\Installer\\vswhere.exe\" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath -utf8\"", "r");
         if (pipe) {
             char buf[512] = {0};
             if (fgets(buf, sizeof(buf), pipe)) {
@@ -147,6 +151,11 @@ bool CompileCppSourceToDll(const std::string& effect_name,
     std::filesystem::path src_dir = plugins_dir / "src";
     std::filesystem::create_directories(plugins_dir, ec);
     std::filesystem::create_directories(src_dir, ec);
+    if (ec) {
+        out_log = "Cannot create plugins/src directory: " + ec.message();
+        out_exit_code = -2;
+        return false;
+    }
 
     std::string safe_name = effect_name;
     if (safe_name.rfind("effect_", 0) == 0) {
@@ -168,33 +177,46 @@ bool CompileCppSourceToDll(const std::string& effect_name,
         }
         ofs.write(source_code.data(), source_code.size());
         ofs.flush();
-    }
-
-    // 解析 project include 绝对路径
-    std::filesystem::path root_dir = std::filesystem::current_path();
-    if (!std::filesystem::exists(root_dir / "include" / "engine" / "effect.h")) {
-        wchar_t mod_path[MAX_PATH];
-        if (GetModuleFileNameW(nullptr, mod_path, MAX_PATH)) {
-            std::filesystem::path exe_dir = std::filesystem::path(mod_path).parent_path();
-            if (std::filesystem::exists(exe_dir / "include" / "engine" / "effect.h")) {
-                root_dir = exe_dir;
-            } else if (std::filesystem::exists(exe_dir / ".." / "include" / "engine" / "effect.h")) {
-                root_dir = (exe_dir / "..").lexically_normal();
-            } else if (std::filesystem::exists(exe_dir / ".." / ".." / "include" / "engine" / "effect.h")) {
-                root_dir = (exe_dir / ".." / "..").lexically_normal();
-            }
+        if (!ofs.good()) {
+            out_log = "Failed to write generated C++ source file: " + src_file.u8string();
+            out_exit_code = -2;
+            return false;
         }
     }
 
+    // Identify the checkout that owns this executable before consulting CWD.
+    // Stop at its nearest project root; never compile against another checkout's
+    // headers simply because the service was launched from that directory.
+    std::filesystem::path root_dir;
+    wchar_t mod_path[MAX_PATH];
+    DWORD mod_len = GetModuleFileNameW(nullptr, mod_path, MAX_PATH);
+    if (mod_len > 0 && mod_len < MAX_PATH) {
+        for (auto dir = std::filesystem::path(mod_path).parent_path(); !dir.empty(); dir = dir.parent_path()) {
+            if (std::filesystem::exists(dir / "calibrated_keymap.json") &&
+                std::filesystem::exists(dir / "config.example.json")) {
+                root_dir = dir;
+                break;
+            }
+            if (dir == dir.parent_path()) break;
+        }
+    }
+    if (root_dir.empty()) root_dir = std::filesystem::current_path();
+
     std::filesystem::path inc_dir = root_dir / "include";
     std::filesystem::path inc_tp = inc_dir / "third_party";
+    if (!std::filesystem::exists(inc_dir / "engine" / "effect.h") ||
+        !std::filesystem::exists(inc_dir / "engine" / "plugin_interface.h")) {
+        out_log = "Project include directory not found; expected include/engine/effect.h near the Web UI executable.";
+        out_exit_code = -6;
+        return false;
+    }
 
     std::filesystem::path abs_src = std::filesystem::absolute(src_file);
     std::filesystem::path abs_dll = std::filesystem::absolute(dll_file);
     std::filesystem::path abs_obj = std::filesystem::absolute(obj_file);
 
     // 构造编译器命令行
-    std::wstring cmd_str = L"cmd.exe /c \"call \"" + vcvars.wstring() + L"\" >nul && cl.exe /nologo /std:c++17 /O2 /EHsc /utf-8 /MD /LD "
+    std::wstring cmd_str = L"cmd.exe /d /s /c \"call \"" + vcvars.wstring() + L"\" >nul || (echo MSVC vcvars setup failed & exit /b 9008) & where cl.exe >nul || (echo MSVC cl.exe not found & exit /b 9009) & cl.exe /nologo /std:c++17 /O2 /EHsc /utf-8 /MD /LD "
         + L"/I \"" + inc_dir.wstring() + L"\" "
         + L"/I \"" + inc_tp.wstring() + L"\" "
         + L"/Fe:\"" + abs_dll.wstring() + L"\" "
@@ -537,6 +559,7 @@ void WebServer::SetupRoutes() {
 
     // 根路径提供前端页面
     svr_.Get("/", [this](const httplib::Request&, httplib::Response& res) {
+        res.set_header("Cache-Control", "no-store");
         res.set_content(LoadHtmlContent(), "text/html; charset=utf-8");
     });
 
@@ -575,9 +598,10 @@ void WebServer::SetupRoutes() {
         auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::system_clock::now().time_since_epoch()).count();
         nlohmann::json j = {
-            {"status", "ok"},
-            {"service", "aura_web_ui"},
-            {"timestamp", now_ms}
+             {"status", "ok"},
+             {"service", "aura_web_ui"},
+             {"web_api_version", 2},
+             {"timestamp", now_ms}
         };
         res.set_content(j.dump(), "application/json; charset=utf-8");
     });
@@ -638,7 +662,7 @@ void WebServer::SetupRoutes() {
             // 格式化输出 (保持 2 格缩进)
             std::string formatted = j.dump(2);
             if (WriteConfigFile(formatted)) {
-                res.set_content(R"json({"status":"ok","message":"配置已保存，daemon 已通过热重载自动生效"})json", "application/json; charset=utf-8");
+                res.set_content(R"json({"status":"ok","message":"配置已写入，等待 daemon 热重载"})json", "application/json; charset=utf-8");
             } else {
                 res.status = 500;
                 res.set_content(R"json({"status":"error","message":"写入配置文件失败"})json", "application/json; charset=utf-8");
@@ -857,7 +881,8 @@ void WebServer::SetupRoutes() {
                 nlohmann::json resp = {
                     {"status", "error"},
                     {"success", false},
-                    {"message", "Compilation failed"},
+                    {"message", exit_code == -1 || exit_code == 9008 ? "未找到可用的 MSVC 编译环境" : exit_code == 9009 ? "未找到 MSVC 编译器 cl.exe" : exit_code == -6 ? "未找到项目 C++ 头文件" : exit_code == -2 ? "无法写入插件源码" : exit_code == -5 ? "MSVC 编译超时" : "MSVC 编译失败"},
+                    {"stage", exit_code == -1 || exit_code == 9008 || exit_code == 9009 ? "msvc_setup" : exit_code == -6 ? "include" : exit_code == -2 ? "source_write" : exit_code == -5 ? "compiler_timeout" : "msvc_compile"},
                     {"exit_code", exit_code},
                     {"compiler_output", out_log},
                     {"log", out_log},
@@ -899,14 +924,17 @@ void WebServer::SetupRoutes() {
             auto cli_res = cli.Post("/api/plugin/reload", payload.dump(), "application/json");
 
             bool daemon_synced = (cli_res && cli_res->status == 200);
+            bool daemon_offline = !cli_res && cli_res.error() != httplib::Error::ConnectionTimeout;
+            bool dll_load_failed = cli_res && cli_res->status == 400;
 
             nlohmann::json resp = {
-                {"status", "ok"},
-                {"success", true},
-                {"message", "Plugin " + name + " reloaded"},
+                {"status", daemon_synced ? "ok" : "error"},
+                {"success", daemon_synced},
+                {"message", daemon_synced ? "插件已由 daemon 确认加载" : daemon_offline ? "daemon 不在线；旧版本保持运行" : dll_load_failed ? "daemon 未能加载 DLL；旧版本保持运行，请查看 aura_daemon.log" : "daemon 重载未确认或已超时；旧版本保持运行"},
+                {"stage", daemon_synced ? "loaded" : daemon_offline ? "daemon_offline" : dll_load_failed ? "dll_load" : "daemon_reload"},
                 {"daemon_synced", daemon_synced}
             };
-            res.status = 200;
+            res.status = daemon_synced ? 200 : 503;
             res.set_content(resp.dump(), "application/json; charset=utf-8");
         } catch (const std::exception& e) {
             res.status = 400;
@@ -1087,20 +1115,19 @@ bool WebServer::WriteConfigFile(const std::string& json_str) const {
         }
         f.write(json_str.data(), json_str.size());
         f.flush();
-    }
-
-    // Windows MoveFileExW 原子替换（支持非 ASCII 路径）
-    if (!MoveFileExW(tmp_path.c_str(), config_path_.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
-        // 若 MoveFileExW 失败则尝试常规写入并清理临时文件
-        std::ofstream f(config_path_, std::ios::binary | std::ios::trunc);
-        if (!f.is_open()) {
+        if (!f.good()) {
+            f.close();
             std::error_code ec;
             std::filesystem::remove(tmp_path, ec);
             return false;
         }
-        f.write(json_str.data(), json_str.size());
+    }
+
+    // Windows MoveFileExW 原子替换（支持非 ASCII 路径）。失败时保留旧文件。
+    if (!MoveFileExW(tmp_path.c_str(), config_path_.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
         std::error_code ec;
         std::filesystem::remove(tmp_path, ec);
+        return false;
     }
 
     return true;

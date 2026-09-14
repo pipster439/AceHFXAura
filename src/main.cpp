@@ -302,6 +302,22 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    // A build/Release executable must use the same config, web assets and plugins
+    // as a repository-root launch, even when started from another directory.
+    if (config_path == "config.json" && keymap_path == "calibrated_keymap.json" &&
+        !std::filesystem::exists("config.json") && !std::filesystem::exists("calibrated_keymap.json")) {
+        for (auto root = current_exe_dir; !root.empty(); root = root.parent_path()) {
+            if (std::filesystem::exists(root / "calibrated_keymap.json") &&
+                std::filesystem::exists(root / "include" / "engine" / "effect.h")) {
+                std::error_code ec;
+                std::filesystem::current_path(root, ec);
+                if (!ec) LOG_INFO("已将工作目录定位到项目根目录: " + root.u8string());
+                break;
+            }
+            if (root == root.parent_path()) break;
+        }
+    }
+
     // 2.5 硬件探测隔离模式分支 (在创建全局互斥量与维护状态文件之前执行)
     if (probe_mode) {
         // 屏蔽 Windows 错误报告 (WER) 崩溃弹窗，确保底层异常时静默终止以触发通道复位
@@ -386,14 +402,18 @@ int main(int argc, char* argv[]) {
     }
 
     if (!std::filesystem::exists(config_path) && !current_exe_dir.empty()) {
-        auto cand_cfg = current_exe_dir / config_path;
-        if (std::filesystem::exists(cand_cfg)) {
-            config_path = cand_cfg.string();
+        auto same_exe_dir_config = current_exe_dir / config_path;
+        if (std::filesystem::exists(same_exe_dir_config)) {
+            config_path = same_exe_dir_config.string();
         } else {
-            auto cand_ex = current_exe_dir / "config.example.json";
-            if (std::filesystem::exists(cand_ex)) {
+            std::filesystem::path example = "config.example.json";
+            if (!std::filesystem::exists(example)) {
+                example = current_exe_dir / "config.example.json";
+            }
+            if (std::filesystem::exists(example)) {
                 std::error_code ec;
-                std::filesystem::copy_file(cand_ex, config_path, std::filesystem::copy_options::overwrite_existing, ec);
+                std::filesystem::copy_file(example, config_path, std::filesystem::copy_options::none, ec);
+                if (ec) LOG_ERROR("无法初始化 config.json: " + ec.message());
             }
         }
     }
