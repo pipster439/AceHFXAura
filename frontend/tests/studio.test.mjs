@@ -9,8 +9,8 @@ import { registerCustomBlocks } from '../src/blockly/customBlocks.js';
 import { JsTranspiler } from '../src/blockly/jsTranspiler.js';
 import { CppTranspiler } from '../src/blockly/cppTranspiler.js';
 import { OrchestratorSerializer as S } from '../src/blockly/orchestratorSerializer.js';
-import { canonicalConfig, processRows, replaceSimpleRows } from '../src/utils/orchestration.js';
-import { stageEffect, effectConfig, getEffectLifecycleStatus } from '../src/utils/applyEffect.js';
+import { canonicalConfig, processRows, replaceSimpleRows, evalCondition, evaluateOverlayStatus } from '../src/utils/orchestration.js';
+import { stageEffect, effectConfig, getEffectLifecycleStatus, sanitizeEffectName, getNextCloneName, renameEffectInConfig } from '../src/utils/applyEffect.js';
 import { EFFECT_STUDIO_TOOLBOX, ORCHESTRATOR_STUDIO_TOOLBOX } from '../src/blockly/toolboxes.js';
 import { EFFECT_PRESETS } from '../src/blockly/presets.js';
 registerCustomBlocks();
@@ -495,4 +495,168 @@ test('orchestration studio toolbox and semantic condition blocks exist', () => {
   const effectBlocks = JSON.stringify(EFFECT_STUDIO_TOOLBOX);
   assert.ok(effectBlocks.includes('color_cycle'));
   assert.ok(effectBlocks.includes('key_ripple_effect'));
+});
+
+test('OrchestrationInspector event overlay determination prioritizes liveGsi.data[eventName] without direct events name matching', () => {
+  const overlay = {
+    trigger: 'event',
+    event: 'event.kill',
+    effect: 'kill_wave',
+    duration_ms: 800
+  };
+
+  // 1. liveGsi has data['event.kill'] = true, events array has different or expired event
+  const liveGsiActive = {
+    connected: true,
+    data: {
+      'event.kill': true,
+      'player.state.health': 100
+    },
+    events: [
+      { name: 'PlayerGotKill', timestamp_ms: Date.now() - 5000 }
+    ]
+  };
+  const resActive = evaluateOverlayStatus(overlay, {
+    isSimMode: false,
+    recentSimEvent: null,
+    liveGsi: liveGsiActive,
+    effectiveProcess: 'cs2.exe',
+    effectiveGsi: liveGsiActive.data
+  });
+  assert.equal(resActive.isActive, true);
+  assert.ok(resActive.reason.includes('event.kill'));
+
+  // 2. liveGsi has data['event.kill'] = false, events array has raw CS2 event name
+  // Must NOT trigger just because raw CS2 event name exists in events array
+  const liveGsiInactive = {
+    connected: true,
+    data: {
+      'event.kill': false,
+      'player.state.health': 100
+    },
+    events: [
+      { name: 'PlayerGotKill', timestamp_ms: Date.now() }
+    ]
+  };
+  const resInactive = evaluateOverlayStatus(overlay, {
+    isSimMode: false,
+    recentSimEvent: null,
+    liveGsi: liveGsiInactive,
+    effectiveProcess: 'cs2.exe',
+    effectiveGsi: liveGsiInactive.data
+  });
+  assert.equal(resInactive.isActive, false);
+
+  // 3. Event without "event." prefix in overlay config reads data['event.kill'] fallback
+  const overlayNoPrefix = {
+    trigger: 'event',
+    event: 'kill',
+    effect: 'kill_wave'
+  };
+  const resAlt = evaluateOverlayStatus(overlayNoPrefix, {
+    isSimMode: false,
+    recentSimEvent: null,
+    liveGsi: liveGsiActive,
+    effectiveProcess: 'cs2.exe',
+    effectiveGsi: liveGsiActive.data
+  });
+  assert.equal(resAlt.isActive, true);
+});
+
+test('import effect name sanitization handles filename and JSON data.name with non-empty validation', () => {
+  // 1. From file name with extensions and spaces
+  assert.equal(sanitizeEffectName('My Crazy Rainbow.json'), 'my_crazy_rainbow_json');
+  assert.equal(sanitizeEffectName('cool-wave_2'), 'cool_wave_2');
+  
+  // 2. From JSON data.name with special chars and spaces
+  assert.equal(sanitizeEffectName('  CS2 !! Hyper-Beast Wave  '), 'cs2_hyper_beast_wave');
+  assert.equal(sanitizeEffectName('__underscore_test__'), 'underscore_test');
+
+  // 3. Non-empty fallback validation
+  assert.equal(sanitizeEffectName('', 'imported_effect'), 'imported_effect');
+  assert.equal(sanitizeEffectName('    ', 'imported_effect'), 'imported_effect');
+  assert.equal(sanitizeEffectName('!@#$%^&*()', 'imported_effect'), 'imported_effect');
+  assert.equal(sanitizeEffectName(null, 'imported_effect'), 'imported_effect');
+  assert.equal(sanitizeEffectName(undefined, 'imported_effect'), 'imported_effect');
+});
+
+test('clone naming follows foo -> foo_copy -> foo_copy_2 -> foo_copy_3 and avoids collisions', () => {
+  // 1. Initial clone: foo -> foo_copy
+  const existing1 = { foo: {} };
+  assert.equal(getNextCloneName('foo', existing1), 'foo_copy');
+
+  // 2. Second clone: foo_copy exists -> foo_copy_2
+  const existing2 = { foo: {}, foo_copy: {} };
+  assert.equal(getNextCloneName('foo', existing2), 'foo_copy_2');
+
+  // 3. Third clone: foo_copy and foo_copy_2 exist -> foo_copy_3
+  const existing3 = { foo: {}, foo_copy: {}, foo_copy_2: {} };
+  assert.equal(getNextCloneName('foo', existing3), 'foo_copy_3');
+
+  // 4. Cloning a copy: foo_copy -> foo_copy_2
+  assert.equal(getNextCloneName('foo_copy', existing2), 'foo_copy_2');
+
+  // 5. Gap handling: foo_copy_2 exists manually -> foo_copy
+  const existingWithGap = { foo: {}, foo_copy_2: {} };
+  assert.equal(getNextCloneName('foo', existingWithGap), 'foo_copy');
+
+  // 6. Next after gap filled
+  const existingGapFilled = { foo: {}, foo_copy: {}, foo_copy_2: {} };
+  assert.equal(getNextCloneName('foo', existingGapFilled), 'foo_copy_3');
+});
+
+test('renameEffectInConfig synchronizes blockly_effects.name and profiles.title while preserving applied_plugin_name', () => {
+  const config = {
+    default_profile: 'old_wave',
+    profiles: {
+      old_wave: {
+        type: 'plugin',
+        plugin_name: 'studio_old_wave_dll_hash123',
+        title: 'old_wave',
+        fps: 25
+      }
+    },
+    blockly_effects: {
+      old_wave: {
+        name: 'old_wave',
+        version: 2,
+        applied_plugin_name: 'studio_old_wave_dll_hash123',
+        published_at: 1000000,
+        source_updated_at: 1000000,
+        blockly_json: { blocks: [] }
+      }
+    },
+    orchestration: {
+      fallback_profile: 'old_wave',
+      rules: [
+        { process: 'cs2.exe', target_profile: 'old_wave', enabled: true }
+      ],
+      event_overlays: [
+        { trigger: 'state', effect: 'old_wave', priority: 10 }
+      ]
+    }
+  };
+
+  const updated = renameEffectInConfig(config, 'old_wave', 'new_wave');
+
+  // 1. Old keys removed
+  assert.equal(updated.blockly_effects.old_wave, undefined);
+  assert.equal(updated.profiles.old_wave, undefined);
+
+  // 2. New keys created with synchronized names
+  assert.ok(updated.blockly_effects.new_wave);
+  assert.equal(updated.blockly_effects.new_wave.name, 'new_wave');
+  assert.ok(updated.profiles.new_wave);
+  assert.equal(updated.profiles.new_wave.title, 'new_wave');
+
+  // 3. Preserves applied_plugin_name and profile plugin_name (no recompile needed)
+  assert.equal(updated.blockly_effects.new_wave.applied_plugin_name, 'studio_old_wave_dll_hash123');
+  assert.equal(updated.profiles.new_wave.plugin_name, 'studio_old_wave_dll_hash123');
+  assert.equal(updated.blockly_effects.new_wave.published_at, 1000000);
+
+  // 4. Cascaded references in orchestration
+  assert.equal(updated.default_profile, 'new_wave');
+  assert.equal(updated.orchestration.fallback_profile, 'new_wave');
+  assert.equal(updated.orchestration.rules[0].target_profile, 'new_wave');
+  assert.equal(updated.orchestration.event_overlays[0].effect, 'new_wave');
 });

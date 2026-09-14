@@ -27,7 +27,13 @@ import EffectStudio from './EffectStudio';
 import OrchestratorStudio from './OrchestratorStudio';
 import OrchestrationInspector from './OrchestrationInspector';
 import KeyboardVisualizer from './KeyboardVisualizer';
-import { getEffectLifecycleStatus, effectConfig } from '../utils/applyEffect';
+import { 
+  getEffectLifecycleStatus, 
+  effectConfig,
+  sanitizeEffectName,
+  getNextCloneName,
+  renameEffectInConfig
+} from '../utils/applyEffect';
 import { EFFECT_PRESETS } from '../blockly/presets';
 import { canonicalConfig } from '../utils/orchestration';
 
@@ -83,7 +89,7 @@ export default function Studio({
   // 处理新建光效
   const handleCreateNewEffect = async (e) => {
     e.preventDefault();
-    const clean = newEffectName.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_');
+    const clean = sanitizeEffectName(newEffectName, '');
     if (!clean) {
       showToast?.('请输入合法的光效名称', 'error');
       return;
@@ -146,12 +152,16 @@ export default function Studio({
     }
   };
 
-  // 处理克隆光效
+  // 处理克隆光效 (foo → foo_copy → foo_copy_2 → foo_copy_3，禁止静默覆盖已有作品)
   const handleCloneEffect = async (srcName, e) => {
     e?.stopPropagation?.();
     const src = config?.blockly_effects?.[srcName];
     if (!src) return;
-    const cloneName = `${srcName}_copy`;
+    const cloneName = getNextCloneName(srcName, config?.blockly_effects || {});
+    if (config?.blockly_effects?.[cloneName]) {
+      showToast?.('克隆名称冲突，操作取消', 'error');
+      return;
+    }
     const nextConfig = effectConfig(config, cloneName, src.blockly_json);
     const ok = await onSaveConfig(nextConfig);
     if (ok) {
@@ -161,67 +171,29 @@ export default function Studio({
     }
   };
 
-  // 处理重命名光效
+  // 处理重命名光效 (同步 blockly_effects[newName].name 与 profiles[newName].title，保留 applied_plugin_name)
   const handleRenameEffect = async (oldName, newName) => {
-    const clean = newName.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_');
-    if (!clean) {
-      showToast?.('名称不能为空', 'error');
-      return;
-    }
-    if (clean === oldName) {
-      setEditingEffectName(null);
-      return;
-    }
-    if (config?.blockly_effects?.[clean]) {
-      showToast?.('目标名称已存在', 'error');
-      return;
-    }
-
-    const effects = { ...(config?.blockly_effects || {}) };
-    const oldEffect = effects[oldName];
-    if (!oldEffect) return;
-
-    delete effects[oldName];
-    effects[clean] = oldEffect;
-
-    const profiles = { ...(config?.profiles || {}) };
-    if (profiles[oldName]) {
-      profiles[clean] = profiles[oldName];
-      delete profiles[oldName];
-    }
-
-    // 级联更新联动与方案中的引用
-    const orch = JSON.parse(JSON.stringify(config?.orchestration || {}));
-    if (orch.fallback_profile === oldName) orch.fallback_profile = clean;
-    if (Array.isArray(orch.rules)) {
-      orch.rules.forEach(r => {
-        if (r.target_profile === oldName) r.target_profile = clean;
-      });
-    }
-    if (Array.isArray(orch.event_overlays)) {
-      orch.event_overlays.forEach(ov => {
-        if (ov.effect === oldName) ov.effect = clean;
-      });
-    }
-
-    let defaultProfile = config?.default_profile;
-    if (defaultProfile === oldName) defaultProfile = clean;
-
-    const nextConfig = {
-      ...config,
-      default_profile: defaultProfile,
-      blockly_effects: effects,
-      profiles,
-      orchestration: orch
-    };
-
-    const ok = await onSaveConfig(nextConfig);
-    if (ok) {
-      showToast?.(`已将「${oldName}」重命名为「${clean}」`, 'success');
-      if (activeEffectName === oldName) {
-        setActiveEffectName(clean);
+    try {
+      const clean = sanitizeEffectName(newName, '');
+      if (!clean) {
+        showToast?.('名称不能为空', 'error');
+        return;
       }
-      setEditingEffectName(null);
+      if (clean === oldName) {
+        setEditingEffectName(null);
+        return;
+      }
+      const nextConfig = renameEffectInConfig(config, oldName, newName);
+      const ok = await onSaveConfig(nextConfig);
+      if (ok) {
+        showToast?.(`已将「${oldName}」重命名为「${clean}」`, 'success');
+        if (activeEffectName === oldName) {
+          setActiveEffectName(clean);
+        }
+        setEditingEffectName(null);
+      }
+    } catch (err) {
+      showToast?.(err.message, 'error');
     }
   };
 
@@ -246,7 +218,7 @@ export default function Studio({
     showToast?.(`已导出光效「${name}」配置`, 'success');
   };
 
-  // 处理导入光效
+  // 处理导入光效 (无论名称来自文件名还是 JSON data.name，最终都经过统一 sanitize + 非空校验)
   const handleImportFile = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -254,11 +226,11 @@ export default function Studio({
       const text = await file.text();
       const data = JSON.parse(text);
 
-      let targetName = file.name.replace(/\.[^/.]+$/, '').toLowerCase().replace(/[^a-z0-9_]/g, '_');
+      let rawName = file.name.replace(/\.[^/.]+$/, '');
       let blocklyJson = null;
 
       if (data.type === 'acehfx_aura_effect' && data.effect) {
-        targetName = data.name || targetName;
+        if (data.name) rawName = data.name;
         blocklyJson = data.effect.blockly_json || data.effect;
       } else if (data.blocks) {
         blocklyJson = data;
@@ -268,10 +240,16 @@ export default function Studio({
         throw new Error('未识别的文件格式');
       }
 
-      let finalName = targetName;
-      let counter = 1;
-      while (config?.blockly_effects?.[finalName]) {
-        finalName = `${targetName}_${counter++}`;
+      // 统一 sanitize + 非空校验
+      const baseName = sanitizeEffectName(rawName, 'imported_effect');
+
+      let finalName = baseName;
+      if (config?.blockly_effects?.[finalName]) {
+        let counter = 2;
+        while (config?.blockly_effects?.[`${baseName}_${counter}`]) {
+          counter++;
+        }
+        finalName = `${baseName}_${counter}`;
       }
 
       const nextConfig = effectConfig(config, finalName, blocklyJson);

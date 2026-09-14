@@ -10,47 +10,9 @@ import {
   Clock
 } from 'lucide-react';
 
-/**
- * Condition evaluator for orchestration rules and overlay state conditions
- */
-function evalCondition(cond, proc, gsiVals) {
-  if (!cond || Object.keys(cond).length === 0) return true;
-  if (cond.type === 'not') return !evalCondition(cond.conditions?.[0], proc, gsiVals);
-  if (cond.type === 'and') return (cond.conditions || []).every(c => evalCondition(c, proc, gsiVals));
-  if (cond.type === 'or') return (cond.conditions || []).some(c => evalCondition(c, proc, gsiVals));
+import { evalCondition, evaluateOverlayStatus } from '../utils/orchestration';
 
-  const field = cond.field || '';
-  const op = cond.op || '==';
-  const expected = cond.value;
-
-  let actual;
-  if (field === 'process.name' || field === 'process') {
-    actual = proc;
-  } else {
-    actual = gsiVals[field];
-  }
-
-  if (actual === undefined || actual === null) {
-    if (typeof expected === 'number') actual = 0;
-    else if (typeof expected === 'boolean') actual = false;
-    else actual = '';
-  }
-
-  if (op === '==' || op === '===') {
-    return String(actual).toLowerCase() === String(expected).toLowerCase();
-  }
-  if (op === '!=' || op === '!==') {
-    return String(actual).toLowerCase() !== String(expected).toLowerCase();
-  }
-  const numActual = Number(actual);
-  const numExpected = Number(expected);
-  if (op === '<') return numActual < numExpected;
-  if (op === '<=') return numActual <= numExpected;
-  if (op === '>') return numActual > numExpected;
-  if (op === '>=') return numActual >= numExpected;
-  if (op === 'contains') return String(actual).toLowerCase().includes(String(expected).toLowerCase());
-  return false;
-}
+export { evalCondition, evaluateOverlayStatus };
 
 export default function OrchestrationInspector({
   config,
@@ -148,27 +110,13 @@ export default function OrchestrationInspector({
   const overlayStatuses = useMemo(() => {
     const overlays = config?.orchestration?.event_overlays || [];
     return overlays.map((ov, idx) => {
-      const isState = ov.trigger === 'state';
-      let isActive = false;
-      let reason = '';
-
-      if (isState) {
-        isActive = evalCondition(ov.condition, effectiveProcess, effectiveGsi);
-        reason = isActive ? '条件已满足' : '条件未满足';
-      } else {
-        // Event overlay
-        if (isSimMode) {
-          isActive = recentSimEvent === ov.event;
-          reason = isActive ? '事件触发中' : `待命 (${ov.event})`;
-        } else {
-          // Check live events
-          const liveEvents = liveGsi?.events || [];
-          const now = Date.now();
-          const match = liveEvents.find(e => e.name === ov.event && (now - e.timestamp_ms) < (ov.duration_ms || 1200));
-          isActive = Boolean(match);
-          reason = isActive ? '检测到游戏事件' : `监听 (${ov.event})`;
-        }
-      }
+      const { isActive, reason } = evaluateOverlayStatus(ov, {
+        isSimMode,
+        recentSimEvent,
+        liveGsi,
+        effectiveProcess,
+        effectiveGsi
+      });
 
       return {
         ...ov,

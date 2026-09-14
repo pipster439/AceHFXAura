@@ -40,3 +40,85 @@ export function replaceSimpleRows(config, kind, rows) {
   }
   return { ...next, blockly_orchestrator: undefined, orchestration: { ...next.orchestration, rules } };
 }
+
+/**
+ * Condition evaluator for orchestration rules and overlay state conditions
+ */
+export function evalCondition(cond, proc, gsiVals = {}) {
+  if (!cond || Object.keys(cond).length === 0) return true;
+  if (cond.type === 'not') return !evalCondition(cond.conditions?.[0], proc, gsiVals);
+  if (cond.type === 'and') return (cond.conditions || []).every(c => evalCondition(c, proc, gsiVals));
+  if (cond.type === 'or') return (cond.conditions || []).some(c => evalCondition(c, proc, gsiVals));
+
+  const field = cond.field || '';
+  const op = cond.op || '==';
+  const expected = cond.value;
+
+  let actual;
+  if (field === 'process.name' || field === 'process') {
+    actual = proc;
+  } else {
+    actual = gsiVals[field];
+  }
+
+  if (actual === undefined || actual === null) {
+    if (typeof expected === 'number') actual = 0;
+    else if (typeof expected === 'boolean') actual = false;
+    else actual = '';
+  }
+
+  if (op === '==' || op === '===') {
+    return String(actual).toLowerCase() === String(expected).toLowerCase();
+  }
+  if (op === '!=' || op === '!==') {
+    return String(actual).toLowerCase() !== String(expected).toLowerCase();
+  }
+  const numActual = Number(actual);
+  const numExpected = Number(expected);
+  if (op === '<') return numActual < numExpected;
+  if (op === '<=') return numActual <= numExpected;
+  if (op === '>') return numActual > numExpected;
+  if (op === '>=') return numActual >= numExpected;
+  if (op === 'contains') return String(actual).toLowerCase().includes(String(expected).toLowerCase());
+  return false;
+}
+
+/**
+ * Evaluates whether an overlay is currently active.
+ * 对 event.kill 这类事件优先读取 /api/gsi/current 返回的 data[eventName]，
+ * 不要把 ov.event 直接和 events[].name 比较。
+ * 不新增 daemon API，也不要复制一份事件别名表。
+ */
+export function evaluateOverlayStatus(ov, { isSimMode, recentSimEvent, liveGsi, effectiveProcess, effectiveGsi } = {}) {
+  const isState = ov?.trigger === 'state';
+  let isActive = false;
+  let reason = '';
+
+  if (isState) {
+    isActive = evalCondition(ov.condition, effectiveProcess, effectiveGsi);
+    reason = isActive ? '条件已满足' : '条件未满足';
+  } else {
+    const eventName = ov?.event || '';
+    if (isSimMode) {
+      isActive = recentSimEvent === eventName;
+      reason = isActive ? '事件触发中' : `待命 (${eventName})`;
+    } else {
+      const data = liveGsi?.data || {};
+      let val = data[eventName];
+      if (val === undefined || val === null) {
+        const altKey = eventName.startsWith('event.') ? eventName.slice(6) : `event.${eventName}`;
+        val = data[altKey];
+      }
+
+      if (val !== undefined && val !== null) {
+        isActive = Boolean(val);
+        reason = isActive ? `检测到 ${eventName}` : `待命 (${eventName})`;
+      } else {
+        isActive = false;
+        reason = `待命 (${eventName})`;
+      }
+    }
+  }
+
+  return { isActive, reason };
+}

@@ -67,3 +67,87 @@ export function effectConfig(config, name, blocklyJson, build) {
   }
   return { ...config, profiles, blockly_effects: { ...config.blockly_effects, [name]: effect } };
 }
+
+export function sanitizeEffectName(rawName, fallback = 'custom_effect') {
+  if (typeof rawName !== 'string') rawName = String(rawName || '');
+  const clean = rawName
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  return clean || fallback;
+}
+
+export function getNextCloneName(srcName, existingEffects = {}) {
+  const existingKeys = Array.isArray(existingEffects)
+    ? existingEffects
+    : Object.keys(existingEffects || {});
+  const existingSet = new Set(existingKeys);
+
+  let root = srcName;
+  const match = srcName.match(/^(.*?)_copy(?:_(\d+))?$/);
+  if (match) {
+    root = match[1];
+  }
+
+  if (!existingSet.has(`${root}_copy`)) {
+    return `${root}_copy`;
+  }
+
+  let index = 2;
+  while (existingSet.has(`${root}_copy_${index}`)) {
+    index++;
+  }
+  return `${root}_copy_${index}`;
+}
+
+export function renameEffectInConfig(config, oldName, newName) {
+  const clean = sanitizeEffectName(newName, '');
+  if (!clean) throw new Error('名称不能为空');
+  if (clean === oldName) return config;
+  if (config?.blockly_effects?.[clean]) throw new Error('目标名称已存在');
+
+  const effects = { ...(config?.blockly_effects || {}) };
+  const oldEffect = effects[oldName];
+  if (!oldEffect) throw new Error(`源光效不存在: ${oldName}`);
+
+  delete effects[oldName];
+  effects[clean] = {
+    ...oldEffect,
+    name: clean
+  };
+
+  const profiles = { ...(config?.profiles || {}) };
+  if (profiles[oldName]) {
+    profiles[clean] = {
+      ...profiles[oldName],
+      title: clean
+    };
+    delete profiles[oldName];
+  }
+
+  const orch = JSON.parse(JSON.stringify(config?.orchestration || {}));
+  if (orch.fallback_profile === oldName) orch.fallback_profile = clean;
+  if (Array.isArray(orch.rules)) {
+    orch.rules.forEach(r => {
+      if (r.target_profile === oldName) r.target_profile = clean;
+    });
+  }
+  if (Array.isArray(orch.event_overlays)) {
+    orch.event_overlays.forEach(ov => {
+      if (ov.effect === oldName) ov.effect = clean;
+    });
+  }
+
+  let defaultProfile = config?.default_profile;
+  if (defaultProfile === oldName) defaultProfile = clean;
+
+  return {
+    ...config,
+    default_profile: defaultProfile,
+    blockly_effects: effects,
+    profiles,
+    orchestration: orch
+  };
+}
