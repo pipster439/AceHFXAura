@@ -2,7 +2,7 @@
 
 GitHub Actions runs on pushes, pull requests, and manual dispatches.
 
-- **Windows:** checks that local configuration and generated plugin sources are absent from Git, builds Release daemon/WebUI and native tests, runs CTest, Python effect tests, and WebUI/dry-run daemon entrypoint tests.
+- **Windows:** checks that local configuration and generated plugin sources are absent from Git, builds Release daemon/WebUI and native tests, runs CTest (including real plugin DLL loading/reloading), and WebUI/dry-run daemon entrypoint tests.
 - **Frontend:** installs the lockfile dependencies with `npm ci`, runs the Node test suite, and builds the single-page UI.
 
 The Windows job builds its own binaries and passes that exact directory through `AURA_BIN_DIR`. Runtime tests use temporary configuration and application-data directories; daemon lifecycle tests use `--dry-run`.
@@ -16,3 +16,5 @@ python -B tests/test_runtime_entrypoints.py
 ```
 
 The frontend build writes `web/index.html`. CI builds only in its disposable checkout and does not publish or commit generated output.
+
+Legacy Python replica/model experiments are excluded from CI. Their passing counts do not measure production behavior. See [TESTING.md](TESTING.md) for the distinction and remaining limitations.

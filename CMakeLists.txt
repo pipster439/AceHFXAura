@@ -154,6 +154,15 @@ target_link_libraries(test_diag_hook PRIVATE user32)
 
 # 5. CTest 测试体系集成
 enable_testing()
+add_library(plugin_fixture_v1 SHARED tests/fixtures/plugin_reload_fixture.cpp)
+target_compile_definitions(plugin_fixture_v1 PRIVATE FIXTURE_VALUE=17)
+add_library(plugin_fixture_v2 SHARED tests/fixtures/plugin_reload_fixture.cpp)
+target_compile_definitions(plugin_fixture_v2 PRIVATE FIXTURE_VALUE=93)
+add_executable(test_plugin_runtime tests/test_plugin_runtime.cpp src/engine/plugin_manager.cpp)
+add_dependencies(test_plugin_runtime plugin_fixture_v1 plugin_fixture_v2)
+add_test(NAME plugin_runtime COMMAND test_plugin_runtime
+    $<TARGET_FILE:plugin_fixture_v1> $<TARGET_FILE:plugin_fixture_v2>)
+set_tests_properties(plugin_runtime PROPERTIES TIMEOUT 30)
 add_test(NAME gsi_rules COMMAND test_gsi_rules)
 set_tests_properties(gsi_rules PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures")
 

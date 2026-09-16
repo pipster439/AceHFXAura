@@ -35,13 +35,9 @@ jobs:
       - name: Configure
         run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
       - name: Build
-        run: cmake --build build --config Release --target aura_daemon aura_web_ui test_gsi_rules --parallel 2
+        run: cmake --build build --config Release --target aura_daemon aura_web_ui test_gsi_rules test_plugin_runtime --parallel 2
       - name: CTest
         run: ctest --test-dir build -C Release --output-on-failure
-      - name: Scratch tests
-        run: python -B tests/test_scratch_blocks_and_library.py
-      - name: Effects tests
-        run: python -B tests/test_e2e_11_effects.py
       # Aura.exe embeds an ASUS driver not stored in Git. Its tests remain local.
       - name: WebUI and dry-run daemon entrypoints
         working-directory: tests

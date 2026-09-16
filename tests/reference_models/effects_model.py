@@ -1,27 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-test_e2e_11_effects.py - Comprehensive 4-Tier E2E Test Suite for ROG Falchion Ace HFX (Aura)
-
-Covers all 11 Lighting Effects:
-  1. static
-  2. breathing
-  3. color_cycle
-  4. wave
-  5. reactive
-  6. ripple
-  7. starry_night
-  8. quicksand
-  9. current
-  10. raindrop
-  11. custom_keymap
-
-4-Tier Coverage Architecture:
-  - Tier 1: Feature Coverage (≥55 tests, 5 per effect)
-  - Tier 2: Boundary & Corner Cases (≥55 tests: thickness, speed_index, brightness, RGB, direction, JSON roots)
-  - Tier 3: Cross-Feature Combinations & Invariants (≥11 tests: arbitration, GSI, rules, layering, roundtrip)
-  - Tier 4: Real-World Application Scenarios (≥6 tests: CS2 gaming, Office, Cyberpunk, Rainbow Wave, Reactive, Starry Night)
-  - Tier 5 / Artifacts: Production files integrity (config.json, config.example.json, keymap, web/index.html)
+"""Legacy reference-model experiments, NOT production or end-to-end tests.
+These checks mostly exercise Python replicas, fixtures and platform primitives.
+They are excluded from CI and default unittest discovery. Passing them does not
+validate Aura behavior. See docs/TESTING.md for implementation-backed checks.
 """
 
 import sys
@@ -42,10 +24,10 @@ if sys.platform == "win32":
     except Exception:
         pass
 
-ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 # ============================================================================
-# Section 0: Authoritative Reference Model (RuleEngine & Effect Invariants)
+# Section 0: Reference Model (RuleEngine & Effect Invariants)
 # Derived from C++ include/engine/builtin_effects.h and src/config/rule_engine.cpp
 # ============================================================================
 
@@ -71,7 +53,7 @@ CARDINAL_AND_SPREAD_DIRECTIONS = [
 
 
 class RuleEngineModel:
-    """Pure-Python authoritative specification model of the C++ RuleEngine."""
+    """Pure-Python replica of the C++ RuleEngine."""
 
     @staticmethod
     def clamp_period(pname: str, pval: Dict[str, Any], def_period: int = 3000) -> int:
@@ -1259,51 +1241,6 @@ class TestProductionArtifactsAndInfra(unittest.TestCase):
 # Test Runner & Reporting
 # ============================================================================
 
-def run_suite():
-    loader = unittest.TestLoader()
-    suite = unittest.TestSuite()
-
-    classes = [
-        TestTier1FeatureCoverage,
-        TestTier2BoundaryAndCornerCases,
-        TestTier3CrossFeatureCombinations,
-        TestTier4RealWorldScenarios,
-        TestProductionArtifactsAndInfra
-    ]
-
-    for cls in classes:
-        suite.addTests(loader.loadTestsFromTestCase(cls))
-
-    runner = unittest.TextTestRunner(verbosity=2)
-    print("=" * 80)
-    print("  ROG Falchion Ace HFX (Aura) - 4-Tier E2E Lighting Effects Test Suite")
-    print("=" * 80)
-
-    result = runner.run(suite)
-
-    # Detailed Breakdown Report
-    t1_count = len(loader.getTestCaseNames(TestTier1FeatureCoverage))
-    t2_count = len(loader.getTestCaseNames(TestTier2BoundaryAndCornerCases))
-    t3_count = len(loader.getTestCaseNames(TestTier3CrossFeatureCombinations))
-    t4_count = len(loader.getTestCaseNames(TestTier4RealWorldScenarios))
-    t5_count = len(loader.getTestCaseNames(TestProductionArtifactsAndInfra))
-    total_count = result.testsRun
-
-    print("\n" + "=" * 80)
-    print("  4-Tier Test Coverage Summary")
-    print("=" * 80)
-    print(f"  Tier 1 (Feature Coverage, ≥55 target):       {t1_count:3d} tests [PASS]")
-    print(f"  Tier 2 (Boundary & Corner Cases, ≥55 target): {t2_count:3d} tests [PASS]")
-    print(f"  Tier 3 (Cross-Feature Combos, ≥11 target):    {t3_count:3d} tests [PASS]")
-    print(f"  Tier 4 (Real-World Scenarios, ≥6 target):     {t4_count:3d} tests [PASS]")
-    print(f"  Artifacts & Infra Verification:               {t5_count:3d} tests [PASS]")
-    print("-" * 80)
-    print(f"  Total Executed: {total_count} | Passed: {total_count - len(result.failures) - len(result.errors)} | Failed: {len(result.failures)} | Errors: {len(result.errors)}")
-    print("=" * 80)
-
-    return result.wasSuccessful()
-
-
 if __name__ == "__main__":
-    success = run_suite()
-    sys.exit(0 if success else 1)
+    print("REFERENCE MODEL CHECKS ONLY - not production coverage", flush=True)
+    unittest.main(verbosity=2)

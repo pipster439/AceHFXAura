@@ -1,23 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-test_e2e_blockly_system.py - Comprehensive 4-Tier Opaque-Box E2E Test Suite
-for the ROG FALCHION ACE HFX Dual-Layer Google Blockly Visual Programming System.
-
-Authoritative Specification Reference:
-  - ORIGINAL_REQUEST.md (header: 2026-09-12T16:23:29Z)
-  - PROJECT.md & TEST_INFRA.md (orchestrator_3)
-  - Explorer Surveys 1, 2, 3 (Blockly, C++ Transpiler, DLL Hot-Reload, Event Orchestrator)
-
-4-Tier Coverage Architecture:
-  - Tier 1: Feature Coverage (≥5 tests per feature across all 15 features in Feature Inventory: 76 tests)
-  - Tier 2: Boundary & Corner Cases (≥5 boundary tests per feature: 75 tests)
-  - Tier 3: Cross-Feature Combinations (Pairwise cross-module integration tests: 12 tests)
-  - Tier 4: Real-World Workload Scenarios (CS2 kill pulse, bomb flash, WASD reactive wave, compound rules, roundtrip: 5 tests)
-
-Total Verification Checkpoints: 168 tests.
-Executable via:
-  python tests/test_e2e_blockly_system.py
+"""Legacy reference-model experiments, NOT production or end-to-end tests.
+These checks mostly exercise Python replicas, fixtures and platform primitives.
+They are excluded from CI and default unittest discovery. Passing them does not
+validate Aura behavior. See docs/TESTING.md for implementation-backed checks.
 """
 
 import sys
@@ -42,10 +28,10 @@ if sys.platform == "win32":
     except Exception:
         pass
 
-ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 # ============================================================================
-# SECTION 0: AUTHORITATIVE REFERENCE MODELS & DOMAIN CONSTANTS
+# SECTION 0: LEGACY REFERENCE MODELS & DOMAIN CONSTANTS
 # ============================================================================
 
 KEYBOARD_68_KEYS: List[Dict[str, Any]] = [
@@ -815,10 +801,6 @@ class TestTier1FeatureCoverage(unittest.TestCase):
     # ------------------------------------------------------------------------
     # Feature 7: BE-PLUGIN-ABI (5 tests)
     # ------------------------------------------------------------------------
-    def test_t1_f07_plugin_api_version_magic(self):
-        """BE-PLUGIN-ABI: Verify AuraGetPluginApiVersion returns 0x00010000 (v1.0.0)."""
-        expected_version = 0x00010000
-        self.assertEqual(expected_version, 65536)
 
     def test_t1_f07_plugin_name_query(self):
         """BE-PLUGIN-ABI: Verify AuraGetEffectName export returns C-string."""
@@ -832,40 +814,11 @@ class TestTier1FeatureCoverage(unittest.TestCase):
         self.assertIn("AuraDestroyEffect(aura::Effect* effect)", cpp)
         self.assertIn("delete effect;", cpp)
 
-    def test_t1_f07_igsi_reader_interface_dispatch(self):
-        """BE-PLUGIN-ABI: Verify pure virtual IGsiReader method signatures."""
-        gsi_interface = [
-            "GetNumber(const char* field, double def_val = 0.0)",
-            "GetBool(const char* field, bool def_val = false)",
-            "GetString(const char* field, const char* def_val = \"\")",
-        ]
-        self.assertEqual(len(gsi_interface), 3)
 
-    def test_t1_f07_effect_context_binding(self):
-        """BE-PLUGIN-ABI: Verify EffectContext struct members (elapsed_ms, keymap, gsi)."""
-        ctx_members = ["elapsed_ms", "keymap", "gsi"]
-        self.assertIn("elapsed_ms", ctx_members)
-        self.assertIn("keymap", ctx_members)
-        self.assertIn("gsi", ctx_members)
 
     # ------------------------------------------------------------------------
     # Feature 8: DAEMON-HOT-RELOAD (5 tests)
     # ------------------------------------------------------------------------
-    def test_t1_f08_shadow_copy_creation(self):
-        """DAEMON-HOT-RELOAD: Verify shadow copy file created in plugins/.cache/."""
-        with tempfile.TemporaryDirectory() as td:
-            plugins_dir = os.path.join(td, "plugins")
-            cache_dir = os.path.join(plugins_dir, ".cache")
-            os.makedirs(cache_dir, exist_ok=True)
-            orig_dll = os.path.join(plugins_dir, "effect_test.dll")
-            with open(orig_dll, "wb") as f:
-                f.write(b"MOCK_DLL_CONTENT")
-
-            shadow_dll = os.path.join(cache_dir, f"effect_test_{int(time.time()*1000)}.dll")
-            shutil.copyfile(orig_dll, shadow_dll)
-
-            self.assertTrue(os.path.exists(shadow_dll))
-            self.assertEqual(os.path.getsize(shadow_dll), os.path.getsize(orig_dll))
 
     def test_t1_f08_win32_loadlibraryw_shadow_dll(self):
         """DAEMON-HOT-RELOAD: Load compiled DLL from shadow copy using Win32 LoadLibraryW."""
@@ -917,53 +870,12 @@ class TestTier1FeatureCoverage(unittest.TestCase):
             finally:
                 k32.FreeLibrary(handle)
 
-    def test_t1_f08_shadow_dll_reload_sequence(self):
-        """DAEMON-HOT-RELOAD: Verify seamless transition when a new version of DLL is compiled."""
-        with tempfile.TemporaryDirectory() as td:
-            cache_dir = os.path.join(td, ".cache")
-            os.makedirs(cache_dir, exist_ok=True)
-            v1_path = os.path.join(cache_dir, "eff_v1.dll")
-            v2_path = os.path.join(cache_dir, "eff_v2.dll")
-            with open(v1_path, "w") as f: f.write("v1")
-            with open(v2_path, "w") as f: f.write("v2")
 
-            active_path = v1_path
-            self.assertEqual(active_path, v1_path)
-            active_path = v2_path
-            self.assertEqual(active_path, v2_path)
-
-    def test_t1_f08_shadow_cache_cleanup(self):
-        """DAEMON-HOT-RELOAD: Verify stale shadow cache files are deleted upon unregistration."""
-        with tempfile.TemporaryDirectory() as td:
-            cache_file = os.path.join(td, "stale_shadow.dll")
-            with open(cache_file, "w") as f: f.write("dummy")
-            self.assertTrue(os.path.exists(cache_file))
-            os.remove(cache_file)
-            self.assertFalse(os.path.exists(cache_file))
 
     # ------------------------------------------------------------------------
     # Feature 9: DAEMON-HOT-SWAP (5 tests)
     # ------------------------------------------------------------------------
-    def test_t1_f09_atomic_profile_pointer_swap(self):
-        """DAEMON-HOT-SWAP: Verify atomic profile pointer swap in EffectEngine."""
-        class MockEffectEngine:
-            def __init__(self):
-                self.active_profile = "profile_a"
-            def swap(self, new_profile: str):
-                self.active_profile = new_profile
 
-        engine = MockEffectEngine()
-        self.assertEqual(engine.active_profile, "profile_a")
-        engine.swap("profile_b")
-        self.assertEqual(engine.active_profile, "profile_b")
-
-    def test_t1_f09_render_latency_within_25fps_budget(self):
-        """DAEMON-HOT-SWAP: Verify 25 FPS render loop tick budget (< 40ms interval)."""
-        t0 = time.perf_counter()
-        # Simulate 1 frame render
-        time.sleep(0.001)  # 1ms render
-        elapsed = time.perf_counter() - t0
-        self.assertLess(elapsed, 0.040, "Frame render exceeded 40ms 25 FPS interval")
 
     def test_t1_f09_shared_ptr_custom_deleter_safety(self):
         """DAEMON-HOT-SWAP: Verify shared_ptr custom deleter prevents DLL unload while active."""
@@ -2337,53 +2249,6 @@ class TestTier4RealWorldScenarios(unittest.TestCase):
 # SECTION 5: FORMATTED RUNNER & SUMMARY REPORT
 # ============================================================================
 
-def run_e2e_test_suite() -> int:
-    """Executes the full 4-tier E2E test suite and formats a comprehensive summary report."""
-    suite = unittest.TestSuite()
-    loader = unittest.TestLoader()
-
-    suite.addTests(loader.loadTestsFromTestCase(TestTier1FeatureCoverage))
-    suite.addTests(loader.loadTestsFromTestCase(TestTier2BoundaryAndCornerCases))
-    suite.addTests(loader.loadTestsFromTestCase(TestTier3CrossFeatureCombinations))
-    suite.addTests(loader.loadTestsFromTestCase(TestTier4RealWorldScenarios))
-
-    t0 = time.perf_counter()
-    runner = unittest.TextTestRunner(verbosity=1)
-    result = runner.run(suite)
-    duration = time.perf_counter() - t0
-
-    t1_count = loader.loadTestsFromTestCase(TestTier1FeatureCoverage).countTestCases()
-    t2_count = loader.loadTestsFromTestCase(TestTier2BoundaryAndCornerCases).countTestCases()
-    t3_count = loader.loadTestsFromTestCase(TestTier3CrossFeatureCombinations).countTestCases()
-    t4_count = loader.loadTestsFromTestCase(TestTier4RealWorldScenarios).countTestCases()
-    total_count = suite.countTestCases()
-
-    t1_pass = t1_count if result.wasSuccessful() else "PARTIAL"
-    t2_pass = t2_count if result.wasSuccessful() else "PARTIAL"
-    t3_pass = t3_count if result.wasSuccessful() else "PARTIAL"
-    t4_pass = t4_count if result.wasSuccessful() else "PARTIAL"
-
-    print("\n" + "=" * 80)
-    print("  ROG FALCHION ACE HFX - DUAL-LAYER BLOCKLY SYSTEM E2E TEST SUITE")
-    print("=" * 80)
-    print("  4-Tier Test Coverage Summary Report:")
-    print("-" * 80)
-    print(f"  Tier 1: Feature Coverage (≥75 target, 15 features):       {t1_count:3d} tests [{'PASS' if result.wasSuccessful() else 'FAIL'}]")
-    print(f"  Tier 2: Boundary & Corner Cases (≥75 target):             {t2_count:3d} tests [{'PASS' if result.wasSuccessful() else 'FAIL'}]")
-    print(f"  Tier 3: Cross-Feature Combinations:                       {t3_count:3d} tests [{'PASS' if result.wasSuccessful() else 'FAIL'}]")
-    print(f"  Tier 4: Real-World Application Scenarios (≥5 target):       {t4_count:3d} tests [{'PASS' if result.wasSuccessful() else 'FAIL'}]")
-    print("-" * 80)
-    print(f"  Total Executed Checkpoints: {total_count} in {duration:.3f}s")
-    print(f"  Passed: {total_count - len(result.failures) - len(result.errors)} | Failed: {len(result.failures)} | Errors: {len(result.errors)}")
-    print("=" * 80)
-
-    if result.wasSuccessful():
-        print("  >>> ALL 168 E2E TEST CHECKPOINTS PASSED SUCCESSFULLY! <<<\n")
-        return 0
-    else:
-        print("  >>> TEST FAILURES DETECTED! <<<\n")
-        return 1
-
-
 if __name__ == "__main__":
-    sys.exit(run_e2e_test_suite())
+    print("REFERENCE MODEL CHECKS ONLY - not production coverage", flush=True)
+    unittest.main(verbosity=2)
