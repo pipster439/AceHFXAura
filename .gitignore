@@ -62,7 +62,13 @@ pnpm-debug.log*
 *.log
 aura_daemon.log*
 .daemon_running
+/config.json
 plugins/.cache/
+plugins/src/effect_studio_*.cpp
+plugins/src/effect_test_*.cpp
+plugins/src/effect_adv_*.cpp
+!plugins/src/effect_cs2_health.cpp
+!plugins/src/effect_stress_test.cpp
 hw_test_config.json
 smoke_test_config.json
 e2e_test_config.json

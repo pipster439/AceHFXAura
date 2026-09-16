@@ -31,15 +31,91 @@ int wmain(int argc, wchar_t* argv[]) {
     int port = 19898;
     std::filesystem::path config_path = L"config.json";
     std::wstring shutdown_event_name;
+    bool has_explicit_config = false;
 
     for (int i = 1; i < argc; ++i) {
         std::wstring arg = argv[i];
-        if (arg == L"--port" && i + 1 < argc) {
-            port = std::stoi(argv[++i]);
-        } else if (arg == L"--config" && i + 1 < argc) {
+        if (arg == L"--port") {
+            if (i + 1 >= argc) {
+                std::cerr << "[WebUI] 错误: --port 缺少端口参数\n";
+                return 1;
+            }
+            std::wstring val = argv[++i];
+            try {
+                size_t pos = 0;
+                int p = std::stoi(val, &pos);
+                if (pos != val.size() || p <= 0 || p > 65535) {
+                    std::cerr << "[WebUI] 错误: --port 参数非法 (必须为 1~65535 整数)\n";
+                    return 1;
+                }
+                port = p;
+            } catch (const std::exception&) {
+                std::cerr << "[WebUI] 错误: --port 参数非法 (必须为 1~65535 整数)\n";
+                return 1;
+            }
+        } else if (arg == L"--config") {
+            if (i + 1 >= argc) {
+                std::cerr << "[WebUI] 错误: --config 缺少配置文件路径\n";
+                return 1;
+            }
             config_path = argv[++i];
-        } else if (arg == L"--shutdown-event" && i + 1 < argc) {
+            has_explicit_config = true;
+        } else if (arg == L"--shutdown-event") {
+            if (i + 1 >= argc) {
+                std::cerr << "[WebUI] 错误: --shutdown-event 缺少事件名称\n";
+                return 1;
+            }
             shutdown_event_name = argv[++i];
+        } else if (arg == L"--help" || arg == L"-h") {
+            std::cout << "用法: aura_web_ui [选项]\n"
+                      << "选项:\n"
+                      << "  --port <1-65535>        指定 HTTP 监听端口 (默认: 19898)\n"
+                      << "  --config <path>         指定配置文件路径 (默认: config.json)\n"
+                      << "  --shutdown-event <name> 指定父进程同步平滑退出命名事件\n"
+                      << "  --help, -h              显示帮助信息\n";
+            return 0;
+        } else {
+            std::cerr << "[WebUI] 错误: 未知的命令行参数: " << std::filesystem::path(arg).u8string() << "\n";
+            return 1;
+        }
+    }
+
+    std::error_code ec;
+    if (has_explicit_config) {
+        if (!std::filesystem::exists(config_path, ec)) {
+            std::cerr << "[WebUI] 错误: 显式指定的配置文件不存在: " << config_path.u8string() << std::endl;
+            return 1;
+        }
+    } else {
+        if (!std::filesystem::exists(config_path, ec)) {
+            std::vector<std::filesystem::path> example_candidates = {
+                "config.example.json",
+                "../config.example.json"
+            };
+            wchar_t mod_path[MAX_PATH];
+            if (GetModuleFileNameW(nullptr, mod_path, MAX_PATH)) {
+                for (auto dir = std::filesystem::path(mod_path).parent_path(); !dir.empty(); dir = dir.parent_path()) {
+                    example_candidates.push_back(dir / "config.example.json");
+                    if (dir == dir.parent_path()) break;
+                }
+            }
+            std::filesystem::path found_example;
+            for (const auto& cand : example_candidates) {
+                if (std::filesystem::exists(cand, ec)) {
+                    found_example = cand;
+                    break;
+                }
+            }
+            if (found_example.empty()) {
+                std::cerr << "[WebUI] 错误: 默认配置文件不存在且未找到模板 config.example.json" << std::endl;
+                return 1;
+            }
+            std::filesystem::copy_file(found_example, config_path, std::filesystem::copy_options::skip_existing, ec);
+            if (ec) {
+                std::cerr << "[WebUI] 错误: 无法从模板初始化 config.json: " << ec.message() << std::endl;
+                return 1;
+            }
+            std::cout << "[WebUI] 已从模板成功初始化默认配置文件: " << config_path.u8string() << std::endl;
         }
     }
 

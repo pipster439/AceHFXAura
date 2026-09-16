@@ -23,7 +23,7 @@ ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
 class TestScratchStudioIntegration(unittest.TestCase):
     def test_multi_effect_lifecycle_in_config(self):
-        config_path = os.path.join(ROOT_DIR, "config.json")
+        config_path = os.path.join(ROOT_DIR, "config.example.json")
         with open(config_path, "r", encoding="utf-8") as f:
             cfg = json.load(f)
 

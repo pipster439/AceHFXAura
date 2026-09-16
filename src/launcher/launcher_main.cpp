@@ -67,20 +67,41 @@ std::filesystem::path GetRuntimeDir() {
     return std::filesystem::current_path() / L".aura_runtime";
 }
 
+HANDLE g_hChildProcess = nullptr;
+
+BOOL WINAPI LauncherCtrlHandler(DWORD signal) {
+    if (signal == CTRL_C_EVENT || signal == CTRL_BREAK_EVENT) {
+        // 由子进程捕获并执行优雅停机，父进程在主循环 WaitForSingleObject 处等待，不在此提前退出
+        return TRUE;
+    }
+    if (signal == CTRL_CLOSE_EVENT) {
+        if (g_hChildProcess) {
+            WaitForSingleObject(g_hChildProcess, 3500);
+        }
+        return TRUE;
+    }
+    return FALSE;
+}
+
 } // namespace
 
 int wmain(int argc, wchar_t* argv[]) {
-    // 0. 单实例检测：若核心守护进程已在运行，直接唤起 Web 控制面板并优雅退出，避免闪退困惑
-    HANDLE hExistingMutex = OpenMutexW(SYNCHRONIZE, FALSE, L"Local\\RogFalchionAceHfxDaemonMutex");
-    if (hExistingMutex) {
-        CloseHandle(hExistingMutex);
-        SetConsoleOutputCP(CP_UTF8);
-        SetConsoleCP(CP_UTF8);
-        std::cout << "[Aura] 检测到 ROG Falchion Ace HFX 核心守护进程已在后台运行中。\n";
-        std::cout << "[Aura] 正在自动打开 Web 控制面板: http://127.0.0.1:19898/ ...\n";
-        ShellExecuteW(nullptr, L"open", L"http://127.0.0.1:19898/", nullptr, nullptr, SW_SHOWNORMAL);
-        Sleep(1500);
-        return 0;
+    // 注册控制台信号处理器：拦截 Ctrl+C，让子进程执行优雅停机，防止 JobObject 瞬间强杀
+    SetConsoleCtrlHandler(LauncherCtrlHandler, TRUE);
+
+    // 0. 单实例检测：仅在无参数启动（如双击图标）时检查；若用户传入了命令行参数则透传给守护进程处理
+    if (argc == 1) {
+        HANDLE hExistingMutex = OpenMutexW(SYNCHRONIZE, FALSE, L"Local\\RogFalchionAceHfxDaemonMutex");
+        if (hExistingMutex) {
+            CloseHandle(hExistingMutex);
+            SetConsoleOutputCP(CP_UTF8);
+            SetConsoleCP(CP_UTF8);
+            std::cout << "[Aura] 检测到 ROG Falchion Ace HFX 核心守护进程已在后台运行中。\n";
+            std::cout << "[Aura] 正在自动打开 Web 控制面板: http://127.0.0.1:19898/ ...\n";
+            ShellExecuteW(nullptr, L"open", L"http://127.0.0.1:19898/", nullptr, nullptr, SW_SHOWNORMAL);
+            Sleep(1500);
+            return 0;
+        }
     }
 
     // 1. 设置控制台 UTF-8 输出
@@ -144,28 +165,34 @@ int wmain(int argc, wchar_t* argv[]) {
         std::filesystem::last_write_time(stamp_file, self_time, ec);
     }
 
-    // 3. 配置文件智能放置：
-    // 若当前工作目录下已有 config.json 则使用之；若无则自动释放 config.json 供用户自由定制
-    std::filesystem::path cwd_config = std::filesystem::current_path() / L"config.json";
-    if (!std::filesystem::exists(cwd_config, ec)) {
-        std::filesystem::copy_file(cfg_example, cwd_config, std::filesystem::copy_options::overwrite_existing, ec);
-    }
-
-    // 4. 构建启动命令行 (完全透明透传用户参数)
+    // 3. 构建启动命令行 (完全透明透传用户参数)
     std::wstring cmd_line = L"\"" + daemon_exe.wstring() + L"\"";
     bool has_config_arg = false;
     bool has_keymap_arg = false;
+    bool is_help = false;
 
     for (int i = 1; i < argc; ++i) {
         std::wstring arg = argv[i];
+        if (arg == L"--help" || arg == L"-h") is_help = true;
         if (arg == L"--config") has_config_arg = true;
         if (arg == L"--keymap") has_keymap_arg = true;
         cmd_line += L" \"" + arg + L"\"";
     }
 
-    // 若用户未显式指定，默认关联 CWD 下的 config.json 与解压出的 calibrated_keymap.json
-    if (!has_config_arg && std::filesystem::exists(cwd_config)) {
-        cmd_line += L" --config \"" + cwd_config.wstring() + L"\"";
+    // 4. 配置文件智能放置：
+    // 仅在用户未显式指定 --config 且非单纯帮助模式时才在当前工作目录释放默认 config.json
+    std::filesystem::path cwd_config = std::filesystem::current_path() / L"config.json";
+    if (!has_config_arg && !is_help) {
+        if (!std::filesystem::exists(cwd_config, ec)) {
+            std::filesystem::copy_file(cfg_example, cwd_config, std::filesystem::copy_options::skip_existing, ec);
+            if (ec || !std::filesystem::exists(cwd_config, ec)) {
+                std::cerr << "[Aura] 错误: 无法在当前目录创建默认 config.json: " << (ec ? ec.message() : "未知错误") << std::endl;
+                return 1;
+            }
+        }
+        if (std::filesystem::exists(cwd_config)) {
+            cmd_line += L" --config \"" + cwd_config.wstring() + L"\"";
+        }
     }
     if (!has_keymap_arg && std::filesystem::exists(keymap_json)) {
         cmd_line += L" --keymap \"" + keymap_json.wstring() + L"\"";
@@ -213,11 +240,13 @@ int wmain(int argc, wchar_t* argv[]) {
     if (hJob) {
         AssignProcessToJobObject(hJob, pi.hProcess);
     }
+    g_hChildProcess = pi.hProcess;
     ResumeThread(pi.hThread);
     CloseHandle(pi.hThread);
 
     // 7. 同步等待主进程生命周期
     WaitForSingleObject(pi.hProcess, INFINITE);
+    g_hChildProcess = nullptr;
 
     DWORD exit_code = 0;
     GetExitCodeProcess(pi.hProcess, &exit_code);

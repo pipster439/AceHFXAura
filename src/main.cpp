@@ -206,6 +206,7 @@ int main(int argc, char* argv[]) {
     double test_stability_minutes = 0.0;
     std::string config_path = "config.json";
     std::string keymap_path = "calibrated_keymap.json";
+    bool has_explicit_config = false;
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
@@ -262,6 +263,7 @@ int main(int argc, char* argv[]) {
                 return 1;
             }
             config_path = argv[++i];
+            has_explicit_config = true;
         } else if (arg == "--keymap") {
             if (i + 1 >= argc) {
                 std::cerr << "错误: --keymap 缺少键位映射表路径\n\n";
@@ -346,6 +348,20 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
+    // 2.5 校验显式指定的配置文件合法性 (快速失败，避免在参数错误时误触单实例分支或状态写盘)
+    if (has_explicit_config) {
+        if (!std::filesystem::exists(config_path)) {
+            auto same_exe_dir_config = current_exe_dir / config_path;
+            if (!current_exe_dir.empty() && std::filesystem::exists(same_exe_dir_config)) {
+                config_path = same_exe_dir_config.string();
+            } else {
+                LOG_ERROR("FATAL: 显式指定的配置文件不存在: " + config_path);
+                std::cerr << "错误: 显式指定的配置文件不存在: " << config_path << "\n";
+                return 1;
+            }
+        }
+    }
+
     // 3. 单实例保护 (Named Mutex)
     HANDLE hMutex = CreateMutexW(NULL, FALSE, L"Local\\RogFalchionAceHfxDaemonMutex");
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
@@ -401,19 +417,47 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    if (!std::filesystem::exists(config_path) && !current_exe_dir.empty()) {
-        auto same_exe_dir_config = current_exe_dir / config_path;
-        if (std::filesystem::exists(same_exe_dir_config)) {
-            config_path = same_exe_dir_config.string();
-        } else {
-            std::filesystem::path example = "config.example.json";
-            if (!std::filesystem::exists(example)) {
-                example = current_exe_dir / "config.example.json";
+    if (has_explicit_config) {
+        if (!std::filesystem::exists(config_path)) {
+            auto same_exe_dir_config = current_exe_dir / config_path;
+            if (!current_exe_dir.empty() && std::filesystem::exists(same_exe_dir_config)) {
+                config_path = same_exe_dir_config.string();
+            } else {
+                LOG_ERROR("FATAL: 显式指定的配置文件不存在: " + config_path);
+                RemoveAllStateFiles();
+                if (hMutex) CloseHandle(hMutex);
+                return 1;
             }
-            if (std::filesystem::exists(example)) {
-                std::error_code ec;
-                std::filesystem::copy_file(example, config_path, std::filesystem::copy_options::none, ec);
-                if (ec) LOG_ERROR("无法初始化 config.json: " + ec.message());
+        }
+    } else {
+        if (!std::filesystem::exists(config_path)) {
+            auto same_exe_dir_config = current_exe_dir / config_path;
+            if (!current_exe_dir.empty() && std::filesystem::exists(same_exe_dir_config)) {
+                config_path = same_exe_dir_config.string();
+            } else {
+                std::filesystem::path example = "config.example.json";
+                if (!std::filesystem::exists(example) && !current_exe_dir.empty()) {
+                    example = current_exe_dir / "config.example.json";
+                }
+                if (!std::filesystem::exists(example) && !current_exe_dir.empty()) {
+                    example = current_exe_dir.parent_path() / "config.example.json";
+                }
+                if (std::filesystem::exists(example)) {
+                    std::error_code ec;
+                    std::filesystem::copy_file(example, config_path, std::filesystem::copy_options::skip_existing, ec);
+                    if (ec) {
+                        LOG_ERROR("FATAL: 无法从模板初始化 config.json: " + ec.message());
+                        RemoveAllStateFiles();
+                        if (hMutex) CloseHandle(hMutex);
+                        return 1;
+                    }
+                    LOG_INFO("已从模板成功初始化默认配置文件: " + config_path);
+                } else {
+                    LOG_ERROR("FATAL: 默认配置文件不存在且未找到模板 config.example.json");
+                    RemoveAllStateFiles();
+                    if (hMutex) CloseHandle(hMutex);
+                    return 1;
+                }
             }
         }
     }
