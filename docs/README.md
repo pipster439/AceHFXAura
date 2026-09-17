@@ -53,6 +53,7 @@ G:/Aura/
 
 | 文档 | 路径 | 核心范围与职责 |
 | :--- | :--- | :--- |
+| **全量技术手册** | [`COMPLETE_DOCUMENTATION.md`](COMPLETE_DOCUMENTATION.md) | **全系统终极技术与使用手册**。涵盖双进程架构、硬件直通逆向、安全兼容性 Gate、CS2 GSI 联动状态机、Blockly Studio、Plugin SDK 原生编译、配置规范、构建打包与质量验收全流程。 |
 | **项目生产总览** | [`README.md`](../README.md) | 针对生产部署与使用者：C++17 双进程架构、MSVC 构建与运行参数、配置中心与热重载、CS2 GSI 字段与游戏事件状态机规范。 |
 | **决策演进日志** | [`AGENT.md`](../AGENT.md) | 针对架构师与维护者：完整记录 Phase 1（驱动逆向与通道寻址）、Phase 2（网页配置与监护体系）、Phase 3（CS2 GSI 适配器与批次 A–D 加固治理）的全流程工程决策与技术考量。 |
 | **任务交接指南** | [`HANDOVER.md`](reports/HANDOVER.md) | 针对后续修复与功能开发者：总结 6 大不可逾越的架构红线、0 error / 0 warning 构建基线、CTest 自动化回归测试方法、关键编码陷阱（显式定界符 raw string、宽字符路径链路、MSVC NDEBUG 规避）。 |
