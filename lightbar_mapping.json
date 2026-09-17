@@ -8,8 +8,8 @@
     "total_hardware_leds": 128,
     "lighting_interface": "USB HID Interface 3 (Set_L_STD_SINGLE_XY)",
     "operating_mode": "Volatile High-Speed Direct RAM Stream (Zero EEPROM Wear)",
-    "export_version": "1.0.0",
-    "last_exported_at": "2026-09-16 23:25:11"
+    "export_version": "1.1.0",
+    "last_exported_at": "2026-09-17 12:56:48"
   },
   "summary": {
     "total_lightbar_leds": 0,

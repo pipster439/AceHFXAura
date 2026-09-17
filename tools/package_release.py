@@ -24,8 +24,37 @@ DIST_DIR = os.path.join(REPO_ROOT, "dist")
 BUILD_RELEASE_DIR = os.path.join(REPO_ROOT, "build", "Release")
 DRIVERS_DIR = os.path.join(REPO_ROOT, "drivers")
 
-VS_PATH = r"C:\Program Files\Microsoft Visual Studio\18\Community"
-VCVARS_BAT = os.path.join(VS_PATH, r"VC\Auxiliary\Build\vcvars64.bat")
+def find_vcvars_bat():
+    known_candidates = [
+        r"C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat",
+        r"C:\Program Files\Microsoft Visual Studio\17\Community\VC\Auxiliary\Build\vcvars64.bat",
+        r"C:\Program Files\Microsoft Visual Studio\17\Professional\VC\Auxiliary\Build\vcvars64.bat",
+        r"C:\Program Files\Microsoft Visual Studio\17\Enterprise\VC\Auxiliary\Build\vcvars64.bat",
+        r"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat",
+    ]
+    for cand in known_candidates:
+        if os.path.isfile(cand):
+            return cand
+
+    vswhere = r"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe"
+    if os.path.isfile(vswhere):
+        try:
+            res = subprocess.run(
+                [vswhere, "-latest", "-requires", "Microsoft.VisualStudio.Component.VC.Tools.x86.x64", "-property", "installationPath"],
+                capture_output=True, text=True, check=True
+            )
+            install_path = res.stdout.strip()
+            if install_path:
+                cand = os.path.join(install_path, "VC", "Auxiliary", "Build", "vcvars64.bat")
+                if os.path.isfile(cand):
+                    return cand
+        except Exception:
+            pass
+
+    return r"C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat"
+
+
+VCVARS_BAT = find_vcvars_bat()
 
 
 def run_cmd(cmd_str, cwd=REPO_ROOT):
@@ -66,10 +95,13 @@ def ensure_binaries():
     print(f"[OK] aura_daemon.exe ({os.path.getsize(daemon_exe):,} bytes)")
     print(f"[OK] aura_web_ui.exe ({os.path.getsize(web_ui_exe):,} bytes)")
 
-    # 同步复制最新产物至仓库根目录
-    shutil.copy2(daemon_exe, os.path.join(REPO_ROOT, "aura_daemon.exe"))
-    shutil.copy2(web_ui_exe, os.path.join(REPO_ROOT, "aura_web_ui.exe"))
-    print(f"[OK] 已同步最新二进制至仓库根目录: aura_daemon.exe, aura_web_ui.exe")
+    # 同步复制最新产物至仓库根目录 (若被占用则告警但不中断打包流程)
+    try:
+        shutil.copy2(daemon_exe, os.path.join(REPO_ROOT, "aura_daemon.exe"))
+        shutil.copy2(web_ui_exe, os.path.join(REPO_ROOT, "aura_web_ui.exe"))
+        print(f"[OK] 已同步最新二进制至仓库根目录: aura_daemon.exe, aura_web_ui.exe")
+    except PermissionError as pe:
+        print(f"[WARN] 无法更新根目录二进制 (文件正被后台进程占用，发布产物已在 dist/ 正常生成): {pe}")
 
     # 清理旧版运行时目录 (%LOCALAPPDATA%\Aura\runtime) 确保单文件运行取用最新释放资产
     runtime_dir = os.path.expandvars(r"%LOCALAPPDATA%\Aura\runtime")
@@ -172,8 +204,11 @@ IDR_WEB_HTML     RCDATA "web.bin"
 
     print(f"[SUCCESS] 独立单文件产物已就绪: {out_exe} ({os.path.getsize(out_exe):,} bytes)")
     root_exe = os.path.join(REPO_ROOT, "Aura.exe")
-    shutil.copy2(out_exe, root_exe)
-    print(f"[OK] 已同步单文件启动器至仓库根目录: Aura.exe ({os.path.getsize(root_exe):,} bytes)")
+    try:
+        shutil.copy2(out_exe, root_exe)
+        print(f"[OK] 已同步单文件启动器至仓库根目录: Aura.exe ({os.path.getsize(root_exe):,} bytes)")
+    except PermissionError as pe:
+        print(f"[WARN] 无法更新根目录 Aura.exe (可能正处于运行状态): {pe}")
     return out_exe
 
 

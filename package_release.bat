@@ -1,5 +1,5 @@
 @echo off
-chcp 65001 >nul
+setlocal
 echo =========================================================
 echo  ROG Falchion Ace HFX - Aura 独立发布包自动化构建
 echo =========================================================
@@ -11,4 +11,4 @@ if %ERRORLEVEL% EQU 0 (
     echo.
     echo [ERROR] 构建过程出现异常，请检查上述错误信息。
 )
-pause
+endlocal
