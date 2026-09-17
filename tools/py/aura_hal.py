@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import ctypes
 from ctypes import wintypes
+import hashlib
 import json
 import logging
 import os
@@ -422,6 +423,8 @@ class AuraHalDevice:
             raise ValueError("设备指针 pDev 不能为空")
         self.pDev = pDev
         self._released = False
+        self.configured_slot_count: int = 0
+        self.last_stream_return: Optional[int] = None
 
         # 解析设备对象虚函数表
         self.dev_vtable = ctypes.cast(
@@ -453,6 +456,9 @@ class AuraHalDevice:
                 f"硬件寻址表长度 {count} 超过安全上界 {MAX_HARDWARE_STREAM_KEYS}，拒绝写入以防破坏内存"
             )
 
+        # 记录已配置的硬件槽位数
+        self.configured_slot_count = count
+
         # 写入 +0x6C (DWORD 长度)
         ctypes.cast(self.pDev + OFFSET_KEY_COUNT, ctypes.POINTER(wintypes.DWORD))[0] = count
 
@@ -471,13 +477,36 @@ class AuraHalDevice:
         if self._released or not self.pDev:
             raise RuntimeError("设备对象已释放，无法执行推流")
 
+        # 缓冲区长度硬性安全校验 (防止 DLL 越界内存读取导致崩溃或数据溢出)
+        actual_len = 0
+        if isinstance(rgb_buf, (bytes, bytearray)):
+            actual_len = len(rgb_buf)
+        elif hasattr(rgb_buf, '_length_'):
+            actual_len = rgb_buf._length_
+        elif hasattr(rgb_buf, '__len__'):
+            actual_len = len(rgb_buf)
+        elif hasattr(rgb_buf, '_type_'):
+            actual_len = ctypes.sizeof(rgb_buf)
+
+        req_len = self.configured_slot_count * 3
+        if self.configured_slot_count > 0 and actual_len > 0 and actual_len < req_len:
+            raise ValueError(
+                f"Configured slots: {self.configured_slot_count}\n"
+                f"Required RGB bytes: {req_len}\n"
+                f"Actual RGB bytes: {actual_len}\n"
+                f"Refusing Set_L_STD_SINGLE_XY to prevent DLL out-of-bounds read."
+            )
+
         if isinstance(rgb_buf, (bytes, bytearray)):
             buf = (ctypes.c_ubyte * len(rgb_buf)).from_buffer_copy(rgb_buf)
-            return self._fn_set_single(self.pDev, ctypes.byref(buf))
+            ret = self._fn_set_single(self.pDev, ctypes.byref(buf))
         elif hasattr(rgb_buf, '_type_'):
-            return self._fn_set_single(self.pDev, ctypes.byref(rgb_buf))
+            ret = self._fn_set_single(self.pDev, ctypes.byref(rgb_buf))
         else:
-            return self._fn_set_single(self.pDev, rgb_buf)
+            ret = self._fn_set_single(self.pDev, rgb_buf)
+
+        self.last_stream_return = ret
+        return ret
 
     def release(self) -> None:
         """安全释放设备 COM 引用，防止内存泄漏与句柄悬垂"""
@@ -518,6 +547,9 @@ class AuraHal:
 
         self.pHal = ctypes.c_void_p()
         self._released = False
+        self.loaded_dll_path: Optional[str] = None
+        self.loaded_dll_sha256: Optional[str] = None
+        self.last_access_return: Optional[int] = None
 
         clsid = to_guid(CLSID_CLAYMORE_HAL)
         iid = to_guid(IID_IASUS_AAC_LED_DEVICE_HAL)
@@ -546,6 +578,12 @@ class AuraHal:
                 h = k32.LoadLibraryW(cand)
                 if h:
                     self._hHalMod = h
+                    self.loaded_dll_path = cand
+                    try:
+                        with open(cand, "rb") as f:
+                            self.loaded_dll_sha256 = hashlib.sha256(f.read()).hexdigest()
+                    except Exception:
+                        pass
                     break
 
         if self._hHalMod:
@@ -624,7 +662,10 @@ class AuraHal:
         if self._released or not self.pHal.value:
             raise RuntimeError("HAL 接口已释放")
         fn_access = ctypes.WINFUNCTYPE(wintypes.LONG, ctypes.c_void_p)(self.hal_vtable[VTABLE_HAL_ACCESS])
-        return fn_access(self.pHal.value)
+        ret = fn_access(self.pHal.value)
+        self.last_access_return = ret
+        logger.info("AuraHal.access() 返回值: 0x%08X (%d)", ret & 0xFFFFFFFF, ret)
+        return ret
 
     def create_led_devices(self, capacity: int = 16) -> List[AuraHalDevice]:
         """
@@ -650,11 +691,15 @@ class AuraHal:
             raise RuntimeError("FATAL: CreateLedDevice 破坏了预分配向量边界！底层行为假设不成立。")
 
         count = (vec.last - vec.first) // elem_size
+        logger.info("CreateLedDevice 发现 %d 个设备", count)
         devices: List[AuraHalDevice] = []
         for i in range(count):
             dev_ptr = storage[i]
             if dev_ptr:
+                logger.info("  设备 [%d]: pDev = 0x%016X", i, dev_ptr)
                 devices.append(AuraHalDevice(dev_ptr))
+
+        return devices
 
         return devices
 

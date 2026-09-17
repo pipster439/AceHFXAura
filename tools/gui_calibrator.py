@@ -398,14 +398,33 @@ class KeyboardCalibratorGUI:
         header_frame = tk.Frame(self.root, bg="#18181C", padx=15, pady=10)
         header_frame.pack(fill=tk.X)
 
+        header_top = tk.Frame(header_frame, bg="#18181C")
+        header_top.pack(fill=tk.X)
+
         title_lbl = tk.Label(
-            header_frame,
+            header_top,
             text="🎮 ROG FALCHION ACE HFX 纯鼠标可视化单键校准工具",
             font=("Segoe UI", 14, "bold"),
             fg="#00E676",
             bg="#18181C"
         )
-        title_lbl.pack(anchor="w")
+        title_lbl.pack(side=tk.LEFT)
+
+        probe_btn = tk.Button(
+            header_top,
+            text="🌈 切换至顶部 Light Bar 探针 (Probe)",
+            font=("Segoe UI", 9, "bold"),
+            bg="#00838F",
+            fg="white",
+            activebackground="#00ACC1",
+            activeforeground="white",
+            relief=tk.FLAT,
+            padx=10,
+            pady=3,
+            cursor="hand2",
+            command=self.launch_probe
+        )
+        probe_btn.pack(side=tk.RIGHT)
 
         hint_lbl = tk.Label(
             header_frame,
@@ -673,6 +692,13 @@ class KeyboardCalibratorGUI:
             f"物理按键详细校准档案已成功导出至：\n\n1. {CALIBRATION_FILE}\n2. {CALIBRATION_FILE.replace('.json', '.md')}"
         )
 
+    def launch_probe(self):
+        """关闭当前校准器并启动 Light Bar 探针工具"""
+        self.on_close()
+        import subprocess
+        probe_script = os.path.join(_DIR, "lightbar_probe.py")
+        subprocess.Popen([sys.executable, probe_script])
+
     def on_close(self):
         """关闭退出清理"""
         if self.is_playing and self.play_timer:
@@ -682,6 +708,11 @@ class KeyboardCalibratorGUI:
         self.root.destroy()
 
 def main():
+    if "--probe" in sys.argv or "--lightbar" in sys.argv:
+        import lightbar_probe
+        lightbar_probe.main()
+        return
+
     root = tk.Tk()
     app = KeyboardCalibratorGUI(root)
     root.mainloop()

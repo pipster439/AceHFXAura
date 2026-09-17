@@ -74,6 +74,10 @@ smoke_test_config.json
 e2e_test_config.json
 e2e_webui_config.json
 
+# ---- 逆向分析临时输出（可由 DLL 重新提取） ----
+/strings*.txt
+/vtable*.txt
+
 # ---- 操作系统与编辑器临时文件 ----
 Thumbs.db
 Desktop.ini

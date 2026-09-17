@@ -291,5 +291,46 @@ class TestMigratedScriptsBehavior(unittest.TestCase):
         self.assertEqual(e2e_key_test.NAME_TO_LED.get("SPACE"), 53)
 
 
+class TestAuraHalBufferSafety(unittest.TestCase):
+    def test_buffer_safety_check_prevents_out_of_bounds(self):
+        from aura_hal import AuraHalDevice, OFFSET_KEY_COUNT, OFFSET_LED_TABLE
+        import ctypes
+
+        # 构造模拟 C++ 对象的内存块 (至少 0x200 字节)
+        buf_mem = ctypes.create_string_buffer(0x300)
+        p_mem = ctypes.addressof(buf_mem)
+
+        # 构造 fake vtable (至少 25 个函数指针)
+        vtable = (ctypes.c_void_p * 30)()
+        p_vtable = ctypes.addressof(vtable)
+
+        # 将 vtable 指针写入对象首部 (+0x00)
+        ctypes.cast(p_mem, ctypes.POINTER(ctypes.c_void_p))[0] = p_vtable
+
+        # 模拟 dummy COM 函数 (返回 1)
+        dummy_fn = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p)(lambda dev, b: 1)
+        dummy_fn_ptr = ctypes.cast(dummy_fn, ctypes.c_void_p).value
+        vtable[19] = dummy_fn_ptr  # VTABLE_DEV_SET_SINGLE
+        vtable[2] = dummy_fn_ptr   # VTABLE_DEV_RELEASE
+
+        dev = AuraHalDevice(p_mem)
+        dev.configure_hardware_table([57, 56])
+        self.assertEqual(dev.configured_slot_count, 2)
+
+        # 传入 3 字节 (要求 6 字节) 应抛出 ValueError
+        with self.assertRaises(ValueError) as ctx:
+            dev.set_led_direct(bytearray(3))
+        self.assertIn("Refusing Set_L_STD_SINGLE_XY to prevent DLL out-of-bounds read", str(ctx.exception))
+        self.assertIn("Configured slots: 2", str(ctx.exception))
+        self.assertIn("Required RGB bytes: 6", str(ctx.exception))
+        self.assertIn("Actual RGB bytes: 3", str(ctx.exception))
+
+        # 传入 >= 6 字节应正常通过
+        ret = dev.set_led_direct(bytearray(6))
+        self.assertEqual(ret, 1)
+        self.assertEqual(dev.last_stream_return, 1)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
