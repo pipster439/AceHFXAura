@@ -26,9 +26,9 @@ Aura 是面向 **ROG Falchion Ace HFX** 的 Windows 灯光控制器。它通过 
 
 ## 从源码构建
 
-在 **x64 Native Tools Command Prompt for VS 2022** 中执行：
+在 **PowerShell（或 Windows Terminal）** 中执行：
 
-```cmd
+```powershell
 git clone https://github.com/pipster439/AceHFXAura.git
 cd AceHFXAura
 
@@ -38,7 +38,7 @@ npm test
 npm run build
 cd ..
 
-cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+cmake -S . -B build
 cmake --build build --config Release
 ```
 
@@ -49,8 +49,6 @@ cmake --build build --config Release
 - `test_gsi_rules.exe`：原生规则、GSI 和叠加行为测试。
 
 构建完成后，CMake 还会把两个运行程序复制到仓库根目录。后续命令都应在仓库根目录执行。
-
-如果使用 Visual Studio 2026，请把生成器替换为本机 CMake 支持的 `Visual Studio 18 2026`。
 
 ## 首次运行
 
