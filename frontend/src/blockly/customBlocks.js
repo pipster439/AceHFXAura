@@ -3,6 +3,8 @@ import {
   DISCRETE_STATE_DROPDOWN_OPTIONS,
   getStateOptions,
   NUMERIC_STATE_DROPDOWN_OPTIONS,
+  BOOLEAN_STATE_DROPDOWN_OPTIONS,
+  EVENT_DROPDOWN_OPTIONS,
   getDefaultThreshold,
   ALL_GSI_ENUM_VALUES
 } from '../constants/gsiDictionary.js';
@@ -353,16 +355,13 @@ export function registerCustomBlocks() {
         {
           type: 'field_dropdown',
           name: 'PATH',
-          options: [
-            ['装备头盔 (player.state.helmet)', 'player.state.helmet'],
-            ['携带拆弹器 (player.state.defusekit)', 'player.state.defusekit']
-          ]
+          options: BOOLEAN_STATE_DROPDOWN_OPTIONS
         },
         { type: 'input_value', name: 'DEFAULT', check: 'Boolean' }
       ],
       output: 'Boolean',
       style: 'gsi_blocks',
-      tooltip: '从 CS2 GSI 提取布尔状态',
+      tooltip: '从 CS2 GSI 提取布尔状态或瞬时事件脉冲',
       helpUrl: ''
     },
     {
@@ -454,14 +453,7 @@ export function registerCustomBlocks() {
         {
           type: 'field_dropdown',
           name: 'EVENT',
-          options: [
-            ['击杀敌人 (event.kill)', 'event.kill'],
-            ['致盲白屏 (event.flash)', 'event.flash'],
-            ['C4已安放 (event.bomb_planted)', 'event.bomb_planted'],
-            ['C4已拆除 (event.bomb_defused)', 'event.bomb_defused'],
-            ['回合获胜/MVP (event.round_mvp)', 'event.round_mvp'],
-            ['受到伤害 (event.damage_taken)', 'event.damage_taken']
-          ]
+          options: EVENT_DROPDOWN_OPTIONS
         },
         {
           type: 'field_input',
@@ -567,7 +559,7 @@ export function registerCustomBlocks() {
     },
     {
       type: 'condition_compare',
-      message0: '遥测比对 %1 %2 %3',
+      message0: '高级遥测比对（通用） %1 %2 %3',
       args0: [
         {
           type: 'field_dropdown',
@@ -603,7 +595,7 @@ export function registerCustomBlocks() {
       ],
       output: ['Condition', 'Boolean'],
       style: 'condition_blocks',
-      tooltip: '判断 GSI 字段或进程状态是否满足比较运算',
+      tooltip: '高级通用条件比对：通用比对 GSI 遥测字段或前台进程名（推荐优先使用直观的玩家血量、C4 状态等专用条件积木）',
       helpUrl: ''
     },
 
@@ -762,14 +754,7 @@ export function registerCustomBlocks() {
         {
           type: 'field_dropdown',
           name: 'EVENT',
-          options: [
-            ['击杀敌人 (event.kill)', 'event.kill'],
-            ['致盲白屏 (event.flash)', 'event.flash'],
-            ['C4已安放 (event.bomb_planted)', 'event.bomb_planted'],
-            ['C4已拆除 (event.bomb_defused)', 'event.bomb_defused'],
-            ['回合获胜/MVP (event.round_mvp)', 'event.round_mvp'],
-            ['受到伤害 (event.damage_taken)', 'event.damage_taken']
-          ]
+          options: EVENT_DROPDOWN_OPTIONS
         }
       ],
       output: 'Boolean',
@@ -816,16 +801,13 @@ export function registerCustomBlocks() {
         {
           type: 'field_dropdown',
           name: 'PATH',
-          options: [
-            ['装备头盔 (player.state.helmet)', 'player.state.helmet'],
-            ['携带拆弹器 (player.state.defusekit)', 'player.state.defusekit']
-          ]
+          options: BOOLEAN_STATE_DROPDOWN_OPTIONS
         },
         { type: 'input_value', name: 'DEFAULT', check: 'Boolean' }
       ],
       output: 'Boolean',
       style: 'condition_blocks',
-      tooltip: '从 CS2 游戏遥测中提取原子布尔值',
+      tooltip: '从 CS2 游戏遥测中提取原子布尔值或瞬时事件脉冲',
       helpUrl: ''
     },
     {

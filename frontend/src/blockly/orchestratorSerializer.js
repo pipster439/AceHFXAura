@@ -331,8 +331,8 @@ export class OrchestratorSerializer {
         field = targetA.getFieldValue('PATH') || 'player.state.health';
         val = this.extractBlockValue(targetB, 0);
       } else if (
-        targetB?.type === 'orch_gsi_num' || targetB?.type === 'orch_gsi_str' ||
-        targetB?.type === 'gsi_get_number' || targetB?.type === 'gsi_get_string'
+        targetB?.type === 'orch_gsi_num' || targetB?.type === 'orch_gsi_str' || targetB?.type === 'orch_gsi_bool' ||
+        targetB?.type === 'gsi_get_number' || targetB?.type === 'gsi_get_string' || targetB?.type === 'gsi_get_boolean'
       ) {
         field = targetB.getFieldValue('PATH') || 'player.state.health';
         val = this.extractBlockValue(targetA, 0);

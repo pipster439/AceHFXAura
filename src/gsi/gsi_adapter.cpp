@@ -455,7 +455,11 @@ void GsiState::SyncEventFieldsToFlatState(uint64_t now_ms) const {
     flat_state_["event.round_started"] = GsiValue(is_active_pulse("RoundStarted", 2000));
     flat_state_["event.freezetime"] = GsiValue(r_phase == "freezetime");
     flat_state_["event.round_victory"] = GsiValue(is_active_pulse("TeamRoundVictory", 4000));
+    flat_state_["event.round_won"] = flat_state_["event.round_victory"];
+    flat_state_["event.round_mvp"] = flat_state_["event.round_victory"];
     flat_state_["event.round_loss"] = GsiValue(is_active_pulse("TeamRoundLoss", 4000));
+    flat_state_["event.round_lost"] = flat_state_["event.round_loss"];
+    flat_state_["event.damage_taken"] = flat_state_["event.damage"];
 
     std::string m_phase;
     auto it_mp = flat_state_.find("map.phase");
@@ -472,6 +476,7 @@ void GsiState::SyncEventFieldsToFlatState(uint64_t now_ms) const {
         fl = static_cast<int>(it_fl->second.num_val);
     }
     flat_state_["event.flashed"] = GsiValue(fl > 50);
+    flat_state_["event.flash"] = flat_state_["event.flashed"];
 
     int brn = 0;
     auto it_brn = flat_state_.find("player_state.burning");
@@ -765,6 +770,7 @@ bool GsiState::GetBool(const char* field, bool def_val) const {
 
 const char* GsiState::GetString(const char* field, const char* def_val) const {
     if (!field || !*field) return def_val;
+    // 契约保证：基于 thread_local static 缓冲，返回指针在同线程下一次 GetString 调用前有效；跨调用保存需立即深拷贝
     thread_local static std::string tl_buf;
     std::lock_guard<std::mutex> lock(mutex_);
     if (std::strncmp(field, "event.", 6) == 0) {

@@ -13,6 +13,11 @@ import { canonicalConfig, processRows, replaceSimpleRows, evalCondition, evaluat
 import { stageEffect, ensureStudioRuntime, effectConfig, getEffectLifecycleStatus, sanitizeEffectName, getNextCloneName, renameEffectInConfig } from '../src/utils/applyEffect.js';
 import { EFFECT_STUDIO_TOOLBOX, ORCHESTRATOR_STUDIO_TOOLBOX } from '../src/blockly/toolboxes.js';
 import { EFFECT_PRESETS } from '../src/blockly/presets.js';
+import {
+  BOOLEAN_GSI_STATES,
+  BOOLEAN_STATE_DROPDOWN_OPTIONS,
+  EVENT_DROPDOWN_OPTIONS
+} from '../src/constants/gsiDictionary.js';
 registerCustomBlocks();
 const num = n => ({ type: 'math_number', fields: { NUM: n } });
 const color = (r,g,b) => ({ type: 'color_rgb', inputs: { R: { block: num(r) }, G: { block: num(g) }, B: { block: num(b) } } });
@@ -671,3 +676,103 @@ test('renameEffectInConfig synchronizes blockly_effects.name and profiles.title 
   assert.equal(updated.orchestration.rules[0].target_profile, 'new_wave');
   assert.equal(updated.orchestration.event_overlays[0].effect, 'new_wave');
 });
+
+test('GSI boolean dictionary exposes all event.* and reader dropdown options consistently', () => {
+  // 1. 验证权威字典包含全部标准瞬态脉冲事件
+  const requiredEvents = [
+    'event.kill',
+    'event.headshot',
+    'event.damage',
+    'event.bomb_planted',
+    'event.bomb_defused',
+    'event.round_won',
+    'event.round_lost'
+  ];
+  const dictKeys = BOOLEAN_GSI_STATES.map(s => s.key);
+  for (const ev of requiredEvents) {
+    assert.ok(dictKeys.includes(ev), `BOOLEAN_GSI_STATES 必须包含 ${ev}`);
+  }
+
+  // 2. 验证 BOOLEAN_STATE_DROPDOWN_OPTIONS 完整导出全部布尔与事件
+  const boolOptionKeys = BOOLEAN_STATE_DROPDOWN_OPTIONS.map(opt => opt[1]);
+  for (const ev of requiredEvents) {
+    assert.ok(boolOptionKeys.includes(ev), `BOOLEAN_STATE_DROPDOWN_OPTIONS 必须包含 ${ev}`);
+  }
+  assert.ok(boolOptionKeys.includes('player.state.helmet'), '包含 player.state.helmet');
+  assert.ok(boolOptionKeys.includes('player.state.defusekit'), '包含 player.state.defusekit');
+
+  // 3. 验证 EVENT_DROPDOWN_OPTIONS 严格匹配所有 event.* 瞬态脉冲
+  const eventOptionKeys = EVENT_DROPDOWN_OPTIONS.map(opt => opt[1]);
+  for (const ev of requiredEvents) {
+    assert.ok(eventOptionKeys.includes(ev), `EVENT_DROPDOWN_OPTIONS 必须包含 ${ev}`);
+  }
+  assert.equal(eventOptionKeys.includes('player.state.helmet'), false, '事件下拉不可混入持续状态');
+
+  // 4. 验证积木实例化后，两个布尔读取积木 (gsi_get_boolean, orch_gsi_bool) 拥有相同且完整的选项
+  const ws = new Blockly.Workspace();
+  const b1 = ws.newBlock('gsi_get_boolean');
+  const b2 = ws.newBlock('orch_gsi_bool');
+  const opts1 = b1.getField('PATH').getOptions().map(o => o[1]);
+  const opts2 = b2.getField('PATH').getOptions().map(o => o[1]);
+  assert.deepEqual(opts1, boolOptionKeys, 'gsi_get_boolean 选项必须与权威字典一致');
+  assert.deepEqual(opts2, boolOptionKeys, 'orch_gsi_bool 选项必须与权威字典一致');
+  assert.deepEqual(opts1, opts2, '两个布尔读取积木选项源必须完全一致');
+
+  // 5. 验证事件覆盖积木 (event_overlay, orch_event_triggered) 共享一致的事件下拉
+  const bEv1 = ws.newBlock('event_overlay');
+  const bEv2 = ws.newBlock('orch_event_triggered');
+  const evOpts1 = bEv1.getField('EVENT').getOptions().map(o => o[1]);
+  const evOpts2 = bEv2.getField('EVENT').getOptions().map(o => o[1]);
+  assert.deepEqual(evOpts1, eventOptionKeys, 'event_overlay 选项必须与权威事件表一致');
+  assert.deepEqual(evOpts2, eventOptionKeys, 'orch_event_triggered 选项必须与权威事件表一致');
+
+  // 6. P3-2: 验证通用 condition_compare 类型与连接保留，UI 文案优化
+  const bCompare = ws.newBlock('condition_compare');
+  assert.equal(bCompare.type, 'condition_compare');
+
+  ws.dispose();
+});
+
+test('orchestratorSerializer handles boolean readers on both left and right sides of logic_compare', () => {
+  const ws = new Blockly.Workspace();
+  registerCustomBlocks();
+
+  // Test right-hand boolean reader in logic_compare: true == orch_gsi_bool(event.kill)
+  const compareBlock = ws.newBlock('logic_compare');
+  compareBlock.setFieldValue('EQ', 'OP');
+
+  const boolValBlock = ws.newBlock('logic_boolean');
+  boolValBlock.setFieldValue('TRUE', 'BOOL');
+  compareBlock.getInput('A').connection.connect(boolValBlock.outputConnection);
+
+  const gsiBoolBlock = ws.newBlock('orch_gsi_bool');
+  gsiBoolBlock.setFieldValue('event.kill', 'PATH');
+  compareBlock.getInput('B').connection.connect(gsiBoolBlock.outputConnection);
+
+  const ast = S.parseConditionAst(compareBlock);
+  assert.equal(ast.field, 'event.kill');
+  assert.equal(ast.op, '==');
+  assert.equal(ast.value, true);
+
+  ws.dispose();
+});
+
+test('evaluateOverlayStatus normalizes event prefix in simulation mode', () => {
+  // Overlay config has 'event.kill'
+  const overlayWithPrefix = { trigger: 'event', event: 'event.kill', effect: 'pulse_kill' };
+  // Overlay config has 'kill' (no prefix)
+  const overlayNoPrefix = { trigger: 'event', event: 'kill', effect: 'pulse_kill' };
+
+  // Trigger simulation with 'event.kill'
+  const sim1 = evaluateOverlayStatus(overlayWithPrefix, { isSimMode: true, recentSimEvent: 'event.kill' });
+  const sim2 = evaluateOverlayStatus(overlayNoPrefix, { isSimMode: true, recentSimEvent: 'event.kill' });
+  assert.equal(sim1.isActive, true, 'event.kill 触发 event.kill 覆盖层');
+  assert.equal(sim2.isActive, true, 'event.kill 触发 kill 覆盖层 (前缀容错)');
+
+  // Trigger simulation with 'kill'
+  const sim3 = evaluateOverlayStatus(overlayWithPrefix, { isSimMode: true, recentSimEvent: 'kill' });
+  const sim4 = evaluateOverlayStatus(overlayNoPrefix, { isSimMode: true, recentSimEvent: 'kill' });
+  assert.equal(sim3.isActive, true, 'kill 触发 event.kill 覆盖层 (前缀容错)');
+  assert.equal(sim4.isActive, true, 'kill 触发 kill 覆盖层');
+});
+

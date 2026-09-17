@@ -100,7 +100,11 @@ export function evaluateOverlayStatus(ov, { isSimMode, recentSimEvent, liveGsi, 
   } else {
     const eventName = ov?.event || '';
     if (isSimMode) {
-      isActive = recentSimEvent === eventName;
+      const match = recentSimEvent && (
+        recentSimEvent === eventName ||
+        recentSimEvent === (eventName.startsWith('event.') ? eventName.slice(6) : `event.${eventName}`)
+      );
+      isActive = Boolean(match);
       reason = isActive ? '事件触发中' : `待命 (${eventName})`;
     } else {
       const data = liveGsi?.data || {};

@@ -10,6 +10,8 @@
 #include "gsi/gsi_adapter.h"
 #include "web/web_server.h"
 #include "aura/aura_types.h"
+#include "aura/aura_adapter.h"
+#include "aura/hal_compat.h"
 #include "engine/builtin_effects.h"
 #include "monitor/key_input_hub.h"
 #include "engine/plugin_interface.h"
@@ -2169,6 +2171,233 @@ int main() {
               "ResolvePluginPath 能够准确规范化插件路径");
 
         std::filesystem::remove(tmp_orch_cfg);
+    }
+
+    // =========================================================================
+    // [测试 P0-1 回归] COM 服务器注册表解析与 UAF 防护验证
+    // =========================================================================
+    std::cout << "\n[测试 P0-1] COM 服务器注册表解析与 UAF 防护验证...\n";
+    {
+        std::wstring test_clsid = L"{AE9DB4C8-4F2A-4756-9B11-2F6D78C61F1A}";
+
+        // 1. HKLM 命中路径：直接返回，不触发 HKCR
+        bool hkcr_called = false;
+        auto mock_hklm_hit = [&](HKEY root, const std::wstring& key) -> std::wstring {
+            if (root == HKEY_LOCAL_MACHINE) {
+                if (key == L"SOFTWARE\\Classes\\CLSID\\" + test_clsid + L"\\InprocServer32") {
+                    return L"C:\\Windows\\System32\\hklm_hal.dll";
+                }
+            } else if (root == HKEY_CLASSES_ROOT) {
+                hkcr_called = true;
+            }
+            return L"";
+        };
+        std::wstring res_hklm = aura::ResolveInprocServerDllPath(test_clsid, mock_hklm_hit);
+        CHECK(res_hklm == L"C:\\Windows\\System32\\hklm_hal.dll", "HKLM 存在时优先返回 HKLM 路径");
+        CHECK(!hkcr_called, "HKLM 命中时不应调用 HKCR 回退");
+
+        // 2. HKLM miss -> HKCR fallback：验证 HKCR 路径接收到完全相同的 clsid_text，无 UAF
+        std::wstring captured_hkcr_key;
+        auto mock_hkcr_fallback = [&](HKEY root, const std::wstring& key) -> std::wstring {
+            if (root == HKEY_LOCAL_MACHINE) {
+                return L""; // miss
+            }
+            if (root == HKEY_CLASSES_ROOT) {
+                captured_hkcr_key = key;
+                return L"C:\\Program Files\\ASUS\\hkcr_fallback_hal.dll";
+            }
+            return L"";
+        };
+        std::wstring res_hkcr = aura::ResolveInprocServerDllPath(test_clsid, mock_hkcr_fallback);
+        CHECK(res_hkcr == L"C:\\Program Files\\ASUS\\hkcr_fallback_hal.dll", "HKLM miss 时成功回退到 HKCR 路径");
+        CHECK(captured_hkcr_key == L"CLSID\\" + test_clsid + L"\\InprocServer32",
+              "HKCR fallback 接收到完整正确的 CLSID 子键 (无 Use-After-Free)");
+
+        // 3. 两处皆 miss 时安全返回空
+        auto mock_both_miss = [](HKEY, const std::wstring&) -> std::wstring {
+            return L"";
+        };
+        std::wstring res_empty = aura::ResolveInprocServerDllPath(test_clsid, mock_both_miss);
+        CHECK(res_empty.empty(), "注册表均未命中时安全返回空字符串");
+    }
+
+    // =========================================================================
+    // [测试 P0-2 回归] 配置热重载与 GSI 状态驱动的 ShouldSuppressWebUi 联动
+    // =========================================================================
+    std::cout << "\n[测试 P0-2] 配置热重载与 GSI 状态驱动的 ShouldSuppressWebUi 联动...\n";
+    {
+        std::string tmp_hot_cfg = (std::filesystem::temp_directory_path() / "tmp_hot_reload_p02.json").string();
+        nlohmann::json cfg_init = {
+            {"default_profile", "desktop_prof"},
+            {"profiles", {
+                {"desktop_prof", {{"type", "static"}, {"color", {10, 20, 30}}}},
+                {"cs2_safe", {{"type", "static"}, {"color", {0, 255, 0}}}},
+                {"cs2_danger", {{"type", "static"}, {"color", {255, 0, 0}}}}
+            }},
+            {"orchestration", {
+                {"version", 2},
+                {"fallback_profile", "desktop_prof"},
+                {"rules", {
+                    {
+                        {"process", "cs2.exe"},
+                        {"target_profile", "cs2_danger"},
+                        {"dnd", true},
+                        {"condition", {
+                            {"field", "player.state.health"},
+                            {"op", "<"},
+                            {"value", 20}
+                        }}
+                    },
+                    {
+                        {"process", "cs2.exe"},
+                        {"target_profile", "cs2_safe"},
+                        {"dnd", false}
+                    }
+                }}
+            }}
+        };
+
+        {
+            std::ofstream out(tmp_hot_cfg);
+            out << cfg_init.dump(2);
+        }
+
+        aura::RuleEngine engine_hot;
+        bool ok = engine_hot.LoadConfig(tmp_hot_cfg);
+        CHECK(ok, "成功加载热重载测试配置");
+
+        // 1. 前台进程为 cs2.exe，初始 GSI 状态：健康 (health = 100)
+        aura::GsiState live_gsi;
+        live_gsi.UpdateFromPayload({{"player", {{"state", {{"health", 100}}}}}});
+
+        std::string cur_proc = "cs2.exe";
+        CHECK(!engine_hot.ShouldSuppressWebUi(cur_proc, &live_gsi), "健康状态下未触发 DND (dnd=false)");
+
+        // 2. 前台进程保持不变 (cs2.exe) -> GSI 条件发生变化：残血 (health = 15)
+        live_gsi.UpdateFromPayload({{"player", {{"state", {{"health", 15}}}}}});
+
+        // 3. 模拟配置热重载（重载触发文件修改与 CheckAndReload）
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        {
+            cfg_init["fps"] = 60;
+            std::ofstream out(tmp_hot_cfg);
+            out << cfg_init.dump(2);
+        }
+        CHECK(engine_hot.CheckAndReload(), "CheckAndReload 成功捕获并应用配置变更");
+
+        // 4. 关键验收：在配置热重载路径下，必须传入当前 live_gsi，立即按当前残血 GSI 正确重新计算 DND
+        bool suppress_with_gsi = engine_hot.ShouldSuppressWebUi(cur_proc, &live_gsi);
+        bool suppress_without_gsi = engine_hot.ShouldSuppressWebUi(cur_proc); // 缺陷形态：漏传 GSI (nullptr)
+
+        CHECK(suppress_with_gsi, "热重载后传入当前 GSI: 立即按残血条件计算得到 DND 抑制 (suppress=true)");
+        CHECK(!suppress_without_gsi, "若漏传 GSI: 无法评估残血条件导致 DND 漏判 (确认修复必要性)");
+
+        std::filesystem::remove(tmp_hot_cfg);
+    }
+
+    // =========================================================================
+    // [测试 P1-2 回归] ASUS HAL 逆向接口兼容性 Gate 判定套件
+    // =========================================================================
+    std::cout << "\n[测试 P1-2] ASUS HAL 逆向接口兼容性 Gate 判定套件...\n";
+    {
+        // 1. 针对受支持文件的 Gate 判定 (drivers/AacKbHal_x64.dll)
+        std::wstring valid_hal_path = L"drivers/AacKbHal_x64.dll";
+        if (!std::filesystem::exists(valid_hal_path)) {
+            valid_hal_path = L"../../drivers/AacKbHal_x64.dll";
+        }
+        if (std::filesystem::exists(valid_hal_path)) {
+            aura::HalGateResult res = aura::ValidateHalFileGate(valid_hal_path);
+            CHECK(res.status == aura::HalGateStatus::Supported, "原厂 AacKbHal_x64.dll 必须通过文件兼容性 Gate 校验");
+            CHECK(res.sha256 == "52d575bf942b7551b3f120c446bf0d853e36f9225c6b9a17407a80e0b1829f04",
+                  "校验 SHA-256 散列值完全吻合");
+            CHECK(res.file_version == "1.3.46.0", "校验 FileVersion 完全吻合 (1.3.46.0)");
+            CHECK(res.matched_version != nullptr, "成功匹配已验证版本表条目");
+        } else {
+            std::cout << "  [*] 跳过本地 drivers/AacKbHal_x64.dll 真实文件读取 (文件不存在)\n";
+        }
+
+        // 2. 针对不受支持的文件 (Unsupported Version / Hash Mismatch)
+        std::filesystem::path tmp_fake_p = std::filesystem::temp_directory_path() / "tmp_fake_hal.dll";
+        {
+            std::ofstream out(tmp_fake_p, std::ios::binary);
+            std::string fake_data = "THIS IS NOT A VALID ASUS HAL DLL BUT A CORRUPTED OR UNKNOWN VERSION";
+            out.write(fake_data.data(), fake_data.size());
+        }
+        std::wstring fake_path = tmp_fake_p.wstring();
+        aura::HalGateResult res_unsupported = aura::ValidateHalFileGate(fake_path);
+        CHECK(res_unsupported.status == aura::HalGateStatus::UnsupportedVersion,
+              "未知或散列不匹配的 DLL 必须判定为 UnsupportedVersion (Fail-closed)");
+        CHECK(!res_unsupported.IsSupported(), "IsSupported() 必须返回 false");
+        std::string err_str = aura::FormatHalGateError(res_unsupported);
+        CHECK(err_str.find("Unsupported ASUS HAL version") != std::string::npos,
+              "错误信息必须包含规范的 'Unsupported ASUS HAL version'");
+        CHECK(err_str.find("Hardware control disabled for safety") != std::string::npos,
+              "错误信息必须包含 'Hardware control disabled for safety'");
+        std::filesystem::remove(tmp_fake_p);
+
+        // 3. 针对不存在的文件 (FileNotFound)
+        aura::HalGateResult res_missing = aura::ValidateHalFileGate(L"nonexistent_dir/missing_hal_12345.dll");
+        CHECK(res_missing.status == aura::HalGateStatus::FileNotFound, "不存在的文件返回 FileNotFound");
+        CHECK(!res_missing.IsSupported(), "不存在的文件不可通过 Gate");
+
+        // 4. 针对内存模块 runtime signature 不匹配 (SignatureMismatch)
+        // 构造一个模拟的 PE64 内存镜像缓冲区 (尺寸需容纳 rva_enable 0x1CB85C)
+        std::vector<uint8_t> mock_pe(0x250000, 0x00);
+        IMAGE_DOS_HEADER* dos = reinterpret_cast<IMAGE_DOS_HEADER*>(mock_pe.data());
+        dos->e_magic = IMAGE_DOS_SIGNATURE;
+        dos->e_lfanew = 0x100;
+        IMAGE_NT_HEADERS* nt = reinterpret_cast<IMAGE_NT_HEADERS*>(mock_pe.data() + 0x100);
+        nt->Signature = IMAGE_NT_SIGNATURE;
+        nt->OptionalHeader.SizeOfImage = static_cast<DWORD>(mock_pe.size());
+
+        const auto& verified_table = aura::GetVerifiedHalVersions();
+        CHECK(!verified_table.empty(), "已验证版本表非空且集中管理");
+        const aura::HalVersionInfo* v_info = &verified_table[0];
+
+        // 故意填入错误的指令序言 (如 NOPs 0x90)
+        memset(mock_pe.data() + v_info->rva_logger, 0x90, 16);
+
+        aura::HalGateResult res_sig_fail = aura::ValidateHalModuleGate(reinterpret_cast<HMODULE>(mock_pe.data()), v_info);
+        CHECK(res_sig_fail.status == aura::HalGateStatus::SignatureMismatch,
+              "指令序言被篡改或不匹配时必须判定为 SignatureMismatch");
+        CHECK(!res_sig_fail.IsSupported(), "签名不符的模块拒绝通过 Gate 驱动硬件");
+
+        // 将正确序言填入，再次校验应通过
+        memcpy(mock_pe.data() + v_info->rva_logger, v_info->logger_prologue.data(), v_info->logger_prologue.size());
+        aura::HalGateResult res_sig_pass = aura::ValidateHalModuleGate(reinterpret_cast<HMODULE>(mock_pe.data()), v_info);
+        CHECK(res_sig_pass.status == aura::HalGateStatus::Supported,
+              "指令序言吻合时内存签名 Gate 判定通过");
+
+        // 填入已打补丁的 0xC3 (ret)，亦应被识别为合规已 patch 模块
+        mock_pe[v_info->rva_logger] = 0xC3;
+        aura::HalGateResult res_sig_patched = aura::ValidateHalModuleGate(reinterpret_cast<HMODULE>(mock_pe.data()), v_info);
+        CHECK(res_sig_patched.status == aura::HalGateStatus::Supported,
+              "已应用防崩补丁 (0xC3) 的模块安全通过 Gate 校验");
+
+        // 5. 针对 ApplyAacDriverPatch 的 Fail-closed 约束检验
+        // 传入非法/未匹配的模块，必须直接拒绝 patch 并返回 false
+        std::vector<uint8_t> invalid_mod(0x1000, 0x00);
+        bool patch_invalid = aura::ApplyAacDriverPatch(reinterpret_cast<HMODULE>(invalid_mod.data()));
+        CHECK(!patch_invalid, "未通过兼容性 Gate 校验的模块必须被 ApplyAacDriverPatch 拒绝 (Fail-closed)");
+
+        // 针对已匹配受支持模块，ApplyAacDriverPatch 应成功执行内存修补
+        memcpy(mock_pe.data() + v_info->rva_logger, v_info->logger_prologue.data(), v_info->logger_prologue.size());
+        *reinterpret_cast<uint32_t*>(mock_pe.data() + v_info->rva_enable) = 1; // enable = 1
+        bool patch_valid = aura::ApplyAacDriverPatch(reinterpret_cast<HMODULE>(mock_pe.data()));
+        CHECK(patch_valid, "符合已验证特征的合法模块成功应用 ApplyAacDriverPatch");
+        CHECK(mock_pe[v_info->rva_logger] == 0xC3, "Logger::Log 函数入口成功修补为 0xC3 (ret)");
+        CHECK(*reinterpret_cast<const uint32_t*>(mock_pe.data() + v_info->rva_enable) == 0,
+              "EnableLog 标志位成功置 0");
+
+        // 6. 针对极端畸变/越界 PE 缓冲区的 SEH 防御检验 (无崩溃防御)
+        std::vector<uint8_t> corrupted_pe(0x200, 0x00);
+        IMAGE_DOS_HEADER* bad_dos = reinterpret_cast<IMAGE_DOS_HEADER*>(corrupted_pe.data());
+        bad_dos->e_magic = IMAGE_DOS_SIGNATURE;
+        bad_dos->e_lfanew = 0x7FFFFFFF; // 巨大越界指针
+        aura::HalGateResult res_corrupted = aura::ValidateHalModuleGate(reinterpret_cast<HMODULE>(corrupted_pe.data()), v_info);
+        CHECK(!res_corrupted.IsSupported(), "异常畸变 PE 内存安全拦截，未触发进程崩溃");
+
+        std::cout << "  [*] 兼容性 Gate 纯逻辑与文件校验通过 (CI 模拟环境未连接真实 ASUS 硬件)\n";
     }
 
     std::cout << "\n=========================================================\n";

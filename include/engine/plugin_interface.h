@@ -22,6 +22,19 @@ public:
 
     virtual double GetNumber(const char* field, double def_val = 0.0) const = 0;
     virtual bool GetBool(const char* field, bool def_val = false) const = 0;
+
+    /**
+     * @brief 获取 CS2 GSI 文本字符串遥测。
+     * 
+     * @param field 遥测键名（如 "player.team", "round.phase"）。
+     * @param def_val 键名不存在时的默认回退字符串。
+     * @return const char* 指向以 null 结尾的 UTF-8 字符串指针。
+     * 
+     * @note 生命周期契约 (Lifetime Contract):
+     * 返回的指针底层基于 thread_local 静态存储区，只保证有效到【同一线程下一次 GetString() 调用之前】。
+     * 调用方/插件若需要跨调用或跨帧长期保存字符串内容，必须在下次调用前立即执行深拷贝 (如赋值给 std::string)。
+     * （若未来演进至 API v2，可考虑 caller-owned buffer 方案；当前严格保持跨 DLL ABI 稳定不变）。
+     */
     virtual const char* GetString(const char* field, const char* def_val = "") const = 0;
     virtual bool IsActive() const { return true; }
 };

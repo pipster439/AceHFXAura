@@ -193,20 +193,26 @@ export const NUMERIC_GSI_STATES = [
 ];
 
 export const BOOLEAN_GSI_STATES = [
-  { key: 'player.state.helmet', label: '防弹头盔 (已装备)' },
-  { key: 'player.state.defusekit', label: '拆弹器包 (已携带)' },
-  { key: 'event.kill', label: '瞬时击杀脉冲 (Kill)' },
-  { key: 'event.headshot', label: '瞬时爆头脉冲 (Headshot)' },
-  { key: 'event.damage', label: '瞬时受击脉冲 (Damage)' },
-  { key: 'event.bomb_planted', label: '瞬时C4安放脉冲 (Planted)' },
-  { key: 'event.bomb_defused', label: '瞬时C4拆除脉冲 (Defused)' },
-  { key: 'event.round_won', label: '瞬时回合获胜脉冲 (Won)' },
-  { key: 'event.round_lost', label: '瞬时回合失利脉冲 (Lost)' }
+  { key: 'player.state.helmet', label: '防弹头盔 (player.state.helmet)' },
+  { key: 'player.state.defusekit', label: '拆弹器包 (player.state.defusekit)' },
+  { key: 'event.kill', label: '瞬时击杀脉冲 (event.kill)' },
+  { key: 'event.headshot', label: '瞬时爆头脉冲 (event.headshot)' },
+  { key: 'event.damage', label: '瞬时受击脉冲 (event.damage)' },
+  { key: 'event.bomb_planted', label: '瞬时C4安放脉冲 (event.bomb_planted)' },
+  { key: 'event.bomb_defused', label: '瞬时C4拆除脉冲 (event.bomb_defused)' },
+  { key: 'event.round_won', label: '瞬时回合获胜脉冲 (event.round_won)' },
+  { key: 'event.round_lost', label: '瞬时回合失利脉冲 (event.round_lost)' }
 ];
 
 export const DISCRETE_STATE_DROPDOWN_OPTIONS = DISCRETE_GSI_STATES.map((s) => [s.label, s.key]);
 
 export const NUMERIC_STATE_DROPDOWN_OPTIONS = NUMERIC_GSI_STATES.map((s) => [s.label, s.key]);
+
+export const BOOLEAN_STATE_DROPDOWN_OPTIONS = BOOLEAN_GSI_STATES.map((s) => [s.label, s.key]);
+
+export const EVENT_GSI_STATES = BOOLEAN_GSI_STATES.filter((s) => s.key.startsWith('event.'));
+
+export const EVENT_DROPDOWN_OPTIONS = EVENT_GSI_STATES.map((s) => [s.label, s.key]);
 
 /**
  * Get discrete options for a specific GSI state key

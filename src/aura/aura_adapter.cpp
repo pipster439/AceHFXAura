@@ -1,4 +1,5 @@
 #include "aura/aura_adapter.h"
+#include "aura/hal_compat.h"
 #include "utils/logger.h"
 #include "utils/system_info.h"
 #include <filesystem>
@@ -114,60 +115,39 @@ bool ApplyAacDriverPatch(HMODULE hHalMod) {
         return false;
     }
 
-    uint8_t* base = reinterpret_cast<uint8_t*>(hHalMod);
-    IMAGE_DOS_HEADER* dos = reinterpret_cast<IMAGE_DOS_HEADER*>(base);
-    if (dos->e_magic != IMAGE_DOS_SIGNATURE) {
-        return false;
-    }
-    IMAGE_NT_HEADERS* nt = reinterpret_cast<IMAGE_NT_HEADERS*>(base + dos->e_lfanew);
-    if (nt->Signature != IMAGE_NT_SIGNATURE) {
-        return false;
-    }
-
-    constexpr DWORD DEFAULT_RVA_LOGGER_LOG = 0x7ABE0;
-    constexpr DWORD DEFAULT_RVA_ENABLE_LOG = 0x1CB85C;
-
-    DWORD rva_logger = DEFAULT_RVA_LOGGER_LOG;
-    DWORD rva_enable = DEFAULT_RVA_ENABLE_LOG;
-
-    // Fast-path: Check if already patched
-    if (*(base + rva_logger) == 0xC3 && *reinterpret_cast<const uint32_t*>(base + rva_enable) == 0) {
-        return true;
+    // 严禁对未识别的 DLL 盲目打补丁（遵守 Gate 安全基准：禁止散落硬编码 offset，禁止模糊签名搜索）
+    const HalVersionInfo* matched_version = nullptr;
+    wchar_t mod_path[MAX_PATH] = {0};
+    if (GetModuleFileNameW(hHalMod, mod_path, MAX_PATH)) {
+        HalGateResult file_gate = ValidateHalFileGate(mod_path);
+        if (file_gate.IsSupported()) {
+            matched_version = file_gate.matched_version;
+        }
     }
 
-    // Check if prologue at default RVA matches known signature (40 55 57 41...) or is already patched (C3)
-    if (*(base + rva_logger) != 0x40 && *(base + rva_logger) != 0xC3) {
-        // Dynamic signature search in .text section for Logger::Log
-        const uint8_t log_sig[] = {0x40, 0x55, 0x57, 0x41, 0x54, 0x41, 0x56, 0x41, 0x57, 0x48, 0x8D, 0xAC, 0x24, 0xE0, 0xEF, 0xFF};
-        IMAGE_SECTION_HEADER* sec = IMAGE_FIRST_SECTION(nt);
-        for (WORD i = 0; i < nt->FileHeader.NumberOfSections; ++i, ++sec) {
-            if (strncmp(reinterpret_cast<const char*>(sec->Name), ".text", 5) == 0) {
-                for (DWORD o = 0; o + sizeof(log_sig) < sec->Misc.VirtualSize; ++o) {
-                    if (memcmp(base + sec->VirtualAddress + o, log_sig, sizeof(log_sig)) == 0) {
-                        rva_logger = sec->VirtualAddress + o;
-                        break;
-                    }
-                }
+    if (!matched_version) {
+        // 若无法从文件确认，匹配集中管理的已验证版本表中的内存特征
+        for (const auto& v : GetVerifiedHalVersions()) {
+            HalGateResult mod_gate = ValidateHalModuleGate(hHalMod, &v);
+            if (mod_gate.IsSupported()) {
+                matched_version = &v;
                 break;
             }
         }
     }
 
-    // Dynamic search for EnableLog instruction in .text: lea rax, [rip+disp]; xor r8d, r8d
-    IMAGE_SECTION_HEADER* sec = IMAGE_FIRST_SECTION(nt);
-    for (WORD i = 0; i < nt->FileHeader.NumberOfSections; ++i, ++sec) {
-        if (strncmp(reinterpret_cast<const char*>(sec->Name), ".text", 5) == 0) {
-            const uint8_t tail[] = {0x45, 0x33, 0xC0, 0x48, 0x89, 0x44, 0x24, 0x20};
-            for (DWORD o = 0; o + 15 < sec->Misc.VirtualSize; ++o) {
-                uint8_t* p = base + sec->VirtualAddress + o;
-                if (p[0] == 0x48 && p[1] == 0x8D && p[2] == 0x05 && memcmp(p + 7, tail, sizeof(tail)) == 0) {
-                    int32_t disp = *reinterpret_cast<int32_t*>(p + 3);
-                    rva_enable = (sec->VirtualAddress + o) + 7 + disp;
-                    break;
-                }
-            }
-            break;
-        }
+    if (!matched_version) {
+        LOG_ERROR("ApplyAacDriverPatch: 拒绝为未通过兼容性 Gate 校验的模块应用内存补丁 (Fail-closed)");
+        return false;
+    }
+
+    uint8_t* base = reinterpret_cast<uint8_t*>(hHalMod);
+    DWORD rva_logger = matched_version->rva_logger;
+    DWORD rva_enable = matched_version->rva_enable;
+
+    // Fast-path: Check if already patched
+    if (*(base + rva_logger) == 0xC3 && *reinterpret_cast<const uint32_t*>(base + rva_enable) == 0) {
+        return true;
     }
 
     bool patched_any = false;
@@ -200,30 +180,49 @@ bool ApplyAacDriverPatch(HMODULE hHalMod) {
     return patched_any;
 }
 
+std::wstring ResolveInprocServerDllPath(
+    const std::wstring& clsid_text,
+    RegistryQueryFn query_fn)
+{
+    if (clsid_text.empty()) return L"";
+
+    if (!query_fn) {
+        query_fn = [](HKEY root, const std::wstring& subkey) -> std::wstring {
+            wchar_t path[MAX_PATH] = {0};
+            DWORD pathSize = sizeof(path);
+            HKEY hKey = nullptr;
+            if (RegOpenKeyExW(root, subkey.c_str(), 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+                RegQueryValueExW(hKey, nullptr, nullptr, nullptr, reinterpret_cast<LPBYTE>(path), &pathSize);
+                RegCloseKey(hKey);
+            }
+            return std::wstring(path);
+        };
+    }
+
+    // 1. HKLM 注册表路径优先尝试
+    std::wstring subkey_hklm = L"SOFTWARE\\Classes\\CLSID\\" + clsid_text + L"\\InprocServer32";
+    std::wstring path = query_fn(HKEY_LOCAL_MACHINE, subkey_hklm);
+    if (!path.empty()) {
+        return path;
+    }
+
+    // 2. HKLM miss 时回退至 HKCR (使用同一份安全深拷贝的 clsid_text)
+    std::wstring subkey_hkcr = L"CLSID\\" + clsid_text + L"\\InprocServer32";
+    return query_fn(HKEY_CLASSES_ROOT, subkey_hkcr);
+}
+
 static std::wstring GetComServerDllPath(REFCLSID clsid) {
     LPOLESTR clsidStr = nullptr;
     if (FAILED(StringFromCLSID(clsid, &clsidStr)) || !clsidStr) {
         return L"";
     }
-    std::wstring subkey = L"SOFTWARE\\Classes\\CLSID\\" + std::wstring(clsidStr) + L"\\InprocServer32";
+    // 关键修复：在释放 COM 分配的内存前显式深拷贝至 std::wstring，
+    // 后续无论是 HKLM 还是 HKCR fallback 均统一使用 clsid_text，彻底消除 UAF。
+    std::wstring clsid_text(clsidStr);
     CoTaskMemFree(clsidStr);
+    clsidStr = nullptr;
 
-    wchar_t path[MAX_PATH] = {0};
-    DWORD pathSize = sizeof(path);
-    HKEY hKey = nullptr;
-    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, subkey.c_str(), 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
-        RegQueryValueExW(hKey, nullptr, nullptr, nullptr, reinterpret_cast<LPBYTE>(path), &pathSize);
-        RegCloseKey(hKey);
-    }
-    if (path[0] == L'\0') {
-        std::wstring hkcrKey = L"CLSID\\" + std::wstring(clsidStr) + L"\\InprocServer32";
-        if (RegOpenKeyExW(HKEY_CLASSES_ROOT, hkcrKey.c_str(), 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
-            pathSize = sizeof(path);
-            RegQueryValueExW(hKey, nullptr, nullptr, nullptr, reinterpret_cast<LPBYTE>(path), &pathSize);
-            RegCloseKey(hKey);
-        }
-    }
-    return std::wstring(path);
+    return aura::ResolveInprocServerDllPath(clsid_text);
 }
 
 static LONG CallCreateLedDeviceSafe(PFN_CreateLedDevice fn, void* pHal, FakeVector* pVec) {
@@ -255,9 +254,24 @@ bool AuraAdapter::ConnectHardwareInternal() {
     void* hal_ptr = nullptr;
 
     // 1. 优先尝试从本地路径/驱动目录加载 AacKbHal_x64.dll 并免注册表调用 DllGetClassObject
-    if (!hHalMod_) {
-        hHalMod_ = GetModuleHandleW(L"AacKbHal_x64.dll");
+    if (hHalMod_) {
+        // 如果外部已传递模块句柄，验证其文件与内存兼容性 Gate
+        wchar_t mod_path[MAX_PATH] = {0};
+        if (GetModuleFileNameW(hHalMod_, mod_path, MAX_PATH)) {
+            HalGateResult gate = ValidateHalFileGate(mod_path);
+            if (!gate.IsSupported()) {
+                LOG_ERROR("ASUS HAL 既有模块文件 Gate 拦截:\n" + FormatHalGateError(gate));
+                hHalMod_ = nullptr;
+            } else {
+                HalGateResult mod_gate = ValidateHalModuleGate(hHalMod_, gate.matched_version);
+                if (!mod_gate.IsSupported()) {
+                    LOG_ERROR("ASUS HAL 既有模块内存签名 Gate 拦截:\n" + FormatHalGateError(mod_gate));
+                    hHalMod_ = nullptr;
+                }
+            }
+        }
     }
+
     if (!hHalMod_) {
         std::vector<std::filesystem::path> candidates;
         wchar_t mod_path[MAX_PATH];
@@ -275,10 +289,25 @@ bool AuraAdapter::ConnectHardwareInternal() {
         std::error_code ec;
         for (const auto& p : candidates) {
             if (std::filesystem::exists(p, ec) && !std::filesystem::is_directory(p, ec)) {
+                // 兼容性 Gate 校验第 1 阶段：文件 SHA-256 与版本号必须匹配已验证列表
+                HalGateResult gate = ValidateHalFileGate(p.wstring());
+                if (!gate.IsSupported()) {
+                    LOG_ERROR("ASUS HAL 文件兼容性 Gate 拦截: " + p.string() + "\n" + FormatHalGateError(gate));
+                    continue;
+                }
+
                 SetDllDirectoryW(p.parent_path().c_str());
                 hHalMod_ = LoadLibraryW(p.c_str());
                 if (hHalMod_) {
-                    LOG_INFO("成功加载底层驱动库: " + p.string());
+                    // 兼容性 Gate 校验第 2 阶段：内存中关键 runtime signature 二次校验
+                    HalGateResult mod_gate = ValidateHalModuleGate(hHalMod_, gate.matched_version);
+                    if (!mod_gate.IsSupported()) {
+                        LOG_ERROR("ASUS HAL 模块内存签名 Gate 拦截: " + p.string() + "\n" + FormatHalGateError(mod_gate));
+                        FreeLibrary(hHalMod_);
+                        hHalMod_ = nullptr;
+                        continue;
+                    }
+                    LOG_INFO("成功加载并通过兼容性 Gate 验证底层驱动库: " + p.string() + " (v" + gate.file_version + ")");
                     break;
                 }
             }
@@ -312,18 +341,41 @@ bool AuraAdapter::ConnectHardwareInternal() {
 
     // 2. 若免注册加载未成功，回退至系统 COM 注册表解析 (兼容已安装奥创的标准环境)
     if (!hal_ptr) {
+        if (hHalMod_) {
+            FreeLibrary(hHalMod_);
+            hHalMod_ = nullptr;
+        }
         LOG_INFO("尝试通过系统注册表 CoCreateInstance 创建 CLSID_ClaymoreHal 实例...");
         std::wstring regDllPath = GetComServerDllPath(clsid_hal);
+        if (regDllPath.empty()) {
+            regDllPath = L"C:\\Program Files\\ASUS\\Aac_Keyboard\\AacKbHal_x64.dll";
+        }
         HMODULE hSysPre = nullptr;
-        if (!regDllPath.empty()) {
+        if (!regDllPath.empty() && std::filesystem::exists(regDllPath)) {
+            HalGateResult gate = ValidateHalFileGate(regDllPath);
+            if (!gate.IsSupported()) {
+                LOG_ERROR("ASUS HAL 注册表目标 DLL 兼容性 Gate 拦截:\n" + FormatHalGateError(gate));
+                state_ = AdapterState::Disconnected;
+                return false;
+            }
             hSysPre = LoadLibraryW(regDllPath.c_str());
+            if (hSysPre) {
+                HalGateResult mod_gate = ValidateHalModuleGate(hSysPre, gate.matched_version);
+                if (!mod_gate.IsSupported()) {
+                    LOG_ERROR("ASUS HAL 注册表目标模块签名 Gate 拦截:\n" + FormatHalGateError(mod_gate));
+                    FreeLibrary(hSysPre);
+                    state_ = AdapterState::Disconnected;
+                    return false;
+                }
+                ApplyAacDriverPatch(hSysPre);
+                hHalMod_ = hSysPre;
+            }
+        } else {
+            LOG_ERROR("未找到任何受支持的 ASUS HAL 驱动组件，启动硬件控制中止 (Fail-closed)");
+            state_ = AdapterState::Disconnected;
+            return false;
         }
-        if (!hSysPre) {
-            hSysPre = LoadLibraryW(L"C:\\Program Files\\ASUS\\Aac_Keyboard\\AacKbHal_x64.dll");
-        }
-        if (hSysPre) {
-            ApplyAacDriverPatch(hSysPre);
-        }
+
         HRESULT hr = CoCreateInstance(
             clsid_hal,
             nullptr,
@@ -331,9 +383,16 @@ bool AuraAdapter::ConnectHardwareInternal() {
             iid_hal,
             &hal_ptr
         );
-        ApplyAacDriverPatch();
+        if (hHalMod_) {
+            ApplyAacDriverPatch(hHalMod_);
+        }
         if (FAILED(hr) || !hal_ptr) {
             LOG_WARN("CoCreateInstance(CLSID_ClaymoreHal) 失败: " + FormatHex(hr) + " (驱动未就绪或未找到硬件组件)");
+            ReleaseHardwareInternal();
+            if (hHalMod_) {
+                FreeLibrary(hHalMod_);
+                hHalMod_ = nullptr;
+            }
             state_ = AdapterState::Disconnected;
             return false;
         }

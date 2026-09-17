@@ -783,7 +783,7 @@ int main(int argc, char* argv[]) {
                     next_tick = std::chrono::steady_clock::now();
                 }
 
-                bool suppress = rule_engine.ShouldSuppressWebUi(cur_proc_now);
+                bool suppress = rule_engine.ShouldSuppressWebUi(cur_proc_now, &gsi_adapter.GetState());
                 web_supervisor.SetSuppressed(suppress);
 
                 LOG_INFO("配置实时重载生效，当前活跃方案更新为: [" + current_active_profile_name + "]" + 

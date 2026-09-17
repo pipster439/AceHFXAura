@@ -44,6 +44,7 @@ include_directories(SYSTEM
 set(DAEMON_SOURCES
     src/main.cpp
     src/aura/aura_adapter.cpp
+    src/aura/hal_compat.cpp
     src/aura/keymap.cpp
     src/monitor/foreground_monitor.cpp
     src/config/rule_engine.cpp
@@ -58,6 +59,7 @@ set(DAEMON_SOURCES
 set(DAEMON_HEADERS
     include/aura/aura_adapter.h
     include/aura/aura_types.h
+    include/aura/hal_compat.h
     include/aura/keymap.h
     include/monitor/foreground_monitor.h
     include/config/rule_engine.h
@@ -89,6 +91,7 @@ target_link_libraries(aura_daemon PRIVATE
     psapi
     ws2_32
     crypt32
+    version
 )
 
 add_custom_command(TARGET aura_daemon POST_BUILD
@@ -138,6 +141,8 @@ add_executable(test_gsi_rules
     src/engine/overlay_manager.cpp
     src/gsi/gsi_adapter.cpp
     src/aura/keymap.cpp
+    src/aura/aura_adapter.cpp
+    src/aura/hal_compat.cpp
     src/web/web_server.cpp
 )
 
@@ -145,6 +150,11 @@ target_link_libraries(test_gsi_rules PRIVATE
     ws2_32
     crypt32
     user32
+    ole32
+    oleaut32
+    shell32
+    psapi
+    version
 )
 
 

@@ -192,7 +192,7 @@ aura_web_ui.exe --port 19898 --config config.json
 package_release.bat
 ```
 
-脚本当前按 Visual Studio 2026 Community 的默认安装路径调用工具链，构建两个 Release 进程、校验前端与驱动资源，并生成 `dist/Aura.exe` 和便携 ZIP。如果本机使用其他 Visual Studio 版本或安装位置，需要先修改 `tools/package_release.py` 中的 `VS_PATH`。
+脚本会自动通过 `vswhere` 检测本机安装的 Visual Studio 版本（支持 Visual Studio 2022 与 Visual Studio 2026）并动态匹配对应 CMake 生成器，构建两个 Release 进程、校验前端与驱动资源，并生成 `dist/Aura.exe` 和便携 ZIP。
 
 源码开发和 Studio 发布建议使用仓库根目录的两个构建产物，因为运行时编译需要同一 checkout 中的 `include/`。单文件 `Aura.exe` 主要用于运行已经构建好的 daemon、Web UI 和光效资源。
 
@@ -213,4 +213,10 @@ cmake --build build --config Release
 ctest --test-dir build -C Release --output-on-failure
 ```
 
-仓库还包含 GSI、编译接口、插件压力与端到端脚本，位于 `tests/`。涉及真实键盘、ASUS HAL、CS2 前台切换或运行时 MSVC 发布的检查必须在 Windows 真机环境完成；当前最终版本已经完成这条真机工作流验证。
+仓库还包含 GSI、编译接口、插件压力与端到端脚本，位于 `tests/`。依照工程规范，自动化 CI 测试通过仅代表模拟护栏通过；涉及真实键盘、ASUS HAL 物理推流与 CS2 实机对局的最终验收须由人工依据 [docs/MANUAL_TESTS.md](docs/MANUAL_TESTS.md) 手动执行核验。
+
+## 免责声明与第三方资产声明 (Disclaimer & Third-Party Notice)
+
+1. **商标与版权**：ASUS、ROG (Republic of Gamers)、Armoury Crate 及相关标志均为 ASUSTeK Computer Inc. 的注册商标或商标。Counter-Strike、CS2 与 Game State Integration (GSI) 均为 Valve Corporation 的注册商标或商标。本项目为独立第三方开源软件，与华硕或 Valve 均无官方关联、赞助或背书关系。
+2. **底层驱动组件**：本项目对键盘底层的灯效控制通过 ASUS 官方硬件抽象库（如 `AacKbHal_x64.dll`）实现。该 DLL 属于华硕专有资产，本仓库未获得其重新分发授权。用户运行建议基于本机已安装的华硕官方配套驱动环境。
+3. **软件许可 (LICENSE)**：项目代码本身的开源许可协议待项目所有者明确决策。发布与使用本项目须遵守当地法律法规及第三方相关最终用户许可协议 (EULA)。

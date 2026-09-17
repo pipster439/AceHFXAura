@@ -8,6 +8,8 @@
 #include <windows.h>
 #include <objbase.h>
 
+#include <functional>
+
 namespace aura {
 
 enum class AdapterState {
@@ -18,6 +20,12 @@ enum class AdapterState {
     BackoffWait,
     Error
 };
+
+// 注册表 InprocServer32 解析辅助函数（支持可测试的查询抽象与 HKLM -> HKCR 回退，杜绝 UAF）
+using RegistryQueryFn = std::function<std::wstring(HKEY root, const std::wstring& subkey)>;
+std::wstring ResolveInprocServerDllPath(
+    const std::wstring& clsid_text,
+    RegistryQueryFn query_fn = nullptr);
 
 // 对 AacKbHal_x64.dll 施加内存防崩补丁 (禁用 Logger::Log 并将 EnableLog 标志位置 0，杜绝 0xC0000409 异常)
 bool ApplyAacDriverPatch(HMODULE hHalMod = nullptr);

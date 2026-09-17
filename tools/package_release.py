@@ -13,6 +13,8 @@ Aura 独立发布包自动化构建脚本 (package_release.py)
 =============================================================================
 """
 
+import argparse
+import json
 import os
 import sys
 import shutil
@@ -24,37 +26,89 @@ DIST_DIR = os.path.join(REPO_ROOT, "dist")
 BUILD_RELEASE_DIR = os.path.join(REPO_ROOT, "build", "Release")
 DRIVERS_DIR = os.path.join(REPO_ROOT, "drivers")
 
-def find_vcvars_bat():
-    known_candidates = [
-        r"C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat",
-        r"C:\Program Files\Microsoft Visual Studio\17\Community\VC\Auxiliary\Build\vcvars64.bat",
-        r"C:\Program Files\Microsoft Visual Studio\17\Professional\VC\Auxiliary\Build\vcvars64.bat",
-        r"C:\Program Files\Microsoft Visual Studio\17\Enterprise\VC\Auxiliary\Build\vcvars64.bat",
-        r"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat",
-    ]
-    for cand in known_candidates:
-        if os.path.isfile(cand):
-            return cand
-
+def detect_vs_toolchain():
+    """
+    统一探测本机 Visual Studio 工具链与匹配的 CMake 生成器。
+    按优先顺序：
+    1. vswhere 查询 installationPath 与 installationVersion
+       - 18.x -> Visual Studio 18 2026
+       - 17.x -> Visual Studio 17 2022
+       - 16.x -> Visual Studio 16 2019
+    2. 已知候选安装路径与对应生成器探测
+    3. 缺省安全回退
+    """
     vswhere = r"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe"
     if os.path.isfile(vswhere):
         try:
             res = subprocess.run(
-                [vswhere, "-latest", "-requires", "Microsoft.VisualStudio.Component.VC.Tools.x86.x64", "-property", "installationPath"],
-                capture_output=True, text=True, check=True
+                [vswhere, "-latest", "-requires", "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
+                 "-format", "json", "-utf8"],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True
             )
-            install_path = res.stdout.strip()
-            if install_path:
-                cand = os.path.join(install_path, "VC", "Auxiliary", "Build", "vcvars64.bat")
-                if os.path.isfile(cand):
-                    return cand
-        except Exception:
-            pass
+            raw_out = res.stdout.decode('utf-8', errors='replace')
+            data = json.loads(raw_out)
+            if data and len(data) > 0:
+                inst = data[0]
+                inst_path = inst.get("installationPath", "")
+                inst_ver = inst.get("installationVersion", "")
+                vcvars = os.path.join(inst_path, "VC", "Auxiliary", "Build", "vcvars64.bat")
+                if os.path.isfile(vcvars):
+                    major = inst_ver.split(".")[0] if inst_ver else ""
+                    if major == "18":
+                        generator = "Visual Studio 18 2026"
+                    elif major == "17":
+                        generator = "Visual Studio 17 2022"
+                    elif major == "16":
+                        generator = "Visual Studio 16 2019"
+                    else:
+                        generator = f"Visual Studio {major}" if major else "Visual Studio 17 2022"
+                    return vcvars, generator
+        except Exception as e:
+            print(f"[WARN] vswhere 探测失败: {e}")
 
-    return r"C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat"
+    # Fallback 遍历已知常见候选路径
+    known_candidates = [
+        # VS 2026 (v18)
+        (r"C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat", "Visual Studio 18 2026"),
+        (r"C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Auxiliary\Build\vcvars64.bat", "Visual Studio 18 2026"),
+        (r"C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Auxiliary\Build\vcvars64.bat", "Visual Studio 18 2026"),
+        # VS 2022 (v17) - 常用安装路径
+        (r"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat", "Visual Studio 17 2022"),
+        (r"C:\Program Files\Microsoft Visual Studio\2022\Professional\VC\Auxiliary\Build\vcvars64.bat", "Visual Studio 17 2022"),
+        (r"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat", "Visual Studio 17 2022"),
+        (r"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat", "Visual Studio 17 2022"),
+        (r"C:\Program Files\Microsoft Visual Studio\17\Community\VC\Auxiliary\Build\vcvars64.bat", "Visual Studio 17 2022"),
+    ]
+    for cand, gen in known_candidates:
+        if os.path.isfile(cand):
+            return cand, gen
+
+    # 兜底：优先选择最普遍的 VS 2022
+    if os.path.isdir(r"C:\Program Files\Microsoft Visual Studio\18"):
+        return (
+            r"C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat",
+            "Visual Studio 18 2026"
+        )
+    return (
+        r"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat",
+        "Visual Studio 17 2022"
+    )
 
 
-VCVARS_BAT = find_vcvars_bat()
+VCVARS_BAT, VS_GENERATOR = detect_vs_toolchain()
+
+
+def get_cached_generator(cache_file):
+    if not os.path.exists(cache_file):
+        return None
+    try:
+        with open(cache_file, "r", encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                if line.startswith("CMAKE_GENERATOR:INTERNAL="):
+                    return line.split("=", 1)[1].strip()
+    except Exception:
+        pass
+    return None
 
 
 def run_cmd(cmd_str, cwd=REPO_ROOT):
@@ -71,20 +125,45 @@ def run_cmd(cmd_str, cwd=REPO_ROOT):
         stderr_str = proc.stderr.decode('gbk', errors='replace')
 
     if proc.returncode != 0:
-        print(f"[ERROR] 执行失败 (Exit Code {proc.returncode}):\n{stderr_str}\n{stdout_str}")
+        print(f"[ERROR] 执行失败 (退出码 {proc.returncode}): {cmd_str}")
+        print(stderr_str)
         sys.exit(proc.returncode)
     return stdout_str
 
 
-def ensure_binaries():
+def ensure_binaries(clean=False):
     print("\n--- 步骤 1: 确保 C++ Release 目标产物已构建 ---")
+    print(f"[*] Visual Studio 工具链: {VCVARS_BAT}")
+    print(f"[*] CMake 生成器: {VS_GENERATOR}")
     daemon_exe = os.path.join(BUILD_RELEASE_DIR, "aura_daemon.exe")
     web_ui_exe = os.path.join(BUILD_RELEASE_DIR, "aura_web_ui.exe")
 
     build_dir = os.path.join(REPO_ROOT, "build")
+    cache_file = os.path.join(build_dir, "CMakeCache.txt")
+
+    if clean and os.path.exists(build_dir):
+        print(f"[*] 用户指定 --clean，正在清理既有 build 目录: {build_dir}")
+        shutil.rmtree(build_dir, ignore_errors=True)
+
     if not os.path.exists(build_dir):
         os.makedirs(build_dir, exist_ok=True)
-        run_cmd(f'cmake -G "Visual Studio 18 2026" -A x64 ..', cwd=build_dir)
+        print(f"[*] 执行 CMake 初始化配置 (-G \"{VS_GENERATOR}\" -A x64)...")
+        run_cmd(f'cmake -G "{VS_GENERATOR}" -A x64 ..', cwd=build_dir)
+    elif not os.path.exists(cache_file):
+        print(f"[*] build 目录存在但未生成缓存，执行 CMake 配置 (-G \"{VS_GENERATOR}\" -A x64)...")
+        run_cmd(f'cmake -G "{VS_GENERATOR}" -A x64 ..', cwd=build_dir)
+    else:
+        # build 目录已存在且包含 CMakeCache.txt，直接读取缓存检验生成器匹配
+        cached_gen = get_cached_generator(cache_file)
+        if cached_gen:
+            print(f"[*] 既有 build 缓存生成器: {cached_gen}")
+            if cached_gen != VS_GENERATOR:
+                print(f"[ERROR] build 目录当前的 CMake 生成器 ({cached_gen}) 与已探测到的 Visual Studio ({VS_GENERATOR}) 不一致！\n"
+                      f"为避免破坏已有构建产物，未静默删除 build 目录。\n"
+                      f"请手动清理 build 目录或指定匹配的生成器。")
+                sys.exit(1)
+            else:
+                print(f"[PASS] CMake 生成器校验一致 ({cached_gen})")
 
     print("正在编译 Release 目标...")
     run_cmd(f'cmake --build . --config Release --target aura_daemon aura_web_ui', cwd=build_dir)
@@ -244,13 +323,21 @@ def build_portable_zip():
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Aura 独立发布包自动化构建流水线")
+    parser.add_argument("--skip-zip", action="store_true", help="跳过便携 Zip 包生成，仅输出独立单文件 Aura.exe")
+    parser.add_argument("--clean", action="store_true", help="构建前清理既有 build 目录（用于切换生成器或纯净重构）")
+    args = parser.parse_args()
+
     print("=========================================================")
     print(" Aura 单文件独立发布包构建流水线 (GitHub Release)")
     print("=========================================================")
-    ensure_binaries()
+    ensure_binaries(clean=args.clean)
     ensure_assets()
     build_single_exe()
-    build_portable_zip()
+    if not args.skip_zip:
+        build_portable_zip()
+    else:
+        print("\n[*] 跳过便携 Zip 压缩包生成 (--skip-zip 已指定)")
     print("\n=========================================================")
     print(" 全部构建任务顺利完成！发布产物位于 dist/ 目录：")
     for f in os.listdir(DIST_DIR):
