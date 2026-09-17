@@ -14,4 +14,4 @@
 - [ ] 在 CS2 真实对局中确认 GSI 在线、基础方案、低血量/C4 持续叠加和击杀/爆头事件叠加。
 - [ ] 检查 `Aura.exe` Windows 文件/产品版本、ZIP 文件名和包内 README 版本均来自 `VERSION`。
 - [ ] 从 `CHANGELOG.md` 整理 GitHub Release notes，明确 alpha 状态、ASUS HAL 不随包分发、MSVC 要求和已知限制。
-- [ ] Owner 已决定仓库代码 LICENSE，并在公开发布前添加对应 `LICENSE` 文件；在决定前不宣称仓库代码已获开源许可。
+- [x] 项目代码采用 GPL-3.0-only，根目录已包含标准 LICENSE 文件。

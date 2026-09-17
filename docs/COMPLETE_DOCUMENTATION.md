@@ -407,8 +407,9 @@ python tools/package_release.py
    - **Counter-Strike**、**CS2**、**Valve** 及其相关标识均为 Valve Corporation 的注册商标或商标。
    - 本项目为独立第三方开源项目，与华硕或 Valve 均无官方关联、合作、赞助或背书关系。
 2. **底层驱动资产与再分发说明**：
-   - 本项目对键盘的底层控制依赖华硕官方硬件抽象层动态库（如 `AacKbHal_x64.dll`）。该动态链接库版权与专有权利完全归华硕所有。
+   - 本项目对键盘的底层控制依赖华硕官方硬件抽象层动态库（如 `AacKbHal_x64.dll`）。该动态链接库版权与专有权利完全归华硕所有，不属于本项目 GPL 授权范围。
    - 本仓库当前未持有该 DLL 的官方再分发授权（`NO REDISTRIBUTION AUTHORIZATION FOUND`）。
    - 公开发行产物默认不内嵌或附带该 DLL。程序只使用最终用户本机 ASUS 官方安装的、通过兼容性 Gate 的组件。
 3. **开源许可协议**：
-   - 本项目代码本身的开源许可类型由项目所有者（Owner）最终决策与发布。
+   - AceHFXAura 项目代码采用 GNU General Public License v3.0 only（SPDX 标识：`GPL-3.0-only`），详情见根目录 [`LICENSE`](../LICENSE)。
+

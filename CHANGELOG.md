@@ -12,6 +12,12 @@
 - 自动检测 Steam/CS2 配置目录，由用户确认后安装 GSI 配置。
 - 双进程 daemon/Web UI 架构、配置热重载、动态插件影子加载与单文件 `Aura.exe` 启动器。
 
+### 许可与分发
+
+- 项目代码正式采用 GNU General Public License v3.0 only (`GPL-3.0-only`)，根目录附带标准 [`LICENSE`](LICENSE) 文件。
+- ASUS 专有 HAL DLL（`AacKbHal_x64.dll`）不属于 GPL 授权内容，亦不随公开发行包分发；运行时仅动态加载用户本机已安装且通过兼容性 Gate 校验的官方驱动。
+- 单文件 `Aura.exe` 包含运行时所需的 Aura Plugin SDK，无需源码 checkout 即可使用 Studio 的原生发布功能，但原生发布仍要求本机安装 MSVC Build Tools、C++ Desktop workload、x64 工具集和 Windows SDK。
+
 ### 已知限制
 
 - 当前仅针对 ROG Falchion Ace HFX 和已验证的 ASUS HAL v1.3.46.0（SHA-256 `52d575bf942b7551b3f120c446bf0d853e36f9225c6b9a17407a80e0b1829f04`）。其他 HAL 版本会 fail closed。

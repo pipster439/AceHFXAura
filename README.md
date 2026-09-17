@@ -24,7 +24,7 @@ Aura 是面向 **ROG Falchion Ace HFX** 的 Windows 灯光控制器。它通过 
 - CMake 3.20 或更新版本
 - Node.js 与 npm（构建 Web Studio 时需要）
 
-> Studio 的“发布”会在运行时查找 `vcvars64.bat` 和 `cl.exe`，并使用仓库的 `include/` 头文件编译插件。只查看、编辑和保存草稿不触发 C++ 编译。
+> Studio 的“发布”会在运行时查找 `vcvars64.bat` 和 `cl.exe`，并使用 Plugin SDK 头文件（单文件运行时自动释放，源码环境使用仓库 `include/`）编译插件。只查看、编辑和保存草稿不触发 C++ 编译。
 
 > 这个 MSVC 要求不仅用于从源码构建：即使使用单文件 `Aura.exe`，只要要在 Studio 中“发布”原生光效，也必须安装 Visual Studio Build Tools 的 C++ Desktop workload、x64 MSVC 工具集和 Windows SDK。
 
@@ -226,5 +226,14 @@ ctest --test-dir build -C Release --output-on-failure
 ## 免责声明与第三方资产声明 (Disclaimer & Third-Party Notice)
 
 1. **商标与版权**：ASUS、ROG (Republic of Gamers)、Armoury Crate 及相关标志均为 ASUSTeK Computer Inc. 的注册商标或商标。Counter-Strike、CS2 与 Game State Integration (GSI) 均为 Valve Corporation 的注册商标或商标。本项目为独立第三方开源软件，与华硕或 Valve 均无官方关联、赞助或背书关系。
-2. **底层驱动组件**：本项目对键盘底层的灯效控制通过 ASUS 官方硬件抽象库（如 `AacKbHal_x64.dll`）实现。该 DLL 属于华硕专有资产，本仓库未获得其重新分发授权，因此公开 Release 默认不内嵌或附带该 DLL，只使用用户本机已安装且通过兼容性 Gate 的华硕官方组件。
-3. **软件许可 (LICENSE)**：项目代码本身的开源许可协议待项目所有者明确决策。发布与使用本项目须遵守当地法律法规及第三方相关最终用户许可协议 (EULA)。
+2. **底层驱动组件**：本项目对键盘底层的灯效控制通过 ASUS 官方硬件抽象库（如 `AacKbHal_x64.dll`）实现。该 DLL 属于华硕专有资产，不属于 AceHFXAura 的 GPL 授权内容；本仓库未获得其重新分发授权，因此公开 Release 默认不内嵌或附带该 DLL，只使用用户本机已安装且通过兼容性 Gate 的华硕官方组件。
+3. **软件许可 (LICENSE)**：AceHFXAura 项目代码采用 GNU General Public License v3.0 only（SPDX 标识：`GPL-3.0-only`），详情见根目录 [LICENSE](LICENSE)。发布与使用本项目须遵守当地法律法规及第三方相关最终用户许可协议 (EULA)。
+
+## License
+
+AceHFXAura is licensed under the GNU General Public License v3.0 only (`GPL-3.0-only`).
+See [LICENSE](LICENSE) for details.
+
+- ASUS, ROG, Armoury Crate, and related marks/assets belong to their respective owners.
+- `AacKbHal_x64.dll` is an ASUS proprietary component and is **not** covered by the AceHFXAura GPL license.
+- Public releases do not bundle or redistribute this DLL; Aura only interacts with official ASUS drivers installed locally that pass compatibility gate verification.
