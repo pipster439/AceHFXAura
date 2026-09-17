@@ -202,7 +202,7 @@ package_release.bat
 
 发布前请逐项完成 [`RELEASE_CHECKLIST.md`](RELEASE_CHECKLIST.md)。
 
-源码开发和 Studio 发布建议使用仓库根目录的两个构建产物，因为运行时编译需要同一 checkout 中的 `include/`。单文件 `Aura.exe` 主要用于运行已经构建好的 daemon、Web UI 和光效资源。
+单文件 `Aura.exe` 会自动释放运行时所需的 Aura Plugin SDK，因此无需源码 checkout 即可使用 Studio 的原生发布功能。原生发布仍要求本机安装 Visual Studio / Build Tools 的 C++ Desktop workload、x64 MSVC 工具集和 Windows SDK。
 
 ## 验证
 
