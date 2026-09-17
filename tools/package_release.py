@@ -8,7 +8,7 @@ Aura 独立发布包自动化构建脚本 (package_release.py)
 1. 编译最新的 Release 二进制文件 (aura_daemon.exe, aura_web_ui.exe)
 2. 验证并准备所有依赖项 (AacKbHal_x64.dll, web/index.html, calibrated_keymap.json)
 3. 编译生成单一独立可执行文件 dist/Aura.exe (内嵌全套双进程组件与驱动)
-4. 同时打包标准的绿色便携 Zip 压缩包 dist/Aura-v1.0.0-windows-x64.zip
+4. 同时打包标准的绿色便携 Zip 压缩包 (如 dist/Aura-v0.1.0-alpha.1-windows-x64.zip)
 5. 输出校验信息与 GitHub Release 发布指引
 =============================================================================
 """
@@ -224,8 +224,50 @@ def ensure_assets():
     print(f"[OK] web/index.html ({os.path.getsize(web_html):,} bytes)")
 
 
-def build_single_exe():
-    print("\n--- 步骤 3: 编译单一独立可执行文件 (Aura.exe) ---")
+def parse_rc_version(version_str):
+    """
+    解析版本字符串中的数值部分为 Windows RC 资源所需的 4 字段逗号分隔格式 (例如 '0,1,0,0')。
+    """
+    cleaned = version_str.lstrip("v").split("-")[0]
+    parts = cleaned.split(".")
+    nums = []
+    for p in parts:
+        try:
+            nums.append(int(p))
+        except ValueError:
+            nums.append(0)
+    while len(nums) < 4:
+        nums.append(0)
+    return ",".join(str(n) for n in nums[:4])
+
+
+def resolve_release_version(cli_version=None):
+    """
+    单一版本来源解析：
+    1. 优先采用命令行显式传入的 --version 参数 (如 'v0.1.0-alpha.1' 或 '0.1.0-alpha.1')。
+    2. 未传参时自动探测 git 最近有效标签 (git describe --tags --abbrev=0)。
+    3. 安全默认回退：当前项目真实版本 'v0.1.0-alpha.1'（严禁猜测生产版本 v1.0.0）。
+    """
+    if cli_version and cli_version.strip():
+        ver = cli_version.strip()
+        return ver if ver.startswith("v") else f"v{ver}"
+
+    try:
+        res = subprocess.run(
+            ["git", "describe", "--tags", "--abbrev=0"],
+            cwd=REPO_ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True
+        )
+        tag = res.stdout.decode('utf-8', errors='replace').strip()
+        if tag:
+            return tag if tag.startswith("v") else f"v{tag}"
+    except Exception:
+        pass
+
+    return "v0.1.0-alpha.1"
+
+
+def build_single_exe(version):
+    print(f"\n--- 步骤 3: 编译单一独立可执行文件 (Aura.exe - Release {version}) ---")
     os.makedirs(DIST_DIR, exist_ok=True)
     temp_dir = os.path.join(REPO_ROOT, "build", "launcher_pack")
     os.makedirs(temp_dir, exist_ok=True)
@@ -245,8 +287,9 @@ def build_single_exe():
     shutil.copy2(cfg_src,    os.path.join(temp_dir, "config.bin"))
     shutil.copy2(web_src,    os.path.join(temp_dir, "web.bin"))
 
-    # 生成 .rc 文件
-    rc_content = """
+    rc_ver_csv = parse_rc_version(version)
+    # 生成 .rc 文件，同时注入共用的版本信息元数据
+    rc_content = f"""
 #define IDR_DAEMON       101
 #define IDR_WEB_UI       102
 #define IDR_HAL_DLL      103
@@ -260,6 +303,33 @@ IDR_HAL_DLL      RCDATA "hal.bin"
 IDR_KEYMAP       RCDATA "keymap.bin"
 IDR_CONFIG_EX    RCDATA "config.bin"
 IDR_WEB_HTML     RCDATA "web.bin"
+
+1 VERSIONINFO
+FILEVERSION {rc_ver_csv}
+PRODUCTVERSION {rc_ver_csv}
+FILEFLAGSMASK 0x3fL
+FILEFLAGS 0x0L
+FILEOS 0x40004L
+FILETYPE 0x1L
+FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"
+        BEGIN
+            VALUE "FileDescription", "ROG Falchion Ace HFX Aura Lighting Controller"
+            VALUE "FileVersion", "{version}"
+            VALUE "InternalName", "Aura"
+            VALUE "OriginalFilename", "Aura.exe"
+            VALUE "ProductName", "Aura"
+            VALUE "ProductVersion", "{version}"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END
 """
     rc_path = os.path.join(temp_dir, "launcher.rc")
     with open(rc_path, "w", encoding="utf-8") as f:
@@ -291,12 +361,12 @@ IDR_WEB_HTML     RCDATA "web.bin"
     return out_exe
 
 
-def build_portable_zip():
-    print("\n--- 步骤 4: 生成绿色便携 Zip 分发包 ---")
-    zip_name = "Aura-v1.0.0-windows-x64.zip"
+def build_portable_zip(version):
+    print(f"\n--- 步骤 4: 生成绿色便携 Zip 分发包 (Release {version}) ---")
+    zip_name = f"Aura-{version}-windows-x64.zip"
     zip_path = os.path.join(DIST_DIR, zip_name)
 
-    readme_content = """# ROG Falchion Ace HFX - Aura Lighting Controller (Release v1.0.0)
+    readme_content = f"""# ROG Falchion Ace HFX - Aura Lighting Controller (Release {version})
 
 ## 使用方法：
 1. **单文件直接启动**：双击运行 `Aura.exe` 即可自动激活键盘灯效并开启后台监护。
@@ -307,6 +377,7 @@ def build_portable_zip():
 - `Aura.exe`: 整合单文件主程序 (已内嵌守护进程、网页配置服务与底层硬件驱动)。
 - `config.example.json`: 配置文件模板 (若当前目录下无 config.json，启动时会自动生成)。
 - `calibrated_keymap.json`: 68 键物理键位与硬件通道映射表。
+- `drivers/AacKbHal_x64.dll`: ASUS 底层键盘 HAL 动态链接库。
 """
     readme_path = os.path.join(DIST_DIR, "README_RELEASE.md")
     with open(readme_path, "w", encoding="utf-8") as f:
@@ -324,22 +395,26 @@ def build_portable_zip():
 
 def main():
     parser = argparse.ArgumentParser(description="Aura 独立发布包自动化构建流水线")
+    parser.add_argument("--version", type=str, default=None,
+                        help="指定发布版本号 (例如 v0.1.0-alpha.1)。未指定时自动探测当前 git 标签，安全回退为 v0.1.0-alpha.1")
     parser.add_argument("--skip-zip", action="store_true", help="跳过便携 Zip 包生成，仅输出独立单文件 Aura.exe")
     parser.add_argument("--clean", action="store_true", help="构建前清理既有 build 目录（用于切换生成器或纯净重构）")
     args = parser.parse_args()
 
+    version = resolve_release_version(args.version)
+
     print("=========================================================")
-    print(" Aura 单文件独立发布包构建流水线 (GitHub Release)")
+    print(f" Aura 单文件独立发布包构建流水线 (Release: {version})")
     print("=========================================================")
     ensure_binaries(clean=args.clean)
     ensure_assets()
-    build_single_exe()
+    build_single_exe(version)
     if not args.skip_zip:
-        build_portable_zip()
+        build_portable_zip(version)
     else:
         print("\n[*] 跳过便携 Zip 压缩包生成 (--skip-zip 已指定)")
     print("\n=========================================================")
-    print(" 全部构建任务顺利完成！发布产物位于 dist/ 目录：")
+    print(f" 全部构建任务顺利完成！发布产物位于 dist/ 目录 (Release: {version})：")
     for f in os.listdir(DIST_DIR):
         fp = os.path.join(DIST_DIR, f)
         print(f"  - {f:<35} ({os.path.getsize(fp):,} bytes)")

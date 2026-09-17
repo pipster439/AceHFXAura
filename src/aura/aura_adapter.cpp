@@ -107,7 +107,16 @@ bool AuraAdapter::Initialize(const Keymap* keymap) {
     return ConnectHardwareInternal();
 }
 
-bool ApplyAacDriverPatch(HMODULE hHalMod) {
+static bool CheckAlreadyPatchedSafe(const uint8_t* base, DWORD rva_logger, DWORD rva_enable) {
+    if (!base) return false;
+    __try {
+        return (*(base + rva_logger) == 0xC3 && *reinterpret_cast<const uint32_t*>(base + rva_enable) == 0);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+bool ApplyAacDriverPatch(HMODULE hHalMod, const HalVersionInfo* matched_version) {
     if (!hHalMod) {
         hHalMod = GetModuleHandleW(L"AacKbHal_x64.dll");
     }
@@ -116,37 +125,48 @@ bool ApplyAacDriverPatch(HMODULE hHalMod) {
     }
 
     // 严禁对未识别的 DLL 盲目打补丁（遵守 Gate 安全基准：禁止散落硬编码 offset，禁止模糊签名搜索）
-    const HalVersionInfo* matched_version = nullptr;
-    wchar_t mod_path[MAX_PATH] = {0};
-    if (GetModuleFileNameW(hHalMod, mod_path, MAX_PATH)) {
-        HalGateResult file_gate = ValidateHalFileGate(mod_path);
-        if (file_gate.IsSupported()) {
-            matched_version = file_gate.matched_version;
-        }
-    }
-
-    if (!matched_version) {
-        // 若无法从文件确认，匹配集中管理的已验证版本表中的内存特征
+    // 校验显式传入的 matched_version 是否真实存在于经过精确 SHA 白名单验证的受支持版本表中
+    const HalVersionInfo* verified_version = nullptr;
+    if (matched_version) {
         for (const auto& v : GetVerifiedHalVersions()) {
-            HalGateResult mod_gate = ValidateHalModuleGate(hHalMod, &v);
-            if (mod_gate.IsSupported()) {
-                matched_version = &v;
+            if (matched_version == &v) {
+                verified_version = &v;
                 break;
             }
         }
     }
 
-    if (!matched_version) {
-        LOG_ERROR("ApplyAacDriverPatch: 拒绝为未通过兼容性 Gate 校验的模块应用内存补丁 (Fail-closed)");
+    // 若调用方未显式传入合法匹配版本，尝试通过模块磁盘路径执行阶段 1 ValidateHalFileGate
+    if (!verified_version) {
+        wchar_t mod_path[MAX_PATH] = {0};
+        if (GetModuleFileNameW(hHalMod, mod_path, MAX_PATH)) {
+            HalGateResult file_gate = ValidateHalFileGate(mod_path);
+            if (file_gate.IsSupported()) {
+                verified_version = file_gate.matched_version;
+            }
+        }
+    }
+
+    // Fail-closed：未通过 ValidateHalFileGate (精确 SHA-256 白名单) 的模块绝对不得进入 patch 流程
+    // 严禁自行枚举 GetVerifiedHalVersions() 依靠内存序言猜测未知版本 (彻底删除任何 fallback)
+    if (!verified_version) {
+        LOG_ERROR("ApplyAacDriverPatch: 拒绝为未通过文件兼容性 Gate 校验的模块应用内存补丁 (Fail-closed)");
+        return false;
+    }
+
+    // 阶段 2 Gate：内存签名仅作为通过 SHA 白名单后的二阶段校验，严禁作为识别未知版本的依据
+    HalGateResult mod_gate = ValidateHalModuleGate(hHalMod, verified_version);
+    if (!mod_gate.IsSupported()) {
+        LOG_ERROR("ApplyAacDriverPatch: 模块内存签名 Gate 校验失败，拒绝应用补丁: " + mod_gate.detail);
         return false;
     }
 
     uint8_t* base = reinterpret_cast<uint8_t*>(hHalMod);
-    DWORD rva_logger = matched_version->rva_logger;
-    DWORD rva_enable = matched_version->rva_enable;
+    DWORD rva_logger = verified_version->rva_logger;
+    DWORD rva_enable = verified_version->rva_enable;
 
-    // Fast-path: Check if already patched
-    if (*(base + rva_logger) == 0xC3 && *reinterpret_cast<const uint32_t*>(base + rva_enable) == 0) {
+    // Fast-path: Check if already patched (前提依然是文件身份与模块签名均已验证通过)
+    if (CheckAlreadyPatchedSafe(base, rva_logger, rva_enable)) {
         return true;
     }
 
@@ -246,6 +266,7 @@ static void CallReleaseSafe(PFN_Release fn, void* ptr) {
 bool AuraAdapter::ConnectHardwareInternal() {
     state_ = AdapterState::Connecting;
     ReleaseHardwareInternal();
+    matched_version_ = nullptr;
 
     GUID clsid_hal{}, iid_hal{};
     CLSIDFromString(L"{AE9DB4C8-4F2A-4756-9B11-2F6D78C61F1A}", &clsid_hal);
@@ -255,20 +276,28 @@ bool AuraAdapter::ConnectHardwareInternal() {
 
     // 1. 优先尝试从本地路径/驱动目录加载 AacKbHal_x64.dll 并免注册表调用 DllGetClassObject
     if (hHalMod_) {
-        // 如果外部已传递模块句柄，验证其文件与内存兼容性 Gate
+        // 如果外部/既有模块句柄已存在，重新核验文件 Gate 与模块签名 Gate
         wchar_t mod_path[MAX_PATH] = {0};
         if (GetModuleFileNameW(hHalMod_, mod_path, MAX_PATH)) {
             HalGateResult gate = ValidateHalFileGate(mod_path);
             if (!gate.IsSupported()) {
                 LOG_ERROR("ASUS HAL 既有模块文件 Gate 拦截:\n" + FormatHalGateError(gate));
+                FreeLibrary(hHalMod_);
                 hHalMod_ = nullptr;
             } else {
                 HalGateResult mod_gate = ValidateHalModuleGate(hHalMod_, gate.matched_version);
                 if (!mod_gate.IsSupported()) {
                     LOG_ERROR("ASUS HAL 既有模块内存签名 Gate 拦截:\n" + FormatHalGateError(mod_gate));
+                    FreeLibrary(hHalMod_);
                     hHalMod_ = nullptr;
+                } else {
+                    matched_version_ = gate.matched_version;
                 }
             }
+        } else {
+            LOG_ERROR("ASUS HAL 既有模块无法获取文件路径 (Fail-closed)");
+            FreeLibrary(hHalMod_);
+            hHalMod_ = nullptr;
         }
     }
 
@@ -308,6 +337,7 @@ bool AuraAdapter::ConnectHardwareInternal() {
                         continue;
                     }
                     LOG_INFO("成功加载并通过兼容性 Gate 验证底层驱动库: " + p.string() + " (v" + gate.file_version + ")");
+                    matched_version_ = gate.matched_version;
                     break;
                 }
             }
@@ -315,26 +345,32 @@ bool AuraAdapter::ConnectHardwareInternal() {
     }
 
     if (hHalMod_) {
-        ApplyAacDriverPatch(hHalMod_);
-        using PFN_DllGetClassObject = HRESULT (__stdcall *)(REFCLSID, REFIID, LPVOID*);
-        PFN_DllGetClassObject fn_get_class_obj = reinterpret_cast<PFN_DllGetClassObject>(
-            GetProcAddress(hHalMod_, "DllGetClassObject")
-        );
-        if (fn_get_class_obj) {
-            if (pFactory_) {
-                pFactory_->Release();
-                pFactory_ = nullptr;
-            }
-            HRESULT hr_fac = fn_get_class_obj(clsid_hal, IID_IClassFactory, reinterpret_cast<void**>(&pFactory_));
-            if (SUCCEEDED(hr_fac) && pFactory_) {
-                HRESULT hr_inst = pFactory_->CreateInstance(nullptr, iid_hal, &hal_ptr);
-                if (SUCCEEDED(hr_inst) && hal_ptr) {
-                    LOG_INFO("成功通过免注册 COM (DllGetClassObject) 实例化 CLSID_ClaymoreHal");
-                } else {
-                    LOG_WARN("IClassFactory::CreateInstance 失败: " + FormatHex(hr_inst));
+        if (!ApplyAacDriverPatch(hHalMod_, matched_version_)) {
+            LOG_ERROR("ASUS HAL 补丁应用失败，拒绝进入硬件控制路径 (Fail-closed)");
+            FreeLibrary(hHalMod_);
+            hHalMod_ = nullptr;
+            matched_version_ = nullptr;
+        } else {
+            using PFN_DllGetClassObject = HRESULT (__stdcall *)(REFCLSID, REFIID, LPVOID*);
+            PFN_DllGetClassObject fn_get_class_obj = reinterpret_cast<PFN_DllGetClassObject>(
+                GetProcAddress(hHalMod_, "DllGetClassObject")
+            );
+            if (fn_get_class_obj) {
+                if (pFactory_) {
+                    pFactory_->Release();
+                    pFactory_ = nullptr;
                 }
-            } else {
-                LOG_WARN("DllGetClassObject 获取工厂失败: " + FormatHex(hr_fac));
+                HRESULT hr_fac = fn_get_class_obj(clsid_hal, IID_IClassFactory, reinterpret_cast<void**>(&pFactory_));
+                if (SUCCEEDED(hr_fac) && pFactory_) {
+                    HRESULT hr_inst = pFactory_->CreateInstance(nullptr, iid_hal, &hal_ptr);
+                    if (SUCCEEDED(hr_inst) && hal_ptr) {
+                        LOG_INFO("成功通过免注册 COM (DllGetClassObject) 实例化 CLSID_ClaymoreHal");
+                    } else {
+                        LOG_WARN("IClassFactory::CreateInstance 失败: " + FormatHex(hr_inst));
+                    }
+                } else {
+                    LOG_WARN("DllGetClassObject 获取工厂失败: " + FormatHex(hr_fac));
+                }
             }
         }
     }
@@ -344,6 +380,7 @@ bool AuraAdapter::ConnectHardwareInternal() {
         if (hHalMod_) {
             FreeLibrary(hHalMod_);
             hHalMod_ = nullptr;
+            matched_version_ = nullptr;
         }
         LOG_INFO("尝试通过系统注册表 CoCreateInstance 创建 CLSID_ClaymoreHal 实例...");
         std::wstring regDllPath = GetComServerDllPath(clsid_hal);
@@ -359,17 +396,27 @@ bool AuraAdapter::ConnectHardwareInternal() {
                 return false;
             }
             hSysPre = LoadLibraryW(regDllPath.c_str());
-            if (hSysPre) {
-                HalGateResult mod_gate = ValidateHalModuleGate(hSysPre, gate.matched_version);
-                if (!mod_gate.IsSupported()) {
-                    LOG_ERROR("ASUS HAL 注册表目标模块签名 Gate 拦截:\n" + FormatHalGateError(mod_gate));
-                    FreeLibrary(hSysPre);
-                    state_ = AdapterState::Disconnected;
-                    return false;
-                }
-                ApplyAacDriverPatch(hSysPre);
-                hHalMod_ = hSysPre;
+            if (!hSysPre) {
+                LOG_ERROR("ASUS HAL 注册表目标 DLL 加载失败 (Fail-closed): " + std::filesystem::path(regDllPath).string());
+                state_ = AdapterState::Disconnected;
+                return false;
             }
+            HalGateResult mod_gate = ValidateHalModuleGate(hSysPre, gate.matched_version);
+            if (!mod_gate.IsSupported()) {
+                LOG_ERROR("ASUS HAL 注册表目标模块签名 Gate 拦截:\n" + FormatHalGateError(mod_gate));
+                FreeLibrary(hSysPre);
+                state_ = AdapterState::Disconnected;
+                return false;
+            }
+            matched_version_ = gate.matched_version;
+            if (!ApplyAacDriverPatch(hSysPre, matched_version_)) {
+                LOG_ERROR("ASUS HAL 注册表目标模块补丁应用失败，拒绝进入硬件控制路径 (Fail-closed)");
+                FreeLibrary(hSysPre);
+                matched_version_ = nullptr;
+                state_ = AdapterState::Disconnected;
+                return false;
+            }
+            hHalMod_ = hSysPre;
         } else {
             LOG_ERROR("未找到任何受支持的 ASUS HAL 驱动组件，启动硬件控制中止 (Fail-closed)");
             state_ = AdapterState::Disconnected;
@@ -383,15 +430,13 @@ bool AuraAdapter::ConnectHardwareInternal() {
             iid_hal,
             &hal_ptr
         );
-        if (hHalMod_) {
-            ApplyAacDriverPatch(hHalMod_);
-        }
         if (FAILED(hr) || !hal_ptr) {
             LOG_WARN("CoCreateInstance(CLSID_ClaymoreHal) 失败: " + FormatHex(hr) + " (驱动未就绪或未找到硬件组件)");
             ReleaseHardwareInternal();
             if (hHalMod_) {
                 FreeLibrary(hHalMod_);
                 hHalMod_ = nullptr;
+                matched_version_ = nullptr;
             }
             state_ = AdapterState::Disconnected;
             return false;
@@ -682,6 +727,7 @@ void AuraAdapter::Shutdown() {
         FreeLibrary(hHalMod_);
         hHalMod_ = nullptr;
     }
+    matched_version_ = nullptr;
 
     state_ = AdapterState::Uninitialized;
     LOG_INFO("[+] AuraAdapter 已安全关闭并释放所有 COM 资源");

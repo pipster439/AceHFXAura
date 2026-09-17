@@ -2374,20 +2374,102 @@ int main() {
         CHECK(res_sig_patched.status == aura::HalGateStatus::Supported,
               "已应用防崩补丁 (0xC3) 的模块安全通过 Gate 校验");
 
-        // 5. 针对 ApplyAacDriverPatch 的 Fail-closed 约束检验
-        // 传入非法/未匹配的模块，必须直接拒绝 patch 并返回 false
-        std::vector<uint8_t> invalid_mod(0x1000, 0x00);
-        bool patch_invalid = aura::ApplyAacDriverPatch(reinterpret_cast<HMODULE>(invalid_mod.data()));
-        CHECK(!patch_invalid, "未通过兼容性 Gate 校验的模块必须被 ApplyAacDriverPatch 拒绝 (Fail-closed)");
+        // 5. 针对 ApplyAacDriverPatch 的 Fail-closed 约束与 Gate 语义回归测试 (A/B/C)
+        // 回归测试 A: known SHA + correct memory signature -> allow
+        {
+            // mock_pe 填入原厂标准序言，v_info 代表已通过文件 Gate 匹配的已知版本 (known SHA)
+            memcpy(mock_pe.data() + v_info->rva_logger, v_info->logger_prologue.data(), v_info->logger_prologue.size());
+            *reinterpret_cast<uint32_t*>(mock_pe.data() + v_info->rva_enable) = 1; // enable = 1
 
-        // 针对已匹配受支持模块，ApplyAacDriverPatch 应成功执行内存修补
-        memcpy(mock_pe.data() + v_info->rva_logger, v_info->logger_prologue.data(), v_info->logger_prologue.size());
-        *reinterpret_cast<uint32_t*>(mock_pe.data() + v_info->rva_enable) = 1; // enable = 1
-        bool patch_valid = aura::ApplyAacDriverPatch(reinterpret_cast<HMODULE>(mock_pe.data()));
-        CHECK(patch_valid, "符合已验证特征的合法模块成功应用 ApplyAacDriverPatch");
-        CHECK(mock_pe[v_info->rva_logger] == 0xC3, "Logger::Log 函数入口成功修补为 0xC3 (ret)");
-        CHECK(*reinterpret_cast<const uint32_t*>(mock_pe.data() + v_info->rva_enable) == 0,
-              "EnableLog 标志位成功置 0");
+            bool patch_a = aura::ApplyAacDriverPatch(reinterpret_cast<HMODULE>(mock_pe.data()), v_info);
+            CHECK(patch_a, "测试 A: known SHA + correct memory signature 必须允许 patch 并成功修补 (allow)");
+            CHECK(mock_pe[v_info->rva_logger] == 0xC3, "Logger::Log 函数入口成功修补为 0xC3 (ret)");
+            CHECK(*reinterpret_cast<const uint32_t*>(mock_pe.data() + v_info->rva_enable) == 0,
+                  "EnableLog 标志位成功置 0");
+
+            // 验证在已知身份前提下的 already-patched 幂等性放行
+            bool patch_a_idempotent = aura::ApplyAacDriverPatch(reinterpret_cast<HMODULE>(mock_pe.data()), v_info);
+            CHECK(patch_a_idempotent, "测试 A (幂等性): 已通过身份 Gate 的已修补模块再次调用必须安全放行");
+        }
+
+        // 回归测试 B: known SHA + wrong memory signature -> deny
+        {
+            // mock_pe_bad 具有已知身份 v_info，但内存序言被篡改或不匹配 (如 0x90 NOPs)
+            std::vector<uint8_t> mock_pe_bad = mock_pe;
+            memset(mock_pe_bad.data() + v_info->rva_logger, 0x90, 16);
+            *reinterpret_cast<uint32_t*>(mock_pe_bad.data() + v_info->rva_enable) = 1;
+
+            bool patch_b = aura::ApplyAacDriverPatch(reinterpret_cast<HMODULE>(mock_pe_bad.data()), v_info);
+            CHECK(!patch_b, "测试 B: known SHA + wrong memory signature 必须拒绝 patch (deny)");
+            CHECK(mock_pe_bad[v_info->rva_logger] == 0x90, "拒绝后函数入口序言未被篡改修改");
+            CHECK(*reinterpret_cast<const uint32_t*>(mock_pe_bad.data() + v_info->rva_enable) == 1,
+                  "拒绝后 EnableLog 状态保持不变");
+        }
+
+        // 回归测试 C: unknown / unavailable file identity + matching prologue -> MUST deny
+        {
+            // 构造内存序言与合法版本完全一致的模块 (matching prologue)
+            std::vector<uint8_t> mock_pe_c = mock_pe;
+            memcpy(mock_pe_c.data() + v_info->rva_logger, v_info->logger_prologue.data(), v_info->logger_prologue.size());
+            *reinterpret_cast<uint32_t*>(mock_pe_c.data() + v_info->rva_enable) = 1;
+
+            // C1: unavailable file identity (纯内存模块，无法通过 GetModuleFileNameW 从磁盘确认身份)
+            // 严禁靠内存序言猜测版本，必须绝对拒绝 (MUST deny)
+            bool patch_c_unavail_no_ver = aura::ApplyAacDriverPatch(reinterpret_cast<HMODULE>(mock_pe_c.data()));
+            CHECK(!patch_c_unavail_no_ver,
+                  "测试 C1: 文件身份不可用 (unavailable file identity) 即使序言匹配也必须拒绝 (MUST deny)");
+
+            bool patch_c_unavail_null_ver = aura::ApplyAacDriverPatch(reinterpret_cast<HMODULE>(mock_pe_c.data()), nullptr);
+            CHECK(!patch_c_unavail_null_ver,
+                  "测试 C1: matched_version 为 nullptr 即使序言匹配也必须拒绝 (MUST deny)");
+
+            // C2: unknown file identity (磁盘上存在文件，但其 SHA-256 不在已验证白名单中)
+            std::filesystem::path tmp_unknown_dll = std::filesystem::temp_directory_path() / "tmp_unknown_hal.dll";
+            {
+                std::ofstream out(tmp_unknown_dll, std::ios::binary);
+                out.write(reinterpret_cast<const char*>(mock_pe_c.data()), mock_pe_c.size());
+            }
+            aura::HalGateResult gate_unknown = aura::ValidateHalFileGate(tmp_unknown_dll.wstring());
+            CHECK(gate_unknown.status == aura::HalGateStatus::UnsupportedVersion,
+                  "测试 C2: 未知文件散列判定为 UnsupportedVersion");
+            CHECK(gate_unknown.matched_version == nullptr,
+                  "测试 C2: 未知文件 matched_version 为空");
+            CHECK(!gate_unknown.IsSupported(),
+                  "测试 C2: 未知文件绝对不得通过 ValidateHalFileGate");
+
+            bool patch_c_unknown = aura::ApplyAacDriverPatch(
+                reinterpret_cast<HMODULE>(mock_pe_c.data()), gate_unknown.matched_version);
+            CHECK(!patch_c_unknown,
+                  "测试 C2: 未知文件身份 (unknown file identity) 即使序言匹配也绝对拒绝 patch (MUST deny)");
+
+            std::filesystem::remove(tmp_unknown_dll);
+
+            // C3: 畸变非法模块句柄
+            std::vector<uint8_t> invalid_mod(0x1000, 0x00);
+            bool patch_c_invalid = aura::ApplyAacDriverPatch(reinterpret_cast<HMODULE>(invalid_mod.data()), nullptr);
+            CHECK(!patch_c_invalid, "测试 C3: 非法/未匹配模块句柄必须被拒绝 (MUST deny)");
+
+            // C4: 伪造/未经验证的 HalVersionInfo 对象（即使序言匹配也绝对禁止绕过白名单）
+            aura::HalVersionInfo forged_ver;
+            forged_ver.file_version = "9.9.9.9";
+            forged_ver.sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+            forged_ver.rva_logger = v_info->rva_logger;
+            forged_ver.rva_enable = v_info->rva_enable;
+            forged_ver.logger_prologue = v_info->logger_prologue;
+            bool patch_c_forged = aura::ApplyAacDriverPatch(
+                reinterpret_cast<HMODULE>(mock_pe_c.data()), &forged_ver);
+            CHECK(!patch_c_forged,
+                  "测试 C4: 未在 GetVerifiedHalVersions 静态白名单表内的伪造版本对象必须被拒绝 (MUST deny)");
+
+            // C5: already-patched 模块在文件身份不可用 (unavailable identity) 时必须绝对拒绝 (MUST deny)
+            std::vector<uint8_t> mock_pe_patched = mock_pe;
+            mock_pe_patched[v_info->rva_logger] = 0xC3;
+            *reinterpret_cast<uint32_t*>(mock_pe_patched.data() + v_info->rva_enable) = 0;
+            bool patch_c_patched_unavail = aura::ApplyAacDriverPatch(
+                reinterpret_cast<HMODULE>(mock_pe_patched.data()), nullptr);
+            CHECK(!patch_c_patched_unavail,
+                  "测试 C5: 已经包含 0xC3 补丁但文件身份不可用的模块必须被绝对拒绝 (MUST deny)");
+        }
 
         // 6. 针对极端畸变/越界 PE 缓冲区的 SEH 防御检验 (无崩溃防御)
         std::vector<uint8_t> corrupted_pe(0x200, 0x00);

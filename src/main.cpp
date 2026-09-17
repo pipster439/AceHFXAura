@@ -1,4 +1,5 @@
 #include "aura/aura_adapter.h"
+#include "aura/hal_compat.h"
 #include "aura/keymap.h"
 #include "monitor/foreground_monitor.h"
 #include "config/rule_engine.h"
@@ -184,14 +185,36 @@ int main(int argc, char* argv[]) {
             preload_candidates.push_back(regHal);
         }
         HMODULE hHalPreload = nullptr;
+        const aura::HalVersionInfo* preloaded_hal_version = nullptr;
         for (const auto& cand : preload_candidates) {
             std::error_code ec;
             if (std::filesystem::exists(cand, ec) && !std::filesystem::is_directory(cand, ec)) {
+                // 预加载必须首先通过阶段 1 文件兼容性 Gate (精确 SHA-256 白名单)
+                aura::HalGateResult gate = aura::ValidateHalFileGate(cand.wstring());
+                if (!gate.IsSupported()) {
+                    LOG_WARN("ASUS HAL 预加载兼容性 Gate 拦截: " + cand.string() + "\n" + aura::FormatHalGateError(gate));
+                    continue;
+                }
+
                 SetDllDirectoryW(cand.parent_path().c_str());
                 hHalPreload = LoadLibraryW(cand.c_str());
                 if (hHalPreload) {
-                    LOG_INFO("底层硬件驱动预加载成功: " + cand.string());
-                    aura::ApplyAacDriverPatch(hHalPreload);
+                    // 阶段 2 内存签名二次校验
+                    aura::HalGateResult mod_gate = aura::ValidateHalModuleGate(hHalPreload, gate.matched_version);
+                    if (!mod_gate.IsSupported()) {
+                        LOG_ERROR("ASUS HAL 预加载模块签名 Gate 拦截: " + cand.string() + "\n" + aura::FormatHalGateError(mod_gate));
+                        FreeLibrary(hHalPreload);
+                        hHalPreload = nullptr;
+                        continue;
+                    }
+                    if (!aura::ApplyAacDriverPatch(hHalPreload, gate.matched_version)) {
+                        LOG_ERROR("ASUS HAL 预加载模块补丁应用失败: " + cand.string());
+                        FreeLibrary(hHalPreload);
+                        hHalPreload = nullptr;
+                        continue;
+                    }
+                    LOG_INFO("底层硬件驱动预加载成功并通过兼容性 Gate 校验: " + cand.string());
+                    preloaded_hal_version = gate.matched_version;
                     break;
                 }
             }
@@ -326,7 +349,9 @@ int main(int argc, char* argv[]) {
         SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
 
         LOG_INFO("[Probe] 正在执行硬件隔离探测与通道复位...");
-        aura::ApplyAacDriverPatch();
+        if (hHalPreload && preloaded_hal_version) {
+            aura::ApplyAacDriverPatch(hHalPreload, preloaded_hal_version);
+        }
         if (!std::filesystem::exists(keymap_path) && !current_exe_dir.empty()) {
             auto cand = current_exe_dir / keymap_path;
             if (std::filesystem::exists(cand)) {

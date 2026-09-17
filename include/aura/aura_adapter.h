@@ -2,6 +2,7 @@
 
 #include "aura/aura_types.h"
 #include "aura/keymap.h"
+#include "aura/hal_compat.h"
 #include <string>
 #include <memory>
 #include <chrono>
@@ -28,7 +29,8 @@ std::wstring ResolveInprocServerDllPath(
     RegistryQueryFn query_fn = nullptr);
 
 // 对 AacKbHal_x64.dll 施加内存防崩补丁 (禁用 Logger::Log 并将 EnableLog 标志位置 0，杜绝 0xC0000409 异常)
-bool ApplyAacDriverPatch(HMODULE hHalMod = nullptr);
+// 严禁利用内存签名在未知版本中枚举猜测；未通过文件 Gate (精确 SHA-256 白名单) 鉴权的模块一律拒绝 (Fail-closed)
+bool ApplyAacDriverPatch(HMODULE hHalMod = nullptr, const HalVersionInfo* matched_version = nullptr);
 
 class AuraAdapter {
 public:
@@ -72,6 +74,7 @@ private:
     // 契约：COM 生命周期由调用方（如 main 中的 ComScope）管理，AuraAdapter 不自行初始化或反初始化 COM
 
     HMODULE hHalMod_ = nullptr;
+    const HalVersionInfo* matched_version_ = nullptr;
     IClassFactory* pFactory_ = nullptr;
     void* pHal_ = nullptr;
     void* pDev_ = nullptr;
