@@ -447,7 +447,7 @@ class CompilerPipeline:
 
             os.makedirs(os.path.dirname(output_dll_path), exist_ok=True)
             cmd = (f'call "{vcvars}" >nul && '
-                   f'cl.exe /nologo /std:c++17 /O2 /EHsc /utf-8 /MD /LD '
+                   f'cl.exe /nologo /std:c++17 /O2 /EHsc /utf-8 /MD /LD /DNOMINMAX /DWIN32_LEAN_AND_MEAN '
                    f'/I "{inc_path}" "{src_file}" /Fe:"{output_dll_path}" /link /INCREMENTAL:NO')
 
             res = subprocess.run(cmd, shell=True, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)

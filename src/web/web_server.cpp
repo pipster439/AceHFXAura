@@ -412,7 +412,7 @@ bool CompileCppSourceToDll(const std::string& effect_name,
     std::filesystem::path abs_obj = std::filesystem::absolute(obj_file);
 
     // 4. 构造编译器命令行
-    std::wstring cmd_str = L"cmd.exe /d /s /c \"call \"" + vcvars.wstring() + L"\" >nul || (echo MSVC vcvars setup failed & exit /b 9008) & where cl.exe >nul || (echo MSVC cl.exe not found & exit /b 9009) & cl.exe /nologo /std:c++17 /O2 /EHsc /utf-8 /MD /LD "
+    std::wstring cmd_str = L"cmd.exe /d /s /c \"call \"" + vcvars.wstring() + L"\" >nul || (echo MSVC vcvars setup failed & exit /b 9008) & where cl.exe >nul || (echo MSVC cl.exe not found & exit /b 9009) & cl.exe /nologo /std:c++17 /O2 /EHsc /utf-8 /MD /LD /DNOMINMAX /DWIN32_LEAN_AND_MEAN "
         + L"/I \"" + inc_dir_str + L"\" "
         + extra_inc
         + L"/Fe:\"" + abs_dll.wstring() + L"\" "

@@ -245,12 +245,14 @@ def main():
         valid_cpp = R"""
         #include "engine/effect.h"
         #include "engine/plugin_interface.h"
+        #include <algorithm>
 
         class TestValidAdversarialEffect : public aura::Effect {
         public:
             TestValidAdversarialEffect() : aura::Effect("adv_valid_effect") {}
             void Render(uint64_t elapsed_ms, aura::FrameBuffer& out_frame, const aura::Keymap& keymap) override {
-                out_frame.Fill(aura::ColorRGB(255, 128, 64));
+                double safe_bound = std::max(0.0, std::min(255.0, static_cast<double>(elapsed_ms % 255)));
+                out_frame.Fill(aura::ColorRGB(static_cast<uint8_t>(safe_bound), 128, 64));
             }
         };
 
