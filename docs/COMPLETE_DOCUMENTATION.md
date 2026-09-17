@@ -1,5 +1,5 @@
 # Aura (ROG Falchion Ace HFX) 完整技术与使用手册
-> **版本**：v0.1.0-alpha.1  
+> **版本**：以仓库根目录 [`VERSION`](../VERSION) 为准
 > **适用硬件**：ASUS ROG Falchion Ace HFX (魔导士 Ace HFX 机械键盘，VID `0x0B05`, PID `0x1B7E`)  
 > **支持系统**：Windows 11 / Windows 10 (x64)  
 > **文档性质**：项目全景架构、驱动兼容性、游戏联动、光效开发与运维全量技术手册
@@ -348,13 +348,13 @@ cmake --build build --config Release
 ### 7.3 自动化独立发布打包 (`package_release.py`)
 运行根目录下的一键打包脚本：
 ```cmd
-python tools/package_release.py --version v0.1.0-alpha.1
+python tools/package_release.py
 ```
 脚本执行全自动流水线：
 1. **工具链智能探测**：优先使用 `vswhere.exe` 探测本机安装的 Visual Studio 版本，动态匹配生成器，并检验既有 `CMakeCache.txt` 匹配性，绝不静默破坏开发者的 build 目录；
-2. **资产校验**：核验驱动 DLL、键位表、`web/index.html` 以及 4 个 Plugin SDK 头文件；
-3. **编译单文件 Aura.exe**：将全部资产与版本元数据编译写入 `launcher.rc`，生成一体化免安装程序；
-4. **生成便携包**：输出 `dist/Aura-v0.1.0-alpha.1-windows-x64.zip`，内含单文件、驱动备份与使用说明。
+2. **资产校验**：核验键位表、`web/index.html` 以及 4 个 Plugin SDK 头文件；
+3. **编译单文件 Aura.exe**：将可再分发资产与版本元数据编译写入 `launcher.rc`，生成一体化免安装程序；
+4. **生成便携包**：按 `VERSION` 输出版本化 ZIP，内含单文件与使用说明。公开产物不包含 `AacKbHal_x64.dll`；运行时从用户本机 ASUS 官方安装目录/注册路径定位，并严格执行 SHA-256 与内存签名 Gate。
 
 ---
 
@@ -409,6 +409,6 @@ python tools/package_release.py --version v0.1.0-alpha.1
 2. **底层驱动资产与再分发说明**：
    - 本项目对键盘的底层控制依赖华硕官方硬件抽象层动态库（如 `AacKbHal_x64.dll`）。该动态链接库版权与专有权利完全归华硕所有。
    - 本仓库当前未持有该 DLL 的官方再分发授权（`NO REDISTRIBUTION AUTHORIZATION FOUND`）。
-   - 当前独立单文件 `dist/Aura.exe` 及便携包内包含该 DLL，仅供技术研究与个人学习使用；若用于公开发行，建议最终用户从已安装的官方驱动目录中获取该组件。
+   - 公开发行产物默认不内嵌或附带该 DLL。程序只使用最终用户本机 ASUS 官方安装的、通过兼容性 Gate 的组件。
 3. **开源许可协议**：
    - 本项目代码本身的开源许可类型由项目所有者（Owner）最终决策与发布。

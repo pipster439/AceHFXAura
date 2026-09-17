@@ -11,7 +11,6 @@
 // Resource IDs defined in launcher.rc
 #define IDR_DAEMON             101
 #define IDR_WEB_UI             102
-#define IDR_HAL_DLL            103
 #define IDR_KEYMAP             104
 #define IDR_CONFIG_EX          105
 #define IDR_WEB_HTML           106
@@ -141,7 +140,6 @@ int wmain(int argc, wchar_t* argv[]) {
     // 2. 解压核心运行时资产与 Plugin SDK
     std::filesystem::path daemon_exe = runtime_dir / L"aura_daemon.exe";
     std::filesystem::path web_ui_exe = runtime_dir / L"aura_web_ui.exe";
-    std::filesystem::path hal_dll    = runtime_dir / L"AacKbHal_x64.dll";
     std::filesystem::path keymap_json= runtime_dir / L"calibrated_keymap.json";
     std::filesystem::path cfg_example= runtime_dir / L"config.example.json";
     std::filesystem::path web_html   = runtime_dir / L"web" / L"index.html";
@@ -154,7 +152,6 @@ int wmain(int argc, wchar_t* argv[]) {
     bool ok = true;
     ok &= ExtractResource(hSelf, IDR_DAEMON, daemon_exe, force_extract);
     ok &= ExtractResource(hSelf, IDR_WEB_UI, web_ui_exe, force_extract);
-    ok &= ExtractResource(hSelf, IDR_HAL_DLL, hal_dll, force_extract);
     ok &= ExtractResource(hSelf, IDR_KEYMAP, keymap_json, force_extract);
     ok &= ExtractResource(hSelf, IDR_CONFIG_EX, cfg_example, force_extract);
     ok &= ExtractResource(hSelf, IDR_WEB_HTML, web_html, force_extract);

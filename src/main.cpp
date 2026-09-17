@@ -166,7 +166,8 @@ int main(int argc, char* argv[]) {
             return 1;
         }
 
-        // 1. 探测并预加载 AacKbHal_x64.dll (支持免奥创独立便携发布包)
+        // 1. 探测并预加载 AacKbHal_x64.dll。公开发行包不内嵌 ASUS 专有 DLL；
+        //    默认从用户本机 ASUS 官方安装目录/注册路径定位，并严格通过兼容性 Gate。
         wchar_t current_mod[MAX_PATH];
         std::filesystem::path current_exe_dir;
         if (GetModuleFileNameW(nullptr, current_mod, MAX_PATH)) {
@@ -220,7 +221,7 @@ int main(int argc, char* argv[]) {
             }
         }
         if (!hHalPreload) {
-            LOG_WARN("未能在本地或候选路径预加载 AacKbHal_x64.dll，后续硬件连接时将尝试系统注册表 COM 解析");
+            LOG_WARN("未找到可用的 AacKbHal_x64.dll。公开发行包不包含 ASUS 专有 DLL；请通过 Armoury Crate / ASUS Aac_Keyboard 官方驱动包安装或修复键盘 HAL。程序只会加载通过已验证 SHA-256 与内存签名 Gate 的版本，请勿从非官方来源下载 DLL。");
         }
 
     // 2. 解析命令行参数

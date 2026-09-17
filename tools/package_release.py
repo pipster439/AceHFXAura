@@ -6,9 +6,9 @@ Aura 独立发布包自动化构建脚本 (package_release.py)
 =============================================================================
 功能：
 1. 编译最新的 Release 二进制文件 (aura_daemon.exe, aura_web_ui.exe)
-2. 验证并准备所有依赖项 (AacKbHal_x64.dll, web/index.html, calibrated_keymap.json)
-3. 编译生成单一独立可执行文件 dist/Aura.exe (内嵌全套双进程组件与驱动)
-4. 同时打包标准的绿色便携 Zip 压缩包 (如 dist/Aura-v0.1.0-alpha.1-windows-x64.zip)
+2. 验证并准备所有可再分发资产 (web/index.html, calibrated_keymap.json)
+3. 编译生成单一独立可执行文件 dist/Aura.exe（不内嵌 ASUS 专有 DLL）
+4. 同时打包按 VERSION 命名的绿色便携 Zip 压缩包
 5. 输出校验信息与 GitHub Release 发布指引
 =============================================================================
 """
@@ -24,7 +24,7 @@ import zipfile
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 DIST_DIR = os.path.join(REPO_ROOT, "dist")
 BUILD_RELEASE_DIR = os.path.join(REPO_ROOT, "build", "Release")
-DRIVERS_DIR = os.path.join(REPO_ROOT, "drivers")
+VERSION_FILE = os.path.join(REPO_ROOT, "VERSION")
 
 def detect_vs_toolchain():
     """
@@ -195,27 +195,18 @@ def ensure_binaries(clean=False):
 
 def ensure_assets():
     print("\n--- 步骤 2: 验证并准备资产文件 ---")
-    # 1. 驱动 DLL
-    hal_dll = os.path.join(DRIVERS_DIR, "AacKbHal_x64.dll")
-    if not os.path.isfile(hal_dll):
-        asus_default = r"C:\Program Files\ASUS\Aac_Keyboard\AacKbHal_x64.dll"
-        if os.path.isfile(asus_default):
-            os.makedirs(DRIVERS_DIR, exist_ok=True)
-            shutil.copy2(asus_default, hal_dll)
-            print(f"[+] 从华硕目录抓取 AacKbHal_x64.dll -> {hal_dll}")
-        else:
-            print("[FATAL] 缺少 AacKbHal_x64.dll！")
-            sys.exit(1)
-    print(f"[OK] AacKbHal_x64.dll ({os.path.getsize(hal_dll):,} bytes)")
+    # ASUS AacKbHal_x64.dll 是用户本机驱动资产，不复制、不内嵌、不打包。
+    # daemon 运行时会从 ASUS 安装目录/注册路径定位，并在加载前执行 SHA-256 兼容性 Gate。
+    print("[INFO] 公开发行包不包含 AacKbHal_x64.dll；运行时使用用户本机 ASUS 安装的已验证版本")
 
-    # 2. 键位映射表
+    # 1. 键位映射表
     keymap_path = os.path.join(REPO_ROOT, "calibrated_keymap.json")
     if not os.path.isfile(keymap_path):
         print("[FATAL] 缺少 calibrated_keymap.json！")
         sys.exit(1)
     print(f"[OK] calibrated_keymap.json ({os.path.getsize(keymap_path):,} bytes)")
 
-    # 3. 前端单页打包产物
+    # 2. 前端单页打包产物
     web_html = os.path.join(REPO_ROOT, "web", "index.html")
     if not os.path.isfile(web_html):
         print("[*] 正在构建前端 React 单页面应用...")
@@ -223,7 +214,7 @@ def ensure_assets():
         run_cmd("npm run build", cwd=frontend_dir)
     print(f"[OK] web/index.html ({os.path.getsize(web_html):,} bytes)")
 
-    # 4. Plugin SDK 公共头文件 (供单文件发行版原生光效发布)
+    # 3. Plugin SDK 公共头文件 (供单文件发行版原生光效发布)
     sdk_files = [
         ("engine", "effect.h"),
         ("engine", "plugin_interface.h"),
@@ -258,26 +249,26 @@ def parse_rc_version(version_str):
 def resolve_release_version(cli_version=None):
     """
     单一版本来源解析：
-    1. 优先采用命令行显式传入的 --version 参数 (如 'v0.1.0-alpha.1' 或 '0.1.0-alpha.1')。
-    2. 未传参时自动探测 git 最近有效标签 (git describe --tags --abbrev=0)。
-    3. 安全默认回退：当前项目真实版本 'v0.1.0-alpha.1'（严禁猜测生产版本 v1.0.0）。
+    始终读取仓库根目录 VERSION（发行版本单一事实源）。
+    保留 --version 仅为兼容旧命令；覆盖值必须与 VERSION 一致，否则拒绝打包。
     """
-    if cli_version and cli_version.strip():
-        ver = cli_version.strip()
-        return ver if ver.startswith("v") else f"v{ver}"
-
     try:
-        res = subprocess.run(
-            ["git", "describe", "--tags", "--abbrev=0"],
-            cwd=REPO_ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True
-        )
-        tag = res.stdout.decode('utf-8', errors='replace').strip()
-        if tag:
-            return tag if tag.startswith("v") else f"v{tag}"
-    except Exception:
-        pass
-
-    return "v0.1.0-alpha.1"
+        with open(VERSION_FILE, "r", encoding="utf-8") as f:
+            version = f.read().strip()
+    except OSError as exc:
+        raise RuntimeError(f"无法读取版本单一事实源 {VERSION_FILE}: {exc}") from exc
+    if not version:
+        raise RuntimeError(f"版本文件为空: {VERSION_FILE}")
+    canonical = version if version.startswith("v") else f"v{version}"
+    if cli_version and cli_version.strip():
+        requested = cli_version.strip()
+        requested = requested if requested.startswith("v") else f"v{requested}"
+        if requested != canonical:
+            raise RuntimeError(
+                f"--version {requested} 与 VERSION 中的 {canonical} 不一致；"
+                "请先更新 VERSION，避免发行版本漂移"
+            )
+    return canonical
 
 
 def build_single_exe(version):
@@ -289,7 +280,6 @@ def build_single_exe(version):
     # 准备资源打包源文件
     daemon_src = os.path.join(BUILD_RELEASE_DIR, "aura_daemon.exe")
     web_ui_src = os.path.join(BUILD_RELEASE_DIR, "aura_web_ui.exe")
-    hal_src    = os.path.join(DRIVERS_DIR, "AacKbHal_x64.dll")
     keymap_src = os.path.join(REPO_ROOT, "calibrated_keymap.json")
     cfg_src    = os.path.join(REPO_ROOT, "config.example.json")
     web_src    = os.path.join(REPO_ROOT, "web", "index.html")
@@ -301,7 +291,6 @@ def build_single_exe(version):
 
     shutil.copy2(daemon_src,          os.path.join(temp_dir, "daemon.bin"))
     shutil.copy2(web_ui_src,          os.path.join(temp_dir, "web_ui.bin"))
-    shutil.copy2(hal_src,             os.path.join(temp_dir, "hal.bin"))
     shutil.copy2(keymap_src,          os.path.join(temp_dir, "keymap.bin"))
     shutil.copy2(cfg_src,             os.path.join(temp_dir, "config.bin"))
     shutil.copy2(web_src,             os.path.join(temp_dir, "web.bin"))
@@ -315,7 +304,6 @@ def build_single_exe(version):
     rc_content = f"""
 #define IDR_DAEMON             101
 #define IDR_WEB_UI             102
-#define IDR_HAL_DLL            103
 #define IDR_KEYMAP             104
 #define IDR_CONFIG_EX          105
 #define IDR_WEB_HTML           106
@@ -326,7 +314,6 @@ def build_single_exe(version):
 
 IDR_DAEMON             RCDATA "daemon.bin"
 IDR_WEB_UI             RCDATA "web_ui.bin"
-IDR_HAL_DLL            RCDATA "hal.bin"
 IDR_KEYMAP             RCDATA "keymap.bin"
 IDR_CONFIG_EX          RCDATA "config.bin"
 IDR_WEB_HTML           RCDATA "web.bin"
@@ -402,14 +389,16 @@ def build_portable_zip(version):
 ## 使用方法：
 1. **单文件直接启动**：双击运行 `Aura.exe` 即可自动激活键盘灯效并开启后台监护。
 2. **Web 配置界面**：启动后打开浏览器访问 `http://127.0.0.1:19898` 即可实时配置灯效方案与规则。
-3. **免奥创独立使用**：本程序已内嵌华硕底层直通驱动，无须在本机安装或运行华硕奥创中心 (Armoury Crate)。
+3. **ASUS 组件要求**：公开发行包不携带 ASUS 专有 DLL。请先安装 Armoury Crate / ASUS `Aac_Keyboard` 驱动包。
 
 ## 文件说明：
-- `Aura.exe`: 整合单文件主程序 (已内嵌守护进程、网页配置服务、底层硬件驱动与 Plugin SDK)。
+- `Aura.exe`: 整合单文件主程序 (已内嵌守护进程、网页配置服务与 Plugin SDK，不内嵌 ASUS DLL)。
 - `config.example.json`: 配置文件模板 (若当前目录下无 config.json，启动时会自动生成)。
 - `calibrated_keymap.json`: 68 键物理键位与硬件通道映射表。
-- `drivers/AacKbHal_x64.dll`: ASUS 底层键盘 HAL 动态链接库。
 - `include/`: Aura C++ Plugin SDK 运行时头文件 (供光效工作室原生发布编译，依赖本机 MSVC / C++ Build Tools)。
+
+## ASUS HAL 说明：
+Aura 运行时会从 ASUS 官方安装目录或注册路径定位 `AacKbHal_x64.dll`，并在加载前校验已验证的 SHA-256 与内存签名。缺失或版本不受支持时，硬件控制会安全失败；请从 ASUS 官方软件恢复驱动，不要从非官方来源下载 DLL。
 """
     readme_path = os.path.join(DIST_DIR, "README_RELEASE.md")
     with open(readme_path, "w", encoding="utf-8") as f:
@@ -419,7 +408,6 @@ def build_portable_zip(version):
         zf.write(os.path.join(DIST_DIR, "Aura.exe"), "Aura.exe")
         zf.write(os.path.join(REPO_ROOT, "calibrated_keymap.json"), "calibrated_keymap.json")
         zf.write(os.path.join(REPO_ROOT, "config.example.json"), "config.example.json")
-        zf.write(os.path.join(DRIVERS_DIR, "AacKbHal_x64.dll"), "drivers/AacKbHal_x64.dll")
         for subdir, fname in [("engine", "effect.h"), ("engine", "plugin_interface.h"), ("aura", "aura_types.h"), ("aura", "keymap.h")]:
             rel = os.path.join("include", subdir, fname)
             zf.write(os.path.join(REPO_ROOT, rel), rel)
@@ -431,7 +419,7 @@ def build_portable_zip(version):
 def main():
     parser = argparse.ArgumentParser(description="Aura 独立发布包自动化构建流水线")
     parser.add_argument("--version", type=str, default=None,
-                        help="指定发布版本号 (例如 v0.1.0-alpha.1)。未指定时自动探测当前 git 标签，安全回退为 v0.1.0-alpha.1")
+                        help="兼容旧命令的版本校验值；必须与仓库根目录 VERSION 一致")
     parser.add_argument("--skip-zip", action="store_true", help="跳过便携 Zip 包生成，仅输出独立单文件 Aura.exe")
     parser.add_argument("--clean", action="store_true", help="构建前清理既有 build 目录（用于切换生成器或纯净重构）")
     args = parser.parse_args()

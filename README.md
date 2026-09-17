@@ -2,6 +2,8 @@
 
 Aura 是面向 **ROG Falchion Ace HFX** 的 Windows 灯光控制器。它通过 ASUS 键盘 HAL 向 68 个已标定按键推送 RGB 帧，并提供一个本地 Web Studio，用 Blockly 制作光效、编排前台程序与 CS2 Game State Integration（GSI）自动化。
 
+当前 alpha 版本号以仓库根目录的 [`VERSION`](VERSION) 为单一事实源；核心能力与已知限制见 [`CHANGELOG.md`](CHANGELOG.md)。
+
 当前版本的完整链路已经过真机验证：启动 daemon、打开 Studio、预览与发布 Blockly 光效、接收 CS2 GSI、按规则切换基础方案并叠加事件/状态光效。
 
 ## 你可以做什么
@@ -17,12 +19,14 @@ Aura 是面向 **ROG Falchion Ace HFX** 的 Windows 灯光控制器。它通过 
 
 - Windows 11 x64
 - ROG Falchion Ace HFX
-- ASUS 键盘 HAL：通常由 Armoury Crate / `Aac_Keyboard` 驱动包安装
+- ASUS 键盘 HAL：必须由用户本机的 Armoury Crate / `Aac_Keyboard` 官方驱动包安装；公开 Release 不携带该专有 DLL
 - Visual Studio 2022 Build Tools 或 Visual Studio 2022，安装“使用 C++ 的桌面开发”、x64 MSVC 工具集和 Windows SDK
 - CMake 3.20 或更新版本
 - Node.js 与 npm（构建 Web Studio 时需要）
 
 > Studio 的“发布”会在运行时查找 `vcvars64.bat` 和 `cl.exe`，并使用仓库的 `include/` 头文件编译插件。只查看、编辑和保存草稿不触发 C++ 编译。
+
+> 这个 MSVC 要求不仅用于从源码构建：即使使用单文件 `Aura.exe`，只要要在 Studio 中“发布”原生光效，也必须安装 Visual Studio Build Tools 的 C++ Desktop workload、x64 MSVC 工具集和 Windows SDK。
 
 ## 从源码构建
 
@@ -192,7 +196,11 @@ aura_web_ui.exe --port 19898 --config config.json
 package_release.bat
 ```
 
-脚本会自动通过 `vswhere` 检测本机安装的 Visual Studio 版本（支持 Visual Studio 2022 与 Visual Studio 2026）并动态匹配对应 CMake 生成器，构建两个 Release 进程、校验前端与驱动资源，并生成 `dist/Aura.exe` 和便携 ZIP。
+脚本会从 [`VERSION`](VERSION) 读取版本，通过 `vswhere` 检测本机安装的 Visual Studio 版本（支持 Visual Studio 2022 与 Visual Studio 2026）并动态匹配对应 CMake 生成器，构建两个 Release 进程、校验可再分发资产，并生成 `dist/Aura.exe` 和便携 ZIP。
+
+出于保守的第三方资产策略，打包脚本不会从本机复制、内嵌或附带 `AacKbHal_x64.dll`。程序运行时从用户已安装的 ASUS 官方目录/注册路径定位 DLL，并且只加载通过已验证 SHA-256 与内存签名 Gate 的版本。如果缺失或版本不受支持，请通过 Armoury Crate / ASUS 官方驱动包安装或修复，不要从非官方来源下载 DLL。
+
+发布前请逐项完成 [`RELEASE_CHECKLIST.md`](RELEASE_CHECKLIST.md)。
 
 源码开发和 Studio 发布建议使用仓库根目录的两个构建产物，因为运行时编译需要同一 checkout 中的 `include/`。单文件 `Aura.exe` 主要用于运行已经构建好的 daemon、Web UI 和光效资源。
 
@@ -218,5 +226,5 @@ ctest --test-dir build -C Release --output-on-failure
 ## 免责声明与第三方资产声明 (Disclaimer & Third-Party Notice)
 
 1. **商标与版权**：ASUS、ROG (Republic of Gamers)、Armoury Crate 及相关标志均为 ASUSTeK Computer Inc. 的注册商标或商标。Counter-Strike、CS2 与 Game State Integration (GSI) 均为 Valve Corporation 的注册商标或商标。本项目为独立第三方开源软件，与华硕或 Valve 均无官方关联、赞助或背书关系。
-2. **底层驱动组件**：本项目对键盘底层的灯效控制通过 ASUS 官方硬件抽象库（如 `AacKbHal_x64.dll`）实现。该 DLL 属于华硕专有资产，本仓库未获得其重新分发授权。用户运行建议基于本机已安装的华硕官方配套驱动环境。
+2. **底层驱动组件**：本项目对键盘底层的灯效控制通过 ASUS 官方硬件抽象库（如 `AacKbHal_x64.dll`）实现。该 DLL 属于华硕专有资产，本仓库未获得其重新分发授权，因此公开 Release 默认不内嵌或附带该 DLL，只使用用户本机已安装且通过兼容性 Gate 的华硕官方组件。
 3. **软件许可 (LICENSE)**：项目代码本身的开源许可协议待项目所有者明确决策。发布与使用本项目须遵守当地法律法规及第三方相关最终用户许可协议 (EULA)。
