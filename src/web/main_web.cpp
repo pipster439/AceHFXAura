@@ -30,6 +30,7 @@ int wmain(int argc, wchar_t* argv[]) {
 
     int port = 19898;
     std::filesystem::path config_path = L"config.json";
+    std::filesystem::path sdk_include_dir;
     std::wstring shutdown_event_name;
     bool has_explicit_config = false;
 
@@ -60,6 +61,12 @@ int wmain(int argc, wchar_t* argv[]) {
             }
             config_path = argv[++i];
             has_explicit_config = true;
+        } else if (arg == L"--sdk-include") {
+            if (i + 1 >= argc) {
+                std::cerr << "[WebUI] 错误: --sdk-include 缺少路径参数\n";
+                return 1;
+            }
+            sdk_include_dir = argv[++i];
         } else if (arg == L"--shutdown-event") {
             if (i + 1 >= argc) {
                 std::cerr << "[WebUI] 错误: --shutdown-event 缺少事件名称\n";
@@ -71,6 +78,7 @@ int wmain(int argc, wchar_t* argv[]) {
                       << "选项:\n"
                       << "  --port <1-65535>        指定 HTTP 监听端口 (默认: 19898)\n"
                       << "  --config <path>         指定配置文件路径 (默认: config.json)\n"
+                      << "  --sdk-include <path>    指定 C++ Plugin SDK include 头文件目录\n"
                       << "  --shutdown-event <name> 指定父进程同步平滑退出命名事件\n"
                       << "  --help, -h              显示帮助信息\n";
             return 0;
@@ -99,6 +107,10 @@ int wmain(int argc, wchar_t* argv[]) {
                     if (dir == dir.parent_path()) break;
                 }
             }
+            wchar_t local_app_data[MAX_PATH];
+            if (GetEnvironmentVariableW(L"LOCALAPPDATA", local_app_data, MAX_PATH)) {
+                example_candidates.push_back(std::filesystem::path(local_app_data) / L"Aura" / L"runtime" / L"config.example.json");
+            }
             std::filesystem::path found_example;
             for (const auto& cand : example_candidates) {
                 if (std::filesystem::exists(cand, ec)) {
@@ -119,7 +131,7 @@ int wmain(int argc, wchar_t* argv[]) {
         }
     }
 
-    aura::WebServer server(config_path, port);
+    aura::WebServer server(config_path, port, sdk_include_dir);
     g_server_ptr = &server;
 
     // 安装控制台信号处理器（支持手动命令行调试时按 Ctrl+C 平滑退出）

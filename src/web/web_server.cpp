@@ -86,62 +86,269 @@ inline std::string EnsureUtf8(const std::string& input) {
     return EnsureValidUtf8(input);
 }
 
-std::filesystem::path FindVcvars64Bat() {
-    std::vector<std::filesystem::path> candidates = {
-        L"C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Auxiliary\\Build\\vcvars64.bat",
-        L"C:\\Program Files\\Microsoft Visual Studio\\18\\Professional\\VC\\Auxiliary\\Build\\vcvars64.bat",
-        L"C:\\Program Files\\Microsoft Visual Studio\\18\\Enterprise\\VC\\Auxiliary\\Build\\vcvars64.bat",
-        L"C:\\Program Files\\Microsoft Visual Studio\\18\\BuildTools\\VC\\Auxiliary\\Build\\vcvars64.bat",
-        L"C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\Build\\vcvars64.bat",
-        L"C:\\Program Files\\Microsoft Visual Studio\\2022\\Professional\\VC\\Auxiliary\\Build\\vcvars64.bat",
-        L"C:\\Program Files\\Microsoft Visual Studio\\2022\\Enterprise\\VC\\Auxiliary\\Build\\vcvars64.bat",
-        L"C:\\Program Files\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Auxiliary\\Build\\vcvars64.bat",
-        L"C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Community\\VC\\Auxiliary\\Build\\vcvars64.bat",
-        L"C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Professional\\VC\\Auxiliary\\Build\\vcvars64.bat",
-        L"C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Enterprise\\VC\\Auxiliary\\Build\\vcvars64.bat"
+} // namespace
+
+std::filesystem::path FindVcvars64Bat(const std::filesystem::path& explicit_path) {
+    // Testing override: simulate clean machine with no MSVC
+    const wchar_t* force_no = _wgetenv(L"AURA_TEST_FORCE_NO_MSVC");
+    if (force_no && wcscmp(force_no, L"1") == 0) {
+        return {};
+    }
+
+    if (!explicit_path.empty()) {
+        std::error_code ec;
+        if (std::filesystem::is_regular_file(explicit_path, ec)) {
+            return explicit_path;
+        }
+    }
+
+    // Cache lookup for performance (cache both positive AND negative results)
+    static std::filesystem::path s_cached_vcvars;
+    static bool s_cache_initialized = false;
+    static std::chrono::steady_clock::time_point s_cache_time{};
+    auto now = std::chrono::steady_clock::now();
+    if (explicit_path.empty() && s_cache_initialized && (now - s_cache_time < std::chrono::seconds(5))) {
+        return s_cached_vcvars;
+    }
+
+    auto update_cache = [&](const std::filesystem::path& val) -> std::filesystem::path {
+        if (explicit_path.empty()) {
+            s_cached_vcvars = val;
+            s_cache_initialized = true;
+            s_cache_time = now;
+        }
+        return val;
+    };
+
+    // Environment variables overrides
+    const wchar_t* env_vars[] = {
+        L"AURA_VCVARS64_PATH",
+        L"AURA_VCVARS_BAT"
+    };
+    for (const wchar_t* ev : env_vars) {
+        const wchar_t* val = _wgetenv(ev);
+        if (val && val[0] != L'\0') {
+            std::error_code ec;
+            std::filesystem::path p(val);
+            if (std::filesystem::is_regular_file(p, ec)) {
+                return update_cache(p);
+            }
+        }
+    }
+
+    // Check if launched from Developer Command Prompt (VSINSTALLDIR / VCINSTALLDIR)
+    const wchar_t* vs_install = _wgetenv(L"VSINSTALLDIR");
+    if (vs_install && vs_install[0] != L'\0') {
+        std::error_code ec;
+        std::filesystem::path p = std::filesystem::path(vs_install) / L"VC" / L"Auxiliary" / L"Build" / L"vcvars64.bat";
+        if (std::filesystem::is_regular_file(p, ec)) {
+            return update_cache(p);
+        }
+    }
+    const wchar_t* vc_install = _wgetenv(L"VCINSTALLDIR");
+    if (vc_install && vc_install[0] != L'\0') {
+        std::error_code ec;
+        std::filesystem::path p = std::filesystem::path(vc_install) / L"Auxiliary" / L"Build" / L"vcvars64.bat";
+        if (std::filesystem::is_regular_file(p, ec)) {
+            return update_cache(p);
+        }
+    }
+
+    // Known candidate paths across drive letters C, D, E
+    std::vector<std::wstring> drives = { L"C:", L"D:", L"E:" };
+    std::vector<std::wstring> subpaths = {
+        L"\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Auxiliary\\Build\\vcvars64.bat",
+        L"\\Program Files\\Microsoft Visual Studio\\18\\Professional\\VC\\Auxiliary\\Build\\vcvars64.bat",
+        L"\\Program Files\\Microsoft Visual Studio\\18\\Enterprise\\VC\\Auxiliary\\Build\\vcvars64.bat",
+        L"\\Program Files\\Microsoft Visual Studio\\18\\BuildTools\\VC\\Auxiliary\\Build\\vcvars64.bat",
+        L"\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\Build\\vcvars64.bat",
+        L"\\Program Files\\Microsoft Visual Studio\\2022\\Professional\\VC\\Auxiliary\\Build\\vcvars64.bat",
+        L"\\Program Files\\Microsoft Visual Studio\\2022\\Enterprise\\VC\\Auxiliary\\Build\\vcvars64.bat",
+        L"\\Program Files\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Auxiliary\\Build\\vcvars64.bat",
+        L"\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Auxiliary\\Build\\vcvars64.bat",
+        L"\\Program Files (x86)\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\Build\\vcvars64.bat",
+        L"\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Community\\VC\\Auxiliary\\Build\\vcvars64.bat",
+        L"\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Professional\\VC\\Auxiliary\\Build\\vcvars64.bat",
+        L"\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Enterprise\\VC\\Auxiliary\\Build\\vcvars64.bat"
     };
 
     std::error_code ec;
-    for (const auto& c : candidates) {
-        if (std::filesystem::exists(c, ec)) {
-            return c;
+    for (const auto& drive : drives) {
+        for (const auto& sp : subpaths) {
+            std::filesystem::path cand = drive + sp;
+            if (std::filesystem::is_regular_file(cand, ec)) {
+                return update_cache(cand);
+            }
         }
     }
 
     // Try finding via vswhere.exe
-    std::filesystem::path vswhere = L"C:\\Program Files (x86)\\Microsoft Visual Studio\\Installer\\vswhere.exe";
-    if (std::filesystem::exists(vswhere, ec)) {
-        FILE* pipe = _popen("\"\"C:\\Program Files (x86)\\Microsoft Visual Studio\\Installer\\vswhere.exe\" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath -utf8\"", "r");
-        if (pipe) {
-            char buf[512] = {0};
-            if (fgets(buf, sizeof(buf), pipe)) {
-                std::string path_str(buf);
-                while (!path_str.empty() && (path_str.back() == '\r' || path_str.back() == '\n' || path_str.back() == ' ')) {
-                    path_str.pop_back();
-                }
-                if (!path_str.empty()) {
-                    std::filesystem::path p = std::filesystem::u8path(path_str) / "VC" / "Auxiliary" / "Build" / "vcvars64.bat";
-                    if (std::filesystem::exists(p, ec)) {
-                        _pclose(pipe);
-                        return p;
+    std::vector<std::filesystem::path> vswhere_paths = {
+        L"C:\\Program Files (x86)\\Microsoft Visual Studio\\Installer\\vswhere.exe",
+        L"C:\\Program Files\\Microsoft Visual Studio\\Installer\\vswhere.exe"
+    };
+    for (const auto& vswhere : vswhere_paths) {
+        if (std::filesystem::is_regular_file(vswhere, ec)) {
+            std::wstring cmd = L"\"\"" + vswhere.wstring() + L"\" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath -utf8\"";
+            FILE* pipe = _wpopen(cmd.c_str(), L"r");
+            if (pipe) {
+                char buf[512] = {0};
+                if (fgets(buf, sizeof(buf), pipe)) {
+                    std::string path_str(buf);
+                    while (!path_str.empty() && (path_str.back() == '\r' || path_str.back() == '\n' || path_str.back() == ' ')) {
+                        path_str.pop_back();
+                    }
+                    if (!path_str.empty()) {
+                        std::filesystem::path p = std::filesystem::u8path(path_str) / "VC" / "Auxiliary" / "Build" / "vcvars64.bat";
+                        if (std::filesystem::is_regular_file(p, ec)) {
+                            _pclose(pipe);
+                            return update_cache(p);
+                        }
                     }
                 }
+                _pclose(pipe);
             }
-            _pclose(pipe);
         }
     }
 
-    return {};
+    return update_cache({});
+}
+
+bool IsValidPluginSdkDir(const std::filesystem::path& dir) {
+    if (dir.empty()) return false;
+    std::error_code ec;
+    return std::filesystem::is_directory(dir, ec) &&
+           std::filesystem::is_regular_file(dir / "engine" / "effect.h", ec) &&
+           std::filesystem::is_regular_file(dir / "engine" / "plugin_interface.h", ec) &&
+           std::filesystem::is_regular_file(dir / "aura" / "aura_types.h", ec) &&
+           std::filesystem::is_regular_file(dir / "aura" / "keymap.h", ec);
+}
+
+SdkDiscoveryResult DiscoverPluginSdkIncludeDir(const std::filesystem::path& explicit_sdk_path) {
+    SdkDiscoveryResult result;
+    const wchar_t* force_no_sdk = _wgetenv(L"AURA_TEST_FORCE_NO_SDK");
+    if (force_no_sdk && wcscmp(force_no_sdk, L"1") == 0) {
+        if (!explicit_sdk_path.empty()) {
+            result.probed_paths.push_back(explicit_sdk_path);
+        }
+        return result;
+    }
+
+    static SdkDiscoveryResult s_cached_sdk_result;
+    static bool s_sdk_cache_valid = false;
+    static std::chrono::steady_clock::time_point s_sdk_cache_time{};
+    auto now = std::chrono::steady_clock::now();
+    if (explicit_sdk_path.empty() && s_sdk_cache_valid && (now - s_sdk_cache_time < std::chrono::seconds(5))) {
+        return s_cached_sdk_result;
+    }
+
+    auto update_sdk_cache = [&](const SdkDiscoveryResult& res) -> SdkDiscoveryResult {
+        if (explicit_sdk_path.empty()) {
+            s_cached_sdk_result = res;
+            s_sdk_cache_valid = true;
+            s_sdk_cache_time = now;
+        }
+        return res;
+    };
+
+    auto probe = [&](const std::filesystem::path& cand) -> bool {
+        if (cand.empty()) return false;
+        std::error_code ec;
+        std::filesystem::path norm = std::filesystem::weakly_canonical(cand, ec);
+        if (ec) norm = cand;
+        std::wstring str = norm.wstring();
+        while (str.size() > 1 && (str.back() == L'\\' || str.back() == L'/')) {
+            str.pop_back();
+        }
+        norm = str;
+
+        for (const auto& existing : result.probed_paths) {
+            if (existing == norm) return false;
+        }
+        result.probed_paths.push_back(norm);
+        if (IsValidPluginSdkDir(norm)) {
+            result.found = true;
+            result.include_dir = norm;
+            return true;
+        }
+        return false;
+    };
+
+    // Priority 1: Explicit Plugin SDK path (CLI / Environment)
+    if (!explicit_sdk_path.empty()) {
+        if (probe(explicit_sdk_path)) return update_sdk_cache(result);
+        if (probe(explicit_sdk_path / "include")) return update_sdk_cache(result);
+    }
+    const wchar_t* env_sdk = _wgetenv(L"AURA_SDK_INCLUDE_DIR");
+    if (env_sdk && env_sdk[0] != L'\0') {
+        if (probe(std::filesystem::path(env_sdk))) return update_sdk_cache(result);
+        if (probe(std::filesystem::path(env_sdk) / "include")) return update_sdk_cache(result);
+    }
+    const wchar_t* env_plugin_sdk = _wgetenv(L"AURA_PLUGIN_SDK_DIR");
+    if (env_plugin_sdk && env_plugin_sdk[0] != L'\0') {
+        if (probe(std::filesystem::path(env_plugin_sdk))) return update_sdk_cache(result);
+        if (probe(std::filesystem::path(env_plugin_sdk) / "include")) return update_sdk_cache(result);
+    }
+
+    // Priority 2: aura_web_ui.exe / runtime packaged sibling include/
+    wchar_t mod_path[MAX_PATH];
+    DWORD mod_len = GetModuleFileNameW(nullptr, mod_path, MAX_PATH);
+    std::filesystem::path exe_dir;
+    if (mod_len > 0 && mod_len < MAX_PATH) {
+        exe_dir = std::filesystem::path(mod_path).parent_path();
+        if (probe(exe_dir / "include")) return update_sdk_cache(result);
+    }
+
+    // Priority 3: Source checkout include/ (development mode fallback)
+    // Traverse upwards from executable's directory only. Never consult CWD to avoid foreign checkout pollution.
+    if (!exe_dir.empty()) {
+        for (auto dir = exe_dir; !dir.empty(); dir = dir.parent_path()) {
+            std::error_code ec;
+            if (std::filesystem::is_regular_file(dir / "calibrated_keymap.json", ec) &&
+                std::filesystem::is_regular_file(dir / "config.example.json", ec)) {
+                if (probe(dir / "include")) return update_sdk_cache(result);
+                break;
+            }
+            if (dir == dir.parent_path()) break;
+        }
+    }
+
+    // Priority 4: Packaged runtime fallback from LOCALAPPDATA
+    // (Used when running a standalone aura_web_ui.exe outside the runtime folder and not in a source checkout)
+    wchar_t local_app_data[MAX_PATH];
+    if (GetEnvironmentVariableW(L"LOCALAPPDATA", local_app_data, MAX_PATH)) {
+        std::filesystem::path runtime_sdk = std::filesystem::path(local_app_data) / L"Aura" / L"runtime" / L"include";
+        if (probe(runtime_sdk)) return update_sdk_cache(result);
+    }
+
+    return update_sdk_cache(result);
 }
 
 bool CompileCppSourceToDll(const std::string& effect_name, 
                            const std::string& source_code, 
                            std::string& out_log, 
                            std::string& out_dll_path, 
-                           int& out_exit_code) {
-    std::filesystem::path vcvars = FindVcvars64Bat();
+                           int& out_exit_code,
+                           const std::filesystem::path& explicit_sdk_dir,
+                           const std::filesystem::path& explicit_vcvars) {
+    // 1. Verify Plugin SDK existence and locate include directory
+    auto sdk_res = DiscoverPluginSdkIncludeDir(explicit_sdk_dir);
+    if (!sdk_res.found) {
+        std::string err = "Studio native publish SDK is missing or incomplete; expected engine/effect.h and engine/plugin_interface.h.\nChecked paths:\n";
+        for (const auto& p : sdk_res.probed_paths) {
+            err += "  - " + EnsureValidUtf8(p.u8string()) + "\n";
+        }
+        out_log = err;
+        out_exit_code = -6;
+        return false;
+    }
+
+    // 2. Verify MSVC / C++ Build Tools toolchain
+    std::filesystem::path vcvars = FindVcvars64Bat(explicit_vcvars);
     if (vcvars.empty() || !std::filesystem::exists(vcvars)) {
-        out_log = "Error: Unable to locate MSVC vcvars64.bat on this Windows host.";
+        out_log = "Error: Unable to locate MSVC vcvars64.bat on this Windows host.\n\n"
+                  "原生发布需要 Microsoft Visual Studio / Build Tools 的 C++ Desktop workload。\n"
+                  "你仍然可以编辑、预览和保存草稿；安装 C++ Build Tools 后即可发布。";
         out_exit_code = -1;
         return false;
     }
@@ -167,7 +374,7 @@ bool CompileCppSourceToDll(const std::string& effect_name,
     std::filesystem::path dll_file = plugins_dir / (base_name + ".dll");
     std::filesystem::path obj_file = plugins_dir / (base_name + ".obj");
 
-    // 写入 C++ 源码
+    // 3. 写入 C++ 源码
     {
         std::ofstream ofs(src_file, std::ios::binary | std::ios::trunc);
         if (!ofs.is_open()) {
@@ -184,41 +391,30 @@ bool CompileCppSourceToDll(const std::string& effect_name,
         }
     }
 
-    // Identify the checkout that owns this executable before consulting CWD.
-    // Stop at its nearest project root; never compile against another checkout's
-    // headers simply because the service was launched from that directory.
-    std::filesystem::path root_dir;
-    wchar_t mod_path[MAX_PATH];
-    DWORD mod_len = GetModuleFileNameW(nullptr, mod_path, MAX_PATH);
-    if (mod_len > 0 && mod_len < MAX_PATH) {
-        for (auto dir = std::filesystem::path(mod_path).parent_path(); !dir.empty(); dir = dir.parent_path()) {
-            if (std::filesystem::exists(dir / "calibrated_keymap.json") &&
-                std::filesystem::exists(dir / "config.example.json")) {
-                root_dir = dir;
-                break;
-            }
-            if (dir == dir.parent_path()) break;
-        }
+    std::filesystem::path inc_dir = sdk_res.include_dir;
+    std::wstring inc_dir_str = inc_dir.wstring();
+    while (inc_dir_str.size() > 1 && (inc_dir_str.back() == L'\\' || inc_dir_str.back() == L'/')) {
+        inc_dir_str.pop_back();
     }
-    if (root_dir.empty()) root_dir = std::filesystem::current_path();
 
-    std::filesystem::path inc_dir = root_dir / "include";
     std::filesystem::path inc_tp = inc_dir / "third_party";
-    if (!std::filesystem::exists(inc_dir / "engine" / "effect.h") ||
-        !std::filesystem::exists(inc_dir / "engine" / "plugin_interface.h")) {
-        out_log = "Project include directory not found; expected include/engine/effect.h near the Web UI executable.";
-        out_exit_code = -6;
-        return false;
+    std::wstring extra_inc = L"";
+    if (std::filesystem::exists(inc_tp, ec)) {
+        std::wstring inc_tp_str = inc_tp.wstring();
+        while (inc_tp_str.size() > 1 && (inc_tp_str.back() == L'\\' || inc_tp_str.back() == L'/')) {
+            inc_tp_str.pop_back();
+        }
+        extra_inc = L"/I \"" + inc_tp_str + L"\" ";
     }
 
     std::filesystem::path abs_src = std::filesystem::absolute(src_file);
     std::filesystem::path abs_dll = std::filesystem::absolute(dll_file);
     std::filesystem::path abs_obj = std::filesystem::absolute(obj_file);
 
-    // 构造编译器命令行
+    // 4. 构造编译器命令行
     std::wstring cmd_str = L"cmd.exe /d /s /c \"call \"" + vcvars.wstring() + L"\" >nul || (echo MSVC vcvars setup failed & exit /b 9008) & where cl.exe >nul || (echo MSVC cl.exe not found & exit /b 9009) & cl.exe /nologo /std:c++17 /O2 /EHsc /utf-8 /MD /LD "
-        + L"/I \"" + inc_dir.wstring() + L"\" "
-        + L"/I \"" + inc_tp.wstring() + L"\" "
+        + L"/I \"" + inc_dir_str + L"\" "
+        + extra_inc
         + L"/Fe:\"" + abs_dll.wstring() + L"\" "
         + L"/Fo:\"" + abs_obj.wstring() + L"\" "
         + L"\"" + abs_src.wstring() + L"\" /link /INCREMENTAL:NO\"";
@@ -310,6 +506,8 @@ bool CompileCppSourceToDll(const std::string& effect_name,
     out_dll_path = dll_file.string();
     return (exit_code == 0 && std::filesystem::exists(dll_file));
 }
+ 
+namespace {
 
 const char* EMBEDDED_FALLBACK_HTML = R"rawhtml(<!DOCTYPE html>
 <html lang="zh-CN">
@@ -529,8 +727,8 @@ bool ValidateWriteRequest(const httplib::Request& req, httplib::Response& res) {
 
 } // namespace
 
-WebServer::WebServer(const std::filesystem::path& config_path, int port)
-    : config_path_(config_path), port_(port) {
+WebServer::WebServer(const std::filesystem::path& config_path, int port, const std::filesystem::path& sdk_include_dir)
+    : config_path_(config_path), port_(port), sdk_include_dir_(sdk_include_dir) {
     SetupRoutes();
 }
 
@@ -594,14 +792,23 @@ void WebServer::SetupRoutes() {
     });
 
     // 心跳检测接口 (前端通过高频轮询感知服务存活，断开时优雅降级)
-    svr_.Get("/api/status", [](const httplib::Request&, httplib::Response& res) {
+    svr_.Get("/api/status", [this](const httplib::Request&, httplib::Response& res) {
         auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::system_clock::now().time_since_epoch()).count();
+        auto sdk_res = DiscoverPluginSdkIncludeDir(sdk_include_dir_);
+        std::filesystem::path vcvars = FindVcvars64Bat();
+        bool sdk_ok = sdk_res.found;
+        bool msvc_ok = !vcvars.empty() && std::filesystem::exists(vcvars);
         nlohmann::json j = {
              {"status", "ok"},
              {"service", "aura_web_ui"},
              {"web_api_version", 2},
-             {"timestamp", now_ms}
+             {"timestamp", now_ms},
+             {"studio_publish_ready", sdk_ok && msvc_ok},
+             {"sdk_headers_found", sdk_ok},
+             {"msvc_found", msvc_ok},
+             {"sdk_include_dir", sdk_ok ? sdk_res.include_dir.u8string() : ""},
+             {"msvc_vcvars_path", msvc_ok ? vcvars.u8string() : ""}
         };
         res.set_content(j.dump(), "application/json; charset=utf-8");
     });
@@ -853,7 +1060,7 @@ void WebServer::SetupRoutes() {
             std::string out_log;
             std::string out_dll_path;
             int exit_code = 0;
-            bool ok = CompileCppSourceToDll(name, code, out_log, out_dll_path, exit_code);
+            bool ok = CompileCppSourceToDll(name, code, out_log, out_dll_path, exit_code, sdk_include_dir_);
 
             auto duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::steady_clock::now() - start_t).count();
@@ -878,11 +1085,33 @@ void WebServer::SetupRoutes() {
                 res.status = 200;
                 res.set_content(resp.dump(), "application/json; charset=utf-8");
             } else {
+                std::string msg;
+                std::string stage;
+                if (exit_code == -6) {
+                    msg = "Studio 原生发布 SDK 缺失或损坏 (Studio native publish SDK is missing or incomplete)";
+                    stage = "sdk_missing";
+                } else if (exit_code == -1 || exit_code == 9009) {
+                    msg = "原生发布需要 Microsoft Visual Studio / Build Tools 的 C++ Desktop workload。你仍然可以编辑、预览和保存草稿；安装 C++ Build Tools 后即可发布。";
+                    stage = "msvc_missing";
+                } else if (exit_code == 9008) {
+                    msg = "MSVC vcvars 环境初始化失败 (MSVC vcvars setup failed)";
+                    stage = "vcvars_failed";
+                } else if (exit_code == -2) {
+                    msg = "无法写入插件源码";
+                    stage = "source_write";
+                } else if (exit_code == -5) {
+                    msg = "MSVC 编译超时";
+                    stage = "compiler_timeout";
+                } else {
+                    msg = "原生插件编译失败 (generated C++ compile failed)";
+                    stage = "compile_failed";
+                }
+
                 nlohmann::json resp = {
                     {"status", "error"},
                     {"success", false},
-                    {"message", exit_code == -1 || exit_code == 9008 ? "未找到可用的 MSVC 编译环境" : exit_code == 9009 ? "未找到 MSVC 编译器 cl.exe" : exit_code == -6 ? "未找到项目 C++ 头文件" : exit_code == -2 ? "无法写入插件源码" : exit_code == -5 ? "MSVC 编译超时" : "MSVC 编译失败"},
-                    {"stage", exit_code == -1 || exit_code == 9008 || exit_code == 9009 ? "msvc_setup" : exit_code == -6 ? "include" : exit_code == -2 ? "source_write" : exit_code == -5 ? "compiler_timeout" : "msvc_compile"},
+                    {"message", msg},
+                    {"stage", stage},
                     {"exit_code", exit_code},
                     {"compiler_output", out_log},
                     {"log", out_log},

@@ -623,6 +623,14 @@ class TestLauncherEntrypoint(unittest.TestCase):
                         "Launcher should have extracted runtime into the isolated LOCALAPPDATA directory")
         self.assertTrue(os.path.isfile(os.path.join(isolated_runtime, "aura_daemon.exe")),
                         "Unpacked aura_daemon.exe must reside inside isolated sandbox")
+        for h in [
+            os.path.join("include", "engine", "effect.h"),
+            os.path.join("include", "engine", "plugin_interface.h"),
+            os.path.join("include", "aura", "aura_types.h"),
+            os.path.join("include", "aura", "keymap.h")
+        ]:
+            self.assertTrue(os.path.isfile(os.path.join(isolated_runtime, h)),
+                            f"Unpacked SDK header '{h}' must reside inside isolated sandbox")
 
     def test_launcher_explicit_nonexistent_config_exits_one(self):
         fake_config = os.path.join(self.tmp_dir, "nonexistent.json")

@@ -223,6 +223,20 @@ def ensure_assets():
         run_cmd("npm run build", cwd=frontend_dir)
     print(f"[OK] web/index.html ({os.path.getsize(web_html):,} bytes)")
 
+    # 4. Plugin SDK 公共头文件 (供单文件发行版原生光效发布)
+    sdk_files = [
+        ("engine", "effect.h"),
+        ("engine", "plugin_interface.h"),
+        ("aura", "aura_types.h"),
+        ("aura", "keymap.h"),
+    ]
+    for subdir, fname in sdk_files:
+        hp = os.path.join(REPO_ROOT, "include", subdir, fname)
+        if not os.path.isfile(hp):
+            print(f"[FATAL] 缺少 Plugin SDK 头文件: include/{subdir}/{fname}！")
+            sys.exit(1)
+        print(f"[OK] include/{subdir}/{fname} ({os.path.getsize(hp):,} bytes)")
+
 
 def parse_rc_version(version_str):
     """
@@ -280,29 +294,46 @@ def build_single_exe(version):
     cfg_src    = os.path.join(REPO_ROOT, "config.example.json")
     web_src    = os.path.join(REPO_ROOT, "web", "index.html")
 
-    shutil.copy2(daemon_src, os.path.join(temp_dir, "daemon.bin"))
-    shutil.copy2(web_ui_src, os.path.join(temp_dir, "web_ui.bin"))
-    shutil.copy2(hal_src,    os.path.join(temp_dir, "hal.bin"))
-    shutil.copy2(keymap_src, os.path.join(temp_dir, "keymap.bin"))
-    shutil.copy2(cfg_src,    os.path.join(temp_dir, "config.bin"))
-    shutil.copy2(web_src,    os.path.join(temp_dir, "web.bin"))
+    sdk_effect_src      = os.path.join(REPO_ROOT, "include", "engine", "effect.h")
+    sdk_plugin_intf_src = os.path.join(REPO_ROOT, "include", "engine", "plugin_interface.h")
+    sdk_types_src       = os.path.join(REPO_ROOT, "include", "aura", "aura_types.h")
+    sdk_keymap_src      = os.path.join(REPO_ROOT, "include", "aura", "keymap.h")
+
+    shutil.copy2(daemon_src,          os.path.join(temp_dir, "daemon.bin"))
+    shutil.copy2(web_ui_src,          os.path.join(temp_dir, "web_ui.bin"))
+    shutil.copy2(hal_src,             os.path.join(temp_dir, "hal.bin"))
+    shutil.copy2(keymap_src,          os.path.join(temp_dir, "keymap.bin"))
+    shutil.copy2(cfg_src,             os.path.join(temp_dir, "config.bin"))
+    shutil.copy2(web_src,             os.path.join(temp_dir, "web.bin"))
+    shutil.copy2(sdk_effect_src,      os.path.join(temp_dir, "sdk_effect.bin"))
+    shutil.copy2(sdk_plugin_intf_src, os.path.join(temp_dir, "sdk_plugin_intf.bin"))
+    shutil.copy2(sdk_types_src,       os.path.join(temp_dir, "sdk_aura_types.bin"))
+    shutil.copy2(sdk_keymap_src,      os.path.join(temp_dir, "sdk_keymap.bin"))
 
     rc_ver_csv = parse_rc_version(version)
     # 生成 .rc 文件，同时注入共用的版本信息元数据
     rc_content = f"""
-#define IDR_DAEMON       101
-#define IDR_WEB_UI       102
-#define IDR_HAL_DLL      103
-#define IDR_KEYMAP       104
-#define IDR_CONFIG_EX    105
-#define IDR_WEB_HTML     106
+#define IDR_DAEMON             101
+#define IDR_WEB_UI             102
+#define IDR_HAL_DLL            103
+#define IDR_KEYMAP             104
+#define IDR_CONFIG_EX          105
+#define IDR_WEB_HTML           106
+#define IDR_SDK_EFFECT         110
+#define IDR_SDK_PLUGIN_INTF    111
+#define IDR_SDK_AURA_TYPES     112
+#define IDR_SDK_KEYMAP         113
 
-IDR_DAEMON       RCDATA "daemon.bin"
-IDR_WEB_UI       RCDATA "web_ui.bin"
-IDR_HAL_DLL      RCDATA "hal.bin"
-IDR_KEYMAP       RCDATA "keymap.bin"
-IDR_CONFIG_EX    RCDATA "config.bin"
-IDR_WEB_HTML     RCDATA "web.bin"
+IDR_DAEMON             RCDATA "daemon.bin"
+IDR_WEB_UI             RCDATA "web_ui.bin"
+IDR_HAL_DLL            RCDATA "hal.bin"
+IDR_KEYMAP             RCDATA "keymap.bin"
+IDR_CONFIG_EX          RCDATA "config.bin"
+IDR_WEB_HTML           RCDATA "web.bin"
+IDR_SDK_EFFECT         RCDATA "sdk_effect.bin"
+IDR_SDK_PLUGIN_INTF    RCDATA "sdk_plugin_intf.bin"
+IDR_SDK_AURA_TYPES     RCDATA "sdk_aura_types.bin"
+IDR_SDK_KEYMAP         RCDATA "sdk_keymap.bin"
 
 1 VERSIONINFO
 FILEVERSION {rc_ver_csv}
@@ -374,10 +405,11 @@ def build_portable_zip(version):
 3. **免奥创独立使用**：本程序已内嵌华硕底层直通驱动，无须在本机安装或运行华硕奥创中心 (Armoury Crate)。
 
 ## 文件说明：
-- `Aura.exe`: 整合单文件主程序 (已内嵌守护进程、网页配置服务与底层硬件驱动)。
+- `Aura.exe`: 整合单文件主程序 (已内嵌守护进程、网页配置服务、底层硬件驱动与 Plugin SDK)。
 - `config.example.json`: 配置文件模板 (若当前目录下无 config.json，启动时会自动生成)。
 - `calibrated_keymap.json`: 68 键物理键位与硬件通道映射表。
 - `drivers/AacKbHal_x64.dll`: ASUS 底层键盘 HAL 动态链接库。
+- `include/`: Aura C++ Plugin SDK 运行时头文件 (供光效工作室原生发布编译，依赖本机 MSVC / C++ Build Tools)。
 """
     readme_path = os.path.join(DIST_DIR, "README_RELEASE.md")
     with open(readme_path, "w", encoding="utf-8") as f:
@@ -388,6 +420,9 @@ def build_portable_zip(version):
         zf.write(os.path.join(REPO_ROOT, "calibrated_keymap.json"), "calibrated_keymap.json")
         zf.write(os.path.join(REPO_ROOT, "config.example.json"), "config.example.json")
         zf.write(os.path.join(DRIVERS_DIR, "AacKbHal_x64.dll"), "drivers/AacKbHal_x64.dll")
+        for subdir, fname in [("engine", "effect.h"), ("engine", "plugin_interface.h"), ("aura", "aura_types.h"), ("aura", "keymap.h")]:
+            rel = os.path.join("include", subdir, fname)
+            zf.write(os.path.join(REPO_ROOT, rel), rel)
         zf.write(readme_path, "README.txt")
 
     print(f"[SUCCESS] 绿色便携 Zip 包已就绪: {zip_path} ({os.path.getsize(zip_path):,} bytes)")

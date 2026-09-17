@@ -9,12 +9,16 @@
 #pragma comment(lib, "shell32.lib")
 
 // Resource IDs defined in launcher.rc
-#define IDR_DAEMON       101
-#define IDR_WEB_UI       102
-#define IDR_HAL_DLL      103
-#define IDR_KEYMAP       104
-#define IDR_CONFIG_EX    105
-#define IDR_WEB_HTML     106
+#define IDR_DAEMON             101
+#define IDR_WEB_UI             102
+#define IDR_HAL_DLL            103
+#define IDR_KEYMAP             104
+#define IDR_CONFIG_EX          105
+#define IDR_WEB_HTML           106
+#define IDR_SDK_EFFECT         110
+#define IDR_SDK_PLUGIN_INTF    111
+#define IDR_SDK_AURA_TYPES     112
+#define IDR_SDK_KEYMAP         113
 
 namespace {
 
@@ -134,13 +138,18 @@ int wmain(int argc, wchar_t* argv[]) {
         force_extract = true;
     }
 
-    // 2. 解压核心运行时资产
+    // 2. 解压核心运行时资产与 Plugin SDK
     std::filesystem::path daemon_exe = runtime_dir / L"aura_daemon.exe";
     std::filesystem::path web_ui_exe = runtime_dir / L"aura_web_ui.exe";
     std::filesystem::path hal_dll    = runtime_dir / L"AacKbHal_x64.dll";
     std::filesystem::path keymap_json= runtime_dir / L"calibrated_keymap.json";
     std::filesystem::path cfg_example= runtime_dir / L"config.example.json";
     std::filesystem::path web_html   = runtime_dir / L"web" / L"index.html";
+
+    std::filesystem::path sdk_effect_h = runtime_dir / L"include" / L"engine" / L"effect.h";
+    std::filesystem::path sdk_plugin_h = runtime_dir / L"include" / L"engine" / L"plugin_interface.h";
+    std::filesystem::path sdk_types_h  = runtime_dir / L"include" / L"aura" / L"aura_types.h";
+    std::filesystem::path sdk_keymap_h = runtime_dir / L"include" / L"aura" / L"keymap.h";
 
     bool ok = true;
     ok &= ExtractResource(hSelf, IDR_DAEMON, daemon_exe, force_extract);
@@ -149,6 +158,10 @@ int wmain(int argc, wchar_t* argv[]) {
     ok &= ExtractResource(hSelf, IDR_KEYMAP, keymap_json, force_extract);
     ok &= ExtractResource(hSelf, IDR_CONFIG_EX, cfg_example, force_extract);
     ok &= ExtractResource(hSelf, IDR_WEB_HTML, web_html, force_extract);
+    ok &= ExtractResource(hSelf, IDR_SDK_EFFECT, sdk_effect_h, force_extract);
+    ok &= ExtractResource(hSelf, IDR_SDK_PLUGIN_INTF, sdk_plugin_h, force_extract);
+    ok &= ExtractResource(hSelf, IDR_SDK_AURA_TYPES, sdk_types_h, force_extract);
+    ok &= ExtractResource(hSelf, IDR_SDK_KEYMAP, sdk_keymap_h, force_extract);
 
     if (!ok) {
         std::cerr << "[Aura] 错误: 内嵌运行时解压失败！" << std::endl;

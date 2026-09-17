@@ -1,5 +1,5 @@
 import { canonicalConfig } from '../utils/orchestration.js';
-import { stageEffect, effectConfig, getEffectLifecycleStatus } from '../utils/applyEffect.js';
+import { stageEffect, effectConfig, getEffectLifecycleStatus, fetchPublishReadiness } from '../utils/applyEffect.js';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Blockly, { loadSafeWorkspaceJson } from '../blockly/index.js';
 import { registerCustomBlocks } from '../blockly/customBlocks';
@@ -46,6 +46,32 @@ export default function EffectStudio({
   const [compilerSuccess, setCompilerSuccess] = useState(null);
   const [isCopied, setIsCopied] = useState(false);
   const [editError, setEditError] = useState(null);
+  const [publishReadiness, setPublishReadiness] = useState({
+    ready: true,
+    sdkFound: true,
+    msvcFound: true,
+    sdkIncludeDir: '',
+    msvcVcvarsPath: '',
+    loaded: false
+  });
+
+  useEffect(() => {
+    let active = true;
+    const checkReadiness = () => {
+      fetchPublishReadiness().then(r => {
+        if (active) setPublishReadiness({ ...r, loaded: true });
+      });
+    };
+    checkReadiness();
+    const interval = setInterval(checkReadiness, 5000);
+    window.addEventListener('focus', checkReadiness);
+    return () => {
+      active = false;
+      clearInterval(interval);
+      window.removeEventListener('focus', checkReadiness);
+    };
+  }, []);
+
   const previewClockRef = useRef({ elapsed: 0, last: null });
 
   // 模拟游戏遥测状态 (供用户调试 GSI 积木)
@@ -275,6 +301,24 @@ export default function EffectStudio({
               >
                 {lifecycle.label}
               </span>
+
+              {publishReadiness.loaded && !publishReadiness.ready && (
+                <span
+                  className={`inline-flex items-center gap-1 px-2.5 py-0.5 text-xs font-semibold rounded-md-full border ${
+                    !publishReadiness.msvcFound
+                      ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                      : 'bg-rose-500/15 text-rose-400 border-rose-500/30'
+                  }`}
+                  title={
+                    !publishReadiness.msvcFound
+                      ? '未检测到 MSVC 编译环境。仍可编辑、预览并保存草稿；安装 Visual Studio / Build Tools 的 C++ 桌面工作负载后即可发布。'
+                      : '未检测到 Plugin SDK 头文件。如果是单文件发行版，请确认运行时解压完整。'
+                  }
+                >
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  {!publishReadiness.msvcFound ? '缺少 MSVC (可编辑/存草稿)' : '缺少 SDK 头文件'}
+                </span>
+              )}
             </div>
             <span className="text-[11px] text-md-on-surface-variant">
               保存草稿仅保存源码；发布后即转译并加载至硬件生效
@@ -334,7 +378,13 @@ export default function EffectStudio({
             onClick={handleCompileAndReload}
             disabled={isCompiling || !!editError}
             className="h-9 px-4 flex items-center gap-2 rounded-md-full bg-md-primary text-md-on-primary hover:bg-md-primary/90 active:scale-95 transition-all text-xs font-bold shadow-md-level1 cursor-pointer disabled:opacity-50"
-            title="发布光效：编译原生插件并实时应用至键盘硬件"
+            title={
+              publishReadiness.loaded && !publishReadiness.ready
+                ? (!publishReadiness.msvcFound
+                    ? '缺少 MSVC 编译环境：当前仍可保存草稿与预览；安装 C++ Desktop 工作负载后即可一键发布'
+                    : '缺少 Plugin SDK 头文件：请检查安装或运行时目录')
+                : '发布光效：编译原生插件并实时应用至键盘硬件'
+            }
           >
             {isCompiling ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
             <span>{isCompiling ? '正在发布…' : '发布'}</span>

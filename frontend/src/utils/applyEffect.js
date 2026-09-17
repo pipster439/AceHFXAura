@@ -1,3 +1,35 @@
+export async function fetchPublishReadiness() {
+  try {
+    const res = await fetch('/api/status', { cache: 'no-store' });
+    if (!res.ok) return { ok: false, ready: true, sdkFound: true, msvcFound: true };
+    const data = await res.json();
+    return {
+      ok: true,
+      ready: data.studio_publish_ready ?? true,
+      sdkFound: data.sdk_headers_found ?? true,
+      msvcFound: data.msvc_found ?? true,
+      sdkIncludeDir: data.sdk_include_dir || '',
+      msvcVcvarsPath: data.msvc_vcvars_path || ''
+    };
+  } catch {
+    return { ok: false, ready: true, sdkFound: true, msvcFound: true };
+  }
+}
+
+export async function ensurePublishReady() {
+  const readiness = await fetchPublishReadiness();
+  if (readiness.sdkFound === false) {
+    const err = new Error('Studio 原生发布 SDK 缺失或损坏 (缺少 include/engine/effect.h 等)。如果是单文件发行版，请确认运行时资产完整。');
+    err.stage = 'sdk_missing';
+    throw err;
+  }
+  if (readiness.msvcFound === false) {
+    const err = new Error('原生发布需要 Microsoft Visual Studio / Build Tools 的 C++ Desktop workload。你仍然可以编辑、预览和保存草稿；安装 C++ Build Tools 后即可发布。');
+    err.stage = 'msvc_missing';
+    throw err;
+  }
+}
+
 export async function ensureStudioRuntime() {
   let web, daemon;
   try {
@@ -34,7 +66,7 @@ export async function requestJson(url, body) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok || data.success === false || data.status === 'error') {
     const err = new Error(data.message || `请求失败 (${res.status})`);
-    err.stage = data.stage || (url.includes('compile') ? 'msvc_compile' : 'daemon_reload');
+    err.stage = data.stage || (url.includes('compile') ? 'compile_failed' : 'daemon_reload');
     err.detail = data.compiler_output || data.log || '';
     throw err;
   }
@@ -49,6 +81,7 @@ export async function stageEffect(name, workspace, transpiler, onLog = () => {})
   const report = line => { progress += `${line}\n`; onLog(progress); };
   report('1/5 检查运行环境…');
   await ensureStudioRuntime();
+  await ensurePublishReady();
   // The editor is locked during publishing; both transpilations happen before
   // the compile request so the revision and generated plugin share one source.
   report('2/5 生成 C++ 源码…');

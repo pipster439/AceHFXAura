@@ -10,7 +10,7 @@ import { JsTranspiler } from '../src/blockly/jsTranspiler.js';
 import { CppTranspiler } from '../src/blockly/cppTranspiler.js';
 import { OrchestratorSerializer as S } from '../src/blockly/orchestratorSerializer.js';
 import { canonicalConfig, processRows, replaceSimpleRows, evalCondition, evaluateOverlayStatus } from '../src/utils/orchestration.js';
-import { stageEffect, ensureStudioRuntime, effectConfig, getEffectLifecycleStatus, sanitizeEffectName, getNextCloneName, renameEffectInConfig } from '../src/utils/applyEffect.js';
+import { stageEffect, ensureStudioRuntime, ensurePublishReady, fetchPublishReadiness, effectConfig, getEffectLifecycleStatus, sanitizeEffectName, getNextCloneName, renameEffectInConfig } from '../src/utils/applyEffect.js';
 import { EFFECT_STUDIO_TOOLBOX, ORCHESTRATOR_STUDIO_TOOLBOX } from '../src/blockly/toolboxes.js';
 import { EFFECT_PRESETS } from '../src/blockly/presets.js';
 import {
@@ -83,6 +83,54 @@ test('publish guard distinguishes an old Web UI, old daemon, and offline daemon 
   globalThis.fetch=async url=>({ok:true,json:async()=>url==='/api/status'?{web_api_version:2}:{daemon_running:false}});
   await assert.rejects(ensureStudioRuntime(),/daemon 不在线/);
  } finally {globalThis.fetch=oldFetch;}
+});
+
+test('publish readiness checks distinguish missing SDK and missing MSVC without breaking runtime health check', async () => {
+ const oldFetch = globalThis.fetch;
+ try {
+  // 1. Missing SDK
+  globalThis.fetch = async url => ({
+    ok: true,
+    json: async () => url === '/api/status'
+      ? { web_api_version: 2, studio_publish_ready: false, sdk_headers_found: false, msvc_found: true }
+      : { studio_runtime: 2 }
+  });
+  const statusMissingSdk = await fetchPublishReadiness();
+  assert.equal(statusMissingSdk.ready, false);
+  assert.equal(statusMissingSdk.sdkFound, false);
+  assert.equal(statusMissingSdk.msvcFound, true);
+  await assert.rejects(ensurePublishReady(), /SDK 缺失或损坏/);
+  await assert.doesNotReject(ensureStudioRuntime());
+
+  // 2. Missing MSVC
+  globalThis.fetch = async url => ({
+    ok: true,
+    json: async () => url === '/api/status'
+      ? { web_api_version: 2, studio_publish_ready: false, sdk_headers_found: true, msvc_found: false }
+      : { studio_runtime: 2 }
+  });
+  const statusMissingMsvc = await fetchPublishReadiness();
+  assert.equal(statusMissingMsvc.ready, false);
+  assert.equal(statusMissingMsvc.sdkFound, true);
+  assert.equal(statusMissingMsvc.msvcFound, false);
+  await assert.rejects(ensurePublishReady(), /C\+\+ Desktop workload/);
+  await assert.doesNotReject(ensureStudioRuntime());
+
+  // 3. Both ready
+  globalThis.fetch = async url => ({
+    ok: true,
+    json: async () => url === '/api/status'
+      ? { web_api_version: 2, studio_publish_ready: true, sdk_headers_found: true, msvc_found: true }
+      : { studio_runtime: 2 }
+  });
+  const statusReady = await fetchPublishReadiness();
+  assert.equal(statusReady.ready, true);
+  assert.equal(statusReady.sdkFound, true);
+  assert.equal(statusReady.msvcFound, true);
+  await assert.doesNotReject(ensurePublishReady());
+ } finally {
+  globalThis.fetch = oldFetch;
+ }
 });
 const hasGpp = (() => {
   try {

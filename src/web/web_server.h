@@ -10,9 +10,27 @@
 
 namespace aura {
 
+struct SdkDiscoveryResult {
+    bool found = false;
+    std::filesystem::path include_dir;
+    std::vector<std::filesystem::path> probed_paths;
+};
+
+bool IsValidPluginSdkDir(const std::filesystem::path& dir);
+SdkDiscoveryResult DiscoverPluginSdkIncludeDir(const std::filesystem::path& explicit_sdk_path = {});
+std::filesystem::path FindVcvars64Bat(const std::filesystem::path& explicit_path = {});
+
+bool CompileCppSourceToDll(const std::string& effect_name, 
+                           const std::string& source_code, 
+                           std::string& out_log, 
+                           std::string& out_dll_path, 
+                           int& out_exit_code,
+                           const std::filesystem::path& explicit_sdk_dir = {},
+                           const std::filesystem::path& explicit_vcvars = {});
+
 class WebServer {
 public:
-    WebServer(const std::filesystem::path& config_path, int port);
+    WebServer(const std::filesystem::path& config_path, int port, const std::filesystem::path& sdk_include_dir = {});
     ~WebServer();
 
     // 启动 HTTP 服务（阻塞直到 stop() 被调用）
@@ -34,6 +52,7 @@ private:
 
     std::filesystem::path config_path_{"config.json"};
     int port_{19898};
+    std::filesystem::path sdk_include_dir_;
     httplib::Server svr_;
     std::atomic<bool> is_running_{false};
     mutable std::mutex file_mutex_;
