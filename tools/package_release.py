@@ -195,7 +195,7 @@ def ensure_binaries(clean=False):
 
 def ensure_assets():
     print("\n--- 步骤 2: 验证并准备资产文件 ---")
-    print("[INFO] 公开发行包默认采用 Native Win32 HID 后端，不依赖任何 ASUS 专有服务与 DLL")
+    print("[INFO] 公开发行包默认采用 Native Win32 HID 后端，运行时不加载 AacKbHal_x64.dll，直接通过 Windows HID 控灯")
 
     # 1. 键位映射表
     keymap_path = os.path.join(REPO_ROOT, "calibrated_keymap.json")
@@ -387,7 +387,7 @@ def build_portable_zip(version):
 ## 使用方法：
 1. **单文件直接启动**：双击运行 `Aura.exe` 即可自动激活键盘灯效并开启后台监护。
 2. **Web 配置界面**：启动后打开浏览器访问 `http://127.0.0.1:19898` 即可实时配置灯效方案与规则。
-3. **免驱动/免奥创支持**：Aura 默认采用原生 Win32 HID (MI_01) 协议直接控灯，完全免除 Armoury Crate / ASUS 专有服务与 DLL 依赖！即插即用。
+3. **原生 HID 控灯**：Aura 默认采用原生 Win32 HID (MI_01) 协议直接控灯，运行时不加载 AacKbHal_x64.dll，即插即用。
  
 ## 文件说明：
 - `Aura.exe`: 整合单文件主程序 (已内嵌守护进程、网页配置服务与 Plugin SDK，不内嵌任何 ASUS 专有 DLL)。
@@ -396,8 +396,8 @@ def build_portable_zip(version):
 - `include/`: Aura C++ Plugin SDK 运行时头文件 (供光效工作室原生发布编译，依赖本机 MSVC / C++ Build Tools)。
  
 ## 后端驱动说明：
-- **默认 (Native Win32 HID)**: 即插即用，直接向键盘 MI_01 接口推送 65 字节 HID Report，零华硕软件依赖。
-- **备用 (Legacy ASUS HAL)**: 若需通过华硕官方驱动运行，可通过 `--backend legacy_hal` 启动，仅在已安装 Armoury Crate / ASUS `Aac_Keyboard` 且通过 SHA-256 白名单验证时可用。
+- **默认 (Native Win32 HID)**: 即插即用，直接向键盘 MI_01 接口推送 65 字节 HID Report，运行时不加载 AacKbHal_x64.dll。
+- **备用/回退 (Legacy ASUS HAL)**: 保留 ASUS HAL 兼容路径（auto 模式下当 Native 端点不可用时作为 fallback，或通过 `--backend legacy_hal` 显式启用），仅在已安装 ASUS 官方驱动包且通过 SHA-256 白名单验证时可用。
 """
     readme_path = os.path.join(DIST_DIR, "README_RELEASE.md")
     with open(readme_path, "w", encoding="utf-8") as f:
