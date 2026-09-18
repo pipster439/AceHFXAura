@@ -2482,6 +2482,123 @@ int main() {
         std::cout << "  [*] 兼容性 Gate 纯逻辑与文件校验通过 (CI 模拟环境未连接真实 ASUS 硬件)\n";
     }
 
+    // =========================================================================
+    std::cout << "\n[测试 P1-3] hardware_backend 严格配置与反拼写错误 (Fail-closed) 校验...\n";
+    {
+        auto write_temp_config = [](const nlohmann::json& content) -> std::filesystem::path {
+            std::filesystem::path tmp_p = std::filesystem::temp_directory_path() / ("tmp_backend_cfg_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + ".json");
+            std::ofstream out(tmp_p);
+            out << content.dump(2);
+            return tmp_p;
+        };
+
+        nlohmann::json base_cfg = {
+            {"default_profile", "desktop"},
+            {"fps", 25},
+            {"profiles", {
+                {"desktop", {
+                    {"type", "static"},
+                    {"color", {255, 255, 255}}
+                }}
+            }}
+        };
+
+        // 1. hardware_backend: "native_hid" (有效值)
+        {
+            nlohmann::json cfg = base_cfg;
+            cfg["hardware_backend"] = "native_hid";
+            auto p = write_temp_config(cfg);
+            aura::RuleEngine re;
+            bool ok = re.LoadConfig(p.string());
+            std::filesystem::remove(p);
+            CHECK(ok, "hardware_backend: 'native_hid' 必须加载成功");
+            CHECK(re.GetHardwareBackend() == aura::HardwareBackend::NativeHid,
+                  "GetHardwareBackend 必须为 NativeHid");
+        }
+
+        // 2. hardware_backend: "legacy_hal" (有效值)
+        {
+            nlohmann::json cfg = base_cfg;
+            cfg["hardware_backend"] = "legacy_hal";
+            auto p = write_temp_config(cfg);
+            aura::RuleEngine re;
+            bool ok = re.LoadConfig(p.string());
+            std::filesystem::remove(p);
+            CHECK(ok, "hardware_backend: 'legacy_hal' 必须加载成功");
+            CHECK(re.GetHardwareBackend() == aura::HardwareBackend::LegacyHal,
+                  "GetHardwareBackend 必须为 LegacyHal");
+        }
+
+        // 3. hardware_backend: "auto" (有效值)
+        {
+            nlohmann::json cfg = base_cfg;
+            cfg["hardware_backend"] = "auto";
+            auto p = write_temp_config(cfg);
+            aura::RuleEngine re;
+            bool ok = re.LoadConfig(p.string());
+            std::filesystem::remove(p);
+            CHECK(ok, "hardware_backend: 'auto' 必须加载成功");
+            CHECK(re.GetHardwareBackend() == aura::HardwareBackend::Auto,
+                  "GetHardwareBackend 必须为 Auto");
+        }
+
+        // 4. 拼写错误: "native_hd" (必须 LoadConfig 失败，Fail-closed)
+        {
+            nlohmann::json cfg = base_cfg;
+            cfg["hardware_backend"] = "native_hd";
+            auto p = write_temp_config(cfg);
+            aura::RuleEngine re;
+            bool ok = re.LoadConfig(p.string());
+            std::filesystem::remove(p);
+            CHECK(!ok, "拼写错误 hardware_backend: 'native_hd' 必须导致 LoadConfig 明确失败 (Fail-closed)");
+        }
+
+        // 5. 非法字符串: "invalid_backend" (必须 LoadConfig 失败)
+        {
+            nlohmann::json cfg = base_cfg;
+            cfg["hardware_backend"] = "invalid_backend";
+            auto p = write_temp_config(cfg);
+            aura::RuleEngine re;
+            bool ok = re.LoadConfig(p.string());
+            std::filesystem::remove(p);
+            CHECK(!ok, "非法字符串 hardware_backend: 'invalid_backend' 必须导致 LoadConfig 失败");
+        }
+
+        // 6. 类型错误: 整数 123 (必须 LoadConfig 失败)
+        {
+            nlohmann::json cfg = base_cfg;
+            cfg["hardware_backend"] = 123;
+            auto p = write_temp_config(cfg);
+            aura::RuleEngine re;
+            bool ok = re.LoadConfig(p.string());
+            std::filesystem::remove(p);
+            CHECK(!ok, "类型错误 hardware_backend: 123 (int) 必须导致 LoadConfig 失败");
+        }
+
+        // 7. 类型错误: 对象 {} (必须 LoadConfig 失败)
+        {
+            nlohmann::json cfg = base_cfg;
+            cfg["hardware_backend"] = nlohmann::json::object();
+            auto p = write_temp_config(cfg);
+            aura::RuleEngine re;
+            bool ok = re.LoadConfig(p.string());
+            std::filesystem::remove(p);
+            CHECK(!ok, "类型错误 hardware_backend: {} (object) 必须导致 LoadConfig 失败");
+        }
+
+        // 8. 缺省省略 hardware_backend -> 默认为 Auto
+        {
+            nlohmann::json cfg = base_cfg;
+            auto p = write_temp_config(cfg);
+            aura::RuleEngine re;
+            bool ok = re.LoadConfig(p.string());
+            std::filesystem::remove(p);
+            CHECK(ok, "省略 hardware_backend 必须加载成功");
+            CHECK(re.GetHardwareBackend() == aura::HardwareBackend::Auto,
+                  "省略 hardware_backend 时默认后端必须为 Auto");
+        }
+    }
+
     std::cout << "\n=========================================================\n";
     if (failures == 0) {
         std::cout << "  [SUCCESS] 所有 GSI 前台隔离、游戏事件与回归护栏测试全部 100% 通过！\n";

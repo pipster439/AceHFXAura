@@ -792,6 +792,12 @@ void AuraAdapter::ReleaseLegacyHalInternal() {
     }
 
     fn_set_single_ = nullptr;
+
+    if (hHalMod_) {
+        FreeLibrary(hHalMod_);
+        hHalMod_ = nullptr;
+    }
+    matched_version_ = nullptr;
 }
 
 void AuraAdapter::ReleaseHardwareInternal() {
@@ -820,11 +826,6 @@ void AuraAdapter::Shutdown() {
     }
 
     ReleaseHardwareInternal();
-    if (hHalMod_) {
-        FreeLibrary(hHalMod_);
-        hHalMod_ = nullptr;
-    }
-    matched_version_ = nullptr;
 
     state_ = AdapterState::Uninitialized;
     LOG_INFO("[+] AuraAdapter 已安全关闭并释放所有硬件与 COM 资源");

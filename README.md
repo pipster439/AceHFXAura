@@ -1,6 +1,6 @@
 # Aura for ROG Falchion Ace HFX
 
-Aura 是面向 **ROG Falchion Ace HFX** 的高性能独立 Windows 灯光控制器。它默认通过原生 Win32 HID（`MI_01` 通道）直接向键盘推送 68 键 RGB 帧，**完全摆脱对 Armoury Crate / ASUS 专有服务与闭源 DLL 的依赖**，即插即用。同时提供一个轻量本地 Web Studio，用 Blockly 制作光效、编排前台程序与 CS2 Game State Integration（GSI）自动化。
+Aura 是面向 **ROG Falchion Ace HFX** 的高性能独立 Windows 灯光控制器。它默认通过原生 Win32 HID（`MI_01` 通道）直接向键盘推送 68 键 RGB 帧，默认执行路径**不加载且不依赖 `AacKbHal_x64.dll` 闭源驱动**，即插即用。同时提供一个轻量本地 Web Studio，用 Blockly 制作光效、编排前台程序与 CS2 Game State Integration（GSI）自动化。
 
 当前 alpha 版本号以仓库根目录的 [`VERSION`](VERSION) 为单一事实源；核心能力与已知限制见 [`CHANGELOG.md`](CHANGELOG.md)。
 
@@ -12,7 +12,7 @@ Aura 是面向 **ROG Falchion Ace HFX** 的高性能独立 Windows 灯光控制�
 
 1. **`native_hid`（默认推荐 / 即插即用）**：
    - 直接使用 Windows 原生 HID API (`SetupAPI` / `hid.lib`) 与键盘的 `MI_01` 灯控端点（VID `0x0B05`, PID `0x1B7E`, UsagePage `0xFF00`, Usage `0x0001`）通信。
-   - 进程**绝不加载** `AacKbHal_x64.dll`，无需安装奥创或任何 ASUS 驱动，启动耗时仅微秒级，内存更低、推流零抖动。
+   - 默认执行路径**不加载、不调用** `AacKbHal_x64.dll`，已实机验证 25 FPS 硬件持续稳定推流。
    - 内置固件特定的 64 字节 USB 边界隔离（Byte 63 / Slot 14 填充），彻底杜绝色彩错位与闪烁。
 
 2. **`legacy_hal`（备用排查模式）**：
@@ -24,7 +24,7 @@ Aura 是面向 **ROG Falchion Ace HFX** 的高性能独立 Windows 灯光控制�
    - 优先尝试 `native_hid` 连接硬件；若 HID 端点不可用，则安全回退至 `legacy_hal`。
 
 > **关于顶部灯条 (Light Bar) 说明**：
-> 在键盘硬件固件设计中，顶部灯条在直接 HID 控灯模式下物理镜像第 1 行（Row 1，即 Esc 至 BackSpace 按键）的 RGB 色彩。独立灯条研究（如 `MI_04` / LampArray 协议）目前已明确暂停，以保证核心 68 键灯光引擎的高可靠性、极低延迟与零崩溃。
+> 在当前经过验证的 `MI_01` Native Direct RGB 路径下，顶部 Light Bar 会跟随 Row 1 的灯光表现。独立 Light Bar 控制不属于当前 milestone。
 
 ## 你可以做什么
 
@@ -37,9 +37,9 @@ Aura 是面向 **ROG Falchion Ace HFX** 的高性能独立 Windows 灯光控制�
 
 ## 系统要求
 
-- Windows 11 x64 (支持 Windows 10 x64 21H2+)
+- Windows 11 x64（Windows 10 x64：未经测试 / 未正式验证）
 - ROG Falchion Ace HFX 机械键盘
-- **无需安装 Armoury Crate 或任何 ASUS 驱动**（若使用备用 `--backend legacy_hal` 则需要本地驱动）
+- 默认 Native 模式不依赖本地 ASUS 闭源驱动（若使用备用 `--backend legacy_hal` 则需要本地已安装的 `AacKbHal_x64.dll`）
 - Visual Studio 2022 / 2026 Build Tools 或 Visual Studio，安装“使用 C++ 的桌面开发”、x64 MSVC 工具集和 Windows SDK（用于 Studio 制作并编译发布原生光效 DLL）
 - CMake 3.20 或更新版本
 - Node.js 与 npm（构建 Web Studio 时需要）
@@ -171,7 +171,7 @@ aura_daemon.exe (127.0.0.1:19897)
         ├─ RuleEngine：统一规则、兜底方案、配置热重载
         ├─ EffectEngine + OverlayManager：基础方案与多层叠加
         ├─ PluginManager：插件发现、影子加载与热重载
-        └─ AuraAdapter：将 128 通道帧推送到 ASUS 键盘 HAL
+        └─ AuraAdapter：将 128 通道帧推送到 Native HID (默认) 或 ASUS 键盘 HAL (备用)
 ```
 
 硬件调用只发生在 daemon 主推流路径；GSI 和 Web 请求线程只更新内存状态或转发请求。配置写入后由 daemon 按文件时间戳热重载。全局与 Profile 帧率会被限制在 10–100 FPS；配置没有指定帧率时回退到 25 FPS，仓库的首次启动模板当前设为 100 FPS。
@@ -255,5 +255,5 @@ AceHFXAura is licensed under the GNU General Public License v3.0 only (`GPL-3.0-
 See [LICENSE](LICENSE) for details.
 
 - ASUS, ROG, Armoury Crate, and related marks/assets belong to their respective owners.
-- The default backend communicates via native Win32 HID APIs and does not load or require ASUS software.
+- The default backend communicates via native Win32 HID APIs and does not load or require AacKbHal_x64.dll.
 - The legacy fallback interacts with local `AacKbHal_x64.dll` only when explicitly requested and verified via SHA-256 gate. Public releases never bundle or redistribute proprietary ASUS components.

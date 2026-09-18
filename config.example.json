@@ -1,6 +1,7 @@
 {
   "default_profile": "desktop",
   "fps": 100,
+  "hardware_backend": "auto",
   "rules": [
     {
       "process": "cs2.exe",

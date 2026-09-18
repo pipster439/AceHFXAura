@@ -2,6 +2,36 @@
 
 所有值得关注的变更都记录在此。发行版本号以仓库根目录的 [`VERSION`](VERSION) 为单一事实源。
 
+## [0.1.0-alpha.2]
+
+### 新增
+
+- **Native Win32 HID MI_01 后端**：直接通过 Windows 原生 HID API (`SetupAPI` / `hid.lib`) 与键盘 `MI_01` 灯控端点通信。
+- **默认 Auto 模式**：优先尝试 Native HID 连接；仅在 HID 端点不可用时安全回退至 legacy HAL。
+- **显式 Backend 配置**：支持通过 CLI 参数 `--backend` 或配置文件 `hardware_backend` 指定 `auto`、`native_hid`、`legacy_hal`。
+- **免专有驱动驻留**：Native HID 默认路径不加载、不调用 `AacKbHal_x64.dll`。
+
+### 改进
+
+- **USB 边界隔离保留**：内置固件特定的 64 字节 USB 边界隔离（Byte 63 / Slot 14 填充），杜绝色彩错位与闪烁。
+- **HID 端点严格匹配**：基于 VID `0x0B05`、PID `0x1B7E`、UsagePage `0xFF00`、Usage `0x0001`、ReportLength 65 与接口路径进行严格白名单过滤。
+- **Legacy HAL 架构降级**：原闭源驱动路径作为备用排查与回退方案（保留 SHA-256 与内存崩溃防御补丁）。
+
+### 修复
+
+- **Overlapped I/O 超时与取消生命周期**：改用 `CancelIoEx` 精准取消，并在返回前通过 `GetOverlappedResult(..., TRUE)` 确保 completion drain，妥善处理 completion race，杜绝栈上 `OVERLAPPED` 生命周期逸出导致 UAF；补齐同步与异步 65 字节短写校验。
+- **Legacy HAL 模块彻底卸载**：`ReleaseLegacyHalInternal()` 在释放 COM 接口后执行 `FreeLibrary(hHalMod_)` 与状态指针置零，确保 legacy → native 切换后 DLL 不再驻留进程。
+- **异常退出隔离探测后端继承**：主进程在加载配置后统一计算 `resolved_backend`，`--probe-hardware` 隔离子进程无条件继承配置的 backend，避免配置 `native_hid` 时子进程回退到 auto / legacy。
+- **严格 Backend 参数与配置校验**：引入 `TryParseHardwareBackend`，CLI 非法后端参数立即以错误码 1 退出，`config.json` 中拼写错误（如 `native_hd`）明确使 `LoadConfig` 失败，杜绝静默降级为 Auto。
+
+### 已知限制
+
+- 当前仅在 Windows 11 x64 + ROG Falchion Ace HFX 实机上完成严格验证；Windows 10 未经验证。
+- 独立 Light Bar 控制未实现；在当前已验证的 MI_01 Native Direct RGB 路径下，顶部 Light Bar 灯光表现跟随 Row 1。
+- Studio 原生 C++ 插件发布仍要求本机安装 MSVC Build Tools / Visual Studio、C++ Desktop workload 与 Windows SDK。
+- CS2 实际提供的 GSI 字段受对局与观战模式限制。
+- 已发布插件的历史 DLL 尚不会自动清理。
+
 ## [0.1.0-alpha.1]
 
 ### 核心能力

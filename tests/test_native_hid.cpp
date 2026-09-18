@@ -181,20 +181,68 @@ bool TestByte63PaddingAndHardwareTable() {
 
 // 4. Backend config parsing and string conversions
 bool TestBackendConfigParse() {
-    std::cout << "[Test 4] Backend Config Parse..." << std::endl;
+    std::cout << "[Test 4] Backend Config Parse & Strict TryParse..." << std::endl;
 
-    TEST_ASSERT(aura::StringToHardwareBackend("auto") == aura::HardwareBackend::Auto, "auto parse");
-    TEST_ASSERT(aura::StringToHardwareBackend("native_hid") == aura::HardwareBackend::NativeHid, "native_hid parse");
-    TEST_ASSERT(aura::StringToHardwareBackend("native") == aura::HardwareBackend::NativeHid, "native parse");
-    TEST_ASSERT(aura::StringToHardwareBackend("legacy_hal") == aura::HardwareBackend::LegacyHal, "legacy_hal parse");
-    TEST_ASSERT(aura::StringToHardwareBackend("hal") == aura::HardwareBackend::LegacyHal, "hal parse");
-    TEST_ASSERT(aura::StringToHardwareBackend("unknown_val") == aura::HardwareBackend::Auto, "fallback to auto");
+    aura::HardwareBackend b = aura::HardwareBackend::Auto;
 
+    // Strict TryParseHardwareBackend: valid values
+    TEST_ASSERT(aura::TryParseHardwareBackend("auto", b) && b == aura::HardwareBackend::Auto, "auto parse");
+    TEST_ASSERT(aura::TryParseHardwareBackend("Auto", b) && b == aura::HardwareBackend::Auto, "Auto parse");
+    TEST_ASSERT(aura::TryParseHardwareBackend("AUTO", b) && b == aura::HardwareBackend::Auto, "AUTO parse");
+
+    TEST_ASSERT(aura::TryParseHardwareBackend("native_hid", b) && b == aura::HardwareBackend::NativeHid, "native_hid parse");
+    TEST_ASSERT(aura::TryParseHardwareBackend("NATIVE_HID", b) && b == aura::HardwareBackend::NativeHid, "NATIVE_HID parse");
+    TEST_ASSERT(aura::TryParseHardwareBackend("native", b) && b == aura::HardwareBackend::NativeHid, "native parse");
+    TEST_ASSERT(aura::TryParseHardwareBackend("Native", b) && b == aura::HardwareBackend::NativeHid, "Native parse");
+    TEST_ASSERT(aura::TryParseHardwareBackend("hid", b) && b == aura::HardwareBackend::NativeHid, "hid parse");
+    TEST_ASSERT(aura::TryParseHardwareBackend("HID", b) && b == aura::HardwareBackend::NativeHid, "HID parse");
+
+    TEST_ASSERT(aura::TryParseHardwareBackend("legacy_hal", b) && b == aura::HardwareBackend::LegacyHal, "legacy_hal parse");
+    TEST_ASSERT(aura::TryParseHardwareBackend("LEGACY_HAL", b) && b == aura::HardwareBackend::LegacyHal, "LEGACY_HAL parse");
+    TEST_ASSERT(aura::TryParseHardwareBackend("legacy", b) && b == aura::HardwareBackend::LegacyHal, "legacy parse");
+    TEST_ASSERT(aura::TryParseHardwareBackend("hal", b) && b == aura::HardwareBackend::LegacyHal, "hal parse");
+    TEST_ASSERT(aura::TryParseHardwareBackend("HAL", b) && b == aura::HardwareBackend::LegacyHal, "HAL parse");
+
+    // Strict TryParseHardwareBackend: invalid values (must return false)
+    TEST_ASSERT(!aura::TryParseHardwareBackend("native_hd", b), "typo native_hd must fail");
+    TEST_ASSERT(!aura::TryParseHardwareBackend("asdf", b), "random string must fail");
+    TEST_ASSERT(!aura::TryParseHardwareBackend("", b), "empty string must fail");
+    TEST_ASSERT(!aura::TryParseHardwareBackend("123", b), "numeric string must fail");
+    TEST_ASSERT(!aura::TryParseHardwareBackend("autoo", b), "autoo must fail");
+    TEST_ASSERT(!aura::TryParseHardwareBackend("legacy_ha", b), "prefix typo must fail");
+
+    // StringToHardwareBackend
+    TEST_ASSERT(aura::StringToHardwareBackend("native_hid") == aura::HardwareBackend::NativeHid, "StringToHardwareBackend valid");
+    TEST_ASSERT(aura::StringToHardwareBackend("unknown_val") == aura::HardwareBackend::Auto, "StringToHardwareBackend fallback to auto");
+
+    // HardwareBackendToString
     TEST_ASSERT(std::string(aura::HardwareBackendToString(aura::HardwareBackend::Auto)) == "auto", "to string auto");
     TEST_ASSERT(std::string(aura::HardwareBackendToString(aura::HardwareBackend::NativeHid)) == "native_hid", "to string native_hid");
     TEST_ASSERT(std::string(aura::HardwareBackendToString(aura::HardwareBackend::LegacyHal)) == "legacy_hal", "to string legacy_hal");
 
     std::cout << "  [PASS] Backend config parse verified." << std::endl;
+    return true;
+}
+
+// 5. Backend resolution precedence (CLI > config > default)
+bool TestResolvedBackendPrecedence() {
+    std::cout << "[Test 5] Resolved Backend Precedence..." << std::endl;
+
+    // CLI overrides config
+    TEST_ASSERT(aura::ResolveHardwareBackend(true, aura::HardwareBackend::NativeHid, aura::HardwareBackend::LegacyHal) == aura::HardwareBackend::NativeHid,
+                "CLI native_hid must override config legacy_hal");
+    TEST_ASSERT(aura::ResolveHardwareBackend(true, aura::HardwareBackend::LegacyHal, aura::HardwareBackend::NativeHid) == aura::HardwareBackend::LegacyHal,
+                "CLI legacy_hal must override config native_hid");
+
+    // Config used when no CLI override
+    TEST_ASSERT(aura::ResolveHardwareBackend(false, aura::HardwareBackend::Auto, aura::HardwareBackend::NativeHid) == aura::HardwareBackend::NativeHid,
+                "Config native_hid used when no CLI");
+    TEST_ASSERT(aura::ResolveHardwareBackend(false, aura::HardwareBackend::Auto, aura::HardwareBackend::LegacyHal) == aura::HardwareBackend::LegacyHal,
+                "Config legacy_hal used when no CLI");
+    TEST_ASSERT(aura::ResolveHardwareBackend(false, aura::HardwareBackend::Auto, aura::HardwareBackend::Auto) == aura::HardwareBackend::Auto,
+                "Default auto when neither specified");
+
+    std::cout << "  [PASS] Resolved backend precedence verified." << std::endl;
     return true;
 }
 
@@ -367,6 +415,7 @@ int main(int argc, char* argv[]) {
     all_passed &= TestPacketBuilder();
     all_passed &= TestByte63PaddingAndHardwareTable();
     all_passed &= TestBackendConfigParse();
+    all_passed &= TestResolvedBackendPrecedence();
     all_passed &= TestAdapterBackendSelection();
     all_passed &= TestNativeBackendErrorPropagation();
 

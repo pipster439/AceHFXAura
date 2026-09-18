@@ -271,20 +271,50 @@ bool NativeHidBackend::SendReport(const std::array<uint8_t, HID_REPORT_SIZE>& re
     );
 
     if (res) {
-        return true;
+        if (bytesWritten == HID_REPORT_SIZE) {
+            return true;
+        }
+        last_error_ = "WriteFile 同步短写: 期望 " + std::to_string(HID_REPORT_SIZE) + " 字节，实际写入 " + std::to_string(bytesWritten) + " 字节";
+        return false;
     }
 
     DWORD err = ::GetLastError();
     if (err == ERROR_IO_PENDING) {
         DWORD waitRes = WaitForSingleObject(hEvent_, 100);
         if (waitRes == WAIT_OBJECT_0) {
-            if (GetOverlappedResult(hDevice_, &ov, &bytesWritten, FALSE) && bytesWritten == HID_REPORT_SIZE) {
-                return true;
+            if (GetOverlappedResult(hDevice_, &ov, &bytesWritten, FALSE)) {
+                if (bytesWritten == HID_REPORT_SIZE) {
+                    return true;
+                }
+                last_error_ = "WriteFile 异步短写: 期望 " + std::to_string(HID_REPORT_SIZE) + " 字节，实际写入 " + std::to_string(bytesWritten) + " 字节";
+                return false;
             }
             err = ::GetLastError();
         } else {
-            CancelIo(hDevice_);
-            last_error_ = "WriteFile 异步超时 (100ms)";
+            // 超时或等待失败：精准取消本次 I/O 请求
+            CancelIoEx(hDevice_, &ov);
+
+            // 无论 CancelIoEx 返回何值（含 ERROR_NOT_FOUND 即取消前已完成的情况），
+            // 在栈上 ov 离开作用域前必须调用 GetOverlappedResult(..., TRUE) 彻底 drain 完成状态，
+            // 确保驱动/内核不再持有对 ov 的任何引用。
+            DWORD drainBytes = 0;
+            BOOL drainOk = GetOverlappedResult(hDevice_, &ov, &drainBytes, TRUE);
+            if (drainOk) {
+                // 请求在超时边界或取消发起前已实际完成写入 (Completion Race)
+                if (drainBytes == HID_REPORT_SIZE) {
+                    return true;
+                }
+                last_error_ = "WriteFile 异步完成但短写: 期望 " + std::to_string(HID_REPORT_SIZE) + " 字节，实际写入 " + std::to_string(drainBytes) + " 字节";
+                return false;
+            }
+
+            DWORD drainErr = ::GetLastError();
+            if (drainErr == ERROR_OPERATION_ABORTED) {
+                // 预期取消：内核已中止该请求，不属于未知硬件故障
+                last_error_ = "WriteFile 异步超时 (100ms)，已成功取消并回收 I/O 请求";
+            } else {
+                last_error_ = "WriteFile 异步超时且取消异常，Win32 错误码: " + std::to_string(drainErr);
+            }
             return false;
         }
     }

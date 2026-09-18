@@ -277,7 +277,11 @@ int main(int argc, char* argv[]) {
                 return 1;
             }
             std::string b_str = argv[++i];
-            cli_backend = aura::StringToHardwareBackend(b_str);
+            if (!aura::TryParseHardwareBackend(b_str, cli_backend)) {
+                std::cerr << "错误: 未知的硬件后端: " << b_str << " (支持: auto, native_hid, native, hid, legacy_hal, legacy, hal)\n\n";
+                PrintUsage();
+                return 1;
+            }
             has_cli_backend = true;
         } else if (arg == "--help" || arg == "-h") {
             PrintUsage();
@@ -451,6 +455,8 @@ int main(int argc, char* argv[]) {
         LOG_WARN("加载配置文件失败: " + config_path + "，将使用内部预设规则");
     }
 
+    aura::HardwareBackend resolved_backend = aura::ResolveHardwareBackend(has_cli_backend, cli_backend, rule_engine.GetHardwareBackend());
+
     // 8. 挂载华硕底层驱动适配器 (在主线程完全拥有，杜绝多线程 COM 激活冲突)
     bool probe_failed = false;
     if (had_abnormal_exit && !dry_run) {
@@ -468,11 +474,9 @@ int main(int argc, char* argv[]) {
                     cmd += L" --keymap \"" + std::wstring(wbuf.data()) + L"\"";
                 }
             }
-            if (has_cli_backend) {
-                cmd += L" --backend ";
-                std::string bname = aura::HardwareBackendToString(cli_backend);
-                cmd += std::wstring(bname.begin(), bname.end());
-            }
+            cmd += L" --backend ";
+            std::string bname = aura::HardwareBackendToString(resolved_backend);
+            cmd += std::wstring(bname.begin(), bname.end());
 
             STARTUPINFOW si{};
             si.cb = sizeof(si);
@@ -518,8 +522,7 @@ int main(int argc, char* argv[]) {
         RemoveAllStateFiles();
     }
 
-    aura::HardwareBackend hw_backend = has_cli_backend ? cli_backend : rule_engine.GetHardwareBackend();
-    aura::AuraAdapter adapter(dry_run, hw_backend);
+    aura::AuraAdapter adapter(dry_run, resolved_backend);
     if (!adapter.Initialize(&keymap)) {
         LOG_WARN("底层硬件初次挂载未就绪，将在推流循环中自动重连");
     } else {

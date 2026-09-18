@@ -487,8 +487,18 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
         }
 
         HardwareBackend new_backend = HardwareBackend::Auto;
-        if (j.contains("hardware_backend") && j["hardware_backend"].is_string()) {
-            new_backend = StringToHardwareBackend(j["hardware_backend"].get<std::string>());
+        if (j.contains("hardware_backend")) {
+            if (!j["hardware_backend"].is_string()) {
+                LOG_ERROR("配置文件中 'hardware_backend' 字段必须为字符串: " << config_path);
+                valid = false;
+            } else {
+                std::string backend_str = j["hardware_backend"].get<std::string>();
+                if (!TryParseHardwareBackend(backend_str, new_backend)) {
+                    LOG_ERROR("配置文件中 'hardware_backend' 包含未知或不支持的值: '" << backend_str 
+                              << "' (支持的有效值: auto, native_hid, native, hid, legacy_hal, legacy, hal): " << config_path);
+                    valid = false;
+                }
+            }
         }
 
         if (j.contains("default_profile")) {

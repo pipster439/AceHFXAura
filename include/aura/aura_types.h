@@ -13,6 +13,7 @@
 #include <cstring>
 #include <algorithm>
 #include <string>
+#include <cctype>
 
 namespace aura {
 
@@ -43,10 +44,34 @@ inline const char* HardwareBackendToString(HardwareBackend b) {
     }
 }
 
+inline bool TryParseHardwareBackend(const std::string& str, HardwareBackend& out_backend) {
+    std::string s = str;
+    for (auto& c : s) {
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
+    if (s == "auto") {
+        out_backend = HardwareBackend::Auto;
+        return true;
+    }
+    if (s == "native_hid" || s == "native" || s == "hid") {
+        out_backend = HardwareBackend::NativeHid;
+        return true;
+    }
+    if (s == "legacy_hal" || s == "legacy" || s == "hal") {
+        out_backend = HardwareBackend::LegacyHal;
+        return true;
+    }
+    return false;
+}
+
 inline HardwareBackend StringToHardwareBackend(const std::string& s) {
-    if (s == "native_hid" || s == "native" || s == "hid") return HardwareBackend::NativeHid;
-    if (s == "legacy_hal" || s == "hal" || s == "legacy") return HardwareBackend::LegacyHal;
-    return HardwareBackend::Auto;
+    HardwareBackend b = HardwareBackend::Auto;
+    TryParseHardwareBackend(s, b);
+    return b;
+}
+
+inline HardwareBackend ResolveHardwareBackend(bool has_cli_backend, HardwareBackend cli_backend, HardwareBackend config_backend) {
+    return has_cli_backend ? cli_backend : config_backend;
 }
 
 constexpr size_t TOTAL_LEDS = 128;
