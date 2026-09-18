@@ -13,7 +13,7 @@ Aura 是面向 **ROG Falchion Ace HFX** 的高性能独立 Windows 灯光控制�
 1. **`native_hid`（默认推荐 / 即插即用）**：
    - 直接使用 Windows 原生 HID API (`SetupAPI` / `hid.lib`) 与键盘的 `MI_01` 灯控端点（VID `0x0B05`, PID `0x1B7E`, UsagePage `0xFF00`, Usage `0x0001`）通信。
    - 默认执行路径**不加载、不调用** `AacKbHal_x64.dll`，已实机验证 25 FPS 硬件持续稳定推流。
-   - 内置固件特定的 64 字节 USB 边界隔离（Byte 63 / Slot 14 填充），彻底杜绝色彩错位与闪烁。
+   - 内置固件特定的 64 字节 USB 边界隔离（Byte 63 / Slot 14 填充），规避当前硬件实测中观察到的 Byte63 / Slot14 色彩异常与闪烁。
 
 2. **`legacy_hal`（备用排查模式）**：
    - 保留原华硕闭源驱动兼容路径，用于历史对比与疑难排查。
@@ -22,6 +22,9 @@ Aura 是面向 **ROG Falchion Ace HFX** 的高性能独立 Windows 灯光控制�
 
 3. **`auto`（默认策略）**：
    - 优先尝试 `native_hid` 连接硬件；若 HID 端点不可用，则安全回退至 `legacy_hal`。
+
+> **关于后端切换说明**：
+> `hardware_backend` 暂未实现运行时动态切换。修改 `config.json` 中的 `hardware_backend` 配置后，需要重启 daemon 进程才能生效；命令行 `--backend` 参数具有更高优先级。
 
 > **关于顶部灯条 (Light Bar) 说明**：
 > 在当前经过验证的 `MI_01` Native Direct RGB 路径下，顶部 Light Bar 会跟随 Row 1 的灯光表现。独立 Light Bar 控制不属于当前 milestone。

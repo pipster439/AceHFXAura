@@ -291,6 +291,8 @@ bool NativeHidBackend::SendReport(const std::array<uint8_t, HID_REPORT_SIZE>& re
             }
             err = ::GetLastError();
         } else {
+            DWORD waitErr = (waitRes == WAIT_FAILED) ? ::GetLastError() : 0;
+
             // 超时或等待失败：精准取消本次 I/O 请求
             CancelIoEx(hDevice_, &ov);
 
@@ -309,11 +311,21 @@ bool NativeHidBackend::SendReport(const std::array<uint8_t, HID_REPORT_SIZE>& re
             }
 
             DWORD drainErr = ::GetLastError();
-            if (drainErr == ERROR_OPERATION_ABORTED) {
-                // 预期取消：内核已中止该请求，不属于未知硬件故障
-                last_error_ = "WriteFile 异步超时 (100ms)，已成功取消并回收 I/O 请求";
+            if (waitRes == WAIT_TIMEOUT) {
+                if (drainErr == ERROR_OPERATION_ABORTED) {
+                    // 预期取消：内核已中止该请求，不属于未知硬件故障
+                    last_error_ = "WriteFile 异步等待超时 (100ms)，已成功取消并回收 I/O 请求";
+                } else {
+                    last_error_ = "WriteFile 异步等待超时 (100ms) 且取消后状态异常，Win32 错误码: " + std::to_string(drainErr);
+                }
+            } else if (waitRes == WAIT_FAILED) {
+                if (drainErr == ERROR_OPERATION_ABORTED) {
+                    last_error_ = "WaitForSingleObject 失败，Win32 错误码: " + std::to_string(waitErr) + "，已成功取消并回收 I/O 请求";
+                } else {
+                    last_error_ = "WaitForSingleObject 失败，错误码: " + std::to_string(waitErr) + "，取消后状态码: " + std::to_string(drainErr);
+                }
             } else {
-                last_error_ = "WriteFile 异步超时且取消异常，Win32 错误码: " + std::to_string(drainErr);
+                last_error_ = "WaitForSingleObject 异常状态码: " + std::to_string(waitRes) + "，取消后状态码: " + std::to_string(drainErr);
             }
             return false;
         }

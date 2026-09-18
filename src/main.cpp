@@ -452,7 +452,11 @@ int main(int argc, char* argv[]) {
 
     aura::RuleEngine rule_engine;
     if (!rule_engine.LoadConfig(config_path)) {
-        LOG_WARN("加载配置文件失败: " + config_path + "，将使用内部预设规则");
+        LOG_ERROR("FATAL: 配置文件加载或校验失败: " + config_path + "，启动中止 (Fail-closed)");
+        std::cerr << "错误: 配置文件加载或校验失败: " << config_path << "\n";
+        RemoveAllStateFiles();
+        if (hMutex) CloseHandle(hMutex);
+        return 1;
     }
 
     aura::HardwareBackend resolved_backend = aura::ResolveHardwareBackend(has_cli_backend, cli_backend, rule_engine.GetHardwareBackend());
