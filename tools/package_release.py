@@ -195,9 +195,7 @@ def ensure_binaries(clean=False):
 
 def ensure_assets():
     print("\n--- 步骤 2: 验证并准备资产文件 ---")
-    # ASUS AacKbHal_x64.dll 是用户本机驱动资产，不复制、不内嵌、不打包。
-    # daemon 运行时会从 ASUS 安装目录/注册路径定位，并在加载前执行 SHA-256 兼容性 Gate。
-    print("[INFO] 公开发行包不包含 AacKbHal_x64.dll；运行时使用用户本机 ASUS 安装的已验证版本")
+    print("[INFO] 公开发行包默认采用 Native Win32 HID 后端，不依赖任何 ASUS 专有服务与 DLL")
 
     # 1. 键位映射表
     keymap_path = os.path.join(REPO_ROOT, "calibrated_keymap.json")
@@ -385,20 +383,21 @@ def build_portable_zip(version):
     zip_path = os.path.join(DIST_DIR, zip_name)
 
     readme_content = f"""# ROG Falchion Ace HFX - Aura Lighting Controller (Release {version})
-
+ 
 ## 使用方法：
 1. **单文件直接启动**：双击运行 `Aura.exe` 即可自动激活键盘灯效并开启后台监护。
 2. **Web 配置界面**：启动后打开浏览器访问 `http://127.0.0.1:19898` 即可实时配置灯效方案与规则。
-3. **ASUS 组件要求**：公开发行包不携带 ASUS 专有 DLL。请先安装 Armoury Crate / ASUS `Aac_Keyboard` 驱动包。
-
+3. **免驱动/免奥创支持**：Aura 默认采用原生 Win32 HID (MI_01) 协议直接控灯，完全免除 Armoury Crate / ASUS 专有服务与 DLL 依赖！即插即用。
+ 
 ## 文件说明：
-- `Aura.exe`: 整合单文件主程序 (已内嵌守护进程、网页配置服务与 Plugin SDK，不内嵌 ASUS DLL)。
+- `Aura.exe`: 整合单文件主程序 (已内嵌守护进程、网页配置服务与 Plugin SDK，不内嵌任何 ASUS 专有 DLL)。
 - `config.example.json`: 配置文件模板 (若当前目录下无 config.json，启动时会自动生成)。
 - `calibrated_keymap.json`: 68 键物理键位与硬件通道映射表。
 - `include/`: Aura C++ Plugin SDK 运行时头文件 (供光效工作室原生发布编译，依赖本机 MSVC / C++ Build Tools)。
-
-## ASUS HAL 说明：
-Aura 运行时会从 ASUS 官方安装目录或注册路径定位 `AacKbHal_x64.dll`，并在加载前校验已验证的 SHA-256 与内存签名。缺失或版本不受支持时，硬件控制会安全失败；请从 ASUS 官方软件恢复驱动，不要从非官方来源下载 DLL。
+ 
+## 后端驱动说明：
+- **默认 (Native Win32 HID)**: 即插即用，直接向键盘 MI_01 接口推送 65 字节 HID Report，零华硕软件依赖。
+- **备用 (Legacy ASUS HAL)**: 若需通过华硕官方驱动运行，可通过 `--backend legacy_hal` 启动，仅在已安装 Armoury Crate / ASUS `Aac_Keyboard` 且通过 SHA-256 白名单验证时可用。
 """
     readme_path = os.path.join(DIST_DIR, "README_RELEASE.md")
     with open(readme_path, "w", encoding="utf-8") as f:

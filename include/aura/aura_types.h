@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <cstring>
 #include <algorithm>
+#include <string>
 
 namespace aura {
 
@@ -26,6 +27,27 @@ inline const GUID IID_IAsusAacLedDeviceHal = {
     0xF2C8D5B4, 0x3854, 0x4325,
     { 0x8A, 0x4F, 0xFD, 0x7C, 0x50, 0x72, 0xE3, 0xBA }
 };
+
+enum class HardwareBackend {
+    Auto,
+    NativeHid,
+    LegacyHal
+};
+
+inline const char* HardwareBackendToString(HardwareBackend b) {
+    switch (b) {
+        case HardwareBackend::Auto: return "auto";
+        case HardwareBackend::NativeHid: return "native_hid";
+        case HardwareBackend::LegacyHal: return "legacy_hal";
+        default: return "unknown";
+    }
+}
+
+inline HardwareBackend StringToHardwareBackend(const std::string& s) {
+    if (s == "native_hid" || s == "native" || s == "hid") return HardwareBackend::NativeHid;
+    if (s == "legacy_hal" || s == "hal" || s == "legacy") return HardwareBackend::LegacyHal;
+    return HardwareBackend::Auto;
+}
 
 constexpr size_t TOTAL_LEDS = 128;
 constexpr size_t RGB_CHANNELS = 3;

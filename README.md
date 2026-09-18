@@ -1,10 +1,30 @@
 # Aura for ROG Falchion Ace HFX
 
-Aura 是面向 **ROG Falchion Ace HFX** 的 Windows 灯光控制器。它通过 ASUS 键盘 HAL 向 68 个已标定按键推送 RGB 帧，并提供一个本地 Web Studio，用 Blockly 制作光效、编排前台程序与 CS2 Game State Integration（GSI）自动化。
+Aura 是面向 **ROG Falchion Ace HFX** 的高性能独立 Windows 灯光控制器。它默认通过原生 Win32 HID（`MI_01` 通道）直接向键盘推送 68 键 RGB 帧，**完全摆脱对 Armoury Crate / ASUS 专有服务与闭源 DLL 的依赖**，即插即用。同时提供一个轻量本地 Web Studio，用 Blockly 制作光效、编排前台程序与 CS2 Game State Integration（GSI）自动化。
 
 当前 alpha 版本号以仓库根目录的 [`VERSION`](VERSION) 为单一事实源；核心能力与已知限制见 [`CHANGELOG.md`](CHANGELOG.md)。
 
-当前版本的完整链路已经过真机验证：启动 daemon、打开 Studio、预览与发布 Blockly 光效、接收 CS2 GSI、按规则切换基础方案并叠加事件/状态光效。
+当前版本的完整链路已经过物理键盘实机严格验证：全黑、纯色、单键变色、25 FPS 持续推流、启动 daemon、打开 Studio、预览与发布 Blockly 光效、接收 CS2 GSI、按规则切换基础方案并叠加事件/状态光效。
+
+## 硬件后端架构 (Hardware Backends)
+
+本项目支持两种硬件后端，由配置项 `hardware_backend` 或启动参数 `--backend` 控制：
+
+1. **`native_hid`（默认推荐 / 即插即用）**：
+   - 直接使用 Windows 原生 HID API (`SetupAPI` / `hid.lib`) 与键盘的 `MI_01` 灯控端点（VID `0x0B05`, PID `0x1B7E`, UsagePage `0xFF00`, Usage `0x0001`）通信。
+   - 进程**绝不加载** `AacKbHal_x64.dll`，无需安装奥创或任何 ASUS 驱动，启动耗时仅微秒级，内存更低、推流零抖动。
+   - 内置固件特定的 64 字节 USB 边界隔离（Byte 63 / Slot 14 填充），彻底杜绝色彩错位与闪烁。
+
+2. **`legacy_hal`（备用排查模式）**：
+   - 保留原华硕闭源驱动兼容路径，用于历史对比与疑难排查。
+   - 需要用户本机已安装 Armoury Crate / ASUS `Aac_Keyboard` 驱动包中的 `AacKbHal_x64.dll`。
+   - 强制启用 SHA-256 白名单文件 Gate、模块签名 Gate 以及内存崩溃防御补丁（禁用致命空指针日志并置零 EnableLog）。
+
+3. **`auto`（默认策略）**：
+   - 优先尝试 `native_hid` 连接硬件；若 HID 端点不可用，则安全回退至 `legacy_hal`。
+
+> **关于顶部灯条 (Light Bar) 说明**：
+> 在键盘硬件固件设计中，顶部灯条在直接 HID 控灯模式下物理镜像第 1 行（Row 1，即 Esc 至 BackSpace 按键）的 RGB 色彩。独立灯条研究（如 `MI_04` / LampArray 协议）目前已明确暂停，以保证核心 68 键灯光引擎的高可靠性、极低延迟与零崩溃。
 
 ## 你可以做什么
 
@@ -17,10 +37,10 @@ Aura 是面向 **ROG Falchion Ace HFX** 的 Windows 灯光控制器。它通过 
 
 ## 系统要求
 
-- Windows 11 x64
-- ROG Falchion Ace HFX
-- ASUS 键盘 HAL：必须由用户本机的 Armoury Crate / `Aac_Keyboard` 官方驱动包安装；公开 Release 不携带该专有 DLL
-- Visual Studio 2022 Build Tools 或 Visual Studio 2022，安装“使用 C++ 的桌面开发”、x64 MSVC 工具集和 Windows SDK
+- Windows 11 x64 (支持 Windows 10 x64 21H2+)
+- ROG Falchion Ace HFX 机械键盘
+- **无需安装 Armoury Crate 或任何 ASUS 驱动**（若使用备用 `--backend legacy_hal` 则需要本地驱动）
+- Visual Studio 2022 / 2026 Build Tools 或 Visual Studio，安装“使用 C++ 的桌面开发”、x64 MSVC 工具集和 Windows SDK（用于 Studio 制作并编译发布原生光效 DLL）
 - CMake 3.20 或更新版本
 - Node.js 与 npm（构建 Web Studio 时需要）
 
@@ -226,7 +246,7 @@ ctest --test-dir build -C Release --output-on-failure
 ## 免责声明与第三方资产声明 (Disclaimer & Third-Party Notice)
 
 1. **商标与版权**：ASUS、ROG (Republic of Gamers)、Armoury Crate 及相关标志均为 ASUSTeK Computer Inc. 的注册商标或商标。Counter-Strike、CS2 与 Game State Integration (GSI) 均为 Valve Corporation 的注册商标或商标。本项目为独立第三方开源软件，与华硕或 Valve 均无官方关联、赞助或背书关系。
-2. **底层驱动组件**：本项目对键盘底层的灯效控制通过 ASUS 官方硬件抽象库（如 `AacKbHal_x64.dll`）实现。该 DLL 属于华硕专有资产，不属于 AceHFXAura 的 GPL 授权内容；本仓库未获得其重新分发授权，因此公开 Release 默认不内嵌或附带该 DLL，只使用用户本机已安装且通过兼容性 Gate 的华硕官方组件。
+2. **底层通信与驱动组件**：本项目默认通过标准 Windows HID 协议直接与硬件通信，不加载、不复制、亦不依赖任何华硕专有动态链接库。仅在显式指定旧版排查模式（`legacy_hal`）时，才会尝试与用户本机已安装的华硕官方组件交互（需通过 SHA-256 Gate 鉴权）。该闭源 DLL 属于华硕专有资产，不属于本项目开源范围，公开 Release 严禁内嵌或分发该 DLL。
 3. **软件许可 (LICENSE)**：AceHFXAura 项目代码采用 GNU General Public License v3.0 only（SPDX 标识：`GPL-3.0-only`），详情见根目录 [LICENSE](LICENSE)。发布与使用本项目须遵守当地法律法规及第三方相关最终用户许可协议 (EULA)。
 
 ## License
@@ -235,5 +255,5 @@ AceHFXAura is licensed under the GNU General Public License v3.0 only (`GPL-3.0-
 See [LICENSE](LICENSE) for details.
 
 - ASUS, ROG, Armoury Crate, and related marks/assets belong to their respective owners.
-- `AacKbHal_x64.dll` is an ASUS proprietary component and is **not** covered by the AceHFXAura GPL license.
-- Public releases do not bundle or redistribute this DLL; Aura only interacts with official ASUS drivers installed locally that pass compatibility gate verification.
+- The default backend communicates via native Win32 HID APIs and does not load or require ASUS software.
+- The legacy fallback interacts with local `AacKbHal_x64.dll` only when explicitly requested and verified via SHA-256 gate. Public releases never bundle or redistribute proprietary ASUS components.

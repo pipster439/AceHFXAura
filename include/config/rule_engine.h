@@ -127,6 +127,10 @@ public:
         std::lock_guard<std::mutex> lock(mutex_);
         return target_fps_;
     }
+    HardwareBackend GetHardwareBackend() const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return hardware_backend_;
+    }
     bool HasProfile(const std::string& name) const;
     std::shared_ptr<const Profile> GetProfile(const std::string& name) const;
 
@@ -141,6 +145,7 @@ private:
 
     std::string default_profile_name_;
     int target_fps_{25};
+    HardwareBackend hardware_backend_{HardwareBackend::Auto};
     std::vector<RuleEntry> rules_;
     std::vector<GsiBinding> gsi_bindings_;
     OrchestrationConfig orchestration_;

@@ -104,6 +104,7 @@ void PrintUsage() {
               << "=========================================================\n"
               << "用法: aura_daemon.exe [选项]\n\n"
               << "选项:\n"
+              << "  --backend <模式>          指定硬件后端 (auto|native_hid|legacy_hal，默认: auto)\n"
               << "  --dry-run                 启动虚拟推流模式 (不挂载底层驱动，验证监控与规则)\n"
               << "  --test-init <次数>        对底层驱动执行 N 次初始化/释放循环内存安全压力测试\n"
               << "  --test-stability <分钟>   持续以 25 FPS 推流指定时长进行稳定性硬性验收\n"
@@ -166,71 +167,22 @@ int main(int argc, char* argv[]) {
             return 1;
         }
 
-        // 1. 探测并预加载 AacKbHal_x64.dll。公开发行包不内嵌 ASUS 专有 DLL；
-        //    默认从用户本机 ASUS 官方安装目录/注册路径定位，并严格通过兼容性 Gate。
+        // 1. 获取主执行文件与模块目录
         wchar_t current_mod[MAX_PATH];
         std::filesystem::path current_exe_dir;
         if (GetModuleFileNameW(nullptr, current_mod, MAX_PATH)) {
             current_exe_dir = std::filesystem::path(current_mod).parent_path();
         }
-        std::vector<std::filesystem::path> preload_candidates = {
-            current_exe_dir / "AacKbHal_x64.dll",
-            current_exe_dir / "drivers" / "AacKbHal_x64.dll",
-            current_exe_dir / ".." / "drivers" / "AacKbHal_x64.dll",
-            std::filesystem::current_path() / "AacKbHal_x64.dll",
-            std::filesystem::current_path() / "drivers" / "AacKbHal_x64.dll",
-            L"C:\\Program Files\\ASUS\\Aac_Keyboard\\AacKbHal_x64.dll"
-        };
-        std::wstring regHal = GetRegisteredHalDllPath();
-        if (!regHal.empty()) {
-            preload_candidates.push_back(regHal);
-        }
-        HMODULE hHalPreload = nullptr;
-        const aura::HalVersionInfo* preloaded_hal_version = nullptr;
-        for (const auto& cand : preload_candidates) {
-            std::error_code ec;
-            if (std::filesystem::exists(cand, ec) && !std::filesystem::is_directory(cand, ec)) {
-                // 预加载必须首先通过阶段 1 文件兼容性 Gate (精确 SHA-256 白名单)
-                aura::HalGateResult gate = aura::ValidateHalFileGate(cand.wstring());
-                if (!gate.IsSupported()) {
-                    LOG_WARN("ASUS HAL 预加载兼容性 Gate 拦截: " + cand.string() + "\n" + aura::FormatHalGateError(gate));
-                    continue;
-                }
 
-                SetDllDirectoryW(cand.parent_path().c_str());
-                hHalPreload = LoadLibraryW(cand.c_str());
-                if (hHalPreload) {
-                    // 阶段 2 内存签名二次校验
-                    aura::HalGateResult mod_gate = aura::ValidateHalModuleGate(hHalPreload, gate.matched_version);
-                    if (!mod_gate.IsSupported()) {
-                        LOG_ERROR("ASUS HAL 预加载模块签名 Gate 拦截: " + cand.string() + "\n" + aura::FormatHalGateError(mod_gate));
-                        FreeLibrary(hHalPreload);
-                        hHalPreload = nullptr;
-                        continue;
-                    }
-                    if (!aura::ApplyAacDriverPatch(hHalPreload, gate.matched_version)) {
-                        LOG_ERROR("ASUS HAL 预加载模块补丁应用失败: " + cand.string());
-                        FreeLibrary(hHalPreload);
-                        hHalPreload = nullptr;
-                        continue;
-                    }
-                    LOG_INFO("底层硬件驱动预加载成功并通过兼容性 Gate 校验: " + cand.string());
-                    preloaded_hal_version = gate.matched_version;
-                    break;
-                }
-            }
-        }
-        if (!hHalPreload) {
-            LOG_WARN("未找到可用的 AacKbHal_x64.dll。公开发行包不包含 ASUS 专有 DLL；请通过 Armoury Crate / ASUS Aac_Keyboard 官方驱动包安装或修复键盘 HAL。程序只会加载通过已验证 SHA-256 与内存签名 Gate 的版本，请勿从非官方来源下载 DLL。");
-        }
-
-    // 2. 解析命令行参数
-    bool dry_run = false;
-    int test_init_count = 0;
-    double test_stability_minutes = 0.0;
-    std::string config_path = "config.json";
-    std::string keymap_path = "calibrated_keymap.json";
-    bool has_explicit_config = false;
+        // 2. 解析命令行参数
+        bool dry_run = false;
+        int test_init_count = 0;
+        double test_stability_minutes = 0.0;
+        std::string config_path = "config.json";
+        std::string keymap_path = "calibrated_keymap.json";
+        bool has_explicit_config = false;
+        aura::HardwareBackend cli_backend = aura::HardwareBackend::Auto;
+        bool has_cli_backend = false;
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
@@ -318,6 +270,15 @@ int main(int argc, char* argv[]) {
                 PrintUsage();
                 return 1;
             }
+        } else if (arg == "--backend") {
+            if (i + 1 >= argc) {
+                std::cerr << "错误: --backend 缺少参数 (auto|native_hid|legacy_hal)\n\n";
+                PrintUsage();
+                return 1;
+            }
+            std::string b_str = argv[++i];
+            cli_backend = aura::StringToHardwareBackend(b_str);
+            has_cli_backend = true;
         } else if (arg == "--help" || arg == "-h") {
             PrintUsage();
             return 0;
@@ -350,9 +311,6 @@ int main(int argc, char* argv[]) {
         SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
 
         LOG_INFO("[Probe] 正在执行硬件隔离探测与通道复位...");
-        if (hHalPreload && preloaded_hal_version) {
-            aura::ApplyAacDriverPatch(hHalPreload, preloaded_hal_version);
-        }
         if (!std::filesystem::exists(keymap_path) && !current_exe_dir.empty()) {
             auto cand = current_exe_dir / keymap_path;
             if (std::filesystem::exists(cand)) {
@@ -364,9 +322,9 @@ int main(int argc, char* argv[]) {
             LOG_ERROR("[Probe] 无法加载键位表: " + keymap_path);
             return 1;
         }
-        aura::AuraAdapter probe_adapter(false);
+        aura::AuraAdapter probe_adapter(false, cli_backend);
         if (!probe_adapter.Initialize(&probe_keymap)) {
-            LOG_WARN("[Probe] 底层驱动初次挂载未就绪");
+            LOG_WARN("[Probe] 底层硬件初次挂载未就绪");
             return 2;
         }
         probe_adapter.Shutdown();
@@ -405,7 +363,7 @@ int main(int argc, char* argv[]) {
 
     // 5. 压力测试独立分支
     if (test_init_count > 0) {
-        aura::AuraAdapter test_adapter(false);
+        aura::AuraAdapter test_adapter(false, cli_backend);
         bool test_ok = test_adapter.RunInitStressTest(static_cast<size_t>(test_init_count));
         RemoveAllStateFiles();
         if (hMutex) CloseHandle(hMutex);
@@ -510,6 +468,11 @@ int main(int argc, char* argv[]) {
                     cmd += L" --keymap \"" + std::wstring(wbuf.data()) + L"\"";
                 }
             }
+            if (has_cli_backend) {
+                cmd += L" --backend ";
+                std::string bname = aura::HardwareBackendToString(cli_backend);
+                cmd += std::wstring(bname.begin(), bname.end());
+            }
 
             STARTUPINFOW si{};
             si.cb = sizeof(si);
@@ -555,9 +518,13 @@ int main(int argc, char* argv[]) {
         RemoveAllStateFiles();
     }
 
-    aura::AuraAdapter adapter(dry_run);
+    aura::HardwareBackend hw_backend = has_cli_backend ? cli_backend : rule_engine.GetHardwareBackend();
+    aura::AuraAdapter adapter(dry_run, hw_backend);
     if (!adapter.Initialize(&keymap)) {
-        LOG_WARN("底层驱动初次挂载未就绪，将在推流循环中自动重连");
+        LOG_WARN("底层硬件初次挂载未就绪，将在推流循环中自动重连");
+    } else {
+        LOG_INFO("AuraAdapter 硬件初始化成功: backend=" + adapter.GetActiveBackendName() + 
+                 (adapter.GetDevicePath().empty() ? "" : (", path=" + adapter.GetDevicePath())));
     }
 
     // 异常退出强制复位兜底

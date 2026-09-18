@@ -486,6 +486,11 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
             new_fps = std::clamp(j["fps"].get<int>(), 10, 100);
         }
 
+        HardwareBackend new_backend = HardwareBackend::Auto;
+        if (j.contains("hardware_backend") && j["hardware_backend"].is_string()) {
+            new_backend = StringToHardwareBackend(j["hardware_backend"].get<std::string>());
+        }
+
         if (j.contains("default_profile")) {
             if (j["default_profile"].is_string()) {
                 def_name = j["default_profile"].get<std::string>();
@@ -732,6 +737,7 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
             config_path_ = config_path;
             default_profile_name_ = def_name;
             target_fps_ = new_fps;
+            hardware_backend_ = new_backend;
             rules_ = std::move(new_rules);
             gsi_bindings_ = std::move(new_gsi_bindings);
             orchestration_ = std::move(new_orchestration);

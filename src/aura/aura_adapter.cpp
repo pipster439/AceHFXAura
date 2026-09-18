@@ -17,8 +17,10 @@ std::string FormatHex(HRESULT hr) {
 }
 } // namespace
 
-AuraAdapter::AuraAdapter(bool dry_run)
+AuraAdapter::AuraAdapter(bool dry_run, HardwareBackend backend)
     : dry_run_(dry_run),
+      configured_backend_(backend),
+      active_backend_(HardwareBackend::Auto),
       state_(AdapterState::Uninitialized),
       hHalMod_(nullptr),
       pFactory_(nullptr),
@@ -34,7 +36,7 @@ AuraAdapter::~AuraAdapter() {
     Shutdown();
 }
 
-bool AuraAdapter::BuildPaddedHardwareTable(const Keymap* keymap) {
+std::vector<uint8_t> AuraAdapter::GeneratePaddedHardwareTable(const Keymap* keymap) {
     std::vector<uint8_t> calibrated_ids;
     if (keymap) {
         for (const auto& [name, info] : keymap->GetAllKeys()) {
@@ -58,39 +60,38 @@ bool AuraAdapter::BuildPaddedHardwareTable(const Keymap* keymap) {
     std::sort(calibrated_ids.begin(), calibrated_ids.end());
     calibrated_ids.erase(std::unique(calibrated_ids.begin(), calibrated_ids.end()), calibrated_ids.end());
 
-    padded_hardware_table_.clear();
+    std::vector<uint8_t> padded_table;
     for (uint8_t kid : calibrated_ids) {
         // USB 64-byte HID packet boundary protection:
         // A 64-byte HID report packs 15 keys (4 bytes each + 4-byte header).
         // Slot 14 (the 15th key) occupies bytes 60..63, which sits on the USB transfer boundary
         // and causes the Blue subpixel (byte 63) to flicker due to hardware FIFO delimiting.
         // We isolate slot 14 with a dummy padding key (0xFF) so no real physical key ever touches byte 63!
-        if (padded_hardware_table_.size() % 15 == 14) {
-            padded_hardware_table_.push_back(DUMMY_PADDING_LED_ID);
+        if (padded_table.size() % 15 == 14) {
+            padded_table.push_back(DUMMY_PADDING_LED_ID);
         }
-        padded_hardware_table_.push_back(kid);
+        padded_table.push_back(kid);
     }
+    return padded_table;
+}
+
+bool AuraAdapter::BuildPaddedHardwareTable(const Keymap* keymap) {
+    padded_hardware_table_ = GeneratePaddedHardwareTable(keymap);
 
     // 上界校验：这是防止 PushFrame 与驱动表写入越界的关键闸门。
-    // 原实现直接按表长写入 216 字节的 stream_buffer_，68 键时恰好占满、零余量，
-    // 只要键位表出现第 69 个唯一 led_id 就会越界 3 字节。
     if (padded_hardware_table_.size() > MAX_HARDWARE_STREAM_KEYS) {
         LOG_ERROR("FATAL: 隔离寻址表条目 " + std::to_string(padded_hardware_table_.size()) +
-                  " 超过安全上界 " + std::to_string(MAX_HARDWARE_STREAM_KEYS) +
-                  "（原始键位数 " + std::to_string(calibrated_ids.size()) + "）。"
-                  "拒绝继续，避免越界写坏推流缓冲与驱动对象内存。");
+                  " 超过安全上界 " + std::to_string(MAX_HARDWARE_STREAM_KEYS) + "。拒绝继续。");
         padded_hardware_table_.clear();
         return false;
     }
 
     LOG_INFO("构建安全隔离硬件寻址表完成: 总条目 " + std::to_string(padded_hardware_table_.size()) + 
-             " (含 " + std::to_string(calibrated_ids.size()) + 
-             " 物理键位 + USB 64字节边界隔离槽；安全上界 " + std::to_string(MAX_HARDWARE_STREAM_KEYS) + ")");
+             " (含 USB 64字节边界隔离槽；安全上界 " + std::to_string(MAX_HARDWARE_STREAM_KEYS) + ")");
     return true;
 }
 
 bool AuraAdapter::Initialize(const Keymap* keymap) {
-    LOG_INFO("AuraAdapter::Initialize: 前置契约——调用方已完成 COM 初始化");
     keymap_ = keymap;
     if (!BuildPaddedHardwareTable(keymap_)) {
         // 表长超上界：必须以失败告终，不能用可能越界的表去驱动硬件
@@ -99,7 +100,7 @@ bool AuraAdapter::Initialize(const Keymap* keymap) {
     }
 
     if (dry_run_) {
-        LOG_INFO("[Dry-Run] AuraAdapter 初始化完成 (虚拟硬件模式，不挂载实际 DLL)");
+        LOG_INFO("[Dry-Run] AuraAdapter 初始化完成 (虚拟硬件模式，不挂载实际驱动)");
         state_ = AdapterState::Connected;
         return true;
     }
@@ -263,9 +264,67 @@ static void CallReleaseSafe(PFN_Release fn, void* ptr) {
     }
 }
 
+bool AuraAdapter::ConnectNativeHidInternal() {
+    if (!native_hid_) {
+        native_hid_ = std::make_unique<NativeHidBackend>();
+    }
+    if (native_hid_->Connect()) {
+        active_backend_ = HardwareBackend::NativeHid;
+        state_ = AdapterState::Connected;
+        failed_push_count_ = 0;
+        last_hardware_error_.clear();
+        return true;
+    }
+    last_hardware_error_ = native_hid_->GetLastError();
+    return false;
+}
+
 bool AuraAdapter::ConnectHardwareInternal() {
     state_ = AdapterState::Connecting;
     ReleaseHardwareInternal();
+
+    if (configured_backend_ == HardwareBackend::NativeHid) {
+        LOG_INFO("硬件后端选择: native_hid (强制使用 Native Win32 HID)");
+        if (ConnectNativeHidInternal()) {
+            return true;
+        }
+        LOG_ERROR("Native HID 连接失败: " + last_hardware_error_ + " (已配置 native_hid，禁止尝试 legacy HAL)");
+        state_ = AdapterState::Disconnected;
+        return false;
+    }
+
+    if (configured_backend_ == HardwareBackend::LegacyHal) {
+        LOG_INFO("硬件后端选择: legacy_hal (强制使用 ASUS 闭源 HAL)");
+        if (ConnectLegacyHalInternal()) {
+            return true;
+        }
+        state_ = AdapterState::Disconnected;
+        return false;
+    }
+
+    // Auto mode (default):
+    // 1. Try Native HID first.
+    // 2. If Native Connect succeeds: use Native, DO NOT touch HAL.
+    // 3. If Native Connect fails: log warning and attempt legacy HAL.
+    // 4. If both fail: report error.
+    LOG_INFO("硬件后端自动选择 (auto): 优先尝试 Native Win32 HID 后端...");
+    if (ConnectNativeHidInternal()) {
+        return true;
+    }
+
+    std::string native_err = last_hardware_error_;
+    LOG_WARN("Native HID connection failed: " + native_err + "\nFalling back to legacy ASUS HAL");
+
+    if (ConnectLegacyHalInternal()) {
+        return true;
+    }
+
+    LOG_ERROR("硬件连接失败: Native HID 与 Legacy ASUS HAL 均未能成功连接");
+    state_ = AdapterState::Disconnected;
+    return false;
+}
+
+bool AuraAdapter::ConnectLegacyHalInternal() {
     matched_version_ = nullptr;
 
     GUID clsid_hal{}, iid_hal{};
@@ -535,9 +594,10 @@ bool AuraAdapter::ConnectHardwareInternal() {
         return false;
     }
 
+    active_backend_ = HardwareBackend::LegacyHal;
     state_ = AdapterState::Connected;
     failed_push_count_ = 0;
-    LOG_INFO("[+] 成功获取硬件控制权，ROG FALCHION ACE HFX 安全隔离驱动通道已就绪！");
+    LOG_INFO("[+] 成功获取硬件控制权，ROG FALCHION ACE HFX 安全隔离驱动通道 (Legacy HAL) 已就绪！");
     return true;
 }
 
@@ -578,47 +638,76 @@ bool AuraAdapter::PushFrame(const FrameBuffer& frame) {
         return true;
     }
 
-    if (state_ != AdapterState::Connected || !pDev_ || !fn_set_single_) {
+    if (state_ != AdapterState::Connected) {
         return false;
     }
 
-    // Translate frame buffer (indexed by led_id) to hardware stream buffer (padded isolated slots)
-    // 纵深防御：正常路径下 BuildPaddedHardwareTable 已拒绝超长表，此处再兜一次，
-    // 确保 stream_buffer_ 的索引永远落在 sizeof(stream_buffer_) 之内。
-    if (padded_hardware_table_.size() * RGB_CHANNELS > sizeof(stream_buffer_)) {
-        LOG_ERROR("FATAL: 硬件寻址表长度 " + std::to_string(padded_hardware_table_.size()) +
-                  " 超出推流缓冲区容量 " + std::to_string(sizeof(stream_buffer_) / RGB_CHANNELS) +
-                  " 槽，已丢弃本帧以避免越界写");
-        return false;
-    }
-    std::memset(stream_buffer_, 0, sizeof(stream_buffer_));
-    for (size_t i = 0; i < padded_hardware_table_.size(); ++i) {
-        uint8_t lid = padded_hardware_table_[i];
-        if (lid != DUMMY_PADDING_LED_ID && lid < TOTAL_LEDS) {
-            stream_buffer_[i * 3 + 0] = frame.buffer[lid * 3 + 0];
-            stream_buffer_[i * 3 + 1] = frame.buffer[lid * 3 + 1];
-            stream_buffer_[i * 3 + 2] = frame.buffer[lid * 3 + 2];
-        }
-    }
-
-    LONG res = CallSetSingleSafe(pDev_, stream_buffer_);
-    if (res < 0) {
-        failed_push_count_++;
-        if (failed_push_count_ >= 3) {
-            LOG_WARN("Set_L_STD_SINGLE_XY 连续推流异常 (" + std::to_string(failed_push_count_) + 
-                     " 次，错误码: " + std::to_string(res) + ")，判定硬件连接断开");
-            state_ = AdapterState::Disconnected;
-            ReleaseHardwareInternal();
-            current_reconnect_interval_ms_ = 1500;
-            reconnect_attempts_ = 0;
-            last_reconnect_attempt_ = std::chrono::steady_clock::now();
+    if (active_backend_ == HardwareBackend::NativeHid) {
+        if (!native_hid_ || !native_hid_->IsConnected()) {
             return false;
         }
-    } else {
-        failed_push_count_ = 0;
+        bool ok = native_hid_->PushFrame(frame, padded_hardware_table_);
+        if (!ok) {
+            failed_push_count_++;
+            last_hardware_error_ = native_hid_->GetLastError();
+            if (failed_push_count_ >= 3) {
+                LOG_WARN("Native HID 连续推流异常 (" + std::to_string(failed_push_count_) + 
+                         " 次，错误: " + last_hardware_error_ + ")，判定硬件连接断开");
+                state_ = AdapterState::Disconnected;
+                ReleaseHardwareInternal();
+                current_reconnect_interval_ms_ = 1500;
+                reconnect_attempts_ = 0;
+                last_reconnect_attempt_ = std::chrono::steady_clock::now();
+                return false;
+            }
+        } else {
+            failed_push_count_ = 0;
+        }
+        return ok;
     }
 
-    return true;
+    if (active_backend_ == HardwareBackend::LegacyHal) {
+        if (!pDev_ || !fn_set_single_) {
+            return false;
+        }
+
+        // Translate frame buffer (indexed by led_id) to hardware stream buffer (padded isolated slots)
+        if (padded_hardware_table_.size() * RGB_CHANNELS > sizeof(stream_buffer_)) {
+            LOG_ERROR("FATAL: 硬件寻址表长度 " + std::to_string(padded_hardware_table_.size()) +
+                      " 超出推流缓冲区容量 " + std::to_string(sizeof(stream_buffer_) / RGB_CHANNELS) +
+                      " 槽，已丢弃本帧以避免越界写");
+            return false;
+        }
+        std::memset(stream_buffer_, 0, sizeof(stream_buffer_));
+        for (size_t i = 0; i < padded_hardware_table_.size(); ++i) {
+            uint8_t lid = padded_hardware_table_[i];
+            if (lid != DUMMY_PADDING_LED_ID && lid < TOTAL_LEDS) {
+                stream_buffer_[i * 3 + 0] = frame.buffer[lid * 3 + 0];
+                stream_buffer_[i * 3 + 1] = frame.buffer[lid * 3 + 1];
+                stream_buffer_[i * 3 + 2] = frame.buffer[lid * 3 + 2];
+            }
+        }
+
+        LONG res = CallSetSingleSafe(pDev_, stream_buffer_);
+        if (res < 0) {
+            failed_push_count_++;
+            if (failed_push_count_ >= 3) {
+                LOG_WARN("Set_L_STD_SINGLE_XY 连续推流异常 (" + std::to_string(failed_push_count_) + 
+                         " 次，错误码: " + std::to_string(res) + ")，判定硬件连接断开");
+                state_ = AdapterState::Disconnected;
+                ReleaseHardwareInternal();
+                current_reconnect_interval_ms_ = 1500;
+                reconnect_attempts_ = 0;
+                last_reconnect_attempt_ = std::chrono::steady_clock::now();
+                return false;
+            }
+        } else {
+            failed_push_count_ = 0;
+        }
+        return true;
+    }
+
+    return false;
 }
 
 bool AuraAdapter::ForceReset() {
@@ -628,7 +717,7 @@ bool AuraAdapter::ForceReset() {
         return true;
     }
 
-    if (state_ != AdapterState::Connected || !pDev_) {
+    if (state_ != AdapterState::Connected) {
         LOG_WARN("硬件尚未连接，无法执行强制复位");
         return false;
     }
@@ -678,7 +767,7 @@ bool AuraAdapter::CheckReconnect() {
     return false;
 }
 
-void AuraAdapter::ReleaseHardwareInternal() {
+void AuraAdapter::ReleaseLegacyHalInternal() {
     if (pDev_) {
         void** dev_vtable = *reinterpret_cast<void***>(pDev_);
         if (dev_vtable) {
@@ -705,6 +794,14 @@ void AuraAdapter::ReleaseHardwareInternal() {
     fn_set_single_ = nullptr;
 }
 
+void AuraAdapter::ReleaseHardwareInternal() {
+    if (native_hid_) {
+        native_hid_->Disconnect();
+    }
+    ReleaseLegacyHalInternal();
+    active_backend_ = HardwareBackend::Auto;
+}
+
 void AuraAdapter::Shutdown() {
     if (state_ == AdapterState::Uninitialized) {
         return;
@@ -715,7 +812,7 @@ void AuraAdapter::Shutdown() {
         return;
     }
 
-    if (state_ == AdapterState::Connected && pDev_) {
+    if (state_ == AdapterState::Connected) {
         // Clean blackout before disconnecting
         FrameBuffer black;
         black.Clear();
@@ -730,7 +827,27 @@ void AuraAdapter::Shutdown() {
     matched_version_ = nullptr;
 
     state_ = AdapterState::Uninitialized;
-    LOG_INFO("[+] AuraAdapter 已安全关闭并释放所有 COM 资源");
+    LOG_INFO("[+] AuraAdapter 已安全关闭并释放所有硬件与 COM 资源");
+}
+
+std::string AuraAdapter::GetActiveBackendName() const {
+    if (dry_run_) return "dry_run";
+    if (state_ != AdapterState::Connected) return "disconnected";
+    switch (active_backend_) {
+        case HardwareBackend::NativeHid: return "native_hid";
+        case HardwareBackend::LegacyHal: return "legacy_hal";
+        default: return "unknown";
+    }
+}
+
+std::string AuraAdapter::GetDevicePath() const {
+    if (active_backend_ == HardwareBackend::NativeHid && native_hid_) {
+        return native_hid_->GetDevicePath();
+    }
+    if (active_backend_ == HardwareBackend::LegacyHal) {
+        return "ASUS HAL (AacKbHal_x64.dll)";
+    }
+    return "";
 }
 
 bool AuraAdapter::RunInitStressTest(size_t iterations) {
@@ -753,7 +870,7 @@ bool AuraAdapter::RunInitStressTest(size_t iterations) {
         auto t1 = std::chrono::high_resolution_clock::now();
         auto us = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
 
-        if (ok && pDev_ != nullptr) {
+        if (ok && (pDev_ != nullptr || (native_hid_ && native_hid_->IsConnected()))) {
             success_count++;
             if (i % 10 == 0 || i == iterations || i == 1) {
                 ProcessMemoryStats mem_cur{};

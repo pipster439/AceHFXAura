@@ -44,6 +44,7 @@ include_directories(SYSTEM
 set(DAEMON_SOURCES
     src/main.cpp
     src/aura/aura_adapter.cpp
+    src/aura/native_hid_backend.cpp
     src/aura/hal_compat.cpp
     src/aura/keymap.cpp
     src/monitor/foreground_monitor.cpp
@@ -58,6 +59,7 @@ set(DAEMON_SOURCES
 
 set(DAEMON_HEADERS
     include/aura/aura_adapter.h
+    include/aura/native_hid_backend.h
     include/aura/aura_types.h
     include/aura/hal_compat.h
     include/aura/keymap.h
@@ -84,6 +86,8 @@ if (MSVC)
 endif()
 
 target_link_libraries(aura_daemon PRIVATE
+    setupapi
+    hid
     ole32
     oleaut32
     user32
@@ -142,11 +146,14 @@ add_executable(test_gsi_rules
     src/gsi/gsi_adapter.cpp
     src/aura/keymap.cpp
     src/aura/aura_adapter.cpp
+    src/aura/native_hid_backend.cpp
     src/aura/hal_compat.cpp
     src/web/web_server.cpp
 )
 
 target_link_libraries(test_gsi_rules PRIVATE
+    setupapi
+    hid
     ws2_32
     crypt32
     user32
@@ -157,12 +164,31 @@ target_link_libraries(test_gsi_rules PRIVATE
     version
 )
 
+# 4. 单元测试: test_native_hid
+add_executable(test_native_hid
+    tests/test_native_hid.cpp
+    src/aura/native_hid_backend.cpp
+    src/aura/aura_adapter.cpp
+    src/aura/hal_compat.cpp
+    src/aura/keymap.cpp
+)
 
-# 4. 诊断测试: test_diag_hook (手动交互式诊断工具，不注册到 CTest)
+target_link_libraries(test_native_hid PRIVATE
+    setupapi
+    hid
+    ole32
+    oleaut32
+    user32
+    shell32
+    psapi
+    version
+)
+
+# 5. 诊断测试: test_diag_hook (手动交互式诊断工具，不注册到 CTest)
 add_executable(test_diag_hook tests/test_diag_hook.cpp)
 target_link_libraries(test_diag_hook PRIVATE user32)
 
-# 5. CTest 测试体系集成
+# 6. CTest 测试体系集成
 enable_testing()
 add_library(plugin_fixture_v1 SHARED tests/fixtures/plugin_reload_fixture.cpp)
 target_compile_definitions(plugin_fixture_v1 PRIVATE FIXTURE_VALUE=17)
@@ -175,6 +201,8 @@ add_test(NAME plugin_runtime COMMAND test_plugin_runtime
 set_tests_properties(plugin_runtime PROPERTIES TIMEOUT 30)
 add_test(NAME gsi_rules COMMAND test_gsi_rules)
 set_tests_properties(gsi_rules PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures")
+add_test(NAME native_hid COMMAND test_native_hid)
+set_tests_properties(native_hid PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
 
 find_package(Python3 COMPONENTS Interpreter QUIET)
 if (Python3_Interpreter_FOUND)

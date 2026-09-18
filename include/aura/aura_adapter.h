@@ -3,6 +3,7 @@
 #include "aura/aura_types.h"
 #include "aura/keymap.h"
 #include "aura/hal_compat.h"
+#include "aura/native_hid_backend.h"
 #include <string>
 #include <memory>
 #include <chrono>
@@ -34,7 +35,7 @@ bool ApplyAacDriverPatch(HMODULE hHalMod = nullptr, const HalVersionInfo* matche
 
 class AuraAdapter {
 public:
-    explicit AuraAdapter(bool dry_run = false);
+    explicit AuraAdapter(bool dry_run = false, HardwareBackend backend = HardwareBackend::Auto);
     ~AuraAdapter();
 
     // Must be called on the dedicated hardware stream thread
@@ -49,29 +50,48 @@ public:
     // Reconnection tick: called by stream thread if disconnected
     bool CheckReconnect();
 
-    // Shutdown and release all COM resources
+    // Shutdown and release all hardware/COM resources
     void Shutdown();
 
     // Memory-safety stress test: repeatedly init and release HAL
     bool RunInitStressTest(size_t iterations);
+
+    void SetBackend(HardwareBackend backend) { configured_backend_ = backend; }
+    HardwareBackend GetConfiguredBackend() const { return configured_backend_; }
+    HardwareBackend GetActiveBackend() const { return active_backend_; }
+    std::string GetActiveBackendName() const;
+    std::string GetDevicePath() const;
+    std::string GetLastHardwareError() const { return last_hardware_error_; }
 
     AdapterState GetState() const { return state_; }
     bool IsConnected() const { return state_ == AdapterState::Connected; }
     bool IsDryRun() const { return dry_run_; }
     uint64_t GetReconnectIntervalMs() const { return current_reconnect_interval_ms_; }
     size_t GetReconnectAttempts() const { return reconnect_attempts_; }
+    const std::vector<uint8_t>& GetPaddedHardwareTable() const { return padded_hardware_table_; }
+
+    // Authoritative static function to generate padded hardware table from keymap
+    static std::vector<uint8_t> GeneratePaddedHardwareTable(const Keymap* keymap);
 
 private:
     bool ConnectHardwareInternal();
+    bool ConnectNativeHidInternal();
+    bool ConnectLegacyHalInternal();
     void ReleaseHardwareInternal();
+    void ReleaseLegacyHalInternal();
     LONG CallSetSingleSafe(void* pDev, void* buffer);
     // 构建隔离寻址表。返回 false 表示表长超过 MAX_HARDWARE_STREAM_KEYS 上界
     // （调用方必须据此失败，绝不能用可能越界的表去驱动硬件）。
     bool BuildPaddedHardwareTable(const Keymap* keymap);
 
     bool dry_run_ = false;
+    HardwareBackend configured_backend_ = HardwareBackend::Auto;
+    HardwareBackend active_backend_ = HardwareBackend::Auto;
     AdapterState state_ = AdapterState::Uninitialized;
     // 契约：COM 生命周期由调用方（如 main 中的 ComScope）管理，AuraAdapter 不自行初始化或反初始化 COM
+
+    std::unique_ptr<NativeHidBackend> native_hid_;
+    std::string last_hardware_error_;
 
     HMODULE hHalMod_ = nullptr;
     const HalVersionInfo* matched_version_ = nullptr;
@@ -79,7 +99,6 @@ private:
     void* pHal_ = nullptr;
     void* pDev_ = nullptr;
     PFN_SetSingle fn_set_single_ = nullptr;
-
 
     const Keymap* keymap_ = nullptr;
     std::vector<uint8_t> padded_hardware_table_;
