@@ -109,9 +109,9 @@ public sealed class DaemonSupervisor : IDaemonSupervisor
             return;
         }
 
-        // 2. 互斥体不存在，寻找可执行文件并启动
-        string? exePath = FindDaemonExecutable();
-        if (string.IsNullOrEmpty(exePath))
+        // 2. 互斥体不存在，使用 RuntimeLayoutResolver 解析规范布局并启动
+        var layout = RuntimeLayoutResolver.Resolve();
+        if (layout == null)
         {
             UpdateStatus("未找到 aura_daemon.exe 可执行文件");
             IsDaemonRunning = false;
@@ -124,8 +124,9 @@ public sealed class DaemonSupervisor : IDaemonSupervisor
         {
             var psi = new ProcessStartInfo
             {
-                FileName = exePath,
-                WorkingDirectory = Path.GetDirectoryName(exePath) ?? string.Empty,
+                FileName = layout.DaemonExecutablePath,
+                WorkingDirectory = layout.WorkingDirectory,
+                Arguments = $"--config \"{layout.ConfigPath}\" --keymap \"{layout.KeymapPath}\"",
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
@@ -218,14 +219,24 @@ public sealed class DaemonSupervisor : IDaemonSupervisor
         }
         else if (Ownership == DaemonOwnership.AttachedPreExisting)
         {
-            // 外部预先启动的守护进程：WinUI 仅通知停机并等待其释放 Mutex，超时绝不越权强杀
+            // 外部预先启动的守护进程：WinUI 发送停机通知并等待其释放 Mutex，超时绝不越权强杀
+            bool mutexReleased = false;
             for (int i = 0; i < 35; i++)
             {
                 await Task.Delay(100);
                 if (!CheckMutexExists())
                 {
+                    mutexReleased = true;
                     break;
                 }
+            }
+
+            if (!mutexReleased)
+            {
+                // 超时后互斥体依然存在：不强杀，保持运行状态，不伪装成已停止
+                IsDaemonRunning = true;
+                UpdateStatus("守护进程未在超时时间内退出，已保留其运行");
+                return;
             }
         }
 
@@ -239,36 +250,5 @@ public sealed class DaemonSupervisor : IDaemonSupervisor
     {
         _status = desc;
         StatusChanged?.Invoke(desc);
-    }
-
-    private static string? FindDaemonExecutable()
-    {
-        // 1. 沿当前执行目录逐级向上查找 (支持 bin/x64/Debug 任意深层路径定位仓库根目录)
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null && dir.Exists)
-        {
-            string rootCandidate = Path.Combine(dir.FullName, "aura_daemon.exe");
-            if (File.Exists(rootCandidate))
-            {
-                return rootCandidate;
-            }
-            string buildCandidate = Path.Combine(dir.FullName, "build", "Release", "aura_daemon.exe");
-            if (File.Exists(buildCandidate))
-            {
-                return buildCandidate;
-            }
-            dir = dir.Parent;
-        }
-
-        // 2. 检查单文件运行时缓存目录 (%LOCALAPPDATA%\Aura\runtime\aura_daemon.exe)
-        string localRuntime = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Aura", "runtime", "aura_daemon.exe");
-        if (File.Exists(localRuntime))
-        {
-            return localRuntime;
-        }
-
-        return null;
     }
 }

@@ -52,7 +52,7 @@ public sealed partial class MainWindow : Window
         AppWindow.Closing += MainWindow_Closing;
 
         // 4. 初始化系统托盘管理
-        _trayIcon = new TrayIconManager(this, ShowAndBringToFront, App.ExitApplication);
+        _trayIcon = new TrayIconManager(this, ShowAndBringToFront, () => { _ = App.RequestExit(); });
 
         // 5. 监听后台守护进程状态变化并同步托盘提示
         DaemonSupervisor.Instance.StatusChanged += (status) =>
@@ -79,7 +79,11 @@ public sealed partial class MainWindow : Window
         }
         else
         {
-            App.ExitApplication();
+            // 非最小化到托盘场景：必须先 Cancel 阻止操作系统内核直接销毁视窗，
+            // 隐藏窗口后启动受控的非重入异步停机流程
+            args.Cancel = true;
+            AppWindow.Hide();
+            _ = App.RequestExit();
         }
     }
 

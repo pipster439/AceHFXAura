@@ -59,23 +59,50 @@ public partial class App : Application
         }
     }
 
-    public static async void ExitApplication()
+    private static readonly object _shutdownLock = new();
+    private static Task? _shutdownTask;
+
+    public static Task RequestExit()
+    {
+        lock (_shutdownLock)
+        {
+            if (_shutdownTask != null)
+            {
+                // 已有 shutdown 正在进行中，直接返回该 Task，防止多次点击导致并发重入
+                return _shutdownTask;
+            }
+
+            _shutdownTask = PerformShutdownAsync();
+            return _shutdownTask;
+        }
+    }
+
+    private static async Task PerformShutdownAsync()
     {
         try
         {
-            if (_window is MainWindow mw)
-            {
-                mw.DisposeTray();
-            }
-
-            // 发送优雅停机请求并等待守护进程退出
+            // 1. 发送优雅停机请求并等待守护进程完成清理与退出
             await DaemonSupervisor.Instance.StopAsync();
         }
         catch
         {
-            // ignore
+            // 忽略停机异常，保障后续清理与应用退出执行
         }
 
+        try
+        {
+            // 2. 守护进程处理完毕后再注销托盘图标与窗口子类化钩子
+            if (_window is MainWindow mw)
+            {
+                mw.DisposeTray();
+            }
+        }
+        catch
+        {
+            // 忽略托盘注销异常
+        }
+
+        // 3. 最终退出 XAML 应用程序
         Current.Exit();
     }
 }

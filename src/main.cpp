@@ -362,16 +362,10 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
-    // 3.5 注册优雅停机通知事件 (Named Event，供 WinUI 等外部管理端发起非强杀优雅退出)
-    HANDLE hShutdownEvent = CreateEventW(NULL, TRUE, FALSE, L"Local\\RogFalchionAceHfxDaemonShutdownEvent");
-    if (hShutdownEvent) {
-        ResetEvent(hShutdownEvent);
-    }
-
     // 4. 注册控制台中断处理器 (Ctrl+C)
     SetConsoleCtrlHandler(ConsoleCtrlHandler, TRUE);
 
-    // 5. 压力测试独立分支
+    // 5. 压力测试独立分支 (独立硬件循环测试流程，不得创建或 Reset 正式守护进程的停机事件)
     if (test_init_count > 0) {
         aura::AuraAdapter test_adapter(false, cli_backend);
         bool test_ok = test_adapter.RunInitStressTest(static_cast<size_t>(test_init_count));
@@ -380,6 +374,25 @@ int main(int argc, char* argv[]) {
         g_shutdown_done.store(true, std::memory_order_release);
         return test_ok ? 0 : 1;
     }
+
+    // 5.5 正式 daemon 进入运行路径：注册优雅停机通知事件 (Named Event)
+    // 采用 RAII 守卫确保在任何异常、提前退出或正常退出路径下均安全 CloseHandle
+    struct ShutdownEventScope {
+        HANDLE handle = nullptr;
+        ShutdownEventScope() {
+            handle = CreateEventW(NULL, TRUE, FALSE, L"Local\\RogFalchionAceHfxDaemonShutdownEvent");
+            if (handle) {
+                ResetEvent(handle);
+            }
+        }
+        ~ShutdownEventScope() {
+            if (handle && handle != INVALID_HANDLE_VALUE) {
+                CloseHandle(handle);
+                handle = nullptr;
+            }
+        }
+    } shutdown_event_scope;
+    HANDLE hShutdownEvent = shutdown_event_scope.handle;
 
     // 6. 检测异常退出标记 (在底层驱动初始化并就绪前严禁写入状态文件，防止启动崩溃形成死循环)
     std::string state_file = GetStateFilePath();
@@ -863,10 +876,6 @@ int main(int argc, char* argv[]) {
     // 正常优雅退出：清除运行状态标记文件
     RemoveAllStateFiles();
     LOG_INFO("[+] 运行状态标记已清除 (.daemon_running 已删除)");
-
-    if (hShutdownEvent) {
-        CloseHandle(hShutdownEvent);
-    }
 
     if (hMutex) {
         CloseHandle(hMutex);

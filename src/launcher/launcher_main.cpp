@@ -189,19 +189,27 @@ int wmain(int argc, wchar_t* argv[]) {
         cmd_line += L" \"" + arg + L"\"";
     }
 
-    // 4. 配置文件智能放置：
-    // 仅在用户未显式指定 --config 且非单纯帮助模式时才在当前工作目录释放默认 config.json
-    std::filesystem::path cwd_config = std::filesystem::current_path() / L"config.json";
+    // 4. 规范配置文件收敛与单次旧配置迁移：
+    // 用户正式配置统一收敛至 %LOCALAPPDATA%\Aura\config.json，杜绝 CWD 分裂
+    std::filesystem::path canonical_config = runtime_dir.parent_path() / L"config.json";
     if (!has_config_arg && !is_help) {
-        if (!std::filesystem::exists(cwd_config, ec)) {
-            std::filesystem::copy_file(cfg_example, cwd_config, std::filesystem::copy_options::skip_existing, ec);
-            if (ec || !std::filesystem::exists(cwd_config, ec)) {
-                std::cerr << "[Aura] 错误: 无法在当前目录创建默认 config.json: " << (ec ? ec.message() : "未知错误") << std::endl;
-                return 1;
+        if (!std::filesystem::exists(canonical_config, ec)) {
+            // 旧配置兼容迁移：若当前工作目录存在 legacy config.json，则一次性迁移至规范路径
+            std::filesystem::path cwd_config = std::filesystem::current_path() / L"config.json";
+            if (std::filesystem::exists(cwd_config, ec)) {
+                std::filesystem::copy_file(cwd_config, canonical_config, std::filesystem::copy_options::skip_existing, ec);
+            }
+            // 若仍不存在，则从模板 config.example.json 初始化
+            if (!std::filesystem::exists(canonical_config, ec)) {
+                std::filesystem::copy_file(cfg_example, canonical_config, std::filesystem::copy_options::skip_existing, ec);
+                if (ec || !std::filesystem::exists(canonical_config, ec)) {
+                    std::cerr << "[Aura] 错误: 无法在规范目录创建默认 config.json: " << (ec ? ec.message() : "未知错误") << std::endl;
+                    return 1;
+                }
             }
         }
-        if (std::filesystem::exists(cwd_config)) {
-            cmd_line += L" --config \"" + cwd_config.wstring() + L"\"";
+        if (std::filesystem::exists(canonical_config)) {
+            cmd_line += L" --config \"" + canonical_config.wstring() + L"\"";
         }
     }
     if (!has_keymap_arg && std::filesystem::exists(keymap_json)) {
