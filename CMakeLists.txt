@@ -188,6 +188,25 @@ target_link_libraries(test_native_hid PRIVATE
 add_executable(test_diag_hook tests/test_diag_hook.cpp)
 target_link_libraries(test_diag_hook PRIVATE user32)
 
+# 5.5 单元测试: test_runtime_status
+add_executable(test_runtime_status
+    tests/test_runtime_status.cpp
+    src/aura/aura_adapter.cpp
+    src/aura/native_hid_backend.cpp
+    src/aura/hal_compat.cpp
+    src/aura/keymap.cpp
+)
+target_link_libraries(test_runtime_status PRIVATE
+    setupapi
+    hid
+    ole32
+    oleaut32
+    user32
+    shell32
+    psapi
+    version
+)
+
 # 6. CTest 测试体系集成
 enable_testing()
 add_library(plugin_fixture_v1 SHARED tests/fixtures/plugin_reload_fixture.cpp)
@@ -199,6 +218,8 @@ add_dependencies(test_plugin_runtime plugin_fixture_v1 plugin_fixture_v2)
 add_test(NAME plugin_runtime COMMAND test_plugin_runtime
     $<TARGET_FILE:plugin_fixture_v1> $<TARGET_FILE:plugin_fixture_v2>)
 set_tests_properties(plugin_runtime PROPERTIES TIMEOUT 30)
+add_test(NAME runtime_status COMMAND test_runtime_status)
+set_tests_properties(runtime_status PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
 add_test(NAME gsi_rules COMMAND test_gsi_rules)
 set_tests_properties(gsi_rules PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures")
 add_test(NAME native_hid COMMAND test_native_hid)

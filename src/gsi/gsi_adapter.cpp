@@ -872,6 +872,18 @@ void GsiAdapter::SetupRoutes() {
         res.status = ok ? 200 : 400;
         res.set_content(ok ? "{\"status\":\"ok\"}" : "{\"status\":\"error\"}", "application/json; charset=utf-8");
     });
+
+    // Control API v1: 查询只读运行时状态快照 (线程安全纯内存复制，严禁触碰硬件对象)
+    svr_->Get("/api/runtime/status", [this](const httplib::Request&, httplib::Response& res) {
+        if (!status_store_) {
+            res.status = 503;
+            res.set_content(R"json({"status":"error","error":"Service Unavailable","message":"Runtime status store not initialized"})json", "application/json; charset=utf-8");
+            return;
+        }
+        auto snap = status_store_->GetSnapshot();
+        res.status = 200;
+        res.set_content(snap.ToJson().dump(), "application/json; charset=utf-8");
+    });
 }
 
 bool GsiAdapter::Start(int port) {

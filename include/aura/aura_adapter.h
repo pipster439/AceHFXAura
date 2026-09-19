@@ -23,6 +23,18 @@ enum class AdapterState {
     Error
 };
 
+inline const char* AdapterStateToString(AdapterState s) {
+    switch (s) {
+        case AdapterState::Uninitialized: return "uninitialized";
+        case AdapterState::Connecting: return "connecting";
+        case AdapterState::Connected: return "connected";
+        case AdapterState::Disconnected: return "disconnected";
+        case AdapterState::BackoffWait: return "backoff_wait";
+        case AdapterState::Error: return "error";
+        default: return "unknown";
+    }
+}
+
 // 注册表 InprocServer32 解析辅助函数（支持可测试的查询抽象与 HKLM -> HKCR 回退，杜绝 UAF）
 using RegistryQueryFn = std::function<std::wstring(HKEY root, const std::wstring& subkey)>;
 std::wstring ResolveInprocServerDllPath(

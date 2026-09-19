@@ -227,10 +227,10 @@ def fetch_http_text(url: str, timeout: float = 2.0) -> str:
         return resp.read().decode("utf-8")
 
 
-def wait_for_http_ready(port: int, max_wait: float = 5.0) -> bool:
-    """Poll the /api/status endpoint until WebUI server is healthy and responding."""
+def wait_for_http_ready(port: int, max_wait: float = 5.0, path: str = "/api/status") -> bool:
+    """Poll the endpoint until server is healthy and responding."""
     start_time = time.time()
-    url = f"http://127.0.0.1:{port}/api/status"
+    url = f"http://127.0.0.1:{port}{path}"
     while time.time() - start_time < max_wait:
         try:
             data = fetch_http_json(url, timeout=0.5)
@@ -578,6 +578,42 @@ class TestDaemonEntrypoint(unittest.TestCase):
             "Daemon Preserved Title 776655",
             "aura_daemon must not overwrite existing config.json in CWD"
         )
+
+    def test_daemon_runtime_status_endpoint_returns_ok_under_dry_run(self):
+        check_daemon_prerequisites_or_skip(self)
+
+        shutil.copyfile(EXAMPLE_CONFIG, os.path.join(self.tmp_dir, "config.example.json"))
+        shutil.copyfile(KEYMAP_FILE, os.path.join(self.tmp_dir, "calibrated_keymap.json"))
+
+        # 严格使用 --dry-run 保护物理硬件
+        proc = subprocess.Popen([self.daemon_exe, "--dry-run"],
+                                cwd=self.tmp_dir, env=self.env,
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                text=True, encoding="utf-8", errors="replace")
+        try:
+            ready = wait_for_http_ready(19897, max_wait=5.0, path="/api/runtime/status")
+            self.assertTrue(ready, "aura_daemon GSI server failed to respond on 19897 /api/runtime/status")
+
+            data = fetch_http_json("http://127.0.0.1:19897/api/runtime/status")
+            self.assertEqual(data.get("status"), "ok")
+            self.assertEqual(data.get("api_version"), 1)
+
+            # Constraint 3:
+            # hardware.connected 表示真实物理硬件连接，dry-run 时必须为 false
+            hw = data.get("hardware", {})
+            self.assertFalse(hw.get("connected"), "Dry-run mode must report hardware.connected as False")
+            self.assertEqual(hw.get("state"), "connected")
+            self.assertEqual(hw.get("active_backend"), "dry_run")
+
+            rt = data.get("runtime", {})
+            self.assertTrue(rt.get("dry_run"), "Dry-run mode must report runtime.dry_run as True")
+            self.assertEqual(rt.get("fps"), 25)
+            self.assertTrue(len(rt.get("active_profile", "")) > 0)
+
+            gsi = data.get("gsi", {})
+            self.assertIn("active", gsi)
+        finally:
+            terminate_proc(proc)
 
 
 # =============================================================================

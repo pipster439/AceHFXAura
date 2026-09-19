@@ -7,6 +7,7 @@
 #include "engine/plugin_manager.h"
 #include "supervisor/web_supervisor.h"
 #include "gsi/gsi_adapter.h"
+#include "aura/runtime_status.h"
 #include "utils/logger.h"
 #include "utils/system_info.h"
 
@@ -562,8 +563,10 @@ int main(int argc, char* argv[]) {
     }
 
     // 9. 启动 CS2 GSI 适配器 (严格监听 127.0.0.1:19897)
-    // 核心线程隔离纪律：网络 I/O 线程仅在内存中维护 GsiState 键值字典，严禁直接触碰 COM/HAL
+    // 核心线程隔离纪律：网络 I/O 线程仅在内存中维护 GsiState 键值字典与只读 RuntimeStatusSnapshot，严禁直接触碰 COM/HAL
+    auto status_store = std::make_shared<aura::RuntimeStatusStore>();
     aura::GsiAdapter gsi_adapter;
+    gsi_adapter.SetStatusStore(status_store);
     if (!gsi_adapter.Start(19897)) {
         LOG_WARN("CS2 GSI 适配器监听 127.0.0.1:19897 失败 (可能端口已被占用)");
     } else {
@@ -731,6 +734,26 @@ int main(int argc, char* argv[]) {
     // （仅主循环访问，故无需加锁；这正是 R2 把决策单点化后获得的简化）
     std::string last_proc_seen = "__UNSET__";
 
+    // 运行时只读状态快照生成器 (主线程独占写入 RuntimeStatusStore，网络线程只读获取纯内存副本)
+    auto update_status_snapshot = [&]() {
+        aura::RuntimeStatusSnapshot snap;
+        snap.hardware_connected = (!dry_run) && adapter.IsConnected();
+        snap.adapter_state = aura::AdapterStateToString(adapter.GetState());
+        snap.configured_backend = aura::HardwareBackendToString(adapter.GetConfiguredBackend());
+        snap.active_backend = adapter.GetActiveBackendName();
+        snap.device_path = adapter.GetDevicePath();
+        snap.last_hardware_error = adapter.GetLastHardwareError();
+        snap.active_profile = current_active_profile_name;
+        snap.target_fps = target_fps;
+        snap.dry_run = dry_run;
+        snap.gsi_active = gsi_adapter.GetState().IsActive();
+        snap.foreground_process = monitor.GetCurrentProcessName();
+        status_store->Update(snap);
+    };
+
+    // 填入初始运行态快照
+    update_status_snapshot();
+
     while (g_running.load(std::memory_order_acquire)) {
         // 检查是否有外部管理端发出的优雅停机通知
         if (hShutdownEvent && WaitForSingleObject(hShutdownEvent, 0) == WAIT_OBJECT_0) {
@@ -849,6 +872,9 @@ int main(int argc, char* argv[]) {
                 break;
             }
         }
+
+        // 每一轮推流、重连检测、规则匹配与配置热重载完成后，在节拍对齐 sleep 前刷新状态快照
+        update_status_snapshot();
 
         // 对齐帧节拍
         next_tick += frame_time;

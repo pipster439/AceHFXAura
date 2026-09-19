@@ -22,6 +22,7 @@
 #include "third_party/json.hpp"
 #include "third_party/httplib.h"
 #include "engine/plugin_interface.h"
+#include "aura/runtime_status.h"
 
 namespace aura {
 
@@ -176,12 +177,16 @@ public:
     void SetPreviewHandler(std::function<bool(const std::string&)> handler) {
         on_preview_frame_ = std::move(handler);
     }
+    void SetStatusStore(std::shared_ptr<const RuntimeStatusStore> store) {
+        status_store_ = std::move(store);
+    }
 
 private:
     void SetupRoutes();
 
     std::function<bool(const std::string&)> on_reload_plugin_;
     std::function<bool(const std::string&)> on_preview_frame_;
+    std::shared_ptr<const RuntimeStatusStore> status_store_;
 
     int port_{19897};
     std::unique_ptr<httplib::Server> svr_;

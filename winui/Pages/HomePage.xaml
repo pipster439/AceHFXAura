@@ -19,9 +19,15 @@
                         </VisualState.StateTriggers>
                         <VisualState.Setters>
                             <Setter Target="CardGridCol1.Width" Value="*" />
+                            <Setter Target="DeviceCard.(Grid.Row)" Value="0" />
+                            <Setter Target="DeviceCard.(Grid.Column)" Value="0" />
                             <Setter Target="DaemonCard.(Grid.Row)" Value="0" />
                             <Setter Target="DaemonCard.(Grid.Column)" Value="1" />
-                            <Setter Target="QuickCard.(Grid.Row)" Value="1" />
+                            <Setter Target="ProfileCard.(Grid.Row)" Value="1" />
+                            <Setter Target="ProfileCard.(Grid.Column)" Value="0" />
+                            <Setter Target="GsiCard.(Grid.Row)" Value="1" />
+                            <Setter Target="GsiCard.(Grid.Column)" Value="1" />
+                            <Setter Target="QuickCard.(Grid.Row)" Value="2" />
                             <Setter Target="QuickCard.(Grid.Column)" Value="0" />
                             <Setter Target="QuickCard.(Grid.ColumnSpan)" Value="2" />
                         </VisualState.Setters>
@@ -33,9 +39,15 @@
                         </VisualState.StateTriggers>
                         <VisualState.Setters>
                             <Setter Target="CardGridCol1.Width" Value="0" />
+                            <Setter Target="DeviceCard.(Grid.Row)" Value="0" />
+                            <Setter Target="DeviceCard.(Grid.Column)" Value="0" />
                             <Setter Target="DaemonCard.(Grid.Row)" Value="1" />
                             <Setter Target="DaemonCard.(Grid.Column)" Value="0" />
-                            <Setter Target="QuickCard.(Grid.Row)" Value="2" />
+                            <Setter Target="ProfileCard.(Grid.Row)" Value="2" />
+                            <Setter Target="ProfileCard.(Grid.Column)" Value="0" />
+                            <Setter Target="GsiCard.(Grid.Row)" Value="3" />
+                            <Setter Target="GsiCard.(Grid.Column)" Value="0" />
+                            <Setter Target="QuickCard.(Grid.Row)" Value="4" />
                             <Setter Target="QuickCard.(Grid.Column)" Value="0" />
                             <Setter Target="QuickCard.(Grid.ColumnSpan)" Value="1" />
                         </VisualState.Setters>
@@ -62,9 +74,11 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <!-- 设备状态卡片 -->
+                <!-- 1. 设备状态卡片 -->
                 <Border x:Name="DeviceCard"
                         Grid.Row="0" Grid.Column="0"
                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
@@ -76,21 +90,23 @@
                         <StackPanel Orientation="Horizontal" Spacing="12">
                             <FontIcon Glyph="&#xE765;" FontSize="24" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
                             <StackPanel>
-                                <TextBlock Text="连接设备" Style="{ThemeResource SubtitleTextBlockStyle}" />
-                                <TextBlock Text="未连接 (待第二阶段 Control API 接入)"
+                                <TextBlock Text="ROG Falchion Ace HFX" Style="{ThemeResource SubtitleTextBlockStyle}" />
+                                <TextBlock x:Name="DeviceStatusText"
+                                           Text="正在检测..."
                                            Style="{ThemeResource BodyTextBlockStyle}"
                                            FontWeight="SemiBold"
                                            TextWrapping="Wrap" />
                             </StackPanel>
                         </StackPanel>
-                        <TextBlock Text="后端协议: 未知 (待第二阶段 Control API 接入)"
+                        <TextBlock x:Name="BackendStatusText"
+                                   Text="后端协议: 检测中..."
                                    Style="{ThemeResource CaptionTextBlockStyle}"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                    TextWrapping="Wrap" />
                     </StackPanel>
                 </Border>
 
-                <!-- 守护进程状态卡片 -->
+                <!-- 2. 守护进程状态卡片 -->
                 <Border x:Name="DaemonCard"
                         Grid.Row="0" Grid.Column="1"
                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
@@ -100,22 +116,70 @@
                         Padding="16">
                     <StackPanel Spacing="12">
                         <StackPanel Orientation="Horizontal" Spacing="12">
-                            <FontIcon Glyph="&#xEC05;" FontSize="24" Foreground="{ThemeResource SystemFillColorSuccessBrush}" />
+                            <FontIcon Glyph="&#xEC05;" FontSize="24" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
                             <StackPanel>
                                 <TextBlock Text="核心服务 (daemon)" Style="{ThemeResource SubtitleTextBlockStyle}" />
                                 <TextBlock x:Name="DaemonStatusText" Text="正在检测..." Style="{ThemeResource BodyTextBlockStyle}" FontWeight="SemiBold" TextWrapping="Wrap" />
                             </StackPanel>
                         </StackPanel>
-                        <TextBlock Text="前台应用窗口感应、25 FPS 默认基线推流、规则引擎与热重载就绪"
+                        <TextBlock x:Name="DaemonDetailText"
+                                   Text="正在连接 Control API (127.0.0.1:19897)..."
                                    Style="{ThemeResource CaptionTextBlockStyle}"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                    TextWrapping="Wrap" />
                     </StackPanel>
                 </Border>
 
-                <!-- 快捷入口卡片 -->
+                <!-- 3. 方案与渲染卡片 -->
+                <Border x:Name="ProfileCard"
+                        Grid.Row="1" Grid.Column="0"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="16">
+                    <StackPanel Spacing="12">
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <FontIcon Glyph="&#xE706;" FontSize="24" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                            <StackPanel>
+                                <TextBlock Text="当前灯效方案" Style="{ThemeResource SubtitleTextBlockStyle}" />
+                                <TextBlock x:Name="ActiveProfileText" Text="--" Style="{ThemeResource BodyTextBlockStyle}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </StackPanel>
+                        <TextBlock x:Name="FpsText"
+                                   Text="渲染帧率: --"
+                                   Style="{ThemeResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+
+                <!-- 4. 游戏集成卡片 -->
+                <Border x:Name="GsiCard"
+                        Grid.Row="1" Grid.Column="1"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="16">
+                    <StackPanel Spacing="12">
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <FontIcon Glyph="&#xE7FC;" FontSize="24" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                            <StackPanel>
+                                <TextBlock Text="游戏联动 (CS2 GSI)" Style="{ThemeResource SubtitleTextBlockStyle}" />
+                                <TextBlock x:Name="GsiStatusText" Text="Idle" Style="{ThemeResource BodyTextBlockStyle}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </StackPanel>
+                        <TextBlock Text="炸弹倒计时、血量呼吸、击杀瞬态光效同步中"
+                                   Style="{ThemeResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+
+                <!-- 5. 快捷入口卡片 -->
                 <Border x:Name="QuickCard"
-                        Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                        Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                         BorderThickness="1"
@@ -123,7 +187,6 @@
                         Padding="16">
                     <StackPanel Spacing="12">
                         <TextBlock Text="快捷入口" Style="{ThemeResource SubtitleTextBlockStyle}" />
-                        <!-- 按钮容器允许空间紧凑时自适应换行或排列 -->
                         <Grid ColumnSpacing="12" RowSpacing="12">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
@@ -155,12 +218,12 @@
                 </Border>
             </Grid>
 
-            <!-- 阶段迁移指引 -->
-            <InfoBar Title="WinUI 3 迁移第一阶段 (Shell 就绪)"
-                     Message="本版本已建立 WinUI 3 原生视窗、自适应导航与系统托盘。Studio 页面通过 WebView2 承载本地 Blockly Web UI，核心灯效与硬件驱动不受任何影响。"
+            <!-- 状态通道指引 -->
+            <InfoBar Title="Aura Control API v1 已接入"
+                     Message="本页面已通过 daemon 核心端口 (http://127.0.0.1:19897/api/runtime/status) 实时同步真实设备连接、协议通道、活跃方案与推流帧率。"
                      IsOpen="True"
                      IsClosable="False"
-                     Severity="Informational" />
+                     Severity="Success" />
         </StackPanel>
     </ScrollViewer>
 </Page>
