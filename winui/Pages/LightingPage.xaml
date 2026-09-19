@@ -9,25 +9,26 @@
     mc:Ignorable="d">
 
     <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-        <StackPanel Spacing="24" Padding="36,24,36,36">
+        <StackPanel Spacing="20" Padding="24,20,24,24" HorizontalAlignment="Stretch">
             <StackPanel Spacing="4">
-                <TextBlock Text="灯效管理 (Lighting)" Style="{ThemeResource TitleTextBlockStyle}" />
+                <TextBlock Text="灯效管理 (Lighting)" Style="{ThemeResource TitleTextBlockStyle}" TextWrapping="Wrap" />
                 <TextBlock Text="逐键 RGB 灯效方案与硬件渲染参数"
                            Style="{ThemeResource BodyTextBlockStyle}"
-                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                           TextWrapping="Wrap" />
             </StackPanel>
 
             <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                     BorderThickness="1"
                     CornerRadius="8"
-                    Padding="20">
+                    Padding="16">
                 <StackPanel Spacing="16">
-                    <TextBlock Text="当前运行灯效参数" Style="{ThemeResource SubtitleTextBlockStyle}" />
+                    <TextBlock Text="当前运行灯效参数" Style="{ThemeResource SubtitleTextBlockStyle}" TextWrapping="Wrap" />
 
-                    <Grid ColumnSpacing="24" RowSpacing="12">
+                    <Grid ColumnSpacing="20" RowSpacing="12">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" MinWidth="120" />
+                            <ColumnDefinition Width="Auto" MinWidth="100" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
                         <Grid.RowDefinitions>
@@ -36,14 +37,14 @@
                             <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
 
-                        <TextBlock Grid.Row="0" Grid.Column="0" Text="默认灯效" FontWeight="SemiBold" />
-                        <TextBlock Grid.Row="0" Grid.Column="1" Text="彩虹波浪 (Rainbow Wave) / 自定义图层" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="当前方案" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <TextBlock Grid.Row="0" Grid.Column="1" Text="未获取 (待第二阶段 Control API 接入)" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
 
-                        <TextBlock Grid.Row="1" Grid.Column="0" Text="推流帧率" FontWeight="SemiBold" />
-                        <TextBlock Grid.Row="1" Grid.Column="1" Text="25 FPS (硬件节能防抖调度)" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="推流帧率" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <TextBlock Grid.Row="1" Grid.Column="1" Text="25 FPS (默认基线)" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
 
-                        <TextBlock Grid.Row="2" Grid.Column="0" Text="底层接口" FontWeight="SemiBold" />
-                        <TextBlock Grid.Row="2" Grid.Column="1" Text="Native Win32 HID 直接下发 (ROG Falchion Ace HFX)" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <TextBlock Grid.Row="2" Grid.Column="0" Text="底层接口" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <TextBlock Grid.Row="2" Grid.Column="1" Text="未连接 (待第二阶段 Control API 接入)" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                     </Grid>
                 </StackPanel>
             </Border>

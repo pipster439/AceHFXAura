@@ -9,28 +9,64 @@
     mc:Ignorable="d">
 
     <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-        <StackPanel Spacing="24" Padding="36,24,36,36">
+        <StackPanel x:Name="RootPanel" Spacing="20" Padding="24,20,24,24">
+            <VisualStateManager.VisualStateGroups>
+                <VisualStateGroup>
+                    <!-- 宽屏视图：双列布局 (窗口宽度 >= 720px) -->
+                    <VisualState x:Name="WideState">
+                        <VisualState.StateTriggers>
+                            <AdaptiveTrigger MinWindowWidth="720" />
+                        </VisualState.StateTriggers>
+                        <VisualState.Setters>
+                            <Setter Target="CardGridCol1.Width" Value="*" />
+                            <Setter Target="DaemonCard.(Grid.Row)" Value="0" />
+                            <Setter Target="DaemonCard.(Grid.Column)" Value="1" />
+                            <Setter Target="QuickCard.(Grid.Row)" Value="1" />
+                            <Setter Target="QuickCard.(Grid.Column)" Value="0" />
+                            <Setter Target="QuickCard.(Grid.ColumnSpan)" Value="2" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <!-- 窄屏视图：单列平铺 (窗口宽度 < 720px，完全兼容 600 DIP 最小物理约束) -->
+                    <VisualState x:Name="NarrowState">
+                        <VisualState.StateTriggers>
+                            <AdaptiveTrigger MinWindowWidth="0" />
+                        </VisualState.StateTriggers>
+                        <VisualState.Setters>
+                            <Setter Target="CardGridCol1.Width" Value="0" />
+                            <Setter Target="DaemonCard.(Grid.Row)" Value="1" />
+                            <Setter Target="DaemonCard.(Grid.Column)" Value="0" />
+                            <Setter Target="QuickCard.(Grid.Row)" Value="2" />
+                            <Setter Target="QuickCard.(Grid.Column)" Value="0" />
+                            <Setter Target="QuickCard.(Grid.ColumnSpan)" Value="1" />
+                        </VisualState.Setters>
+                    </VisualState>
+                </VisualStateGroup>
+            </VisualStateManager.VisualStateGroups>
+
             <!-- 标题区 -->
             <StackPanel Spacing="4">
-                <TextBlock Text="ROG Falchion Ace HFX 控制中心" Style="{ThemeResource TitleTextBlockStyle}" />
+                <TextBlock Text="ROG Falchion Ace HFX 控制中心" Style="{ThemeResource TitleTextBlockStyle}" TextWrapping="Wrap" />
                 <TextBlock Text="硬件级单键 RGB 磁轴键盘控制与生态协同平台"
                            Style="{ThemeResource BodyTextBlockStyle}"
-                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                           TextWrapping="Wrap" />
             </StackPanel>
 
-            <!-- 状态卡片网格 -->
-            <Grid ColumnSpacing="16" RowSpacing="16">
+            <!-- 状态卡片响应式网格 -->
+            <Grid x:Name="CardGrid" ColumnSpacing="16" RowSpacing="16">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" MinWidth="260" />
-                    <ColumnDefinition Width="*" MinWidth="260" />
+                    <ColumnDefinition x:Name="CardGridCol0" Width="*" />
+                    <ColumnDefinition x:Name="CardGridCol1" Width="*" />
                 </Grid.ColumnDefinitions>
                 <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
                 <!-- 设备状态卡片 -->
-                <Border Grid.Row="0" Grid.Column="0"
+                <Border x:Name="DeviceCard"
+                        Grid.Row="0" Grid.Column="0"
                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                         BorderThickness="1"
@@ -41,10 +77,13 @@
                             <FontIcon Glyph="&#xE765;" FontSize="24" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
                             <StackPanel>
                                 <TextBlock Text="连接设备" Style="{ThemeResource SubtitleTextBlockStyle}" />
-                                <TextBlock Text="ROG Falchion Ace HFX (65%)" Style="{ThemeResource BodyTextBlockStyle}" FontWeight="SemiBold" />
+                                <TextBlock Text="未连接 (待第二阶段 Control API 接入)"
+                                           Style="{ThemeResource BodyTextBlockStyle}"
+                                           FontWeight="SemiBold"
+                                           TextWrapping="Wrap" />
                             </StackPanel>
                         </StackPanel>
-                        <TextBlock Text="后端协议: Native Win32 HID (MI_01) 优先，ASUS HAL 兜底兼容"
+                        <TextBlock Text="后端协议: 未知 (待第二阶段 Control API 接入)"
                                    Style="{ThemeResource CaptionTextBlockStyle}"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                    TextWrapping="Wrap" />
@@ -52,7 +91,8 @@
                 </Border>
 
                 <!-- 守护进程状态卡片 -->
-                <Border Grid.Row="0" Grid.Column="1"
+                <Border x:Name="DaemonCard"
+                        Grid.Row="0" Grid.Column="1"
                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                         BorderThickness="1"
@@ -63,18 +103,19 @@
                             <FontIcon Glyph="&#xEC05;" FontSize="24" Foreground="{ThemeResource SystemFillColorSuccessBrush}" />
                             <StackPanel>
                                 <TextBlock Text="核心服务 (daemon)" Style="{ThemeResource SubtitleTextBlockStyle}" />
-                                <TextBlock x:Name="DaemonStatusText" Text="正在检测..." Style="{ThemeResource BodyTextBlockStyle}" FontWeight="SemiBold" />
+                                <TextBlock x:Name="DaemonStatusText" Text="正在检测..." Style="{ThemeResource BodyTextBlockStyle}" FontWeight="SemiBold" TextWrapping="Wrap" />
                             </StackPanel>
                         </StackPanel>
-                        <TextBlock Text="前台应用窗口感应、60 FPS 硬件节流、规则引擎与热重载就绪"
+                        <TextBlock Text="前台应用窗口感应、25 FPS 默认基线推流、规则引擎与热重载就绪"
                                    Style="{ThemeResource CaptionTextBlockStyle}"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                    TextWrapping="Wrap" />
                     </StackPanel>
                 </Border>
 
-                <!-- 快速直达卡片 -->
-                <Border Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                <!-- 快捷入口卡片 -->
+                <Border x:Name="QuickCard"
+                        Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                         BorderThickness="1"
@@ -82,8 +123,14 @@
                         Padding="16">
                     <StackPanel Spacing="12">
                         <TextBlock Text="快捷入口" Style="{ThemeResource SubtitleTextBlockStyle}" />
-                        <StackPanel Orientation="Horizontal" Spacing="12">
+                        <!-- 按钮容器允许空间紧凑时自适应换行或排列 -->
+                        <Grid ColumnSpacing="12" RowSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
                             <Button x:Name="OpenStudioBtn"
+                                    Grid.Column="0"
                                     Click="OpenStudioBtn_Click"
                                     AutomationProperties.Name="进入 Blockly Studio"
                                     ToolTipService.ToolTip="进入 Blockly Studio"
@@ -94,6 +141,7 @@
                                 </StackPanel>
                             </Button>
                             <Button x:Name="RefreshStatusBtn"
+                                    Grid.Column="1"
                                     Click="RefreshStatusBtn_Click"
                                     AutomationProperties.Name="刷新核心状态"
                                     ToolTipService.ToolTip="刷新核心状态">
@@ -102,14 +150,14 @@
                                     <TextBlock Text="刷新核心状态" />
                                 </StackPanel>
                             </Button>
-                        </StackPanel>
+                        </Grid>
                     </StackPanel>
                 </Border>
             </Grid>
 
             <!-- 阶段迁移指引 -->
             <InfoBar Title="WinUI 3 迁移第一阶段 (Shell 就绪)"
-                     Message="本版本已建立 WinUI 3 原生视窗、自适应导航与系统托盘。Studio 页面通过 WebView2 无缝嵌入本地 Blockly Web UI，核心灯效与硬件驱动不受任何影响。"
+                     Message="本版本已建立 WinUI 3 原生视窗、自适应导航与系统托盘。Studio 页面通过 WebView2 承载本地 Blockly Web UI，核心灯效与硬件驱动不受任何影响。"
                      IsOpen="True"
                      IsClosable="False"
                      Severity="Informational" />

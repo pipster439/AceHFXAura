@@ -107,9 +107,13 @@ public sealed class TrayIconManager : IDisposable
     [DllImport("user32.dll")]
     private static extern bool SetForegroundWindow(IntPtr hWnd);
 
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern uint RegisterWindowMessage(string lpString);
+
     private readonly IntPtr _hWnd;
     private readonly Action _onOpen;
     private readonly Action _onExit;
+    private readonly uint _wmTaskbarCreated;
     private IntPtr _hIcon = IntPtr.Zero;
     private bool _isAdded = false;
     private string _daemonStatusText = "守护进程: 运行中";
@@ -122,6 +126,7 @@ public sealed class TrayIconManager : IDisposable
         _hWnd = WindowNative.GetWindowHandle(window);
         _onOpen = onOpen;
         _onExit = onExit;
+        _wmTaskbarCreated = RegisterWindowMessage("TaskbarCreated");
 
         LoadAppIcon();
 
@@ -193,6 +198,13 @@ public sealed class TrayIconManager : IDisposable
 
     private IntPtr TraySubclassCallback(IntPtr hWnd, uint uMsg, IntPtr wParam, IntPtr lParam, UIntPtr uIdSubclass, UIntPtr dwRefData)
     {
+        if (_wmTaskbarCreated != 0 && uMsg == _wmTaskbarCreated)
+        {
+            // Windows Explorer 重启后自动重新向系统任务栏注册托盘图标
+            AddTrayIcon();
+            return IntPtr.Zero;
+        }
+
         if (uMsg == WM_TRAYICON)
         {
             int mouseMsg = (int)lParam;

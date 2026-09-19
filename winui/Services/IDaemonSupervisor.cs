@@ -3,11 +3,19 @@ using System.Threading.Tasks;
 
 namespace Aura_WinUI.Services;
 
+public enum DaemonOwnership
+{
+    None,
+    SpawnedByWinUI,
+    AttachedPreExisting
+}
+
 public interface IDaemonSupervisor
 {
     bool IsDaemonRunning { get; }
     bool IsWebServerReady { get; }
     string StatusDescription { get; }
+    DaemonOwnership Ownership { get; }
 
     event Action<string>? StatusChanged;
 

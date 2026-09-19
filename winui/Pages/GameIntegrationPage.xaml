@@ -9,22 +9,23 @@
     mc:Ignorable="d">
 
     <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-        <StackPanel Spacing="24" Padding="36,24,36,36">
+        <StackPanel Spacing="20" Padding="24,20,24,24" HorizontalAlignment="Stretch">
             <StackPanel Spacing="4">
-                <TextBlock Text="游戏深度联动 (Game Integration)" Style="{ThemeResource TitleTextBlockStyle}" />
+                <TextBlock Text="游戏深度联动 (Game Integration)" Style="{ThemeResource TitleTextBlockStyle}" TextWrapping="Wrap" />
                 <TextBlock Text="基于 Valve 官方 CS2 Game State Integration 的原生硬件灯效驱动"
                            Style="{ThemeResource BodyTextBlockStyle}"
-                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                           TextWrapping="Wrap" />
             </StackPanel>
 
             <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                     BorderThickness="1"
                     CornerRadius="8"
-                    Padding="20">
+                    Padding="16">
                 <StackPanel Spacing="16">
-                    <TextBlock Text="安全与防作弊合规保证" Style="{ThemeResource SubtitleTextBlockStyle}" />
-                    <TextBlock Text="本程序严格遵守反作弊安全边界：不读取游戏进程内存、不注入任何 DLL、不进行进程 Hook。完全依托 Valve 官方公开的 Game State Integration (GSI) HTTP Payload 进行灯效同步，100% 免疫 VAC / 平台反作弊封禁风险。"
+                    <TextBlock Text="安全与防作弊合规架构" Style="{ThemeResource SubtitleTextBlockStyle}" TextWrapping="Wrap" />
+                    <TextBlock Text="本程序严格遵守反作弊安全边界：不读取游戏进程内存、不注入任何 DLL、不进行进程 Hook。完全依托 Valve 官方公开的 Game State Integration (GSI) 本机 HTTP 网络协议接收游戏事件与状态通知，实现零侵入硬件灯效联动。"
                                Style="{ThemeResource BodyTextBlockStyle}"
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                TextWrapping="Wrap" />

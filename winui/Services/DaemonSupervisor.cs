@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Aura_WinUI.Services;
@@ -11,6 +12,7 @@ public sealed class DaemonSupervisor : IDaemonSupervisor
 {
     private const uint SYNCHRONIZE = 0x00100000;
     private const string DAEMON_MUTEX_NAME = @"Local\RogFalchionAceHfxDaemonMutex";
+    private const string DAEMON_SHUTDOWN_EVENT_NAME = @"Local\RogFalchionAceHfxDaemonShutdownEvent";
 
     [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     private static extern IntPtr OpenMutex(uint dwDesiredAccess, bool bInheritHandle, string lpName);
@@ -19,12 +21,16 @@ public sealed class DaemonSupervisor : IDaemonSupervisor
     private static extern bool CloseHandle(IntPtr hObject);
 
     private readonly HttpClient _http = new() { Timeout = TimeSpan.FromMilliseconds(1500) };
+    private readonly object _taskLock = new();
+    private Task? _inFlightStartTask;
+
     private Process? _spawnedProcess;
     private string _status = "未初始化";
 
     public bool IsDaemonRunning { get; private set; }
     public bool IsWebServerReady { get; private set; }
     public string StatusDescription => _status;
+    public DaemonOwnership Ownership { get; private set; } = DaemonOwnership.None;
 
     public event Action<string>? StatusChanged;
 
@@ -62,7 +68,22 @@ public sealed class DaemonSupervisor : IDaemonSupervisor
         return false;
     }
 
-    public async Task EnsureStartedAsync()
+    public Task EnsureStartedAsync()
+    {
+        // 串行化并发调用 (App.OnLaunched、HomePage.Loaded、StudioPage.Loaded 等共享同一启动 Task)
+        lock (_taskLock)
+        {
+            if (_inFlightStartTask != null && !_inFlightStartTask.IsCompleted)
+            {
+                return _inFlightStartTask;
+            }
+
+            _inFlightStartTask = EnsureStartedCoreAsync();
+            return _inFlightStartTask;
+        }
+    }
+
+    private async Task EnsureStartedCoreAsync()
     {
         UpdateStatus("正在探测后台核心状态...");
 
@@ -70,6 +91,10 @@ public sealed class DaemonSupervisor : IDaemonSupervisor
         if (CheckMutexExists())
         {
             IsDaemonRunning = true;
+            if (_spawnedProcess == null)
+            {
+                Ownership = DaemonOwnership.AttachedPreExisting;
+            }
             UpdateStatus("守护进程已在运行中");
 
             // 检查 Web 服务是否可通
@@ -84,12 +109,13 @@ public sealed class DaemonSupervisor : IDaemonSupervisor
             return;
         }
 
-        // 2. 未运行，寻找可执行文件并启动
+        // 2. 互斥体不存在，寻找可执行文件并启动
         string? exePath = FindDaemonExecutable();
         if (string.IsNullOrEmpty(exePath))
         {
             UpdateStatus("未找到 aura_daemon.exe 可执行文件");
             IsDaemonRunning = false;
+            Ownership = DaemonOwnership.None;
             return;
         }
 
@@ -104,8 +130,20 @@ public sealed class DaemonSupervisor : IDaemonSupervisor
                 CreateNoWindow = true
             };
 
-            _spawnedProcess = Process.Start(psi);
-            IsDaemonRunning = true;
+            var proc = Process.Start(psi);
+            if (proc != null)
+            {
+                _spawnedProcess = proc;
+                Ownership = DaemonOwnership.SpawnedByWinUI;
+                IsDaemonRunning = true;
+            }
+            else
+            {
+                UpdateStatus("守护进程启动失败 (未能创建进程句柄)");
+                IsDaemonRunning = false;
+                Ownership = DaemonOwnership.None;
+                return;
+            }
 
             // 等待 Web 端口开放 (最多 5 秒)
             for (int i = 0; i < 25; i++)
@@ -124,29 +162,77 @@ public sealed class DaemonSupervisor : IDaemonSupervisor
         {
             UpdateStatus($"启动失败: {ex.Message}");
             IsDaemonRunning = false;
+            Ownership = DaemonOwnership.None;
         }
     }
 
-    public Task StopAsync()
+    public async Task StopAsync()
     {
-        if (_spawnedProcess != null && !_spawnedProcess.HasExited)
+        UpdateStatus("正在请求守护进程退出...");
+
+        // 1. 发送优雅停机通知 (Named Event: RogFalchionAceHfxDaemonShutdownEvent)
+        try
+        {
+            if (EventWaitHandle.TryOpenExisting(DAEMON_SHUTDOWN_EVENT_NAME, out var shutdownEvent))
+            {
+                using (shutdownEvent)
+                {
+                    shutdownEvent.Set();
+                }
+            }
+        }
+        catch
+        {
+            // 忽略事件打开异常
+        }
+
+        // 2. 根据所有权执行退出等待与兜底策略
+        if (Ownership == DaemonOwnership.SpawnedByWinUI && _spawnedProcess != null && !_spawnedProcess.HasExited)
         {
             try
             {
-                _spawnedProcess.Kill(true);
-                _spawnedProcess.WaitForExit(2000);
+                // 等待进程优雅退出 (最长等待 3.5 秒)
+                using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(3500));
+                await _spawnedProcess.WaitForExitAsync(cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                // 优雅退出超时，仅对 WinUI 自己拉起的进程执行最后兜底强杀
+                try
+                {
+                    if (!_spawnedProcess.HasExited)
+                    {
+                        _spawnedProcess.Kill(true);
+                    }
+                }
+                catch
+                {
+                    // 忽略强杀异常
+                }
             }
             catch
             {
-                // 忽略退出异常
+                // 忽略等待异常
             }
             _spawnedProcess = null;
         }
+        else if (Ownership == DaemonOwnership.AttachedPreExisting)
+        {
+            // 外部预先启动的守护进程：WinUI 仅通知停机并等待其释放 Mutex，超时绝不越权强杀
+            for (int i = 0; i < 35; i++)
+            {
+                await Task.Delay(100);
+                if (!CheckMutexExists())
+                {
+                    break;
+                }
+            }
+        }
 
+        Ownership = DaemonOwnership.None;
         IsDaemonRunning = false;
         IsWebServerReady = false;
         UpdateStatus("守护进程已停止");
-        return Task.CompletedTask;
     }
 
     private void UpdateStatus(string desc)

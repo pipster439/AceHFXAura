@@ -362,6 +362,12 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
+    // 3.5 注册优雅停机通知事件 (Named Event，供 WinUI 等外部管理端发起非强杀优雅退出)
+    HANDLE hShutdownEvent = CreateEventW(NULL, TRUE, FALSE, L"Local\\RogFalchionAceHfxDaemonShutdownEvent");
+    if (hShutdownEvent) {
+        ResetEvent(hShutdownEvent);
+    }
+
     // 4. 注册控制台中断处理器 (Ctrl+C)
     SetConsoleCtrlHandler(ConsoleCtrlHandler, TRUE);
 
@@ -713,6 +719,13 @@ int main(int argc, char* argv[]) {
     std::string last_proc_seen = "__UNSET__";
 
     while (g_running.load(std::memory_order_acquire)) {
+        // 检查是否有外部管理端发出的优雅停机通知
+        if (hShutdownEvent && WaitForSingleObject(hShutdownEvent, 0) == WAIT_OBJECT_0) {
+            LOG_INFO("接收到外部停机通知事件 (Shutdown Event)，正在执行优雅退出...");
+            g_running.store(false, std::memory_order_release);
+            break;
+        }
+
         // 主线程统一评估当前前台进程与 GSI 状态驱动的灯效方案
         // (严格遵循主线程独占 COM/HAL 纪律，绝不在网络线程执行硬件调用)
         std::string cur_proc = monitor.GetCurrentProcessName();
@@ -850,6 +863,10 @@ int main(int argc, char* argv[]) {
     // 正常优雅退出：清除运行状态标记文件
     RemoveAllStateFiles();
     LOG_INFO("[+] 运行状态标记已清除 (.daemon_running 已删除)");
+
+    if (hShutdownEvent) {
+        CloseHandle(hShutdownEvent);
+    }
 
     if (hMutex) {
         CloseHandle(hMutex);

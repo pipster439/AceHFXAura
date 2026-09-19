@@ -9,21 +9,22 @@
     mc:Ignorable="d">
 
     <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-        <StackPanel Spacing="24" Padding="36,24,36,36">
+        <StackPanel Spacing="20" Padding="24,20,24,24" HorizontalAlignment="Stretch">
             <StackPanel Spacing="4">
-                <TextBlock Text="自动化与规则 (Automation)" Style="{ThemeResource TitleTextBlockStyle}" />
+                <TextBlock Text="自动化与规则 (Automation)" Style="{ThemeResource TitleTextBlockStyle}" TextWrapping="Wrap" />
                 <TextBlock Text="基于 Windows 系统前台窗口事件驱动的智能方案匹配"
                            Style="{ThemeResource BodyTextBlockStyle}"
-                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                           TextWrapping="Wrap" />
             </StackPanel>
 
             <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                     BorderThickness="1"
                     CornerRadius="8"
-                    Padding="20">
+                    Padding="16">
                 <StackPanel Spacing="16">
-                    <TextBlock Text="前台监控机制 (Foreground Monitor)" Style="{ThemeResource SubtitleTextBlockStyle}" />
+                    <TextBlock Text="前台监控机制 (Foreground Monitor)" Style="{ThemeResource SubtitleTextBlockStyle}" TextWrapping="Wrap" />
                     <TextBlock Text="核心守护进程通过 Win32 SetWinEventHook(EVENT_SYSTEM_FOREGROUND) 进行纯事件驱动监听，完全无轮询开销。当检测到游戏或目标进程时，自动完成毫秒级灯效切换与 Web 服务节能管理。"
                                Style="{ThemeResource BodyTextBlockStyle}"
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"

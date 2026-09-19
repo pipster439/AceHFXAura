@@ -24,22 +24,8 @@ public sealed partial class HomePage : Page
 
     private void OpenStudioBtn_Click(object sender, RoutedEventArgs e)
     {
-        // 导航至 Studio
-        if (MainWindow.CurrentNavFrame != null)
-        {
-            MainWindow.CurrentNavFrame.Navigate(typeof(StudioPage));
-            if (MainWindow.CurrentNavView != null)
-            {
-                foreach (var item in MainWindow.CurrentNavView.MenuItems)
-                {
-                    if (item is NavigationViewItem nvi && (string)nvi.Tag == "studio")
-                    {
-                        MainWindow.CurrentNavView.SelectedItem = nvi;
-                        break;
-                    }
-                }
-            }
-        }
+        // 通过 MainWindow 统筹导航通道进入 Studio，自动处理防重与选中同步
+        MainWindow.CurrentInstance?.NavigateTo(typeof(StudioPage));
     }
 
     private async System.Threading.Tasks.Task RefreshStatusAsync()
