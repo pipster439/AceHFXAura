@@ -55,29 +55,57 @@ public static class RuntimeLayoutResolver
         }
 
         // 2. 便携绿色版优先 (Portable Priority)：
-        // 若执行文件所在目录下同时存在 calibrated_keymap.json 与 aura_daemon.exe (且非源码树)
+        // 如果 Aura.exe / 程序所在目录同时存在：config.example.json, calibrated_keymap.json, [可选 include/]
+        // → 视为 Portable 模式:
+        //   config = exe目录\config.json
+        //   keymap = exe目录\calibrated_keymap.json
+        //   working directory = exe目录
         string appBase = AppContext.BaseDirectory;
         string portableKeymap = Path.Combine(appBase, "calibrated_keymap.json");
-        string portableDaemon = Path.Combine(appBase, "aura_daemon.exe");
+        string portableExample = Path.Combine(appBase, "config.example.json");
 
-        if (File.Exists(portableDaemon) && File.Exists(portableKeymap))
+        if (File.Exists(portableKeymap) && File.Exists(portableExample))
         {
-            string portableConfig = Path.Combine(appBase, "config.json");
-            if (!File.Exists(portableConfig))
+            string portableDaemon = Path.Combine(appBase, "aura_daemon.exe");
+            if (!File.Exists(portableDaemon))
             {
-                string exampleCfg = Path.Combine(appBase, "config.example.json");
-                if (File.Exists(exampleCfg))
+                string portableAura = Path.Combine(appBase, "Aura.exe");
+                if (File.Exists(portableAura))
                 {
-                    try { File.Copy(exampleCfg, portableConfig, false); } catch { }
+                    portableDaemon = portableAura;
+                }
+                else
+                {
+                    portableDaemon = Path.Combine(appBase, "build", "Release", "aura_daemon.exe");
                 }
             }
 
-            return new RuntimeLayout(
-                DaemonExecutablePath: portableDaemon,
-                WorkingDirectory: appBase,
-                ConfigPath: portableConfig,
-                KeymapPath: portableKeymap
-            );
+            if (!File.Exists(portableDaemon))
+            {
+                string localRuntime = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "Aura", "runtime", "aura_daemon.exe");
+                if (File.Exists(localRuntime))
+                {
+                    portableDaemon = localRuntime;
+                }
+            }
+
+            if (File.Exists(portableDaemon))
+            {
+                string portableConfig = Path.Combine(appBase, "config.json");
+                if (!File.Exists(portableConfig))
+                {
+                    try { File.Copy(portableExample, portableConfig, false); } catch { }
+                }
+
+                return new RuntimeLayout(
+                    DaemonExecutablePath: portableDaemon,
+                    WorkingDirectory: appBase,
+                    ConfigPath: portableConfig,
+                    KeymapPath: portableKeymap
+                );
+            }
         }
 
         // 3. 正式单文件 / 桌面客户端 Canonical 路径：

@@ -189,31 +189,70 @@ int wmain(int argc, wchar_t* argv[]) {
         cmd_line += L" \"" + arg + L"\"";
     }
 
-    // 4. 规范配置文件收敛与单次旧配置迁移：
-    // 用户正式配置统一收敛至 %LOCALAPPDATA%\Aura\config.json，杜绝 CWD 分裂
-    std::filesystem::path canonical_config = runtime_dir.parent_path() / L"config.json";
-    if (!has_config_arg && !is_help) {
-        if (!std::filesystem::exists(canonical_config, ec)) {
-            // 旧配置兼容迁移：若当前工作目录存在 legacy config.json，则一次性迁移至规范路径
-            std::filesystem::path cwd_config = std::filesystem::current_path() / L"config.json";
-            if (std::filesystem::exists(cwd_config, ec)) {
-                std::filesystem::copy_file(cwd_config, canonical_config, std::filesystem::copy_options::skip_existing, ec);
-            }
-            // 若仍不存在，则从模板 config.example.json 初始化
-            if (!std::filesystem::exists(canonical_config, ec)) {
-                std::filesystem::copy_file(cfg_example, canonical_config, std::filesystem::copy_options::skip_existing, ec);
-                if (ec || !std::filesystem::exists(canonical_config, ec)) {
-                    std::cerr << "[Aura] 错误: 无法在规范目录创建默认 config.json: " << (ec ? ec.message() : "未知错误") << std::endl;
-                    return 1;
+    // 4. 判断运行模式 (Portable 绿色便携模式 vs 正式单文件模式)：
+    // 如果 Aura.exe 所在目录同时存在：config.example.json, calibrated_keymap.json, [include/ 目录]
+    // → 视为 Portable 模式:
+    //   config = exe目录\config.json
+    //   keymap = exe目录\calibrated_keymap.json
+    //   working directory = exe目录
+    // 否则:
+    // → 正式单文件模式:
+    //   config = %LOCALAPPDATA%\Aura\config.json
+    //   keymap = %LOCALAPPDATA%\Aura\runtime\calibrated_keymap.json
+    //   working directory = %LOCALAPPDATA%\Aura
+    std::filesystem::path exe_dir = self_path.parent_path();
+    bool is_portable = std::filesystem::exists(exe_dir / L"config.example.json", ec) &&
+                       std::filesystem::exists(exe_dir / L"calibrated_keymap.json", ec);
+    if (is_portable && std::filesystem::is_directory(exe_dir / L"include", ec)) {
+        // include/ 目录强化 Portable 模式判断
+    }
+
+    std::filesystem::path target_config;
+    std::filesystem::path target_keymap;
+    std::filesystem::path target_working_dir;
+
+    if (is_portable) {
+        // Portable 绿色便携模式
+        target_config = exe_dir / L"config.json";
+        target_keymap = exe_dir / L"calibrated_keymap.json";
+        target_working_dir = exe_dir;
+
+        // 若 exe 目录下 config.json 尚不存在，从同目录 config.example.json 初始化
+        if (!std::filesystem::exists(target_config, ec)) {
+            std::filesystem::copy_file(exe_dir / L"config.example.json", target_config, std::filesystem::copy_options::skip_existing, ec);
+        }
+    } else {
+        // 正式单文件模式
+        target_config = runtime_dir.parent_path() / L"config.json";
+        target_keymap = keymap_json; // %LOCALAPPDATA%\Aura\runtime\calibrated_keymap.json
+        target_working_dir = runtime_dir.parent_path();
+
+        if (!has_config_arg && !is_help) {
+            if (!std::filesystem::exists(target_config, ec)) {
+                // 旧配置兼容迁移：若当前工作目录存在 legacy config.json，则一次性迁移至规范路径
+                std::filesystem::path cwd_config = std::filesystem::current_path() / L"config.json";
+                if (std::filesystem::exists(cwd_config, ec)) {
+                    std::filesystem::copy_file(cwd_config, target_config, std::filesystem::copy_options::skip_existing, ec);
+                }
+                // 若仍不存在，则从模板 config.example.json 初始化
+                if (!std::filesystem::exists(target_config, ec)) {
+                    std::filesystem::copy_file(cfg_example, target_config, std::filesystem::copy_options::skip_existing, ec);
+                    if (ec || !std::filesystem::exists(target_config, ec)) {
+                        std::cerr << "[Aura] 错误: 无法在规范目录创建默认 config.json: " << (ec ? ec.message() : "未知错误") << std::endl;
+                        return 1;
+                    }
                 }
             }
         }
-        if (std::filesystem::exists(canonical_config)) {
-            cmd_line += L" --config \"" + canonical_config.wstring() + L"\"";
+    }
+
+    if (!has_config_arg && !is_help) {
+        if (std::filesystem::exists(target_config)) {
+            cmd_line += L" --config \"" + target_config.wstring() + L"\"";
         }
     }
-    if (!has_keymap_arg && std::filesystem::exists(keymap_json)) {
-        cmd_line += L" --keymap \"" + keymap_json.wstring() + L"\"";
+    if (!has_keymap_arg && std::filesystem::exists(target_keymap)) {
+        cmd_line += L" --keymap \"" + target_keymap.wstring() + L"\"";
     }
 
     // 5. 创建 Windows Job Object 并启用 KILL_ON_JOB_CLOSE (终极防孤儿保护)
@@ -242,7 +281,7 @@ int wmain(int argc, wchar_t* argv[]) {
         TRUE,
         creation_flags,
         nullptr,
-        nullptr, // 继承 CWD
+        target_working_dir.c_str(), // Portable 为 exe 目录，正式单文件模式为 %LOCALAPPDATA%\Aura
         &si,
         &pi
     );

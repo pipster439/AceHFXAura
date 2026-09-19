@@ -59,6 +59,8 @@ public partial class App : Application
         }
     }
 
+    public static bool IsShuttingDown { get; private set; }
+
     private static readonly object _shutdownLock = new();
     private static Task? _shutdownTask;
 
@@ -72,6 +74,7 @@ public partial class App : Application
                 return _shutdownTask;
             }
 
+            IsShuttingDown = true;
             _shutdownTask = PerformShutdownAsync();
             return _shutdownTask;
         }

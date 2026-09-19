@@ -72,6 +72,12 @@ public sealed partial class MainWindow : Window
 
     private void MainWindow_Closing(AppWindow sender, AppWindowClosingEventArgs args)
     {
+        if (App.IsShuttingDown)
+        {
+            // 正在执行程序化停机中：不再 Cancel 关闭流程，允许系统顺利关闭窗口
+            return;
+        }
+
         if (TrayIconManager.MinimizeToTrayEnabled)
         {
             args.Cancel = true;
