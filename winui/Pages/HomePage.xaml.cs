@@ -103,29 +103,30 @@ public sealed partial class HomePage : Page
         // 核心纪律：禁止每次 status poll 调用 DaemonSupervisor.EnsureStartedAsync()
         // 状态读取与生命周期启动职责严格分离
 
-        // 单飞行闸门 (Single-flight gate)：避免 polling 与手动刷新产生并发 HTTP 请求
-        if (!await _refreshGate.WaitAsync(0, token).ConfigureAwait(false))
-        {
-            return;
-        }
+        bool acquired = false;
 
         try
         {
-            var status = await AuraControlClient.Instance.GetRuntimeStatusAsync(token).ConfigureAwait(false);
+            acquired = await _refreshGate.WaitAsync(0, token).ConfigureAwait(false);
+            if (!acquired)
+            {
+                return;
+            }
+
+            var status = await AuraControlClient.Instance
+                .GetRuntimeStatusAsync(token)
+                .ConfigureAwait(false);
 
             if (token.IsCancellationRequested)
             {
                 return;
             }
 
-            DispatcherQueue.TryEnqueue(() =>
-            {
-                ApplyStatusToUi(status);
-            });
+            DispatcherQueue.TryEnqueue(() => ApplyStatusToUi(status));
         }
         catch (OperationCanceledException)
         {
-            // 正常取消
+            // 正常生命周期取消
         }
         catch
         {
@@ -133,7 +134,10 @@ public sealed partial class HomePage : Page
         }
         finally
         {
-            _refreshGate.Release();
+            if (acquired)
+            {
+                _refreshGate.Release();
+            }
         }
     }
 

@@ -760,7 +760,12 @@ bool AuraAdapter::CheckReconnect() {
             return true;
         } else {
             current_reconnect_interval_ms_ = std::min<uint64_t>(current_reconnect_interval_ms_ * 2, 60000);
+            state_ = AdapterState::BackoffWait;
             return false;
+        }
+    } else {
+        if (state_ == AdapterState::Disconnected) {
+            state_ = AdapterState::BackoffWait;
         }
     }
 
