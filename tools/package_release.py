@@ -195,7 +195,7 @@ def ensure_binaries(clean=False):
 
 def ensure_assets():
     print("\n--- 步骤 2: 验证并准备资产文件 ---")
-    print("[INFO] 公开发行包默认采用 Native Win32 HID 后端，运行时不加载 AacKbHal_x64.dll，直接通过 Windows HID 控灯")
+    print("[INFO] 公开发行包默认使用 auto 后端策略：优先通过 Native Win32 HID 控灯；当 Native HID 成功连接时不加载 AacKbHal_x64.dll，仅在 Native 不可用且 legacy fallback 成功时使用 ASUS HAL。")
 
     # 1. 键位映射表
     keymap_path = os.path.join(REPO_ROOT, "calibrated_keymap.json")
@@ -387,7 +387,7 @@ def build_portable_zip(version):
 ## 使用方法：
 1. **单文件直接启动**：双击运行 `Aura.exe` 即可自动激活键盘灯效并开启后台监护。
 2. **Web 配置界面**：启动后打开浏览器访问 `http://127.0.0.1:19898` 即可实时配置灯效方案与规则。
-3. **原生 HID 控灯**：Aura 默认采用原生 Win32 HID (MI_01) 协议直接控灯，运行时不加载 AacKbHal_x64.dll，即插即用。
+3. **原生 HID 控灯**：Aura 默认优先采用原生 Win32 HID (MI_01) 协议直接控灯，运行时不加载 AacKbHal_x64.dll，即插即用。
  
 ## 文件说明：
 - `Aura.exe`: 整合单文件主程序 (已内嵌守护进程、网页配置服务与 Plugin SDK，不内嵌任何 ASUS 专有 DLL)。
