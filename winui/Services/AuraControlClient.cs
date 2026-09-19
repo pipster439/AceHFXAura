@@ -176,9 +176,211 @@ public sealed class RuntimeStatus
     };
 }
 
+// ========================================================
+// Lighting Control API v1 DTOs
+// ========================================================
+
+public sealed class ProfileListItemDto
+{
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = "";
+
+    [JsonPropertyName("type")]
+    public string Type { get; set; } = "";
+}
+
+public sealed class ProfileListResponseDto
+{
+    [JsonPropertyName("status")]
+    public string Status { get; set; } = "";
+
+    [JsonPropertyName("api_version")]
+    public int ApiVersion { get; set; } = 1;
+
+    [JsonPropertyName("revision")]
+    public string Revision { get; set; } = "";
+
+    [JsonPropertyName("profiles")]
+    public List<ProfileListItemDto> Profiles { get; set; } = new();
+}
+
+public sealed class ProfileDetailDto
+{
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = "";
+
+    [JsonPropertyName("type")]
+    public string Type { get; set; } = "";
+
+    [JsonPropertyName("brightness")]
+    public double Brightness { get; set; } = 1.0;
+
+    [JsonPropertyName("fps")]
+    public int Fps { get; set; } = 25;
+
+    [JsonPropertyName("fps_inherited")]
+    public bool FpsInherited { get; set; } = true;
+
+    [JsonPropertyName("supports_period")]
+    public bool SupportsPeriod { get; set; } = false;
+
+    [JsonPropertyName("period_ms")]
+    public int? PeriodMs { get; set; }
+}
+
+public sealed class ProfileDetailResponseDto
+{
+    [JsonPropertyName("status")]
+    public string Status { get; set; } = "";
+
+    [JsonPropertyName("api_version")]
+    public int ApiVersion { get; set; } = 1;
+
+    [JsonPropertyName("revision")]
+    public string Revision { get; set; } = "";
+
+    [JsonPropertyName("profile")]
+    public ProfileDetailDto? Profile { get; set; }
+}
+
+public sealed class ProfilePatchDto
+{
+    [JsonPropertyName("expected_revision")]
+    public string ExpectedRevision { get; set; } = "";
+
+    [JsonPropertyName("brightness")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public double? Brightness { get; set; }
+
+    [JsonPropertyName("period_ms")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? PeriodMs { get; set; }
+
+    [JsonPropertyName("fps")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? Fps { get; set; }
+}
+
+public sealed class ProfilePatchResponseDto
+{
+    [JsonPropertyName("status")]
+    public string Status { get; set; } = "";
+
+    [JsonPropertyName("api_version")]
+    public int ApiVersion { get; set; } = 1;
+
+    [JsonPropertyName("message")]
+    public string Message { get; set; } = "";
+
+    [JsonPropertyName("revision")]
+    public string Revision { get; set; } = "";
+}
+
+public sealed class ApiErrorResponseDto
+{
+    [JsonPropertyName("status")]
+    public string Status { get; set; } = "";
+
+    [JsonPropertyName("error")]
+    public string Error { get; set; } = "";
+
+    [JsonPropertyName("message")]
+    public string Message { get; set; } = "";
+
+    [JsonPropertyName("current_revision")]
+    public string CurrentRevision { get; set; } = "";
+}
+
+// ========================================================
+// Client Result Models
+// ========================================================
+
+public sealed class ProfileListResult
+{
+    public bool IsSuccess { get; init; }
+    public string ErrorMessage { get; init; } = "";
+    public string Revision { get; init; } = "";
+    public IReadOnlyList<ProfileListItemDto> Profiles { get; init; } = Array.Empty<ProfileListItemDto>();
+
+    public static ProfileListResult Success(IReadOnlyList<ProfileListItemDto> profiles, string revision) => new()
+    {
+        IsSuccess = true,
+        Profiles = profiles,
+        Revision = revision
+    };
+
+    public static ProfileListResult Failure(string error) => new()
+    {
+        IsSuccess = false,
+        ErrorMessage = error
+    };
+}
+
+public sealed class ProfileDetailResult
+{
+    public bool IsSuccess { get; init; }
+    public string ErrorMessage { get; init; } = "";
+    public string Revision { get; init; } = "";
+    public ProfileDetailDto? Profile { get; init; }
+
+    public static ProfileDetailResult Success(ProfileDetailDto profile, string revision) => new()
+    {
+        IsSuccess = true,
+        Profile = profile,
+        Revision = revision
+    };
+
+    public static ProfileDetailResult Failure(string error) => new()
+    {
+        IsSuccess = false,
+        ErrorMessage = error
+    };
+}
+
+public enum UpdateProfileStatus
+{
+    Success,
+    Conflict,
+    ValidationError,
+    NotFound,
+    Failure
+}
+
+public sealed class UpdateProfileResult
+{
+    public UpdateProfileStatus Status { get; init; }
+    public bool IsSuccess => Status == UpdateProfileStatus.Success;
+    public bool IsConflict => Status == UpdateProfileStatus.Conflict;
+    public string ErrorMessage { get; init; } = "";
+    public string NewRevision { get; init; } = "";
+    public string CurrentRevision { get; init; } = "";
+
+    public static UpdateProfileResult Success(string newRevision) => new()
+    {
+        Status = UpdateProfileStatus.Success,
+        NewRevision = newRevision
+    };
+
+    public static UpdateProfileResult Conflict(string currentRevision, string message) => new()
+    {
+        Status = UpdateProfileStatus.Conflict,
+        CurrentRevision = currentRevision,
+        ErrorMessage = string.IsNullOrEmpty(message) ? "配置已被其他编辑器修改" : message
+    };
+
+    public static UpdateProfileResult Failure(UpdateProfileStatus status, string message) => new()
+    {
+        Status = status,
+        ErrorMessage = message
+    };
+}
+
 public interface IAuraControlClient
 {
     Task<RuntimeStatus> GetRuntimeStatusAsync(CancellationToken cancellationToken = default);
+    Task<ProfileListResult> GetProfilesAsync(CancellationToken cancellationToken = default);
+    Task<ProfileDetailResult> GetProfileAsync(string name, CancellationToken cancellationToken = default);
+    Task<UpdateProfileResult> UpdateProfileAsync(string name, ProfilePatchDto patch, CancellationToken cancellationToken = default);
 }
 
 public sealed class AuraControlClient : IAuraControlClient
@@ -195,7 +397,7 @@ public sealed class AuraControlClient : IAuraControlClient
 
     public AuraControlClient(HttpClient? client = null)
     {
-        _http = client ?? new HttpClient { Timeout = TimeSpan.FromMilliseconds(1200) };
+        _http = client ?? new HttpClient { Timeout = TimeSpan.FromMilliseconds(2500) };
     }
 
     public async Task<RuntimeStatus> GetRuntimeStatusAsync(CancellationToken cancellationToken = default)
@@ -238,6 +440,160 @@ public sealed class AuraControlClient : IAuraControlClient
         catch (Exception ex)
         {
             return RuntimeStatus.Offline(ex.Message);
+        }
+    }
+
+    public async Task<ProfileListResult> GetProfilesAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Get, "http://127.0.0.1:19897/api/lighting/profiles");
+            using var res = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+
+            var json = await res.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            if (!res.IsSuccessStatusCode)
+            {
+                return ProfileListResult.Failure($"HTTP {(int)res.StatusCode}: {res.ReasonPhrase}");
+            }
+
+            var dto = JsonSerializer.Deserialize<ProfileListResponseDto>(json, JsonOptions);
+            if (dto == null)
+            {
+                return ProfileListResult.Failure("Empty or invalid JSON payload");
+            }
+
+            if (!string.Equals(dto.Status, "ok", StringComparison.OrdinalIgnoreCase))
+            {
+                return ProfileListResult.Failure($"Daemon returned non-ok status: {dto.Status}");
+            }
+
+            if (dto.ApiVersion != 1)
+            {
+                return ProfileListResult.Failure($"Unsupported API version: {dto.ApiVersion} (expected 1)");
+            }
+
+            return ProfileListResult.Success(dto.Profiles, dto.Revision);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return ProfileListResult.Failure("Request canceled");
+        }
+        catch (Exception ex)
+        {
+            return ProfileListResult.Failure(ex.Message);
+        }
+    }
+
+    public async Task<ProfileDetailResult> GetProfileAsync(string name, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return ProfileDetailResult.Failure("Profile name cannot be empty");
+        }
+
+        try
+        {
+            string url = $"http://127.0.0.1:19897/api/lighting/profiles/{Uri.EscapeDataString(name)}";
+            using var req = new HttpRequestMessage(HttpMethod.Get, url);
+            using var res = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+
+            var json = await res.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            if (!res.IsSuccessStatusCode)
+            {
+                return ProfileDetailResult.Failure($"HTTP {(int)res.StatusCode}: {res.ReasonPhrase}");
+            }
+
+            var dto = JsonSerializer.Deserialize<ProfileDetailResponseDto>(json, JsonOptions);
+            if (dto == null || dto.Profile == null)
+            {
+                return ProfileDetailResult.Failure("Empty or invalid JSON payload");
+            }
+
+            if (!string.Equals(dto.Status, "ok", StringComparison.OrdinalIgnoreCase))
+            {
+                return ProfileDetailResult.Failure($"Daemon returned non-ok status: {dto.Status}");
+            }
+
+            if (dto.ApiVersion != 1)
+            {
+                return ProfileDetailResult.Failure($"Unsupported API version: {dto.ApiVersion} (expected 1)");
+            }
+
+            return ProfileDetailResult.Success(dto.Profile, dto.Revision);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return ProfileDetailResult.Failure("Request canceled");
+        }
+        catch (Exception ex)
+        {
+            return ProfileDetailResult.Failure(ex.Message);
+        }
+    }
+
+    public async Task<UpdateProfileResult> UpdateProfileAsync(string name, ProfilePatchDto patch, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return UpdateProfileResult.Failure(UpdateProfileStatus.ValidationError, "Profile name cannot be empty");
+        }
+
+        try
+        {
+            string url = $"http://127.0.0.1:19897/api/lighting/profiles/{Uri.EscapeDataString(name)}";
+            string patchJson = JsonSerializer.Serialize(patch, JsonOptions);
+
+            using var req = new HttpRequestMessage(new HttpMethod("PATCH"), url)
+            {
+                Content = new StringContent(patchJson, System.Text.Encoding.UTF8, "application/json")
+            };
+
+            using var res = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+            var resJson = await res.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+
+            if (res.StatusCode == System.Net.HttpStatusCode.OK)
+            {
+                var okDto = JsonSerializer.Deserialize<ProfilePatchResponseDto>(resJson, JsonOptions);
+                if (okDto != null && string.Equals(okDto.Status, "ok", StringComparison.OrdinalIgnoreCase))
+                {
+                    return UpdateProfileResult.Success(okDto.Revision);
+                }
+                return UpdateProfileResult.Failure(UpdateProfileStatus.Failure, "Unexpected non-ok response from daemon");
+            }
+
+            ApiErrorResponseDto? errDto = null;
+            try
+            {
+                errDto = JsonSerializer.Deserialize<ApiErrorResponseDto>(resJson, JsonOptions);
+            }
+            catch { }
+
+            string msg = errDto?.Message ?? res.ReasonPhrase ?? $"HTTP {(int)res.StatusCode}";
+
+            if (res.StatusCode == System.Net.HttpStatusCode.Conflict)
+            {
+                return UpdateProfileResult.Conflict(errDto?.CurrentRevision ?? "", msg);
+            }
+
+            if (res.StatusCode == System.Net.HttpStatusCode.BadRequest)
+            {
+                return UpdateProfileResult.Failure(UpdateProfileStatus.ValidationError, msg);
+            }
+
+            if (res.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                return UpdateProfileResult.Failure(UpdateProfileStatus.NotFound, msg);
+            }
+
+            return UpdateProfileResult.Failure(UpdateProfileStatus.Failure, msg);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return UpdateProfileResult.Failure(UpdateProfileStatus.Failure, "Request canceled");
+        }
+        catch (Exception ex)
+        {
+            return UpdateProfileResult.Failure(UpdateProfileStatus.Failure, ex.Message);
         }
     }
 }

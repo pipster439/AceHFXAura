@@ -615,6 +615,45 @@ class TestDaemonEntrypoint(unittest.TestCase):
         finally:
             terminate_proc(proc)
 
+    def test_daemon_lighting_endpoints_return_profiles_and_detail_under_dry_run(self):
+        check_daemon_prerequisites_or_skip(self)
+
+        shutil.copyfile(EXAMPLE_CONFIG, os.path.join(self.tmp_dir, "config.example.json"))
+        shutil.copyfile(KEYMAP_FILE, os.path.join(self.tmp_dir, "calibrated_keymap.json"))
+
+        # 严格使用 --dry-run 保护物理硬件
+        proc = subprocess.Popen([self.daemon_exe, "--dry-run"],
+                                cwd=self.tmp_dir, env=self.env,
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                text=True, encoding="utf-8", errors="replace")
+        try:
+            ready = wait_for_http_ready(19897, max_wait=5.0, path="/api/runtime/status")
+            self.assertTrue(ready, "aura_daemon GSI server failed to respond on 19897 /api/runtime/status")
+
+            # 1. GET /api/lighting/profiles
+            profiles_data = fetch_http_json("http://127.0.0.1:19897/api/lighting/profiles")
+            self.assertEqual(profiles_data.get("status"), "ok")
+            self.assertEqual(profiles_data.get("api_version"), 1)
+            self.assertTrue(len(profiles_data.get("revision", "")) > 0)
+            profiles = profiles_data.get("profiles", [])
+            self.assertTrue(len(profiles) >= 2)
+            names = [p.get("name") for p in profiles]
+            self.assertIn("desktop", names)
+
+            # 2. GET /api/lighting/profiles/desktop
+            detail_data = fetch_http_json("http://127.0.0.1:19897/api/lighting/profiles/desktop")
+            self.assertEqual(detail_data.get("status"), "ok")
+            self.assertEqual(detail_data.get("api_version"), 1)
+            prof = detail_data.get("profile", {})
+            self.assertEqual(prof.get("name"), "desktop")
+            self.assertEqual(prof.get("type"), "breathing")
+            self.assertTrue(prof.get("supports_period"))
+            self.assertEqual(prof.get("period_ms"), 3500)
+            self.assertEqual(prof.get("brightness"), 1.0)
+            self.assertEqual(prof.get("fps"), 25)
+        finally:
+            terminate_proc(proc)
+
 
 # =============================================================================
 # Launcher Entrypoint Test Suite (Aura.exe)

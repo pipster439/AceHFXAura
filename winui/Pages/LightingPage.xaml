@@ -10,50 +10,174 @@
 
     <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
         <StackPanel Spacing="20" Padding="24,20,24,24" HorizontalAlignment="Stretch">
+            <!-- 页面标题 -->
             <StackPanel Spacing="4">
                 <TextBlock Text="灯效管理 (Lighting)" Style="{ThemeResource TitleTextBlockStyle}" TextWrapping="Wrap" />
-                <TextBlock Text="逐键 RGB 灯效方案与硬件渲染参数"
+                <TextBlock Text="原生灯效方案配置与硬件渲染参数调控"
                            Style="{ThemeResource BodyTextBlockStyle}"
                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                            TextWrapping="Wrap" />
             </StackPanel>
 
+            <!-- 1. 当前运行态卡片 (只读，来自 /api/runtime/status) -->
             <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                     BorderThickness="1"
                     CornerRadius="8"
                     Padding="16">
-                <StackPanel Spacing="16">
-                    <TextBlock Text="当前运行灯效参数" Style="{ThemeResource SubtitleTextBlockStyle}" TextWrapping="Wrap" />
+                <Grid ColumnSpacing="16" RowSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
 
-                    <Grid ColumnSpacing="20" RowSpacing="12">
+                    <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                        <FontIcon Glyph="&#xE781;" FontSize="20" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                        <StackPanel>
+                            <TextBlock Text="当前活跃方案 (Active Profile)" Style="{ThemeResource SubtitleTextBlockStyle}" />
+                            <TextBlock Text="由前台应用监控与 CS2 GSI 规则引擎实时计算判定 (只读)"
+                                       Style="{ThemeResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <Button Grid.Row="0" Grid.Column="1"
+                            x:Name="RefreshStatusBtn"
+                            Click="RefreshStatusBtn_Click"
+                            VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="&#xE72C;" FontSize="14" />
+                            <TextBlock Text="刷新状态" />
+                        </StackPanel>
+                    </Button>
+
+                    <Grid Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" ColumnSpacing="24" RowSpacing="6">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" MinWidth="100" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
 
-                        <TextBlock Grid.Row="0" Grid.Column="0" Text="当前方案" FontWeight="SemiBold" TextWrapping="Wrap" />
-                        <TextBlock Grid.Row="0" Grid.Column="1" Text="未获取 (待第二阶段 Control API 接入)" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                        <StackPanel Grid.Column="0" Spacing="2">
+                            <TextBlock Text="活跃方案名" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock x:Name="ActiveProfileText" Text="正在读取..." FontWeight="SemiBold" Style="{ThemeResource BodyTextBlockStyle}" />
+                        </StackPanel>
 
-                        <TextBlock Grid.Row="1" Grid.Column="0" Text="推流帧率" FontWeight="SemiBold" TextWrapping="Wrap" />
-                        <TextBlock Grid.Row="1" Grid.Column="1" Text="25 FPS (默认基线)" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                        <StackPanel Grid.Column="1" Spacing="2">
+                            <TextBlock Text="推流帧率" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock x:Name="ActiveFpsText" Text="--" FontWeight="SemiBold" Style="{ThemeResource BodyTextBlockStyle}" />
+                        </StackPanel>
 
-                        <TextBlock Grid.Row="2" Grid.Column="0" Text="底层接口" FontWeight="SemiBold" TextWrapping="Wrap" />
-                        <TextBlock Grid.Row="2" Grid.Column="1" Text="未连接 (待第二阶段 Control API 接入)" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                        <StackPanel Grid.Column="2" Spacing="2">
+                            <TextBlock Text="硬件接口" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock x:Name="ActiveBackendText" Text="--" FontWeight="SemiBold" Style="{ThemeResource BodyTextBlockStyle}" />
+                        </StackPanel>
                     </Grid>
-                </StackPanel>
+                </Grid>
             </Border>
 
-            <InfoBar Title="第一阶段架构提示"
-                     Message="本阶段保持 Native HID 控灯与 EffectEngine 核心完全独立运作。更高级的逐键可视化编辑与原生参数调节将在后续阶段通过 Control API 接入。"
-                     IsOpen="True"
-                     IsClosable="False"
-                     Severity="Informational" />
+            <!-- 2. 状态提示条 (保存成功 / 409 冲突 / 校验错误) -->
+            <InfoBar x:Name="StatusInfoBar"
+                     IsOpen="False"
+                     IsClosable="True" />
+
+            <!-- 3. Profile 编辑卡片 (Selected Profile) -->
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="16">
+                <StackPanel Spacing="20">
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="方案参数配置 (Selected Profile)" Style="{ThemeResource SubtitleTextBlockStyle}" />
+                        <TextBlock Text="调整本地草稿，点击“保存更改”后通过原子写入生效，无需重启守护进程"
+                                   Style="{ThemeResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </StackPanel>
+
+                    <!-- 方案选择 -->
+                    <ComboBox x:Name="ProfileComboBox"
+                              Header="编辑方案"
+                              PlaceholderText="正在加载方案列表..."
+                              MinWidth="280"
+                              HorizontalAlignment="Left"
+                              SelectionChanged="ProfileComboBox_SelectionChanged" />
+
+                    <!-- 效果类型 (只读) -->
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="效果类型" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                        <TextBlock x:Name="EffectTypeText"
+                                   Text="--"
+                                   Style="{ThemeResource BodyTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </StackPanel>
+
+                    <!-- 亮度调节 (0 - 100%) -->
+                    <StackPanel Spacing="4" MaxWidth="540" HorizontalAlignment="Left">
+                        <Grid>
+                            <TextBlock Text="亮度 (Brightness)" Style="{ThemeResource BodyStrongTextBlockStyle}" HorizontalAlignment="Left" />
+                            <TextBlock x:Name="BrightnessValueText" Text="100%" Style="{ThemeResource BodyStrongTextBlockStyle}" HorizontalAlignment="Right" />
+                        </Grid>
+                        <Slider x:Name="BrightnessSlider"
+                                Minimum="0"
+                                Maximum="100"
+                                StepFrequency="1"
+                                ValueChanged="BrightnessSlider_ValueChanged" />
+                        <TextBlock Text="调节该方案下的整体灯光亮度比率 (0%–100%)"
+                                   Style="{ThemeResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </StackPanel>
+
+                    <!-- 动画周期 (仅当 supports_period == true 时显示) -->
+                    <StackPanel x:Name="PeriodPanel" Spacing="6" MaxWidth="540" HorizontalAlignment="Left" Visibility="Collapsed">
+                        <TextBlock Text="动画周期 (Animation Period)" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                        <NumberBox x:Name="PeriodNumberBox"
+                                   Minimum="33"
+                                   SmallChange="100"
+                                   LargeChange="500"
+                                   SpinButtonPlacementMode="Compact"
+                                   ValueChanged="PeriodNumberBox_ValueChanged" />
+                        <TextBlock Text="动态效果单次完整循环周期 (毫秒，最小 33ms)"
+                                   Style="{ThemeResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </StackPanel>
+
+                    <!-- 方案帧率 (10 - 100 FPS) -->
+                    <StackPanel Spacing="6" MaxWidth="540" HorizontalAlignment="Left">
+                        <TextBlock Text="方案推流帧率 (Profile FPS)" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                        <NumberBox x:Name="FpsNumberBox"
+                                   Minimum="10"
+                                   Maximum="100"
+                                   SmallChange="1"
+                                   LargeChange="5"
+                                   SpinButtonPlacementMode="Compact"
+                                   ValueChanged="FpsNumberBox_ValueChanged" />
+                        <TextBlock x:Name="FpsHelperText"
+                                   Text="继承全局默认帧率 (10–100 FPS)"
+                                   Style="{ThemeResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </StackPanel>
+
+                    <!-- 底部操作栏 -->
+                    <StackPanel Orientation="Horizontal" Spacing="16" VerticalAlignment="Center" Margin="0,12,0,0">
+                        <Button x:Name="SaveBtn"
+                                Content="保存更改"
+                                Style="{ThemeResource AccentButtonStyle}"
+                                Click="SaveBtn_Click"
+                                IsEnabled="False" />
+                        <TextBlock x:Name="DirtyHintText"
+                                   Text="存在未保存的本地修改"
+                                   VerticalAlignment="Center"
+                                   Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                   Style="{ThemeResource CaptionTextBlockStyle}"
+                                   Visibility="Collapsed" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
         </StackPanel>
     </ScrollViewer>
 </Page>

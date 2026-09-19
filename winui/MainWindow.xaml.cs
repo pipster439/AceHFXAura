@@ -68,6 +68,28 @@ public sealed partial class MainWindow : Window
 
         // 7. 默认进入首页
         NavigateTo(typeof(HomePage));
+
+        // 8. 自动化导航压力验证钩子 (支持环境变量或 G:\Aura\nav_stress_trigger.txt 触发)
+        int stressCycles = 0;
+        string triggerPath = @"G:\Aura\nav_stress_trigger.txt";
+        if (System.IO.File.Exists(triggerPath))
+        {
+            try
+            {
+                string content = System.IO.File.ReadAllText(triggerPath).Trim();
+                int.TryParse(content, out stressCycles);
+            }
+            catch { }
+        }
+        if (stressCycles <= 0)
+        {
+            string? stressCyclesEnv = Environment.GetEnvironmentVariable("AURA_TEST_NAV_STRESS");
+            int.TryParse(stressCyclesEnv, out stressCycles);
+        }
+        if (stressCycles > 0)
+        {
+            _ = RunNavStressTestAsync(stressCycles);
+        }
     }
 
     private void MainWindow_Closing(AppWindow sender, AppWindowClosingEventArgs args)
@@ -192,5 +214,45 @@ public sealed partial class MainWindow : Window
     public void DisposeTray()
     {
         _trayIcon.Dispose();
+    }
+
+    private async Task RunNavStressTestAsync(int cycles)
+    {
+        string resultFile = @"G:\Aura\nav_stress_result.txt";
+        Console.WriteLine($"[NAV_STRESS] Starting {cycles} navigation cycles (Home <-> Lighting)...");
+        try
+        {
+            System.IO.File.WriteAllText(resultFile, $"STARTING {cycles} cycles at {DateTime.Now}\n");
+            await Task.Delay(800);
+            for (int i = 1; i <= cycles; i++)
+            {
+                DispatcherQueue?.TryEnqueue(() => NavigateTo(typeof(LightingPage)));
+                await Task.Delay(300);
+                DispatcherQueue?.TryEnqueue(() => NavigateTo(typeof(HomePage)));
+                await Task.Delay(250);
+                Console.WriteLine($"[NAV_STRESS] Cycle {i}/{cycles} passed.");
+                System.IO.File.AppendAllText(resultFile, $"Cycle {i}/{cycles} passed at {DateTime.Now}\n");
+            }
+            Console.WriteLine($"[NAV_STRESS] All {cycles} navigation cycles completed successfully!");
+            System.IO.File.AppendAllText(resultFile, $"SUCCESS {cycles} cycles completed at {DateTime.Now}\n");
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[NAV_STRESS_ERROR] {ex}");
+            System.IO.File.AppendAllText(resultFile, $"FAILED: {ex}\n");
+        }
+        finally
+        {
+            bool autoExit = Environment.GetEnvironmentVariable("AURA_TEST_NAV_STRESS_AUTOEXIT") == "1"
+                || System.IO.File.Exists(@"G:\Aura\nav_stress_trigger.txt");
+            if (autoExit)
+            {
+                await Task.Delay(500);
+                DispatcherQueue?.TryEnqueue(() =>
+                {
+                    Application.Current.Exit();
+                });
+            }
+        }
     }
 }

@@ -7,6 +7,7 @@
 #include <windows.h>
 
 #include "web/web_server.h"
+#include "config/lighting_service.h"
 #include "third_party/json.hpp"
 #include <fstream>
 #include <iostream>
@@ -1334,6 +1335,10 @@ bool WebServer::ReadConfigFile(std::string& out_json_str) const {
 }
 
 bool WebServer::WriteConfigFile(const std::string& json_str) const {
+    NamedConfigLock named_lock(L"Local\\AceHFXAuraConfigWriteMutex", 5000);
+    if (!named_lock.IsAcquired()) {
+        return false;
+    }
     std::lock_guard<std::mutex> lock(file_mutex_);
     // 原子写入：先写入临时文件，再原子替换覆盖
     std::filesystem::path tmp_path = config_path_.wstring() + L".tmp";

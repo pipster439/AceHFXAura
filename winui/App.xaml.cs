@@ -17,6 +17,15 @@ public partial class App : Application
     public App()
     {
         InitializeComponent();
+        UnhandledException += (sender, e) =>
+        {
+            Console.Error.WriteLine($"[FATAL] Xaml UnhandledException: {e.Exception}");
+            try
+            {
+                System.IO.File.AppendAllText(@"G:\Aura\aura_winui_crash.log", $"[{DateTime.Now}] Xaml: {e.Exception}\n");
+            }
+            catch { }
+        };
     }
 
     public static void HandleSecondaryActivation(AppActivationArguments args)

@@ -188,4 +188,273 @@ public sealed class AuraControlClientTests
         Assert.AreEqual("desktop", result.ActiveProfileDisplayName);
         Assert.AreEqual("Idle", result.GsiStatusDisplayName);
     }
+
+    [TestMethod]
+    public async Task GetProfilesAsync_WhenSuccess_ParsesProfilesAndRevision()
+    {
+        var json = """
+        {
+          "status": "ok",
+          "api_version": 1,
+          "revision": "0123456789abcdef",
+          "profiles": [
+            { "name": "desktop", "type": "breathing" },
+            { "name": "coding", "type": "static" }
+          ]
+        }
+        """;
+
+        var fakeHandler = new FakeHttpMessageHandler(req =>
+        {
+            Assert.AreEqual("http://127.0.0.1:19897/api/lighting/profiles", req.RequestUri?.ToString());
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(json, Encoding.UTF8, "application/json")
+            };
+        });
+
+        var client = new AuraControlClient(new HttpClient(fakeHandler));
+        var result = await client.GetProfilesAsync();
+
+        Assert.IsTrue(result.IsSuccess);
+        Assert.AreEqual("0123456789abcdef", result.Revision);
+        Assert.AreEqual(2, result.Profiles.Count);
+        Assert.AreEqual("desktop", result.Profiles[0].Name);
+        Assert.AreEqual("breathing", result.Profiles[0].Type);
+        Assert.AreEqual("coding", result.Profiles[1].Name);
+        Assert.AreEqual("static", result.Profiles[1].Type);
+    }
+
+    [TestMethod]
+    public async Task GetProfilesAsync_WhenVersionMismatched_ReturnsFailure()
+    {
+        var json = """
+        {
+          "status": "ok",
+          "api_version": 2,
+          "profiles": []
+        }
+        """;
+
+        var fakeHandler = new FakeHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
+        });
+
+        var client = new AuraControlClient(new HttpClient(fakeHandler));
+        var result = await client.GetProfilesAsync();
+
+        Assert.IsFalse(result.IsSuccess);
+        StringAssert.Contains(result.ErrorMessage, "Unsupported API version");
+    }
+
+    [TestMethod]
+    public async Task GetProfileAsync_WhenSuccess_ParsesDetailWithSupportsPeriodAndInheritance()
+    {
+        var json = """
+        {
+          "status": "ok",
+          "api_version": 1,
+          "revision": "abcdef0123456789",
+          "profile": {
+            "name": "desktop",
+            "type": "breathing",
+            "brightness": 0.85,
+            "fps": 25,
+            "fps_inherited": true,
+            "supports_period": true,
+            "period_ms": 3200
+          }
+        }
+        """;
+
+        var fakeHandler = new FakeHttpMessageHandler(req =>
+        {
+            Assert.AreEqual("http://127.0.0.1:19897/api/lighting/profiles/desktop", req.RequestUri?.ToString());
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(json, Encoding.UTF8, "application/json")
+            };
+        });
+
+        var client = new AuraControlClient(new HttpClient(fakeHandler));
+        var result = await client.GetProfileAsync("desktop");
+
+        Assert.IsTrue(result.IsSuccess);
+        Assert.AreEqual("abcdef0123456789", result.Revision);
+        Assert.IsNotNull(result.Profile);
+        Assert.AreEqual("desktop", result.Profile.Name);
+        Assert.AreEqual("breathing", result.Profile.Type);
+        Assert.AreEqual(0.85, result.Profile.Brightness);
+        Assert.AreEqual(25, result.Profile.Fps);
+        Assert.IsTrue(result.Profile.FpsInherited);
+        Assert.IsTrue(result.Profile.SupportsPeriod);
+        Assert.AreEqual(3200, result.Profile.PeriodMs);
+    }
+
+    [TestMethod]
+    public async Task GetProfileAsync_WhenNotFound_ReturnsFailure()
+    {
+        var fakeHandler = new FakeHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.NotFound)
+        {
+            Content = new StringContent("{\"status\":\"error\",\"message\":\"Profile not found\"}", Encoding.UTF8, "application/json")
+        });
+
+        var client = new AuraControlClient(new HttpClient(fakeHandler));
+        var result = await client.GetProfileAsync("ghost");
+
+        Assert.IsFalse(result.IsSuccess);
+        StringAssert.Contains(result.ErrorMessage, "404");
+    }
+
+    [TestMethod]
+    public async Task UpdateProfileAsync_WhenSuccess_ReturnsSuccessWithNewRevision()
+    {
+        var responseJson = """
+        {
+          "status": "ok",
+          "api_version": 1,
+          "message": "Profile updated",
+          "revision": "new_rev_987654321"
+        }
+        """;
+
+        var fakeHandler = new FakeHttpMessageHandler(req =>
+        {
+            Assert.AreEqual(new HttpMethod("PATCH"), req.Method);
+            Assert.AreEqual("http://127.0.0.1:19897/api/lighting/profiles/desktop", req.RequestUri?.ToString());
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(responseJson, Encoding.UTF8, "application/json")
+            };
+        });
+
+        var client = new AuraControlClient(new HttpClient(fakeHandler));
+        var patch = new ProfilePatchDto
+        {
+            ExpectedRevision = "old_rev_12345",
+            Brightness = 0.5
+        };
+
+        var result = await client.UpdateProfileAsync("desktop", patch);
+
+        Assert.IsTrue(result.IsSuccess);
+        Assert.AreEqual(UpdateProfileStatus.Success, result.Status);
+        Assert.AreEqual("new_rev_987654321", result.NewRevision);
+    }
+
+    [TestMethod]
+    public async Task UpdateProfileAsync_SparseSerialization_OmitsNullFields()
+    {
+        string capturedBody = "";
+        var fakeHandler = new FakeHttpMessageHandler(req =>
+        {
+            capturedBody = req.Content?.ReadAsStringAsync().Result ?? "";
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("{\"status\":\"ok\",\"api_version\":1,\"revision\":\"rev2\"}", Encoding.UTF8, "application/json")
+            };
+        });
+
+        var client = new AuraControlClient(new HttpClient(fakeHandler));
+        var patch = new ProfilePatchDto
+        {
+            ExpectedRevision = "rev1",
+            Brightness = 0.75
+            // PeriodMs and Fps are null!
+        };
+
+        var result = await client.UpdateProfileAsync("desktop", patch);
+        Assert.IsTrue(result.IsSuccess);
+
+        // Verify null fields are not serialized, preserving sparse patch semantics
+        StringAssert.Contains(capturedBody, "\"brightness\":0.75");
+        StringAssert.Contains(capturedBody, "\"expected_revision\":\"rev1\"");
+        Assert.IsFalse(capturedBody.Contains("fps"), "Null fps must not be serialized");
+        Assert.IsFalse(capturedBody.Contains("period_ms"), "Null period_ms must not be serialized");
+    }
+
+    [TestMethod]
+    public async Task UpdateProfileAsync_WhenConflict409_ReturnsConflictWithCurrentRevision()
+    {
+        var conflictJson = """
+        {
+          "status": "error",
+          "error": "Conflict",
+          "message": "Configuration has been modified externally",
+          "current_revision": "studio_modified_rev_888"
+        }
+        """;
+
+        var fakeHandler = new FakeHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.Conflict)
+        {
+            Content = new StringContent(conflictJson, Encoding.UTF8, "application/json")
+        });
+
+        var client = new AuraControlClient(new HttpClient(fakeHandler));
+        var patch = new ProfilePatchDto
+        {
+            ExpectedRevision = "stale_rev_111",
+            Brightness = 0.3
+        };
+
+        var result = await client.UpdateProfileAsync("desktop", patch);
+
+        Assert.IsFalse(result.IsSuccess);
+        Assert.IsTrue(result.IsConflict);
+        Assert.AreEqual(UpdateProfileStatus.Conflict, result.Status);
+        Assert.AreEqual("studio_modified_rev_888", result.CurrentRevision);
+        StringAssert.Contains(result.ErrorMessage, "modified externally");
+    }
+
+    [TestMethod]
+    public async Task UpdateProfileAsync_WhenValidationError400_ReturnsValidationError()
+    {
+        var errJson = """
+        {
+          "status": "error",
+          "error": "Validation Error",
+          "message": "Field 'brightness' must be a valid number in [0.0, 1.0]"
+        }
+        """;
+
+        var fakeHandler = new FakeHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.BadRequest)
+        {
+            Content = new StringContent(errJson, Encoding.UTF8, "application/json")
+        });
+
+        var client = new AuraControlClient(new HttpClient(fakeHandler));
+        var patch = new ProfilePatchDto
+        {
+            ExpectedRevision = "rev1",
+            Brightness = 1.5
+        };
+
+        var result = await client.UpdateProfileAsync("desktop", patch);
+
+        Assert.IsFalse(result.IsSuccess);
+        Assert.AreEqual(UpdateProfileStatus.ValidationError, result.Status);
+        StringAssert.Contains(result.ErrorMessage, "Field 'brightness'");
+    }
+
+    [TestMethod]
+    public async Task UpdateProfileAsync_WhenMalformedJson_HandlesGracefullyWithoutThrowing()
+    {
+        var fakeHandler = new FakeHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.InternalServerError)
+        {
+            Content = new StringContent("<!DOCTYPE html><html><body>500 Error</body></html>", Encoding.UTF8, "text/html")
+        });
+
+        var client = new AuraControlClient(new HttpClient(fakeHandler));
+        var patch = new ProfilePatchDto
+        {
+            ExpectedRevision = "rev1",
+            Brightness = 0.5
+        };
+
+        var result = await client.UpdateProfileAsync("desktop", patch);
+
+        Assert.IsFalse(result.IsSuccess);
+        Assert.AreEqual(UpdateProfileStatus.Failure, result.Status);
+    }
 }

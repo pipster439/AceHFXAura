@@ -26,6 +26,8 @@
 
 namespace aura {
 
+class LightingControlService;
+
 // 通用 GSI 字段值容器
 struct GsiValue {
     enum class Type { None, Number, String, Boolean };
@@ -180,6 +182,9 @@ public:
     void SetStatusStore(std::shared_ptr<const RuntimeStatusStore> store) {
         status_store_ = std::move(store);
     }
+    void SetLightingService(std::shared_ptr<LightingControlService> service) {
+        lighting_service_ = std::move(service);
+    }
 
 private:
     void SetupRoutes();
@@ -187,6 +192,7 @@ private:
     std::function<bool(const std::string&)> on_reload_plugin_;
     std::function<bool(const std::string&)> on_preview_frame_;
     std::shared_ptr<const RuntimeStatusStore> status_store_;
+    std::shared_ptr<LightingControlService> lighting_service_;
 
     int port_{19897};
     std::unique_ptr<httplib::Server> svr_;

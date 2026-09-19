@@ -55,6 +55,7 @@ set(DAEMON_SOURCES
     src/engine/overlay_manager.cpp
     src/supervisor/web_supervisor.cpp
     src/gsi/gsi_adapter.cpp
+    src/config/lighting_service.cpp
 )
 
 set(DAEMON_HEADERS
@@ -65,6 +66,7 @@ set(DAEMON_HEADERS
     include/aura/keymap.h
     include/monitor/foreground_monitor.h
     include/config/rule_engine.h
+    include/config/lighting_service.h
     include/engine/effect.h
     include/engine/builtin_effects.h
     include/engine/effect_engine.h
@@ -149,6 +151,7 @@ add_executable(test_gsi_rules
     src/aura/native_hid_backend.cpp
     src/aura/hal_compat.cpp
     src/web/web_server.cpp
+    src/config/lighting_service.cpp
 )
 
 target_link_libraries(test_gsi_rules PRIVATE
@@ -207,6 +210,35 @@ target_link_libraries(test_runtime_status PRIVATE
     version
 )
 
+# 5.6 单元测试: test_lighting_service
+add_executable(test_lighting_service
+    tests/test_lighting_service.cpp
+    src/config/lighting_service.cpp
+    src/config/rule_engine.cpp
+    src/engine/builtin_effects.cpp
+    src/engine/effect_engine.cpp
+    src/engine/plugin_manager.cpp
+    src/engine/overlay_manager.cpp
+    src/gsi/gsi_adapter.cpp
+    src/aura/keymap.cpp
+    src/aura/aura_adapter.cpp
+    src/aura/native_hid_backend.cpp
+    src/aura/hal_compat.cpp
+    src/web/web_server.cpp
+)
+target_link_libraries(test_lighting_service PRIVATE
+    setupapi
+    hid
+    ole32
+    oleaut32
+    user32
+    shell32
+    psapi
+    version
+    ws2_32
+    crypt32
+)
+
 # 6. CTest 测试体系集成
 enable_testing()
 add_library(plugin_fixture_v1 SHARED tests/fixtures/plugin_reload_fixture.cpp)
@@ -220,6 +252,8 @@ add_test(NAME plugin_runtime COMMAND test_plugin_runtime
 set_tests_properties(plugin_runtime PROPERTIES TIMEOUT 30)
 add_test(NAME runtime_status COMMAND test_runtime_status)
 set_tests_properties(runtime_status PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
+add_test(NAME lighting_service COMMAND test_lighting_service)
+set_tests_properties(lighting_service PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
 add_test(NAME gsi_rules COMMAND test_gsi_rules)
 set_tests_properties(gsi_rules PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures")
 add_test(NAME native_hid COMMAND test_native_hid)

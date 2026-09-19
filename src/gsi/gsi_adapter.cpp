@@ -1,4 +1,5 @@
 #include "gsi/gsi_adapter.h"
+#include "config/lighting_service.h"
 #include "utils/logger.h"
 #include <algorithm>
 #include <cctype>
@@ -884,6 +885,11 @@ void GsiAdapter::SetupRoutes() {
         res.status = 200;
         res.set_content(snap.ToJson().dump(), "application/json; charset=utf-8");
     });
+
+    // Lighting Control API v1 (挂载在 127.0.0.1:19897)
+    if (lighting_service_) {
+        lighting_service_->RegisterRoutes(*svr_);
+    }
 }
 
 bool GsiAdapter::Start(int port) {
