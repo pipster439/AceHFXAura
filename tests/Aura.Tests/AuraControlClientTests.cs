@@ -921,4 +921,264 @@ public sealed class AuraControlClientTests
         Assert.IsTrue(EffectParamValueComparer.AreValuesEqual(EffectParamType.Number, 2, 2.0));
         Assert.IsFalse(EffectParamValueComparer.AreValuesEqual(EffectParamType.Number, 1.5, null));
     }
+
+    [TestMethod]
+    public async Task GetAutomationRulesAsync_WhenValidPayload_ParsesAllRulesAndRevision()
+    {
+        var json = """
+        {
+          "status": "ok",
+          "api_version": 1,
+          "revision": "rev_auto_123",
+          "rules": [
+            { "index": 0, "process": "cs2.exe", "profile": "cs2_gamer" },
+            { "index": 2, "process": "devenv.exe", "profile": "coding" }
+          ]
+        }
+        """;
+
+        var fakeHandler = new FakeHttpMessageHandler(req =>
+        {
+            Assert.AreEqual(HttpMethod.Get, req.Method);
+            Assert.AreEqual("http://127.0.0.1:19897/api/automation/rules", req.RequestUri?.ToString());
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(json, Encoding.UTF8, "application/json")
+            };
+        });
+
+        var client = new AuraControlClient(new HttpClient(fakeHandler));
+        var result = await client.GetAutomationRulesAsync();
+
+        Assert.IsTrue(result.IsSuccess);
+        Assert.AreEqual("rev_auto_123", result.Revision);
+        Assert.AreEqual(2, result.Rules.Count);
+        Assert.AreEqual(0, result.Rules[0].Index);
+        Assert.AreEqual("cs2.exe", result.Rules[0].Process);
+        Assert.AreEqual("cs2_gamer", result.Rules[0].Profile);
+        Assert.AreEqual(2, result.Rules[1].Index);
+        Assert.AreEqual("devenv.exe", result.Rules[1].Process);
+        Assert.AreEqual("coding", result.Rules[1].Profile);
+    }
+
+    [TestMethod]
+    public async Task AddAutomationRuleAsync_WhenCreated_ReturnsSuccessWithRuleAndIndex()
+    {
+        var json = """
+        {
+          "status": "ok",
+          "api_version": 1,
+          "revision": "rev_auto_456",
+          "index": 2,
+          "rule": { "process": "code.exe", "profile": "coding" }
+        }
+        """;
+
+        string capturedBody = "";
+        var fakeHandler = new FakeHttpMessageHandler(req =>
+        {
+            Assert.AreEqual(HttpMethod.Post, req.Method);
+            Assert.AreEqual("http://127.0.0.1:19897/api/automation/rules", req.RequestUri?.ToString());
+            capturedBody = req.Content?.ReadAsStringAsync().Result ?? "";
+            return new HttpResponseMessage(HttpStatusCode.Created)
+            {
+                Content = new StringContent(json, Encoding.UTF8, "application/json")
+            };
+        });
+
+        var client = new AuraControlClient(new HttpClient(fakeHandler));
+        var result = await client.AddAutomationRuleAsync(
+            new AutomationRuleDto { Process = "code", Profile = "coding" },
+            "rev_auto_123");
+
+        Assert.IsTrue(result.IsSuccess);
+        Assert.AreEqual("rev_auto_456", result.Revision);
+        Assert.AreEqual(2, result.Index);
+        Assert.IsNotNull(result.Rule);
+        Assert.AreEqual("code.exe", result.Rule.Process);
+        Assert.AreEqual("coding", result.Rule.Profile);
+
+        StringAssert.Contains(capturedBody, "\"expected_revision\":\"rev_auto_123\"");
+        StringAssert.Contains(capturedBody, "\"process\":\"code\"");
+        StringAssert.Contains(capturedBody, "\"profile\":\"coding\"");
+    }
+
+    [TestMethod]
+    public async Task AddAutomationRuleAsync_WhenDuplicateProcess_ReturnsDuplicateStatus()
+    {
+        var json = """
+        {
+          "status": "error",
+          "error": "duplicate_process",
+          "message": "Rule for process 'cs2.exe' already exists",
+          "current_revision": "rev_curr_999"
+        }
+        """;
+
+        var fakeHandler = new FakeHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.Conflict)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
+        });
+
+        var client = new AuraControlClient(new HttpClient(fakeHandler));
+        var result = await client.AddAutomationRuleAsync(
+            new AutomationRuleDto { Process = "cs2.exe", Profile = "desktop" },
+            "rev_auto_123");
+
+        Assert.IsFalse(result.IsSuccess);
+        Assert.IsTrue(result.IsDuplicate);
+        Assert.AreEqual(AutomationMutationStatus.DuplicateProcess, result.Status);
+        Assert.AreEqual("duplicate_process", result.ErrorCode);
+        StringAssert.Contains(result.ErrorMessage, "already exists");
+    }
+
+    [TestMethod]
+    public async Task AddAutomationRuleAsync_WhenRevisionConflict_ReturnsConflictWithCurrentRevision()
+    {
+        var json = """
+        {
+          "status": "error",
+          "error": "revision_conflict",
+          "message": "Configuration has been modified externally",
+          "current_revision": "rev_latest_888"
+        }
+        """;
+
+        var fakeHandler = new FakeHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.Conflict)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
+        });
+
+        var client = new AuraControlClient(new HttpClient(fakeHandler));
+        var result = await client.AddAutomationRuleAsync(
+            new AutomationRuleDto { Process = "notepad.exe", Profile = "desktop" },
+            "stale_revision");
+
+        Assert.IsFalse(result.IsSuccess);
+        Assert.IsTrue(result.IsConflict);
+        Assert.AreEqual(AutomationMutationStatus.Conflict, result.Status);
+        Assert.AreEqual("rev_latest_888", result.CurrentRevision);
+        Assert.AreEqual("revision_conflict", result.ErrorCode);
+    }
+
+    [TestMethod]
+    public async Task UpdateAutomationRuleAsync_WhenSuccess_SendsPatchPayloadAndReturnsNewRevision()
+    {
+        var json = """
+        {
+          "status": "ok",
+          "api_version": 1,
+          "revision": "rev_auto_789",
+          "index": 1,
+          "rule": { "process": "devenv.exe", "profile": "desktop" }
+        }
+        """;
+
+        string capturedBody = "";
+        var fakeHandler = new FakeHttpMessageHandler(req =>
+        {
+            Assert.AreEqual(new HttpMethod("PATCH"), req.Method);
+            Assert.AreEqual("http://127.0.0.1:19897/api/automation/rules/1", req.RequestUri?.ToString());
+            capturedBody = req.Content?.ReadAsStringAsync().Result ?? "";
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(json, Encoding.UTF8, "application/json")
+            };
+        });
+
+        var client = new AuraControlClient(new HttpClient(fakeHandler));
+        var result = await client.UpdateAutomationRuleAsync(1, null, "desktop", "rev_auto_456");
+
+        Assert.IsTrue(result.IsSuccess);
+        Assert.AreEqual("rev_auto_789", result.Revision);
+        Assert.AreEqual(1, result.Index);
+        Assert.IsNotNull(result.Rule);
+        Assert.AreEqual("desktop", result.Rule.Profile);
+
+        StringAssert.Contains(capturedBody, "\"expected_revision\":\"rev_auto_456\"");
+        StringAssert.Contains(capturedBody, "\"profile\":\"desktop\"");
+        Assert.IsFalse(capturedBody.Contains("\"process\""));
+    }
+
+    [TestMethod]
+    public async Task UpdateAutomationRuleAsync_WhenNotFound_ReturnsNotFoundStatus()
+    {
+        var json = """
+        {
+          "status": "error",
+          "error": "rule_not_found",
+          "message": "Rule index 99 out of bounds"
+        }
+        """;
+
+        var fakeHandler = new FakeHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.NotFound)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
+        });
+
+        var client = new AuraControlClient(new HttpClient(fakeHandler));
+        var result = await client.UpdateAutomationRuleAsync(99, "test.exe", null, "rev_1");
+
+        Assert.IsFalse(result.IsSuccess);
+        Assert.AreEqual(AutomationMutationStatus.NotFound, result.Status);
+        Assert.AreEqual("rule_not_found", result.ErrorCode);
+    }
+
+    [TestMethod]
+    public async Task DeleteAutomationRuleAsync_WhenSuccess_SendsDeletePayloadAndReturnsNewRevision()
+    {
+        var json = """
+        {
+          "status": "ok",
+          "api_version": 1,
+          "revision": "rev_auto_after_del",
+          "deleted_index": 1
+        }
+        """;
+
+        string capturedBody = "";
+        var fakeHandler = new FakeHttpMessageHandler(req =>
+        {
+            Assert.AreEqual(HttpMethod.Delete, req.Method);
+            Assert.AreEqual("http://127.0.0.1:19897/api/automation/rules/1", req.RequestUri?.ToString());
+            capturedBody = req.Content?.ReadAsStringAsync().Result ?? "";
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(json, Encoding.UTF8, "application/json")
+            };
+        });
+
+        var client = new AuraControlClient(new HttpClient(fakeHandler));
+        var result = await client.DeleteAutomationRuleAsync(1, "rev_auto_789");
+
+        Assert.IsTrue(result.IsSuccess);
+        Assert.AreEqual("rev_auto_after_del", result.Revision);
+        Assert.AreEqual(1, result.Index);
+        StringAssert.Contains(capturedBody, "\"expected_revision\":\"rev_auto_789\"");
+    }
+
+    [TestMethod]
+    public async Task DeleteAutomationRuleAsync_WhenRevisionConflict_ReturnsConflictStatus()
+    {
+        var json = """
+        {
+          "status": "error",
+          "error": "revision_conflict",
+          "message": "Configuration has been modified externally",
+          "current_revision": "rev_external_123"
+        }
+        """;
+
+        var fakeHandler = new FakeHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.Conflict)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
+        });
+
+        var client = new AuraControlClient(new HttpClient(fakeHandler));
+        var result = await client.DeleteAutomationRuleAsync(0, "stale_rev");
+
+        Assert.IsFalse(result.IsSuccess);
+        Assert.IsTrue(result.IsConflict);
+        Assert.AreEqual("rev_external_123", result.CurrentRevision);
+    }
 }

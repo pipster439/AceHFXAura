@@ -9,31 +9,6 @@
 
 namespace aura {
 
-
-// ========================================================
-// 64-bit FNV-1a 哈希与版本计算
-// ========================================================
-uint64_t ComputeFnv1a64(const void* data, size_t len) {
-    const auto* ptr = static_cast<const uint8_t*>(data);
-    uint64_t hash = 14695981039346656037ULL; // FNV_offset_basis
-    for (size_t i = 0; i < len; ++i) {
-        hash ^= static_cast<uint64_t>(ptr[i]);
-        hash *= 1099511628211ULL; // FNV_prime
-    }
-    return hash;
-}
-
-std::string FormatFnv1aHex(uint64_t hash) {
-    char buf[32];
-    std::snprintf(buf, sizeof(buf), "%016llx", static_cast<unsigned long long>(hash));
-    return std::string(buf);
-}
-
-std::string ComputeFileRevision(const std::string& content) {
-    uint64_t h = ComputeFnv1a64(content.data(), content.size());
-    return FormatFnv1aHex(h);
-}
-
 // ========================================================
 // 共享有效参数解析 (与 RuleEngine 统一事实来源)
 // ========================================================
@@ -463,13 +438,7 @@ LightingControlService::LightingControlService(std::filesystem::path config_path
 }
 
 bool LightingControlService::ReadRawConfigFile(std::string& out_content, std::string& out_revision) const {
-    std::ifstream file(config_path_, std::ios::binary);
-    if (!file.is_open()) {
-        return false;
-    }
-    out_content.assign((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-    out_revision = ComputeFileRevision(out_content);
-    return true;
+    return aura::ReadRawConfigFile(config_path_, out_content, out_revision);
 }
 
 LightingControlService::OpResult LightingControlService::GetProfileList(
@@ -560,7 +529,7 @@ LightingControlService::OpResult LightingControlService::UpdateProfile(
     }
 
     // 1. 获取跨进程 Windows Named Mutex 互斥锁
-    NamedConfigLock lock(L"Local\\AceHFXAuraConfigWriteMutex", 5000);
+    NamedConfigLock lock(kConfigWriteMutexName, 5000);
     if (!lock.IsAcquired()) {
         return {500, "Internal Error", "Failed to acquire cross-process configuration lock", ""};
     }
@@ -619,27 +588,8 @@ LightingControlService::OpResult LightingControlService::UpdateProfile(
         // 5. 格式化输出 (保持 2 格缩进)
         std::string formatted = root.dump(2);
 
-        // 6. 写入临时文件
-        std::filesystem::path tmp_path = config_path_.wstring() + L".tmp";
-        {
-            std::ofstream f(tmp_path, std::ios::binary | std::ios::trunc);
-            if (!f.is_open()) {
-                return {500, "Internal Error", "Failed to create temporary configuration file", current_rev};
-            }
-            f.write(formatted.data(), formatted.size());
-            f.flush();
-            if (!f.good()) {
-                f.close();
-                std::error_code ec;
-                std::filesystem::remove(tmp_path, ec);
-                return {500, "Internal Error", "Failed to write temporary configuration data", current_rev};
-            }
-        }
-
-        // 7. 原子替换覆盖 (通过 file_replacer_ 支持测试接缝)
-        if (!file_replacer_(tmp_path.wstring(), config_path_.wstring())) {
-            std::error_code ec;
-            std::filesystem::remove(tmp_path, ec);
+        // 6 & 7. 写入临时文件并原子替换覆盖 (通过 file_replacer_ 支持测试接缝)
+        if (!AtomicWriteConfigFile(config_path_, formatted, file_replacer_)) {
             return {500, "Internal Error", "Failed to atomically replace configuration file", current_rev};
         }
 
@@ -730,7 +680,7 @@ LightingControlService::OpResult LightingControlService::UpdateBaseLighting(
     }
 
     // 1. 获取跨进程 Windows Named Mutex 互斥锁
-    NamedConfigLock lock(L"Local\\AceHFXAuraConfigWriteMutex", 5000);
+    NamedConfigLock lock(kConfigWriteMutexName, 5000);
     if (!lock.IsAcquired()) {
         return {500, "Internal Error", "Failed to acquire cross-process configuration lock", ""};
     }
@@ -907,26 +857,8 @@ LightingControlService::OpResult LightingControlService::UpdateBaseLighting(
         // 7. 格式化输出 (保持 2 格缩进)
         std::string formatted = root.dump(2);
 
-        // 8. 写入临时文件并原子替换
-        std::filesystem::path tmp_path = config_path_.wstring() + L".tmp";
-        {
-            std::ofstream f(tmp_path, std::ios::binary | std::ios::trunc);
-            if (!f.is_open()) {
-                return {500, "Internal Error", "Failed to create temporary configuration file", current_rev};
-            }
-            f.write(formatted.data(), formatted.size());
-            f.flush();
-            if (!f.good()) {
-                f.close();
-                std::error_code ec;
-                std::filesystem::remove(tmp_path, ec);
-                return {500, "Internal Error", "Failed to write temporary configuration data", current_rev};
-            }
-        }
-
-        if (!file_replacer_(tmp_path.wstring(), config_path_.wstring())) {
-            std::error_code ec;
-            std::filesystem::remove(tmp_path, ec);
+        // 8. 写入临时文件并原子替换 (通过 file_replacer_ 支持测试接缝)
+        if (!AtomicWriteConfigFile(config_path_, formatted, file_replacer_)) {
             return {500, "Internal Error", "Failed to atomically replace configuration file", current_rev};
         }
 

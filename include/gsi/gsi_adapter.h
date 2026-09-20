@@ -27,6 +27,7 @@
 namespace aura {
 
 class LightingControlService;
+class AutomationControlService;
 
 // 通用 GSI 字段值容器
 struct GsiValue {
@@ -185,6 +186,9 @@ public:
     void SetLightingService(std::shared_ptr<LightingControlService> service) {
         lighting_service_ = std::move(service);
     }
+    void SetAutomationService(std::shared_ptr<AutomationControlService> service) {
+        automation_service_ = std::move(service);
+    }
 
 private:
     void SetupRoutes();
@@ -193,6 +197,7 @@ private:
     std::function<bool(const std::string&)> on_preview_frame_;
     std::shared_ptr<const RuntimeStatusStore> status_store_;
     std::shared_ptr<LightingControlService> lighting_service_;
+    std::shared_ptr<AutomationControlService> automation_service_;
 
     int port_{19897};
     std::unique_ptr<httplib::Server> svr_;

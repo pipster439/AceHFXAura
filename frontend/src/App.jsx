@@ -1,5 +1,6 @@
 import { ensureStudioRuntime } from './utils/applyEffect.js';
 import { processRows, gsiRows, replaceSimpleRows } from './utils/orchestration.js';
+import { ConfigSaveCoordinator } from './utils/configSaveCoordinator.js';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import Sidebar from './components/Sidebar';
@@ -84,10 +85,13 @@ export default function App() {
   const isInitializedRef = useRef(false);
   const isSwitchingProfileRef = useRef(false);
   const saveTimeoutRef = useRef(null);
-  const saveChainRef = useRef(Promise.resolve());
-  const saveSeqRef = useRef(0);
   const configRef = useRef(null);
   configRef.current = config;
+
+  const coordinatorRef = useRef(null);
+  if (!coordinatorRef.current) {
+    coordinatorRef.current = new ConfigSaveCoordinator();
+  }
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
@@ -162,8 +166,12 @@ export default function App() {
   // 读取配置
   const fetchConfig = useCallback(async () => {
     try {
-      const res = await fetch('/api/config');
+      const res = await fetch('/api/config', { cache: 'no-store' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const etag = res.headers.get('ETag');
+      if (etag && coordinatorRef.current) {
+        coordinatorRef.current.setRevision(etag);
+      }
       const data = await res.json();
       setConfig(data);
 
@@ -216,37 +224,33 @@ export default function App() {
     return () => clearInterval(interval);
   }, [isGameModalOpen, fetchConfig]);
 
-  // 直接保存配置到后端（无阻断静默提交）
+  // 直接保存配置到后端（携带 If-Match 乐观并发保护与 generation 防覆盖队列）
   const saveConfigDirectly = useCallback(async (newConfig) => {
-    if (!newConfig) return false;
-    const seq = ++saveSeqRef.current;
-    const previous = saveChainRef.current;
-    let release;
-    saveChainRef.current = new Promise(resolve => { release = resolve; });
-    await previous;
-    try {
+    if (!newConfig || !coordinatorRef.current) return false;
+    coordinatorRef.current.fetchConfigFn = fetchConfig;
+    coordinatorRef.current.beforeSave = async (cfg) => {
       setIsSaving(true);
-      if (newConfig.orchestration?.version === 2) await ensureStudioRuntime();
-      const res = await fetch('/api/config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newConfig)
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        showToast(data.message || '配置保存失败', 'error');
-        return false;
+      if (cfg.orchestration?.version === 2) await ensureStudioRuntime();
+    };
+    coordinatorRef.current.onConflict = (data) => {
+      showToast(data?.message || '配置已被其他页面或进程修改，请刷新后重试', 'error');
+    };
+    coordinatorRef.current.onError = (data) => {
+      showToast(data?.message || '配置保存失败', 'error');
+    };
+    coordinatorRef.current.onSaveSuccess = (cfg, seq) => {
+      if (seq === coordinatorRef.current.saveSeq) {
+        configRef.current = cfg;
+        setConfig(cfg);
       }
-      if (seq === saveSeqRef.current) { configRef.current = newConfig; setConfig(newConfig); }
-      return true;
-    } catch (err) {
-      showToast('配置保存失败：' + err.message, 'error');
-      return false;
+    };
+
+    try {
+      return await coordinatorRef.current.saveConfig(newConfig);
     } finally {
-      release();
-      if (seq === saveSeqRef.current) setIsSaving(false);
+      setIsSaving(false);
     }
-  }, []);
+  }, [fetchConfig]);
 
   // 方案切换 (实时自动激活至硬件)
   const handleProfileChange = (pname) => {

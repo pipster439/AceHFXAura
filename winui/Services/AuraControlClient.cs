@@ -727,6 +727,167 @@ public sealed class UpdateProfileResult
     };
 }
 
+public sealed class AutomationRuleDto
+{
+    [JsonPropertyName("index")]
+    public int Index { get; set; } = -1;
+
+    [JsonPropertyName("process")]
+    public string Process { get; set; } = "";
+
+    [JsonPropertyName("profile")]
+    public string Profile { get; set; } = "";
+}
+
+public sealed class AutomationRulesResponseDto
+{
+    [JsonPropertyName("status")]
+    public string Status { get; set; } = "";
+
+    [JsonPropertyName("api_version")]
+    public int ApiVersion { get; set; } = 1;
+
+    [JsonPropertyName("revision")]
+    public string Revision { get; set; } = "";
+
+    [JsonPropertyName("rules")]
+    public List<AutomationRuleDto> Rules { get; set; } = new();
+}
+
+public sealed class AutomationRuleMutationResponseDto
+{
+    [JsonPropertyName("status")]
+    public string Status { get; set; } = "";
+
+    [JsonPropertyName("api_version")]
+    public int ApiVersion { get; set; } = 1;
+
+    [JsonPropertyName("revision")]
+    public string Revision { get; set; } = "";
+
+    [JsonPropertyName("rule")]
+    public AutomationRuleDto? Rule { get; set; }
+
+    [JsonPropertyName("index")]
+    public int? Index { get; set; }
+
+    [JsonPropertyName("deleted_index")]
+    public int? DeletedIndex { get; set; }
+}
+
+public sealed class AutomationRuleAddRequestDto
+{
+    [JsonPropertyName("expected_revision")]
+    public string ExpectedRevision { get; set; } = "";
+
+    [JsonPropertyName("rule")]
+    public AutomationRuleDto Rule { get; set; } = new();
+}
+
+public sealed class AutomationRulePatchRequestDto
+{
+    [JsonPropertyName("expected_revision")]
+    public string ExpectedRevision { get; set; } = "";
+
+    [JsonPropertyName("rule")]
+    public AutomationRulePatchItemDto Rule { get; set; } = new();
+}
+
+public sealed class AutomationRulePatchItemDto
+{
+    [JsonPropertyName("process")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Process { get; set; }
+
+    [JsonPropertyName("profile")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Profile { get; set; }
+}
+
+public sealed class AutomationRuleDeleteRequestDto
+{
+    [JsonPropertyName("expected_revision")]
+    public string ExpectedRevision { get; set; } = "";
+}
+
+public sealed class AutomationRulesResult
+{
+    public bool IsSuccess { get; init; }
+    public string ErrorCode { get; init; } = "";
+    public string ErrorMessage { get; init; } = "";
+    public string Revision { get; init; } = "";
+    public IReadOnlyList<AutomationRuleDto> Rules { get; init; } = Array.Empty<AutomationRuleDto>();
+
+    public static AutomationRulesResult Success(IReadOnlyList<AutomationRuleDto> rules, string revision) => new()
+    {
+        IsSuccess = true,
+        Rules = rules,
+        Revision = revision
+    };
+
+    public static AutomationRulesResult Failure(string message, string errorCode = "") => new()
+    {
+        IsSuccess = false,
+        ErrorMessage = message,
+        ErrorCode = errorCode
+    };
+}
+
+public enum AutomationMutationStatus
+{
+    Success,
+    Conflict,
+    DuplicateProcess,
+    ValidationError,
+    NotFound,
+    Failure
+}
+
+public sealed class AutomationRuleMutationResult
+{
+    public bool IsSuccess => Status == AutomationMutationStatus.Success;
+    public bool IsConflict => Status == AutomationMutationStatus.Conflict;
+    public bool IsDuplicate => Status == AutomationMutationStatus.DuplicateProcess;
+    public AutomationMutationStatus Status { get; init; }
+    public string ErrorCode { get; init; } = "";
+    public string ErrorMessage { get; init; } = "";
+    public string Revision { get; init; } = "";
+    public string CurrentRevision { get; init; } = "";
+    public AutomationRuleDto? Rule { get; init; }
+    public int? Index { get; init; }
+
+    public static AutomationRuleMutationResult Success(string revision, AutomationRuleDto? rule = null, int? index = null) => new()
+    {
+        Status = AutomationMutationStatus.Success,
+        Revision = revision,
+        Rule = rule,
+        Index = index
+    };
+
+    public static AutomationRuleMutationResult Conflict(string currentRevision, string message) => new()
+    {
+        Status = AutomationMutationStatus.Conflict,
+        ErrorCode = "revision_conflict",
+        CurrentRevision = currentRevision,
+        ErrorMessage = string.IsNullOrEmpty(message) ? "配置已被其他编辑器修改" : message
+    };
+
+    public static AutomationRuleMutationResult Duplicate(string message, string currentRevision = "") => new()
+    {
+        Status = AutomationMutationStatus.DuplicateProcess,
+        ErrorCode = "duplicate_process",
+        CurrentRevision = currentRevision,
+        ErrorMessage = message
+    };
+
+    public static AutomationRuleMutationResult Failure(AutomationMutationStatus status, string message, string errorCode = "") => new()
+    {
+        Status = status,
+        ErrorCode = errorCode,
+        ErrorMessage = message
+    };
+}
+
 public interface IAuraControlClient
 {
     Task<RuntimeStatus> GetRuntimeStatusAsync(CancellationToken cancellationToken = default);
@@ -736,6 +897,12 @@ public interface IAuraControlClient
     Task<ProfileListResult> GetProfilesAsync(CancellationToken cancellationToken = default);
     Task<ProfileDetailResult> GetProfileAsync(string name, CancellationToken cancellationToken = default);
     Task<UpdateProfileResult> UpdateProfileAsync(string name, ProfilePatchDto patch, CancellationToken cancellationToken = default);
+
+    // Automation Control API v1 (Phase 4 Application Rule CRUD)
+    Task<AutomationRulesResult> GetAutomationRulesAsync(CancellationToken cancellationToken = default);
+    Task<AutomationRuleMutationResult> AddAutomationRuleAsync(AutomationRuleDto rule, string expectedRevision, CancellationToken cancellationToken = default);
+    Task<AutomationRuleMutationResult> UpdateAutomationRuleAsync(int index, string? process, string? profile, string expectedRevision, CancellationToken cancellationToken = default);
+    Task<AutomationRuleMutationResult> DeleteAutomationRuleAsync(int index, string expectedRevision, CancellationToken cancellationToken = default);
 }
 
 public sealed class AuraControlClient : IAuraControlClient
@@ -1092,6 +1259,246 @@ public sealed class AuraControlClient : IAuraControlClient
         catch (Exception ex)
         {
             return UpdateBaseLightingResult.Failure(UpdateProfileStatus.Failure, ex.Message);
+        }
+    }
+
+    public async Task<AutomationRulesResult> GetAutomationRulesAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Get, "http://127.0.0.1:19897/api/automation/rules");
+            using var res = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+
+            var json = await res.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            if (!res.IsSuccessStatusCode)
+            {
+                return AutomationRulesResult.Failure($"HTTP {(int)res.StatusCode}: {res.ReasonPhrase}");
+            }
+
+            var dto = JsonSerializer.Deserialize<AutomationRulesResponseDto>(json, JsonOptions);
+            if (dto == null)
+            {
+                return AutomationRulesResult.Failure("Empty or invalid JSON payload");
+            }
+
+            if (!string.Equals(dto.Status, "ok", StringComparison.OrdinalIgnoreCase))
+            {
+                return AutomationRulesResult.Failure($"Daemon returned non-ok status: {dto.Status}");
+            }
+
+            if (dto.ApiVersion != 1)
+            {
+                return AutomationRulesResult.Failure($"Unsupported API version: {dto.ApiVersion} (expected 1)");
+            }
+
+            return AutomationRulesResult.Success(dto.Rules, dto.Revision);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return AutomationRulesResult.Failure("Request canceled");
+        }
+        catch (Exception ex)
+        {
+            return AutomationRulesResult.Failure(ex.Message);
+        }
+    }
+
+    public async Task<AutomationRuleMutationResult> AddAutomationRuleAsync(AutomationRuleDto rule, string expectedRevision, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            string url = "http://127.0.0.1:19897/api/automation/rules";
+            var payload = new AutomationRuleAddRequestDto
+            {
+                ExpectedRevision = expectedRevision,
+                Rule = rule
+            };
+            string reqJson = JsonSerializer.Serialize(payload, JsonOptions);
+
+            using var req = new HttpRequestMessage(HttpMethod.Post, url)
+            {
+                Content = new StringContent(reqJson, System.Text.Encoding.UTF8, "application/json")
+            };
+
+            using var res = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+            var resJson = await res.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+
+            if (res.StatusCode == System.Net.HttpStatusCode.Created)
+            {
+                var okDto = JsonSerializer.Deserialize<AutomationRuleMutationResponseDto>(resJson, JsonOptions);
+                if (okDto != null && string.Equals(okDto.Status, "ok", StringComparison.OrdinalIgnoreCase))
+                {
+                    return AutomationRuleMutationResult.Success(okDto.Revision, okDto.Rule, okDto.Index);
+                }
+                return AutomationRuleMutationResult.Failure(AutomationMutationStatus.Failure, "Unexpected non-ok response from daemon");
+            }
+
+            ApiErrorResponseDto? errDto = null;
+            try
+            {
+                errDto = JsonSerializer.Deserialize<ApiErrorResponseDto>(resJson, JsonOptions);
+            }
+            catch { }
+
+            string msg = errDto?.Message ?? res.ReasonPhrase ?? $"HTTP {(int)res.StatusCode}";
+
+            if (res.StatusCode == System.Net.HttpStatusCode.Conflict)
+            {
+                if (string.Equals(errDto?.Error, "duplicate_process", StringComparison.OrdinalIgnoreCase))
+                {
+                    return AutomationRuleMutationResult.Duplicate(msg, errDto?.CurrentRevision ?? "");
+                }
+                return AutomationRuleMutationResult.Conflict(errDto?.CurrentRevision ?? "", msg);
+            }
+
+            if (res.StatusCode == System.Net.HttpStatusCode.BadRequest)
+            {
+                return AutomationRuleMutationResult.Failure(AutomationMutationStatus.ValidationError, msg, errDto?.Error ?? "");
+            }
+
+            return AutomationRuleMutationResult.Failure(AutomationMutationStatus.Failure, msg, errDto?.Error ?? "");
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return AutomationRuleMutationResult.Failure(AutomationMutationStatus.Failure, "Request canceled");
+        }
+        catch (Exception ex)
+        {
+            return AutomationRuleMutationResult.Failure(AutomationMutationStatus.Failure, ex.Message);
+        }
+    }
+
+    public async Task<AutomationRuleMutationResult> UpdateAutomationRuleAsync(int index, string? process, string? profile, string expectedRevision, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            string url = $"http://127.0.0.1:19897/api/automation/rules/{index}";
+            var payload = new AutomationRulePatchRequestDto
+            {
+                ExpectedRevision = expectedRevision,
+                Rule = new AutomationRulePatchItemDto
+                {
+                    Process = process,
+                    Profile = profile
+                }
+            };
+            string reqJson = JsonSerializer.Serialize(payload, JsonOptions);
+
+            using var req = new HttpRequestMessage(new HttpMethod("PATCH"), url)
+            {
+                Content = new StringContent(reqJson, System.Text.Encoding.UTF8, "application/json")
+            };
+
+            using var res = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+            var resJson = await res.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+
+            if (res.StatusCode == System.Net.HttpStatusCode.OK)
+            {
+                var okDto = JsonSerializer.Deserialize<AutomationRuleMutationResponseDto>(resJson, JsonOptions);
+                if (okDto != null && string.Equals(okDto.Status, "ok", StringComparison.OrdinalIgnoreCase))
+                {
+                    return AutomationRuleMutationResult.Success(okDto.Revision, okDto.Rule, okDto.Index ?? index);
+                }
+                return AutomationRuleMutationResult.Failure(AutomationMutationStatus.Failure, "Unexpected non-ok response from daemon");
+            }
+
+            ApiErrorResponseDto? errDto = null;
+            try
+            {
+                errDto = JsonSerializer.Deserialize<ApiErrorResponseDto>(resJson, JsonOptions);
+            }
+            catch { }
+
+            string msg = errDto?.Message ?? res.ReasonPhrase ?? $"HTTP {(int)res.StatusCode}";
+
+            if (res.StatusCode == System.Net.HttpStatusCode.Conflict)
+            {
+                if (string.Equals(errDto?.Error, "duplicate_process", StringComparison.OrdinalIgnoreCase))
+                {
+                    return AutomationRuleMutationResult.Duplicate(msg, errDto?.CurrentRevision ?? "");
+                }
+                return AutomationRuleMutationResult.Conflict(errDto?.CurrentRevision ?? "", msg);
+            }
+
+            if (res.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                return AutomationRuleMutationResult.Failure(AutomationMutationStatus.NotFound, msg, "rule_not_found");
+            }
+
+            if (res.StatusCode == System.Net.HttpStatusCode.BadRequest)
+            {
+                return AutomationRuleMutationResult.Failure(AutomationMutationStatus.ValidationError, msg, errDto?.Error ?? "");
+            }
+
+            return AutomationRuleMutationResult.Failure(AutomationMutationStatus.Failure, msg, errDto?.Error ?? "");
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return AutomationRuleMutationResult.Failure(AutomationMutationStatus.Failure, "Request canceled");
+        }
+        catch (Exception ex)
+        {
+            return AutomationRuleMutationResult.Failure(AutomationMutationStatus.Failure, ex.Message);
+        }
+    }
+
+    public async Task<AutomationRuleMutationResult> DeleteAutomationRuleAsync(int index, string expectedRevision, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            string url = $"http://127.0.0.1:19897/api/automation/rules/{index}";
+            var payload = new AutomationRuleDeleteRequestDto
+            {
+                ExpectedRevision = expectedRevision
+            };
+            string reqJson = JsonSerializer.Serialize(payload, JsonOptions);
+
+            using var req = new HttpRequestMessage(HttpMethod.Delete, url)
+            {
+                Content = new StringContent(reqJson, System.Text.Encoding.UTF8, "application/json")
+            };
+
+            using var res = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+            var resJson = await res.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+
+            if (res.StatusCode == System.Net.HttpStatusCode.OK)
+            {
+                var okDto = JsonSerializer.Deserialize<AutomationRuleMutationResponseDto>(resJson, JsonOptions);
+                if (okDto != null && string.Equals(okDto.Status, "ok", StringComparison.OrdinalIgnoreCase))
+                {
+                    return AutomationRuleMutationResult.Success(okDto.Revision, index: okDto.DeletedIndex ?? index);
+                }
+                return AutomationRuleMutationResult.Failure(AutomationMutationStatus.Failure, "Unexpected non-ok response from daemon");
+            }
+
+            ApiErrorResponseDto? errDto = null;
+            try
+            {
+                errDto = JsonSerializer.Deserialize<ApiErrorResponseDto>(resJson, JsonOptions);
+            }
+            catch { }
+
+            string msg = errDto?.Message ?? res.ReasonPhrase ?? $"HTTP {(int)res.StatusCode}";
+
+            if (res.StatusCode == System.Net.HttpStatusCode.Conflict)
+            {
+                return AutomationRuleMutationResult.Conflict(errDto?.CurrentRevision ?? "", msg);
+            }
+
+            if (res.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                return AutomationRuleMutationResult.Failure(AutomationMutationStatus.NotFound, msg, "rule_not_found");
+            }
+
+            return AutomationRuleMutationResult.Failure(AutomationMutationStatus.Failure, msg, errDto?.Error ?? "");
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return AutomationRuleMutationResult.Failure(AutomationMutationStatus.Failure, "Request canceled");
+        }
+        catch (Exception ex)
+        {
+            return AutomationRuleMutationResult.Failure(AutomationMutationStatus.Failure, ex.Message);
         }
     }
 }

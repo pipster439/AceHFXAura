@@ -8,6 +8,7 @@
 #include "supervisor/web_supervisor.h"
 #include "gsi/gsi_adapter.h"
 #include "config/lighting_service.h"
+#include "config/automation_service.h"
 #include "aura/runtime_status.h"
 #include "utils/logger.h"
 #include "utils/system_info.h"
@@ -567,9 +568,11 @@ int main(int argc, char* argv[]) {
     // 核心线程隔离纪律：网络 I/O 线程仅在内存中维护 GsiState 键值字典与只读 RuntimeStatusSnapshot，严禁直接触碰 COM/HAL
     auto status_store = std::make_shared<aura::RuntimeStatusStore>();
     auto lighting_service = std::make_shared<aura::LightingControlService>(std::filesystem::path(config_path));
+    auto automation_service = std::make_shared<aura::AutomationControlService>(std::filesystem::path(config_path));
     aura::GsiAdapter gsi_adapter;
     gsi_adapter.SetStatusStore(status_store);
     gsi_adapter.SetLightingService(lighting_service);
+    gsi_adapter.SetAutomationService(automation_service);
     if (!gsi_adapter.Start(19897)) {
         LOG_WARN("CS2 GSI 适配器监听 127.0.0.1:19897 失败 (可能端口已被占用)");
     } else {

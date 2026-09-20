@@ -367,10 +367,10 @@ export default function Studio({
                   <GitBranch className="w-4 h-4" />
                 </div>
                 <div className="flex flex-col min-w-0">
-                  <span className="font-bold text-xs truncate">主联动规则编排</span>
+                  <span className="font-bold text-xs truncate">主联动规则编排 [经典 / 进阶]</span>
                   <div className="flex items-center gap-1.5 mt-0.5">
                     <span className="text-[10px] px-1.5 py-0.2 rounded bg-md-secondary/15 text-md-secondary font-semibold">
-                      自动化
+                      经典自动化
                     </span>
                     <span className="text-[10px] text-emerald-400 font-semibold">
                       ● 运行中

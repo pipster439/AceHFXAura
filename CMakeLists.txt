@@ -56,6 +56,8 @@ set(DAEMON_SOURCES
     src/supervisor/web_supervisor.cpp
     src/gsi/gsi_adapter.cpp
     src/config/lighting_service.cpp
+    src/config/automation_service.cpp
+    src/config/config_writer_util.cpp
 )
 
 set(DAEMON_HEADERS
@@ -67,6 +69,8 @@ set(DAEMON_HEADERS
     include/monitor/foreground_monitor.h
     include/config/rule_engine.h
     include/config/lighting_service.h
+    include/config/automation_service.h
+    include/config/config_writer_util.h
     include/engine/effect.h
     include/engine/builtin_effects.h
     include/engine/effect_engine.h
@@ -114,10 +118,12 @@ target_link_libraries(test_com PRIVATE ole32 oleaut32)
 set(WEB_SOURCES
     src/web/main_web.cpp
     src/web/web_server.cpp
+    src/config/config_writer_util.cpp
 )
 
 set(WEB_HEADERS
     src/web/web_server.h
+    include/config/config_writer_util.h
     include/third_party/httplib.h
     include/third_party/json.hpp
 )
@@ -152,6 +158,8 @@ add_executable(test_gsi_rules
     src/aura/hal_compat.cpp
     src/web/web_server.cpp
     src/config/lighting_service.cpp
+    src/config/automation_service.cpp
+    src/config/config_writer_util.cpp
 )
 
 target_link_libraries(test_gsi_rules PRIVATE
@@ -214,6 +222,8 @@ target_link_libraries(test_runtime_status PRIVATE
 add_executable(test_lighting_service
     tests/test_lighting_service.cpp
     src/config/lighting_service.cpp
+    src/config/automation_service.cpp
+    src/config/config_writer_util.cpp
     src/config/rule_engine.cpp
     src/engine/builtin_effects.cpp
     src/engine/effect_engine.cpp
@@ -227,6 +237,37 @@ add_executable(test_lighting_service
     src/web/web_server.cpp
 )
 target_link_libraries(test_lighting_service PRIVATE
+    setupapi
+    hid
+    ole32
+    oleaut32
+    user32
+    shell32
+    psapi
+    version
+    ws2_32
+    crypt32
+)
+
+# 5.7 单元测试: test_automation_service
+add_executable(test_automation_service
+    tests/test_automation_service.cpp
+    src/config/automation_service.cpp
+    src/config/config_writer_util.cpp
+    src/config/lighting_service.cpp
+    src/config/rule_engine.cpp
+    src/engine/builtin_effects.cpp
+    src/engine/effect_engine.cpp
+    src/engine/plugin_manager.cpp
+    src/engine/overlay_manager.cpp
+    src/gsi/gsi_adapter.cpp
+    src/aura/keymap.cpp
+    src/aura/aura_adapter.cpp
+    src/aura/native_hid_backend.cpp
+    src/aura/hal_compat.cpp
+    src/web/web_server.cpp
+)
+target_link_libraries(test_automation_service PRIVATE
     setupapi
     hid
     ole32
@@ -254,6 +295,8 @@ add_test(NAME runtime_status COMMAND test_runtime_status)
 set_tests_properties(runtime_status PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
 add_test(NAME lighting_service COMMAND test_lighting_service)
 set_tests_properties(lighting_service PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
+add_test(NAME automation_service COMMAND test_automation_service)
+set_tests_properties(automation_service PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
 add_test(NAME gsi_rules COMMAND test_gsi_rules)
 set_tests_properties(gsi_rules PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures")
 add_test(NAME native_hid COMMAND test_native_hid)

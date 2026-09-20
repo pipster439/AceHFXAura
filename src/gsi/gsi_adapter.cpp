@@ -1,5 +1,6 @@
 #include "gsi/gsi_adapter.h"
 #include "config/lighting_service.h"
+#include "config/automation_service.h"
 #include "utils/logger.h"
 #include <algorithm>
 #include <cctype>
@@ -889,6 +890,11 @@ void GsiAdapter::SetupRoutes() {
     // Lighting Control API v1 (挂载在 127.0.0.1:19897)
     if (lighting_service_) {
         lighting_service_->RegisterRoutes(*svr_);
+    }
+
+    // Automation Control API v1 (挂载在 127.0.0.1:19897)
+    if (automation_service_) {
+        automation_service_->RegisterRoutes(*svr_);
     }
 }
 

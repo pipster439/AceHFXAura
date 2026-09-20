@@ -631,7 +631,11 @@ class TestStudioReleaseRegression(unittest.TestCase):
                     }
                 }
             }
-            status, save_res = fetch_json(f"http://127.0.0.1:{port}/api/config", method="POST", body=draft_cfg)
+            # Fetch current ETag for optimistic concurrency (mandatory If-Match)
+            req_get = urllib.request.Request(f"http://127.0.0.1:{port}/api/config")
+            with urllib.request.urlopen(req_get, timeout=5.0) as resp:
+                etag = resp.headers.get("ETag")
+            status, save_res = fetch_json(f"http://127.0.0.1:{port}/api/config", method="POST", body=draft_cfg, headers={"If-Match": etag})
             self.assertEqual(status, 200)
             self.assertEqual(save_res.get("status"), "ok")
 

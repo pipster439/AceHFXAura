@@ -110,3 +110,4 @@ ORIGINAL_REQUEST.md
 # Local hardware probe observations (review before publishing as evidence)
 /physical_test_log.json
 /docs/hardware/PHYSICAL_TEST_LOG.md
+changes.patch

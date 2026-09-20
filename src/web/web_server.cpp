@@ -7,6 +7,7 @@
 #include <windows.h>
 
 #include "web/web_server.h"
+#include "config/config_writer_util.h"
 #include "config/lighting_service.h"
 #include "third_party/json.hpp"
 #include <fstream>
@@ -842,24 +843,80 @@ void WebServer::SetupRoutes() {
         res.set_content(j.dump(), "application/json; charset=utf-8");
     });
 
-    // 获取完整配置文件内容
+    // 获取完整配置文件内容 (纯净配置 JSON，版本仅通过 ETag 标头返回)
     svr_.Get("/api/config", [this](const httplib::Request&, httplib::Response& res) {
         std::string json_str;
-        if (ReadConfigFile(json_str)) {
+        std::string rev;
+        bool ok = false;
+        {
+            std::lock_guard<std::mutex> lock(file_mutex_);
+            ok = aura::ReadRawConfigFile(config_path_, json_str, rev);
+        }
+        if (ok) {
+            res.set_header("ETag", "\"" + rev + "\"");
+            res.set_header("Cache-Control", "no-store");
             res.set_content(json_str, "application/json; charset=utf-8");
         } else {
             res.status = 500;
+            res.set_header("Cache-Control", "no-store");
             res.set_content(R"json({"status":"error","message":"无法读取配置文件"})json", "application/json; charset=utf-8");
         }
     });
 
-    // 保存更新配置文件 (受 R7 写接口防御保护)
+    // 保存更新配置文件 (强制 If-Match 乐观并发检查与 R7 写接口防御保护)
     svr_.Post("/api/config", [this](const httplib::Request& req, httplib::Response& res) {
         if (!ValidateWriteRequest(req, res)) {
             return;
         }
+
+        // 1. If-Match 强制性检查 (Mandatory Optimistic Concurrency)
+        std::string if_match = req.get_header_value("If-Match");
+        if (if_match.empty()) {
+            res.status = 428; // Precondition Required
+            res.set_content(R"json({"status":"error","error":"precondition_required","message":"Missing mandatory If-Match header"})json", "application/json; charset=utf-8");
+            return;
+        }
+
+        // 规范化 If-Match (去除首尾双引号)
+        if (if_match.size() >= 2 && if_match.front() == '"' && if_match.back() == '"') {
+            if_match = if_match.substr(1, if_match.size() - 2);
+        }
+
+        // 2. 获取跨进程 Windows Named Mutex 互斥锁 (同步 daemon 与其他写操作)
+        NamedConfigLock named_lock(aura::kConfigWriteMutexName, 5000);
+        if (!named_lock.IsAcquired()) {
+            res.status = 500;
+            res.set_content(R"json({"status":"error","message":"无法获取跨进程配置锁"})json", "application/json; charset=utf-8");
+            return;
+        }
+
+        std::lock_guard<std::mutex> local_lock(file_mutex_);
+
+        // 3. 锁内重新读取当前文件内容并计算最新版本
+        std::string current_content;
+        std::string current_rev;
+        if (!aura::ReadRawConfigFile(config_path_, current_content, current_rev)) {
+            res.status = 500;
+            res.set_content(R"json({"status":"error","message":"无法读取当前配置文件进行版本校验"})json", "application/json; charset=utf-8");
+            return;
+        }
+
+        // 4. 版本比对 (防旧草稿与外部修改竞态覆盖)
+        if (if_match != current_rev) {
+            res.status = 409;
+            res.set_header("ETag", "\"" + current_rev + "\"");
+            nlohmann::json err = {
+                {"status", "error"},
+                {"error", "revision_conflict"},
+                {"message", "配置已被外部或其他页面修改，请刷新后重试"},
+                {"current_revision", current_rev}
+            };
+            res.set_content(err.dump(), "application/json; charset=utf-8");
+            return;
+        }
+
         try {
-            // 校验 JSON 格式合法性
+            // 5. 校验 JSON 格式合法性
             auto j = nlohmann::json::parse(req.body);
             if (!j.is_object() || !j.contains("profiles") || !j.contains("rules")) {
                 res.status = 400;
@@ -867,9 +924,11 @@ void WebServer::SetupRoutes() {
                 return;
             }
 
-            // 格式化输出 (保持 2 格缩进)
+            // 6. 格式化输出并原子写入
             std::string formatted = j.dump(2);
-            if (WriteConfigFile(formatted)) {
+            if (aura::AtomicWriteConfigFile(config_path_, formatted)) {
+                std::string new_rev = aura::ComputeFileRevision(formatted);
+                res.set_header("ETag", "\"" + new_rev + "\"");
                 res.set_content(R"json({"status":"ok","message":"配置已写入，等待 daemon 热重载"})json", "application/json; charset=utf-8");
             } else {
                 res.status = 500;
@@ -1335,36 +1394,12 @@ bool WebServer::ReadConfigFile(std::string& out_json_str) const {
 }
 
 bool WebServer::WriteConfigFile(const std::string& json_str) const {
-    NamedConfigLock named_lock(L"Local\\AceHFXAuraConfigWriteMutex", 5000);
+    NamedConfigLock named_lock(aura::kConfigWriteMutexName, 5000);
     if (!named_lock.IsAcquired()) {
         return false;
     }
     std::lock_guard<std::mutex> lock(file_mutex_);
-    // 原子写入：先写入临时文件，再原子替换覆盖
-    std::filesystem::path tmp_path = config_path_.wstring() + L".tmp";
-    {
-        std::ofstream f(tmp_path, std::ios::binary | std::ios::trunc);
-        if (!f.is_open()) {
-            return false;
-        }
-        f.write(json_str.data(), json_str.size());
-        f.flush();
-        if (!f.good()) {
-            f.close();
-            std::error_code ec;
-            std::filesystem::remove(tmp_path, ec);
-            return false;
-        }
-    }
-
-    // Windows MoveFileExW 原子替换（支持非 ASCII 路径）。失败时保留旧文件。
-    if (!MoveFileExW(tmp_path.c_str(), config_path_.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
-        std::error_code ec;
-        std::filesystem::remove(tmp_path, ec);
-        return false;
-    }
-
-    return true;
+    return aura::AtomicWriteConfigFile(config_path_, json_str);
 }
 
 std::string WebServer::GetGsiCfgTemplate() {

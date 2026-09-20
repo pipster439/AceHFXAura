@@ -18,50 +18,11 @@
 #include <unordered_set>
 
 #include "aura/aura_types.h"
+#include "config/config_writer_util.h"
 #include "third_party/json.hpp"
 #include "third_party/httplib.h"
 
 namespace aura {
-
-// ========================================================
-// 跨进程 Windows Named Mutex 锁 (RAII)
-// 同步 daemon 与 aura_web_ui.exe 对 config.json 的并发写操作
-// ========================================================
-class NamedConfigLock {
-public:
-    explicit NamedConfigLock(const wchar_t* name = L"Local\\AceHFXAuraConfigWriteMutex", DWORD timeout_ms = 5000) {
-        hMutex_ = CreateMutexW(nullptr, FALSE, name);
-        if (hMutex_) {
-            DWORD wait_res = WaitForSingleObject(hMutex_, timeout_ms);
-            acquired_ = (wait_res == WAIT_OBJECT_0 || wait_res == WAIT_ABANDONED);
-        }
-    }
-
-    ~NamedConfigLock() {
-        if (acquired_ && hMutex_) {
-            ReleaseMutex(hMutex_);
-        }
-        if (hMutex_) {
-            CloseHandle(hMutex_);
-        }
-    }
-
-    bool IsAcquired() const { return acquired_; }
-
-    NamedConfigLock(const NamedConfigLock&) = delete;
-    NamedConfigLock& operator=(const NamedConfigLock&) = delete;
-
-private:
-    HANDLE hMutex_{nullptr};
-    bool acquired_{false};
-};
-
-// ========================================================
-// 64-bit FNV-1a 内容哈希与版本计算
-// ========================================================
-uint64_t ComputeFnv1a64(const void* data, size_t len);
-std::string FormatFnv1aHex(uint64_t hash);
-std::string ComputeFileRevision(const std::string& content);
 
 // ========================================================
 // 动画周期 (period_ms) 共享元数据与解析
