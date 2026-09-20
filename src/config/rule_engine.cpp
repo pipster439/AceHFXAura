@@ -1,4 +1,5 @@
 #include "config/rule_engine.h"
+#include "config/lighting_service.h"
 #include "engine/builtin_effects.h"
 #include "engine/plugin_manager.h"
 #include "gsi/gsi_adapter.h"
@@ -270,76 +271,7 @@ uint8_t ParseBrightness(const std::string& pname, const nlohmann::json& pval) {
     return static_cast<uint8_t>(std::clamp(static_cast<int>(std::round(v)), 0, 255));
 }
 
-ColorRGB ParseColorFromArray(const nlohmann::json& arr, const ColorRGB& def) {
-    if (!arr.is_array() || arr.size() < 3) return def;
-    if (!arr[0].is_number() || !arr[1].is_number() || !arr[2].is_number()) return def;
-    double r = arr[0].get<double>();
-    double g = arr[1].get<double>();
-    double b = arr[2].get<double>();
-    if (!std::isfinite(r) || !std::isfinite(g) || !std::isfinite(b)) return def;
-    return ColorRGB(
-        static_cast<uint8_t>(std::clamp(static_cast<int>(std::round(r)), 0, 255)),
-        static_cast<uint8_t>(std::clamp(static_cast<int>(std::round(g)), 0, 255)),
-        static_cast<uint8_t>(std::clamp(static_cast<int>(std::round(b)), 0, 255))
-    );
-}
-
-ColorRGB ParseColor(const nlohmann::json& pval, const std::string& primary_key, const std::string& fallback_key, const ColorRGB& def_color) {
-    if (pval.contains(primary_key)) {
-        return ParseColorFromArray(pval[primary_key], def_color);
-    }
-    if (!fallback_key.empty() && pval.contains(fallback_key)) {
-        return ParseColorFromArray(pval[fallback_key], def_color);
-    }
-    return def_color;
-}
-
-ColorRGB ParseBgColor(const nlohmann::json& pval, const ColorRGB& def_bg = ColorRGB(0, 0, 0)) {
-    if (pval.contains("bg")) {
-        return ParseColorFromArray(pval["bg"], def_bg);
-    }
-    if (pval.contains("background")) {
-        return ParseColorFromArray(pval["background"], def_bg);
-    }
-    return def_bg;
-}
-
 } // namespace
-
-double ParseAndClampThickness(const std::string& pname, const nlohmann::json& pval, double def_val = 1.0) {
-    if (!pval.contains("thickness")) return def_val;
-    const auto& tv = pval["thickness"];
-    if (!tv.is_number()) {
-        if (!pname.empty()) {
-            LOG_WARN("方案 '" << pname << "' 的 thickness 字段非数值 (" << tv.dump() << ")，已使用默认值 " << def_val);
-        }
-        return def_val;
-    }
-    double v = tv.get<double>();
-    if (!std::isfinite(v)) {
-        if (!pname.empty()) {
-            LOG_WARN("方案 '" << pname << "' 的 thickness 非有限数值 (" << tv.dump() << ")，已使用默认值 " << def_val);
-        }
-        return def_val;
-    }
-    if (v < 0.1) {
-        if (!pname.empty()) {
-            LOG_WARN("方案 '" << pname << "' 的 thickness 小于 0.1 (" << v << ")，已被钳制为 0.1");
-        }
-        return 0.1;
-    }
-    if (v > 5.0) {
-        if (!pname.empty()) {
-            LOG_WARN("方案 '" << pname << "' 的 thickness 超过 5.0 (" << v << ")，已被钳制为 5.0");
-        }
-        return 5.0;
-    }
-    return v;
-}
-
-double ParseAndClampThickness(const nlohmann::json& pval, double def_val = 1.0) {
-    return ParseAndClampThickness("", pval, def_val);
-}
 
 std::shared_ptr<Effect> CreateEffectFromProfile(const std::string& pname, const nlohmann::json& pval) {
     std::string type = pval.value("type", "static");

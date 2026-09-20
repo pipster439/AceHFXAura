@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using Aura_WinUI.Services;
 
 namespace Aura.Tests;
@@ -456,5 +457,468 @@ public sealed class AuraControlClientTests
 
         Assert.IsFalse(result.IsSuccess);
         Assert.AreEqual(UpdateProfileStatus.Failure, result.Status);
+    }
+
+    [TestMethod]
+    public async Task GetLightingPresetsAsync_WhenValidPayload_ParsesAllPresetsCorrectly()
+    {
+        var json = """
+        {
+          "status": "ok",
+          "api_version": 1,
+          "presets": [
+            {
+              "id": "static",
+              "display_name": "Static",
+              "effect": "static",
+              "supports_period": false,
+              "default_period_ms": null
+            },
+            {
+              "id": "breathing",
+              "display_name": "Breathing",
+              "effect": "breathing",
+              "supports_period": true,
+              "default_period_ms": 3000
+            }
+          ]
+        }
+        """;
+
+        var fakeHandler = new FakeHttpMessageHandler(req =>
+        {
+            Assert.AreEqual("http://127.0.0.1:19897/api/lighting/presets", req.RequestUri?.ToString());
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(json, Encoding.UTF8, "application/json")
+            };
+        });
+
+        var client = new AuraControlClient(new HttpClient(fakeHandler));
+        var result = await client.GetLightingPresetsAsync();
+
+        Assert.IsTrue(result.IsSuccess);
+        Assert.AreEqual(2, result.Presets.Count);
+        Assert.AreEqual("static", result.Presets[0].Id);
+        Assert.AreEqual("Static", result.Presets[0].DisplayName);
+        Assert.IsFalse(result.Presets[0].SupportsPeriod);
+        Assert.IsNull(result.Presets[0].DefaultPeriodMs);
+
+        Assert.AreEqual("breathing", result.Presets[1].Id);
+        Assert.AreEqual("Breathing", result.Presets[1].DisplayName);
+        Assert.IsTrue(result.Presets[1].SupportsPeriod);
+        Assert.AreEqual(3000, result.Presets[1].DefaultPeriodMs);
+    }
+
+    [TestMethod]
+    public async Task GetBaseLightingAsync_WhenSuccess_ParsesBaseLightingCorrectly()
+    {
+        var json = """
+        {
+          "status": "ok",
+          "api_version": 1,
+          "revision": "base_rev_12345",
+          "lighting": {
+            "profile_name": "desktop",
+            "effect": "breathing",
+            "preset_id": "breathing",
+            "is_builtin_preset": true,
+            "brightness": 0.85,
+            "supports_period": true,
+            "period_ms": 3200
+          }
+        }
+        """;
+
+        var fakeHandler = new FakeHttpMessageHandler(req =>
+        {
+            Assert.AreEqual("http://127.0.0.1:19897/api/lighting/base", req.RequestUri?.ToString());
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(json, Encoding.UTF8, "application/json")
+            };
+        });
+
+        var client = new AuraControlClient(new HttpClient(fakeHandler));
+        var result = await client.GetBaseLightingAsync();
+
+        Assert.IsTrue(result.IsSuccess);
+        Assert.AreEqual("base_rev_12345", result.Revision);
+        Assert.IsNotNull(result.Lighting);
+        Assert.AreEqual("desktop", result.Lighting.ProfileName);
+        Assert.AreEqual("breathing", result.Lighting.Effect);
+        Assert.AreEqual("breathing", result.Lighting.PresetId);
+        Assert.IsTrue(result.Lighting.IsBuiltinPreset);
+        Assert.AreEqual(0.85, result.Lighting.Brightness);
+        Assert.IsTrue(result.Lighting.SupportsPeriod);
+        Assert.AreEqual(3200, result.Lighting.PeriodMs);
+    }
+
+    [TestMethod]
+    public async Task GetBaseLightingAsync_WhenAdvancedEffect_ParsesNonBuiltinPresetGracefully()
+    {
+        var json = """
+        {
+          "status": "ok",
+          "api_version": 1,
+          "revision": "studio_rev_999",
+          "lighting": {
+            "profile_name": "custom_studio_prof",
+            "effect": "custom_keymap",
+            "preset_id": "",
+            "is_builtin_preset": false,
+            "brightness": 1.0,
+            "supports_period": false,
+            "period_ms": null
+          }
+        }
+        """;
+
+        var fakeHandler = new FakeHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
+        });
+
+        var client = new AuraControlClient(new HttpClient(fakeHandler));
+        var result = await client.GetBaseLightingAsync();
+
+        Assert.IsTrue(result.IsSuccess);
+        Assert.IsNotNull(result.Lighting);
+        Assert.AreEqual("custom_studio_prof", result.Lighting.ProfileName);
+        Assert.AreEqual("custom_keymap", result.Lighting.Effect);
+        Assert.IsFalse(result.Lighting.IsBuiltinPreset);
+        Assert.AreEqual("", result.Lighting.PresetId);
+        Assert.IsFalse(result.Lighting.SupportsPeriod);
+        Assert.IsNull(result.Lighting.PeriodMs);
+    }
+
+    [TestMethod]
+    public async Task UpdateBaseLightingAsync_WhenSuccess_ReturnsSuccessWithNewRevision()
+    {
+        var responseJson = """
+        {
+          "status": "ok",
+          "api_version": 1,
+          "message": "Base lighting updated",
+          "revision": "new_base_rev_8888"
+        }
+        """;
+
+        var fakeHandler = new FakeHttpMessageHandler(req =>
+        {
+            Assert.AreEqual(new HttpMethod("PATCH"), req.Method);
+            Assert.AreEqual("http://127.0.0.1:19897/api/lighting/base", req.RequestUri?.ToString());
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(responseJson, Encoding.UTF8, "application/json")
+            };
+        });
+
+        var client = new AuraControlClient(new HttpClient(fakeHandler));
+        var patch = new BaseLightingPatchDto
+        {
+            ExpectedRevision = "old_rev",
+            Preset = "wave",
+            Brightness = 0.9,
+            PeriodMs = 3500
+        };
+
+        var result = await client.UpdateBaseLightingAsync(patch);
+
+        Assert.IsTrue(result.IsSuccess);
+        Assert.AreEqual(UpdateProfileStatus.Success, result.Status);
+        Assert.AreEqual("new_base_rev_8888", result.NewRevision);
+    }
+
+    [TestMethod]
+    public async Task UpdateBaseLightingAsync_SparseSerialization_OmitsNullFields()
+    {
+        string capturedBody = "";
+        var fakeHandler = new FakeHttpMessageHandler(req =>
+        {
+            capturedBody = req.Content?.ReadAsStringAsync().Result ?? "";
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("{\"status\":\"ok\",\"api_version\":1,\"revision\":\"rev2\"}", Encoding.UTF8, "application/json")
+            };
+        });
+
+        var client = new AuraControlClient(new HttpClient(fakeHandler));
+        var patch = new BaseLightingPatchDto
+        {
+            ExpectedRevision = "rev1",
+            Preset = "breathing"
+            // Brightness and PeriodMs are null
+        };
+
+        var result = await client.UpdateBaseLightingAsync(patch);
+        Assert.IsTrue(result.IsSuccess);
+
+        StringAssert.Contains(capturedBody, "\"preset\":\"breathing\"");
+        StringAssert.Contains(capturedBody, "\"expected_revision\":\"rev1\"");
+        Assert.IsFalse(capturedBody.Contains("brightness"), "Null brightness must not be serialized");
+        Assert.IsFalse(capturedBody.Contains("period_ms"), "Null period_ms must not be serialized");
+    }
+
+    [TestMethod]
+    public async Task UpdateBaseLightingAsync_WhenConflict409_ReturnsConflictWithCurrentRevision()
+    {
+        var conflictJson = """
+        {
+          "status": "error",
+          "error": "Conflict",
+          "message": "Configuration has been modified externally",
+          "current_revision": "latest_rev_777"
+        }
+        """;
+
+        var fakeHandler = new FakeHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.Conflict)
+        {
+            Content = new StringContent(conflictJson, Encoding.UTF8, "application/json")
+        });
+
+        var client = new AuraControlClient(new HttpClient(fakeHandler));
+        var patch = new BaseLightingPatchDto
+        {
+            ExpectedRevision = "stale_rev_1",
+            Brightness = 0.5
+        };
+
+        var result = await client.UpdateBaseLightingAsync(patch);
+
+        Assert.IsFalse(result.IsSuccess);
+        Assert.IsTrue(result.IsConflict);
+        Assert.AreEqual("latest_rev_777", result.CurrentRevision);
+        StringAssert.Contains(result.ErrorMessage, "modified externally");
+    }
+
+    [TestMethod]
+    public async Task UpdateBaseLightingAsync_WhenValidationError400_ReturnsValidationError()
+    {
+        var errJson = """
+        {
+          "status": "error",
+          "error": "Validation Error",
+          "message": "Preset 'ghost' is not a supported builtin preset"
+        }
+        """;
+
+        var fakeHandler = new FakeHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.BadRequest)
+        {
+            Content = new StringContent(errJson, Encoding.UTF8, "application/json")
+        });
+
+        var client = new AuraControlClient(new HttpClient(fakeHandler));
+        var patch = new BaseLightingPatchDto
+        {
+            ExpectedRevision = "rev1",
+            Preset = "ghost"
+        };
+
+        var result = await client.UpdateBaseLightingAsync(patch);
+
+        Assert.IsFalse(result.IsSuccess);
+        Assert.AreEqual(UpdateProfileStatus.ValidationError, result.Status);
+        StringAssert.Contains(result.ErrorMessage, "not a supported builtin preset");
+    }
+
+    [TestMethod]
+    public async Task GetLightingPresetsAsync_ParsesParameterSchemaCorrectly()
+    {
+        var json = """
+        {
+          "status": "ok",
+          "api_version": 1,
+          "presets": [
+            {
+              "id": "wave",
+              "display_name": "Wave",
+              "effect": "wave",
+              "supports_period": true,
+              "default_period_ms": 3500,
+              "parameter_schema": [
+                {
+                  "key": "direction",
+                  "display_name": "波浪方向",
+                  "type": "enum",
+                  "default_value": "diag_dl",
+                  "options": [
+                    { "value": "diag_dl", "label": "左下对角" },
+                    { "value": "spread", "label": "居中扩散" }
+                  ]
+                },
+                {
+                  "key": "thickness",
+                  "display_name": "波浪粗细",
+                  "type": "number",
+                  "min": 0.1,
+                  "max": 5.0,
+                  "step": 0.1,
+                  "default_value": 1.0
+                }
+              ]
+            }
+          ]
+        }
+        """;
+
+        var fakeHandler = new FakeHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
+        });
+
+        var client = new AuraControlClient(new HttpClient(fakeHandler));
+        var result = await client.GetLightingPresetsAsync();
+
+        Assert.IsTrue(result.IsSuccess);
+        Assert.AreEqual(1, result.Presets.Count);
+        var p = result.Presets[0];
+        Assert.AreEqual("wave", p.Id);
+        Assert.AreEqual(2, p.ParameterSchema.Count);
+
+        var s0 = p.ParameterSchema[0];
+        Assert.AreEqual("direction", s0.Key);
+        Assert.AreEqual(EffectParamType.Enum, s0.Type);
+        Assert.AreEqual(2, s0.Options.Count);
+        Assert.AreEqual("diag_dl", s0.Options[0].Value);
+
+        var s1 = p.ParameterSchema[1];
+        Assert.AreEqual("thickness", s1.Key);
+        Assert.AreEqual(EffectParamType.Number, s1.Type);
+        Assert.AreEqual(0.1, s1.Min);
+        Assert.AreEqual(5.0, s1.Max);
+        Assert.AreEqual(0.1, s1.Step);
+    }
+
+    [TestMethod]
+    public async Task GetBaseLightingAsync_ParsesParametersCorrectly()
+    {
+        var json = """
+        {
+          "status": "ok",
+          "api_version": 1,
+          "revision": "base_rev_999",
+          "lighting": {
+            "profile_name": "desktop",
+            "effect": "quicksand",
+            "preset_id": "quicksand",
+            "is_builtin_preset": true,
+            "brightness": 0.9,
+            "supports_period": true,
+            "period_ms": 3500,
+            "parameters": {
+              "color1": [255, 0, 0],
+              "direction": "spread",
+              "thickness": 1.8
+            }
+          }
+        }
+        """;
+
+        var fakeHandler = new FakeHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
+        });
+
+        var client = new AuraControlClient(new HttpClient(fakeHandler));
+        var result = await client.GetBaseLightingAsync();
+
+        Assert.IsTrue(result.IsSuccess);
+        Assert.IsNotNull(result.Lighting);
+        Assert.IsNotNull(result.Lighting.Parameters);
+        Assert.IsTrue(result.Lighting.Parameters.ContainsKey("direction"));
+        Assert.AreEqual("spread", result.Lighting.Parameters["direction"].GetString());
+        Assert.IsTrue(result.Lighting.Parameters.ContainsKey("thickness"));
+        Assert.AreEqual(1.8, result.Lighting.Parameters["thickness"].GetDouble());
+    }
+
+    [TestMethod]
+    public async Task UpdateBaseLightingAsync_SerializesSparseParametersCorrectly()
+    {
+        string capturedBody = "";
+        var fakeHandler = new FakeHttpMessageHandler(req =>
+        {
+            capturedBody = req.Content?.ReadAsStringAsync().Result ?? "";
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("{\"status\":\"ok\",\"api_version\":1,\"revision\":\"rev2\"}", Encoding.UTF8, "application/json")
+            };
+        });
+
+        var client = new AuraControlClient(new HttpClient(fakeHandler));
+        var patch = new BaseLightingPatchDto
+        {
+            ExpectedRevision = "rev1",
+            Parameters = new Dictionary<string, object>
+            {
+                { "direction", "spread" },
+                { "thickness", 2.5 }
+            }
+        };
+
+        var result = await client.UpdateBaseLightingAsync(patch);
+        Assert.IsTrue(result.IsSuccess);
+
+        StringAssert.Contains(capturedBody, "\"expected_revision\":\"rev1\"");
+        StringAssert.Contains(capturedBody, "\"parameters\":{");
+        StringAssert.Contains(capturedBody, "\"direction\":\"spread\"");
+        StringAssert.Contains(capturedBody, "\"thickness\":2.5");
+        Assert.IsFalse(capturedBody.Contains("preset"), "Null preset omitted");
+        Assert.IsFalse(capturedBody.Contains("brightness"), "Null brightness omitted");
+        Assert.IsFalse(capturedBody.Contains("period_ms"), "Null period_ms omitted");
+    }
+
+    [TestMethod]
+    public void EffectParamValueComparer_ColorDeepEquality_MatchesJsonAndArrays()
+    {
+        var draft = new int[] { 255, 0, 128 };
+        using var doc1 = JsonDocument.Parse("[255, 0, 128]");
+        using var doc2 = JsonDocument.Parse("[255, 0, 129]");
+
+        Assert.IsTrue(EffectParamValueComparer.AreValuesEqual(EffectParamType.Color, draft, doc1.RootElement));
+        Assert.IsFalse(EffectParamValueComparer.AreValuesEqual(EffectParamType.Color, draft, doc2.RootElement));
+
+        var list = new List<int> { 255, 0, 128 };
+        Assert.IsTrue(EffectParamValueComparer.AreValuesEqual(EffectParamType.Color, draft, list));
+        Assert.IsFalse(EffectParamValueComparer.AreValuesEqual(EffectParamType.Color, draft, null));
+    }
+
+    [TestMethod]
+    public void EffectParamValueComparer_BooleanEquality_MatchesJsonAndBools()
+    {
+        using var docTrue = JsonDocument.Parse("true");
+        using var docFalse = JsonDocument.Parse("false");
+
+        Assert.IsTrue(EffectParamValueComparer.AreValuesEqual(EffectParamType.Boolean, true, docTrue.RootElement));
+        Assert.IsTrue(EffectParamValueComparer.AreValuesEqual(EffectParamType.Boolean, false, docFalse.RootElement));
+        Assert.IsFalse(EffectParamValueComparer.AreValuesEqual(EffectParamType.Boolean, true, docFalse.RootElement));
+        Assert.IsFalse(EffectParamValueComparer.AreValuesEqual(EffectParamType.Boolean, false, docTrue.RootElement));
+        Assert.IsTrue(EffectParamValueComparer.AreValuesEqual(EffectParamType.Boolean, true, true));
+        Assert.IsFalse(EffectParamValueComparer.AreValuesEqual(EffectParamType.Boolean, true, null));
+    }
+
+    [TestMethod]
+    public void EffectParamValueComparer_EnumEquality_MatchesOrdinalStrings()
+    {
+        using var doc = JsonDocument.Parse("\"diag_dl\"");
+
+        Assert.IsTrue(EffectParamValueComparer.AreValuesEqual(EffectParamType.Enum, "diag_dl", doc.RootElement));
+        Assert.IsFalse(EffectParamValueComparer.AreValuesEqual(EffectParamType.Enum, "spread", doc.RootElement));
+        Assert.IsTrue(EffectParamValueComparer.AreValuesEqual(EffectParamType.Enum, "diag_dl", "diag_dl"));
+        Assert.IsFalse(EffectParamValueComparer.AreValuesEqual(EffectParamType.Enum, "diag_dl", null));
+    }
+
+    [TestMethod]
+    public void EffectParamValueComparer_NumberEquality_HandlesEpsilonAndMixedTypes()
+    {
+        using var docExact = JsonDocument.Parse("1.5");
+        using var docClose = JsonDocument.Parse("1.50005");
+        using var docDifferent = JsonDocument.Parse("1.6");
+
+        Assert.IsTrue(EffectParamValueComparer.AreValuesEqual(EffectParamType.Number, 1.5, docExact.RootElement));
+        Assert.IsTrue(EffectParamValueComparer.AreValuesEqual(EffectParamType.Number, 1.5, docClose.RootElement));
+        Assert.IsFalse(EffectParamValueComparer.AreValuesEqual(EffectParamType.Number, 1.5, docDifferent.RootElement));
+        Assert.IsTrue(EffectParamValueComparer.AreValuesEqual(EffectParamType.Number, 2, 2.0));
+        Assert.IsFalse(EffectParamValueComparer.AreValuesEqual(EffectParamType.Number, 1.5, null));
     }
 }
