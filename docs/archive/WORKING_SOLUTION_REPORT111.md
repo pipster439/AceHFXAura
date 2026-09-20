@@ -1,3 +1,5 @@
+> Historical snapshot. Superseded by [current documentation](../README.md). Claims and TODOs below describe their original period, not current implementation or verified acceptance.
+
 # WORKING_SOLUTION_REPORT.md
 
 ---
@@ -177,7 +179,7 @@ ole32.CoUninitialize()
 
 ## 与既有排查记录的对照
 
-对照 [`AGENT.md`](file:///g:/Aura/AGENT.md) 中的记录，本次排查与实测对前期的推论进行了明确的证实与修正：
+对照 [`AGENT.md`](../../AGENT.md) 中的记录，本次排查与实测对前期的推论进行了明确的证实与修正：
 
 | 既有记录 / 前期推测（摘自 AGENT.md） | 本次实测结果 | 结论对照 |
 | :--- | :--- | :--- |

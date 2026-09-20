@@ -17,7 +17,7 @@ import http.client
 import subprocess
 import shutil
 
-ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 TEST_PORT = 29898
 BASE_URL = f"http://127.0.0.1:{TEST_PORT}"
 

@@ -1,3 +1,5 @@
+> Historical snapshot. Superseded by [current documentation](../README.md). Claims and TODOs below describe their original period, not current implementation or verified acceptance.
+
 # ROG Falchion Ace HFX 灯效问题定位与修复报告
 
 > 日期：2026-08-30

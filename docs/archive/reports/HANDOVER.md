@@ -1,3 +1,5 @@
+> Historical snapshot. Superseded by [current documentation](../../README.md). Claims and TODOs below describe their original period, not current implementation or verified acceptance.
+
 # Aura 项目交接文档 —— 批次 B 之后的任务执行指南
 
 - **交接时间**：2026-09-10 21:44 (GMT+8)

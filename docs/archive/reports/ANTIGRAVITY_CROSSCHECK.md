@@ -1,3 +1,5 @@
+> Historical snapshot. Superseded by [current documentation](../../README.md). Claims and TODOs below describe their original period, not current implementation or verified acceptance.
+
 # Antigravity 交叉验证记录（Gemini 3.8 Flash High）
 
 - **交叉验证对象**：本地 Google Antigravity（`agy` CLI v1.2.0），模型 `gemini-3.8-flash-high`

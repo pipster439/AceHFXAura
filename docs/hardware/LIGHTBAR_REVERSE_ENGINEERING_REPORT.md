@@ -1,3 +1,5 @@
+> Historical hardware investigation, retained for evidence and hypotheses. Current transport is Native HID; this report does not establish independent Light Bar control. See [hardware status](README.md). Use `tools/run_lightbar_probe.bat` from the repository for manual research.
+
 # ASUS ROG Falchion Ace HFX (魔导士 Ace HFX)
 # 顶部 15-LED Light Bar 独立控制逆向工程与协议全解析报告
 
@@ -265,8 +267,8 @@ void AacM605::InitTable() {
 
 为进行零风险、安全的物理验证，我们在根目录下开发了专属轻量级 GUI 验证工具：
 
-- **主程序**：[`lightbar_probe.py`](file:///g:/Aura/lightbar_probe.py)
-- **启动脚本**：[`run_lightbar_probe.bat`](file:///g:/Aura/run_lightbar_probe.bat)
+- **主程序**：[`lightbar_probe.py`](../../tools/lightbar_probe.py)
+- **启动脚本**：[`run_lightbar_probe.bat`](../../tools/run_lightbar_probe.bat)
 
 ### 界面功能与组件清单
 1. **15 个可点击方块 (`#0` ~ `#14`)**：展示引脚 `P0` 到 `P112`，支持鼠标点击选中；
@@ -278,7 +280,7 @@ void AacM605::InitTable() {
 7. **停止动画 (Stop)** 与通讯错误日志区。
 
 ### 核心物理实测判定流程
-1. 双击运行根目录 [`run_lightbar_probe.bat`](file:///g:/Aura/run_lightbar_probe.bat)；
+1. 双击运行 tools 目录 [`run_lightbar_probe.bat`](../../tools/run_lightbar_probe.bat)；
 2. 界面加载后，底层自动完成独占访问并注入 83 槽硬件寻址表；
 3. 界面默认选中 **`LED #7 (Pin 56)`**，当前颜色为红色；
 4. 点击 **`💡 点亮当前选中灯珠 (Set Selected LED)`**：

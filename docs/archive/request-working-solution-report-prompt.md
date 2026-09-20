@@ -1,3 +1,5 @@
+> Historical snapshot. Superseded by [current documentation](../README.md). Claims and TODOs below describe their original period, not current implementation or verified acceptance.
+
 # Prompt：整理一份可验证的实现方案说明文档
 
 ## 背景
