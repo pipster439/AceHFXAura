@@ -319,7 +319,8 @@ def save_detailed_calibrated_map(records_dict, device_name="ROG FALCHION ACE HFX
     with open(CALIBRATION_FILE, 'w', encoding='utf-8') as f:
         json.dump(export_data, f, indent=2, ensure_ascii=False)
 
-    md_file = CALIBRATION_FILE.replace('.json', '.md')
+    md_file = os.path.join(_DIR, '..', 'docs', 'hardware', 'calibrated_keymap.md')
+    os.makedirs(os.path.dirname(md_file), exist_ok=True)
     with open(md_file, 'w', encoding='utf-8') as f:
         f.write(f"# {device_name} 物理按键硬件校准全貌详细报告\n\n")
         f.write(f"- **设备型号**: ROG FALCHION ACE HFX (PID: `0x1B7E`, Model: 7038)\n")
@@ -689,7 +690,7 @@ class KeyboardCalibratorGUI:
         save_detailed_calibrated_map(self.calibrated_data)
         messagebox.showinfo(
             "导出成功",
-            f"物理按键详细校准档案已成功导出至：\n\n1. {CALIBRATION_FILE}\n2. {CALIBRATION_FILE.replace('.json', '.md')}"
+            f"物理按键详细校准档案已成功导出至：\n\n1. {CALIBRATION_FILE}\n2. {os.path.join(_DIR, '..', 'docs', 'hardware', 'calibrated_keymap.md')}"
         )
 
     def launch_probe(self):

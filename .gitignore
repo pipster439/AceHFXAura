@@ -9,7 +9,7 @@ build/
 out/
 bin/
 obj/
-Testing/
+/Testing/
 *.exe
 *.dll
 *.lib
@@ -106,3 +106,7 @@ ORIGINAL_REQUEST.md
 # web/index.html 是 WebUI 运行期必需的单文件打包页面，故意保留跟踪；
 # ============================================================
 !web/index.html
+
+# Local hardware probe observations (review before publishing as evidence)
+/physical_test_log.json
+/docs/hardware/PHYSICAL_TEST_LOG.md

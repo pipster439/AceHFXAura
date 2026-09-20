@@ -3,7 +3,7 @@
 """Legacy reference-model experiments, NOT production or end-to-end tests.
 These checks mostly exercise Python replicas, fixtures and platform primitives.
 They are excluded from CI and default unittest discovery. Passing them does not
-validate Aura behavior. See docs/TESTING.md for implementation-backed checks.
+validate Aura behavior. See docs/testing/TESTING.md for implementation-backed checks.
 """
 
 import sys

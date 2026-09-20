@@ -1,3 +1,4 @@
+@rem LEGACY C++ launcher packaging; does not package WinUI. See docs/development/PACKAGING.md.
 @echo off
 setlocal
 echo =========================================================

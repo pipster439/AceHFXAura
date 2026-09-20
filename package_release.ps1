@@ -1,3 +1,4 @@
+# LEGACY C++ launcher packaging; does not package WinUI. See docs/development/PACKAGING.md.
 <#
 .SYNOPSIS
     Aura Release Packaging Script for PowerShell

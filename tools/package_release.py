@@ -2,7 +2,8 @@
 # -*- coding: utf-8 -*-
 """
 =============================================================================
-Aura 独立发布包自动化构建脚本 (package_release.py)
+Aura LEGACY C++ launcher packaging (not WinUI)
+See docs/development/PACKAGING.md for scope and side effects.
 =============================================================================
 功能：
 1. 编译最新的 Release 二进制文件 (aura_daemon.exe, aura_web_ui.exe)
