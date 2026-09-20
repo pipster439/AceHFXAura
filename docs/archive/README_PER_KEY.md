@@ -1,3 +1,5 @@
+> Historical snapshot. Superseded by [current documentation](../README.md). Claims and TODOs below describe their original period, not current implementation or verified acceptance.
+
 # ROG FALCHION ACE HFX 硬件级独立单键 RGB 控制系统
 
 本工具专为 **ROG FALCHION ACE HFX**（魔导士 ACE HFX，PID: `0x1B7E`, Model: `7038`）深度定制开发，直接通过华硕原生底层驱动通讯层实现**完全独立的单键 RGB 控制**。
@@ -42,7 +44,7 @@
 
 ## 使用示例
 
-脚本路径：[`g:\Aura\set_per_key.py`](file:///g:/Aura/set_per_key.py)
+脚本路径：[`g:\Aura\set_per_key.py`](../../tools/set_per_key.py)
 
 ### 示例 1：点亮功能按键（空格+回车+退格+Tab）
 ```powershell
@@ -75,7 +77,7 @@ python g:\Aura\set_per_key.py --preset off --duration 1
 
 ## 🖥️ 纯鼠标可视化图形校准工具 (GUI Calibrator) ⭐ 强烈推荐
 
-工具路径：[`g:\Aura\gui_calibrator.py`](file:///g:/Aura/gui_calibrator.py) 或 双击 [`g:\Aura\run_gui_calibrator.bat`](file:///g:/Aura/run_gui_calibrator.bat)
+工具路径：[`g:\Aura\gui_calibrator.py`](../../tools/gui_calibrator.py) 或 双击 [`g:\Aura\run_gui_calibrator.bat`](../../tools/run_gui_calibrator.bat)
 
 ```powershell
 python g:\Aura\gui_calibrator.py
@@ -90,7 +92,7 @@ python g:\Aura\gui_calibrator.py
 
 ## 🛠️ 终端命令行校准工具 (CLI Calibrator)
 
-工具脚本：[`g:\Aura\calibrate_keys.py`](file:///g:/Aura/calibrate_keys.py)
+工具脚本：`g:\Aura\calibrate_keys.py` (historical path: `file:///g:/Aura/calibrate_keys.py`; no longer present)
 
 ### 1. 启动交互式逐键校准（支持实时探针微调）
 ```powershell
@@ -118,5 +120,5 @@ python g:\Aura\calibrate_keys.py --mode sweep
 
 ### 4. 详细导出成果
 校准过程中随时按 `Q` 退出或全部完成后，系统将自动生成：
-- **完整 JSON 数据库**：[`g:\Aura\calibrated_keymap.json`](file:///g:/Aura/calibrated_keymap.json)
-- **可视化对照总表报告**：[`g:\Aura\calibrated_keymap.md`](file:///g:/Aura/calibrated_keymap.md)
+- **完整 JSON 数据库**：[`g:\Aura\calibrated_keymap.json`](../../calibrated_keymap.json)
+- **可视化对照总表报告**：[`g:\Aura\calibrated_keymap.md`](../hardware/calibrated_keymap.md)

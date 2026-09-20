@@ -1,3 +1,5 @@
+> Historical snapshot. Superseded by [current documentation](../../README.md). Claims and TODOs below describe their original period, not current implementation or verified acceptance.
+
 # Aura 代码仓库深度审查报告
 
 - **审查对象**：`G:\Aura`（ROG Falchion Ace HFX 硬件级单键 RGB 灯效控制系统）

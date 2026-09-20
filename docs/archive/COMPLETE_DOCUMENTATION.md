@@ -1,5 +1,7 @@
+> Historical snapshot. Superseded by [current documentation](../README.md). Claims and TODOs below describe their original period, not current implementation or verified acceptance.
+
 # Aura (ROG Falchion Ace HFX) 完整技术与使用手册
-> **版本**：以仓库根目录 [`VERSION`](../VERSION) 为准
+> **版本**：以仓库根目录 [`VERSION`](../../VERSION) 为准
 > **适用硬件**：ASUS ROG Falchion Ace HFX (魔导士 Ace HFX 机械键盘，VID `0x0B05`, PID `0x1B7E`)  
 > **支持系统**：Windows 11 / Windows 10 (x64)  
 > **文档性质**：项目全景架构、驱动兼容性、游戏联动、光效开发与运维全量技术手册
@@ -373,7 +375,7 @@ python tools/package_release.py
 ### 8.2 物理真机与 CS2 人工验收指引
 > **重要规约**：自动化 CI 测试通过仅代表模拟护栏通过；由于自动化流水线中未连接真实 USB 键盘，项目整体状态标记为 **`NOT VERIFIED ON REAL HARDWARE`**。
 
-在准备发布正式发行版前，测试人员须遵照 [`docs/MANUAL_TESTS.md`](docs/MANUAL_TESTS.md) 在连接物理键盘的真机上逐项完成核验并签字确认：
+在准备发布正式发行版前，测试人员须遵照 `docs/testing/MANUAL_TESTS.md` (historical path: `docs/testing/MANUAL_TESTS.md`; no longer present) 在连接物理键盘的真机上逐项完成核验并签字确认：
 1. 物理键盘 68 键与 15 独立 Touch Bar 发光均匀，无闪烁；
 2. 网页 Studio 实时预览与真机同步；
 3. 保存草稿（真机保持运行）与发布插件（真机平滑热重载）；
@@ -411,5 +413,5 @@ python tools/package_release.py
    - 本仓库当前未持有该 DLL 的官方再分发授权（`NO REDISTRIBUTION AUTHORIZATION FOUND`）。
    - 公开发行产物默认不内嵌或附带该 DLL。程序只使用最终用户本机 ASUS 官方安装的、通过兼容性 Gate 的组件。
 3. **开源许可协议**：
-   - AceHFXAura 项目代码采用 GNU General Public License v3.0 only（SPDX 标识：`GPL-3.0-only`），详情见根目录 [`LICENSE`](../LICENSE)。
+   - AceHFXAura 项目代码采用 GNU General Public License v3.0 only（SPDX 标识：`GPL-3.0-only`），详情见根目录 [`LICENSE`](../../LICENSE)。
 

@@ -1,3 +1,5 @@
+> Historical snapshot. Superseded by [current documentation](../../README.md). Claims and TODOs below describe their original period, not current implementation or verified acceptance.
+
 # Aura 缺陷处理方案（待批准）
 
 - **依据**：`AURA_CODE_REVIEW_REPORT.md`（80 项）+ `REPORT_CROSSCHECK.md` + `ANTIGRAVITY_CROSSCHECK.md`

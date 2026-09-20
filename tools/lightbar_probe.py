@@ -58,7 +58,7 @@ from aura_hal import (
 # 默认导出文件定位在工程根目录
 REPO_ROOT = os.path.abspath(os.path.join(_DIR, ".."))
 LIGHTBAR_MAPPING_FILE = os.path.join(REPO_ROOT, "lightbar_mapping.json")
-PHYSICAL_TEST_LOG_FILE = os.path.join(REPO_ROOT, "docs", "reports", "PHYSICAL_TEST_LOG.md")
+PHYSICAL_TEST_LOG_FILE = os.path.join(REPO_ROOT, "docs", "hardware", "PHYSICAL_TEST_LOG.md")
 PHYSICAL_TEST_JSON_FILE = os.path.join(REPO_ROOT, "physical_test_log.json")
 
 # 候选与对照组定义
@@ -429,7 +429,10 @@ def export_lightbar_mapping(records: Dict[int, Dict[str, Any]], lightbar_order: 
         with open(file_path, "w", encoding="utf-8") as f:
             json.dump(export_data, f, indent=2, ensure_ascii=False)
 
-        md_path = file_path.replace(".json", ".md")
+        md_path = (os.path.join(REPO_ROOT, "docs", "hardware", "lightbar_mapping.md")
+                   if os.path.abspath(file_path) == os.path.abspath(LIGHTBAR_MAPPING_FILE)
+                   else file_path.replace(".json", ".md"))
+        os.makedirs(os.path.dirname(md_path), exist_ok=True)
         with open(md_path, "w", encoding="utf-8") as f:
             f.write("# ROG FALCHION ACE HFX 顶部 RGB Light Bar 引脚勘测报告\n\n")
             f.write(f"- **设备型号**: ROG FALCHION ACE HFX (PID: `0x1B7E`)\n")

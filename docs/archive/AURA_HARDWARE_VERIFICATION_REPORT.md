@@ -1,3 +1,5 @@
+> Historical snapshot. Superseded by [current documentation](../README.md). Claims and TODOs below describe their original period, not current implementation or verified acceptance.
+
 # ROG FALCHION ACE HFX 硬件灯效控制实测与证伪报告
 
 **报告日期**：2026 年 8 月 28 日  

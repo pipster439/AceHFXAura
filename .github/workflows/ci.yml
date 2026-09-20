@@ -35,7 +35,7 @@ jobs:
       - name: Configure
         run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
       - name: Build
-        run: cmake --build build --config Release --target aura_daemon aura_web_ui test_gsi_rules test_plugin_runtime test_native_hid test_runtime_status --parallel 2
+        run: cmake --build build --config Release --target aura_daemon aura_web_ui test_gsi_rules test_plugin_runtime test_native_hid test_runtime_status test_lighting_service --parallel 2
       - name: CTest
         run: ctest --test-dir build -C Release --output-on-failure
       # Physical hardware acceptance remains local; CI only runs non-hardware tests.

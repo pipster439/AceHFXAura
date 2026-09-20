@@ -29,3 +29,28 @@ The fixture DLLs validate the plugin manager contract, not the Studio code gener
 ## Verification of the test itself (2026-09-16)
 
 The production implementation passed `plugin_runtime`. In an isolated copy under the ignored build directory, `PluginManager::ReloadPlugin` was deliberately changed to return `true` immediately, without loading or publishing a new DLL. The same regression executable then exited with code 1 and `DLL rendered the wrong version`. The repository's production source was not modified. This demonstrates detection of a no-op reload; it is not a comprehensive mutation-coverage result.
+
+## Current validation matrix
+
+Run from the repository root unless specified:
+
+```powershell
+cmake -S . -B build -A x64
+cmake --build build --config Release
+ctest --test-dir build -C Release --output-on-failure
+python -B -m unittest discover -s tests -p "test_*.py" -v
+dotnet test tests/Aura.Tests/Aura.Tests.csproj -c Release
+dotnet build winui/Aura.WinUI.csproj -c Release -p:Platform=x64
+cd frontend
+npm ci
+npm test
+npm run build
+```
+
+Python discovery includes release/launcher checks that require a freshly packaged legacy `dist/Aura.exe`; absent or stale artifacts are not cleanup regressions and must be reported. Do not run packaging merely to satisfy these checks without accounting for its runtime-cache side effects. The CI-safe subset is `test_aura_hal`, `test_lightbar_probe`, `test_gsi_dictionary_blocks`, plus isolated Web/daemon entrypoint classes. Tests may skip daemon lifecycle cases when a real instance occupies the shared mutex or ports.
+
+CTest registers `plugin_runtime`, `runtime_status`, `lighting_service`, `gsi_rules`, `native_hid`, and (when Python is found) `aura_hal_py`. Lighting tests exercise production service validation and parameter schemas; .NET tests exercise the production client. Report their results separately.
+
+`test_com.cpp` and `test_diag_hook.cpp` remain CMake-built manual diagnostics, not CTest tests. The latter is interactive. `test_cs2_gsi.py` sends to live ports 19897/19898 and is an opt-in integration tool, not isolated CI. Do not run live probes or hardware calibration against a user's session as an automated check.
+
+[Historical M1/M5 harnesses](../../tests/archive/README.md) are retained outside default discovery. `tests/reference_models/` remains non-production evidence. Neither is included in current coverage claims.

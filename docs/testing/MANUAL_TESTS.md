@@ -12,7 +12,7 @@
 
 - **操作系统**：Windows 11 x64
 - **物理硬件**：ASUS ROG Falchion Ace HFX (魔导士 Ace HFX 机械键盘，VID `0x0B05`, PID `0x1B7E`)
-- **驱动依赖**：ASUS 键盘 HAL (`AacKbHal_x64.dll` v1.3.46.0，SHA256: `52D575BF942B7551B3F120C446BF0D853E36F9225C6B9A17407A80E0B1829F04`)
+- **后端**：先显式验证 `--backend native_hid`；另行验证默认 auto 的回退行为。仅 legacy HAL 验收需要已安装且通过当前代码 Gate 的 ASUS DLL。
 - **编译工具链**：Visual Studio 2022 或 2026 (MSVC x64 C++17)
 - **测试游戏**：Counter-Strike 2 (已安装并配置 GSI `gamestate_integration_aura.cfg`)
 
@@ -22,11 +22,11 @@
 
 ### 1. 基础启动与硬件直通
 - [ ] **1.1 Aura 启动**  
-  - 操作：在终端运行 `aura_daemon.exe`。
-  - 预期：控制台显示 `AacKbHal_x64.dll` 兼容性 Gate 校验通过 (SHA-256 / FileVersion / Runtime Signature 匹配)，守护进程成功与键盘建立直连，并自动拉起 `aura_web_ui.exe`。
+  - 操作：在终端运行 `aura_daemon.exe --backend native_hid`。
+  - 预期：控制台确认 active backend 为 native_hid，守护进程与键盘建立连接并拉起 `aura_web_ui.exe`；此模式不应加载 ASUS HAL。
 - [ ] **1.2 真键盘基础灯效**  
   - 操作：观察键盘物理按键发光。
-  - 预期：键盘 68 颗物理按键与顶部 15 颗独立 Light Bar LED 均按照当前默认 profile 正常点亮，无全键黑屏、闪烁或错位。
+  - 预期：键盘 68 键按当前基础灯效点亮，无意外黑屏、闪烁或错位。记录 Light Bar 随 Row 1 的表现；独立灯条控制不属于当前已完成能力。
 
 ### 2. Studio 创作、预览与草稿恢复
 - [ ] **2.1 Studio 创建简单光效**  
@@ -88,3 +88,11 @@
 | 4. CS2 GSI 完整对局联动 | | | | | |
 
 > **最终声明**：在上述表格由人工实机填写真实验收数据之前，本项目状态必须保持标记为 `NOT VERIFIED ON REAL HARDWARE`。
+
+## Native WinUI Lighting acceptance
+
+- [ ] Home shows the actual configured/active backend and runtime state.
+- [ ] Lighting loads preset schemas; color, boolean, enum and number controls match the selected effect.
+- [ ] Draft edits, apply, refresh and conflicting revisions behave correctly; errors preserve a recoverable draft.
+- [ ] Studio opens through WebView2 on 19898 and can preview/publish with the required MSVC tools.
+- [ ] Exit and restart follow the intended daemon ownership/lifecycle; verify on real Windows hardware.

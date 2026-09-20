@@ -1,18 +1,18 @@
 # Aura for ROG Falchion Ace HFX
 
-Aura 是面向 **ROG Falchion Ace HFX** 的高性能独立 Windows 灯光控制器。它默认通过原生 Win32 HID（`MI_01` 通道）直接向键盘推送 68 键 RGB 帧，默认执行路径**不加载且不依赖 `AacKbHal_x64.dll` 闭源驱动**，即插即用。同时提供一个轻量本地 Web Studio，用 Blockly 制作光效、编排前台程序与 CS2 Game State Integration（GSI）自动化。
+Aura 是面向 **ROG Falchion Ace HFX** 的高性能独立 Windows 灯光控制器。它默认通过原生 Win32 HID（`MI_01` 通道）直接向键盘推送 68 键 RGB 帧，默认 `auto` 策略优先 Native HID，连接失败时尝试经过 Gate 的 legacy HAL；显式 `--backend native_hid` 可禁止 HAL 回退。当前桌面客户端为 WinUI，提供原生 Home 和 Lighting 页面；WebView2 Studio 继续复用本地 Web 服务。项目同时提供一个轻量本地 Web Studio，用 Blockly 制作光效、编排前台程序与 CS2 Game State Integration（GSI）自动化。
 
 当前 alpha 版本号以仓库根目录的 [`VERSION`](VERSION) 为单一事实源；核心能力与已知限制见 [`CHANGELOG.md`](CHANGELOG.md)。
 
-当前版本的完整链路已经过物理键盘实机严格验证：全黑、纯色、单键变色、25 FPS 持续推流、启动 daemon、打开 Studio、预览与发布 Blockly 光效、接收 CS2 GSI、按规则切换基础方案并叠加事件/状态光效。
+当前开发线包含 Phase 3.6 Lighting：基于后端参数 schema 生成原生控件，并通过 Lighting Control API 读取、应用基础灯效。自动化测试与真机验收是不同证据；本次文档整理不宣称重新完成硬件验收。详见 [文档索引](docs/README.md) 和 [当前架构](docs/architecture/README.md)。
 
 ## 硬件后端架构 (Hardware Backends)
 
 本项目支持两种硬件后端，由配置项 `hardware_backend` 或启动参数 `--backend` 控制：
 
-1. **`native_hid`（默认推荐 / 即插即用）**：
+1. **`native_hid`（显式选择原生模式）**：
    - 直接使用 Windows 原生 HID API (`SetupAPI` / `hid.lib`) 与键盘的 `MI_01` 灯控端点（VID `0x0B05`, PID `0x1B7E`, UsagePage `0xFF00`, Usage `0x0001`）通信。
-   - 默认执行路径**不加载、不调用** `AacKbHal_x64.dll`，已实机验证 25 FPS 硬件持续稳定推流。
+   - 该模式**不加载、不调用** `AacKbHal_x64.dll`，已实机验证 25 FPS 硬件持续稳定推流。
    - 内置固件特定的 64 字节 USB 边界隔离（Byte 63 / Slot 14 填充），规避当前硬件实测中观察到的 Byte63 / Slot14 色彩异常与闪烁。
 
 2. **`legacy_hal`（备用排查模式）**：
@@ -20,7 +20,7 @@ Aura 是面向 **ROG Falchion Ace HFX** 的高性能独立 Windows 灯光控制�
    - 需要用户本机已安装 Armoury Crate / ASUS `Aac_Keyboard` 驱动包中的 `AacKbHal_x64.dll`。
    - 强制启用 SHA-256 白名单文件 Gate、模块签名 Gate 以及内存崩溃防御补丁（禁用致命空指针日志并置零 EnableLog）。
 
-3. **`auto`（默认策略）**：
+3. **`auto`（当前配置与命令行默认策略）**：
    - 优先尝试 `native_hid` 连接硬件；若 HID 端点不可用，则安全回退至 `legacy_hal`。
 
 > **关于后端切换说明**：
@@ -31,6 +31,7 @@ Aura 是面向 **ROG Falchion Ace HFX** 的高性能独立 Windows 灯光控制�
 
 ## 你可以做什么
 
+- **原生 Lighting 控制**：选择内置效果，编辑 schema 提供的颜色、开关、枚举和数值参数，应用基础灯效并处理配置版本冲突。
 - **在 Studio 制作光效**：用 Blockly 组合全键填色、单键控制、波纹、颜色运算、时间、变量、循环、按键状态和 GSI 数据。
 - **直接预览到键盘**：浏览器中的 JS 运行时与原生插件共享同一套顺序控制语义；停止预览后，键盘恢复显示当前已应用方案。
 - **编排自动化**：按前台进程和 GSI 条件选择基础方案，也可以在击杀等事件发生时播放一次叠加，或在低血量等条件成立期间持续叠加。
@@ -42,10 +43,11 @@ Aura 是面向 **ROG Falchion Ace HFX** 的高性能独立 Windows 灯光控制�
 
 - Windows 11 x64（Windows 10 x64：未经测试 / 未正式验证）
 - ROG Falchion Ace HFX 机械键盘
-- 默认 Native 模式不依赖本地 ASUS 闭源驱动（若使用备用 `--backend legacy_hal` 则需要本地已安装的 `AacKbHal_x64.dll`）
+- Native HID 路径不依赖本地 ASUS 闭源驱动；显式 legacy_hal 或 auto 回退需要本地已安装且通过 Gate 的 `AacKbHal_x64.dll`
 - Visual Studio 2022 / 2026 Build Tools 或 Visual Studio，安装“使用 C++ 的桌面开发”、x64 MSVC 工具集和 Windows SDK（用于 Studio 制作并编译发布原生光效 DLL）
 - CMake 3.20 或更新版本
 - Node.js 与 npm（构建 Web Studio 时需要）
+- .NET 10 SDK（WinUI / Aura.Tests）；WinUI 依赖版本以 `winui/Aura.WinUI.csproj` 为准；Studio 需要 WebView2 runtime
 
 > Studio 的“发布”会在运行时查找 `vcvars64.bat` 和 `cl.exe`，并使用 Plugin SDK 头文件（单文件运行时自动释放，源码环境使用仓库 `include/`）编译插件。只查看、编辑和保存草稿不触发 C++ 编译。
 
@@ -67,6 +69,8 @@ cd ..
 
 cmake -S . -B build
 cmake --build build --config Release
+dotnet test tests/Aura.Tests/Aura.Tests.csproj -c Release
+dotnet build winui/Aura.WinUI.csproj -c Release -p:Platform=x64
 ```
 
 `npm run build` 会把 React/Blockly 应用打包为单文件 `web/index.html`。CMake 会构建：
@@ -78,6 +82,10 @@ cmake --build build --config Release
 构建完成后，CMake 还会把两个运行程序复制到仓库根目录。后续命令都应在仓库根目录执行。
 
 ## 首次运行
+
+从源码使用 WinUI：完成上述 C++ 和 WinUI 构建后，可在 Visual Studio 运行 `winui/Aura.WinUI.csproj`（x64 Release）。`RuntimeLayoutResolver` 会在源码目录发现 daemon、keymap 和示例配置；Home / Lighting 连接 19897，Studio 通过 WebView2 加载 19898。当前 legacy `dist/Aura.exe` 不包含 WinUI。
+
+也可单独运行 daemon 和浏览器 Studio：
 
 1. 确认键盘已连接，并关闭可能正在控制同一灯光通道的软件效果。
 2. 在仓库根目录启动：
@@ -141,7 +149,7 @@ cmake --build build --config Release
 
 点击“保存并应用”时，Studio 会先发布自动化所引用的 Blockly 草稿，再提交统一规则。画布在切换页面时还会暂存到当前浏览器标签页的 `sessionStorage`；它不是持久发布，关闭标签页前仍应保存。
 
-更详细的积木执行与联动语义见 [docs/STUDIO_WORKFLOW.md](docs/STUDIO_WORKFLOW.md)。
+更详细的积木执行与联动语义见 [Studio workflow](docs/studio/STUDIO_WORKFLOW.md)。
 
 ## GSI 自动化
 
@@ -162,7 +170,8 @@ Profile 只保存逻辑方案名与当前 `plugin_name` 引用。自动化引用
 ## 当前运行结构
 
 ```text
-浏览器 Studio (127.0.0.1:19898)
+WinUI Home / Lighting ── Control / Lighting API ──► daemon :19897
+WinUI WebView2 / 浏览器 Studio (127.0.0.1:19898)
         │ 配置 / 编译 / 预览 / GSI 诊断
         ▼
 aura_web_ui.exe
@@ -174,7 +183,7 @@ aura_daemon.exe (127.0.0.1:19897)
         ├─ RuleEngine：统一规则、兜底方案、配置热重载
         ├─ EffectEngine + OverlayManager：基础方案与多层叠加
         ├─ PluginManager：插件发现、影子加载与热重载
-        └─ AuraAdapter：将 128 通道帧推送到 Native HID (默认) 或 ASUS 键盘 HAL (备用)
+        └─ AuraAdapter：将 128 通道帧推送到 Native HID (auto 优先) 或 ASUS 键盘 HAL (回退/显式选择)
 ```
 
 硬件调用只发生在 daemon 主推流路径；GSI 和 Web 请求线程只更新内存状态或转发请求。配置写入后由 daemon 按文件时间戳热重载。全局与 Profile 帧率会被限制在 10–100 FPS；配置没有指定帧率或在首次启动模板中默认设为 25 FPS（与当前正式真机稳定性验收标准一致）。
@@ -211,7 +220,9 @@ aura_web_ui.exe --port 19898 --config config.json
 
 此模式没有 daemon，因此硬件预览、插件加载确认和 GSI 实时状态不可用。
 
-## 构建发布包
+## Legacy launcher 发布包
+
+此入口仅打包 C++ launcher、daemon 和 Web Studio，不包含 WinUI；限制及后续工作见 [Packaging](docs/development/PACKAGING.md)。
 
 在仓库根目录执行：
 
@@ -221,9 +232,9 @@ package_release.bat
 
 脚本会从 [`VERSION`](VERSION) 读取版本，通过 `vswhere` 检测本机安装的 Visual Studio 版本（支持 Visual Studio 2022 与 Visual Studio 2026）并动态匹配对应 CMake 生成器，构建两个 Release 进程、校验可再分发资产，并生成 `dist/Aura.exe` 和便携 ZIP。
 
-出于保守的第三方资产策略，打包脚本不会从本机复制、内嵌或附带 `AacKbHal_x64.dll`。程序运行时从用户已安装的 ASUS 官方目录/注册路径定位 DLL，并且只加载通过已验证 SHA-256 与内存签名 Gate 的版本。如果缺失或版本不受支持，请通过 Armoury Crate / ASUS 官方驱动包安装或修复，不要从非官方来源下载 DLL。
+出于保守的第三方资产策略，打包脚本不会从本机复制、内嵌或附带 `AacKbHal_x64.dll`。仅在显式选择 legacy HAL 或 auto 回退到 HAL 时，程序从用户已安装的 ASUS 官方目录/注册路径定位 DLL，并且只加载通过已验证 SHA-256 与内存签名 Gate 的版本。如果缺失或版本不受支持，请通过 Armoury Crate / ASUS 官方驱动包安装或修复，不要从非官方来源下载 DLL。
 
-发布前请逐项完成 [`RELEASE_CHECKLIST.md`](RELEASE_CHECKLIST.md)。
+发布前请逐项完成 [`RELEASE_CHECKLIST.md`](docs/development/RELEASE_CHECKLIST.md)。
 
 单文件 `Aura.exe` 会自动释放运行时所需的 Aura Plugin SDK，因此无需源码 checkout 即可使用 Studio 的原生发布功能。原生发布仍要求本机安装 Visual Studio / Build Tools 的 C++ Desktop workload、x64 MSVC 工具集和 Windows SDK。
 
@@ -244,12 +255,12 @@ cmake --build build --config Release
 ctest --test-dir build -C Release --output-on-failure
 ```
 
-仓库还包含 GSI、编译接口、插件压力与端到端脚本，位于 `tests/`。依照工程规范，自动化 CI 测试通过仅代表模拟护栏通过；涉及真实键盘、ASUS HAL 物理推流与 CS2 实机对局的最终验收须由人工依据 [docs/MANUAL_TESTS.md](docs/MANUAL_TESTS.md) 手动执行核验。
+仓库还包含 GSI、编译接口、插件压力与端到端脚本，位于 `tests/`。依照工程规范，自动化 CI 测试通过仅代表模拟护栏通过；涉及真实键盘、ASUS HAL 物理推流与 CS2 实机对局的最终验收须由人工依据 [Manual acceptance](docs/testing/MANUAL_TESTS.md) 手动执行核验。
 
 ## 免责声明与第三方资产声明 (Disclaimer & Third-Party Notice)
 
 1. **商标与版权**：ASUS、ROG (Republic of Gamers)、Armoury Crate 及相关标志均为 ASUSTeK Computer Inc. 的注册商标或商标。Counter-Strike、CS2 与 Game State Integration (GSI) 均为 Valve Corporation 的注册商标或商标。本项目为独立第三方开源软件，与华硕或 Valve 均无官方关联、赞助或背书关系。
-2. **底层通信与驱动组件**：本项目默认通过标准 Windows HID 协议直接与硬件通信，不加载、不复制、亦不依赖任何华硕专有动态链接库。仅在显式指定旧版排查模式（`legacy_hal`）时，才会尝试与用户本机已安装的华硕官方组件交互（需通过 SHA-256 Gate 鉴权）。该闭源 DLL 属于华硕专有资产，不属于本项目开源范围，公开 Release 严禁内嵌或分发该 DLL。
+2. **底层通信与驱动组件**：本项目优先通过标准 Windows HID 协议直接与硬件通信；显式 `native_hid` 模式不加载华硕专有动态链接库。在显式指定旧版排查模式（`legacy_hal`）或 `auto` 回退时，才会尝试与用户本机已安装的华硕官方组件交互（需通过 SHA-256 Gate 鉴权）。该闭源 DLL 属于华硕专有资产，不属于本项目开源范围，公开 Release 严禁内嵌或分发该 DLL。
 3. **软件许可 (LICENSE)**：AceHFXAura 项目代码采用 GNU General Public License v3.0 only（SPDX 标识：`GPL-3.0-only`），详情见根目录 [LICENSE](LICENSE)。发布与使用本项目须遵守当地法律法规及第三方相关最终用户许可协议 (EULA)。
 
 ## License
@@ -258,5 +269,5 @@ AceHFXAura is licensed under the GNU General Public License v3.0 only (`GPL-3.0-
 See [LICENSE](LICENSE) for details.
 
 - ASUS, ROG, Armoury Crate, and related marks/assets belong to their respective owners.
-- The default backend communicates via native Win32 HID APIs and does not load or require AacKbHal_x64.dll.
-- The legacy fallback interacts with local `AacKbHal_x64.dll` only when explicitly requested and verified via SHA-256 gate. Public releases never bundle or redistribute proprietary ASUS components.
+- The default auto policy tries native Win32 HID first; explicit native_hid never loads AacKbHal_x64.dll.
+- The legacy fallback interacts with local `AacKbHal_x64.dll` when explicitly requested or selected by auto fallback, and verified via SHA-256 gate. Public releases never bundle or redistribute proprietary ASUS components.

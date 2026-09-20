@@ -1,3 +1,5 @@
+> Historical snapshot. Superseded by [current documentation](../../README.md). Claims and TODOs below describe their original period, not current implementation or verified acceptance.
+
 # 外部 Review 报告核查结论
 
 - **被核查文件**：`C:\Users\ROG\Downloads\repository_review_report.md`（下称"该报告"）
