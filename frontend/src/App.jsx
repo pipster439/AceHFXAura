@@ -1,5 +1,6 @@
 import { ensureStudioRuntime } from './utils/applyEffect.js';
-import { processRows, gsiRows, replaceSimpleRows } from './utils/orchestration.js';
+import { processRows, gsiRows, replaceSimpleRows, hasAutomationV2 } from './utils/orchestration.js';
+import AutomationAuthoring from './components/AutomationAuthoring';
 import { ConfigSaveCoordinator } from './utils/configSaveCoordinator.js';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -677,7 +678,9 @@ export default function App() {
                 />
               )}
 
-              {activeTab === 'rules' && (
+              {activeTab === 'automation' && <AutomationAuthoring onConfigChanged={async()=>{coordinatorRef.current?.bumpGeneration();await fetchConfig();}}/>}
+              {['rules','gsi'].includes(activeTab) && hasAutomationV2(config) && <p>此配置含 Automation v2，旧整表编辑器为只读。请使用 Automation；Application Rules 仍通过原 API 编辑。</p>}
+              {activeTab === 'rules' && !hasAutomationV2(config) && (
                 <RulesSettings
                   rules={processRows(config || {})}
                   onAddRule={handleAddRule}
@@ -688,7 +691,7 @@ export default function App() {
                 />
               )}
 
-              {activeTab === 'gsi' && (
+              {activeTab === 'gsi' && !hasAutomationV2(config) && (
                 <GsiSettings
                   config={{ ...config, gsi_bindings: gsiRows(config || {}) }}
                   onUpdateGsiBindings={handleUpdateGsiBindings}

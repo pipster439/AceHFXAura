@@ -36,6 +36,7 @@ export default function Sidebar({
     { id: 'lighting', label: '预设灯效', icon: Palette },
     { id: 'perkey', label: '逐键涂装', icon: Keyboard },
     { id: 'studio', label: '工作室', icon: Sparkles },
+    { id: 'automation', label: 'Automation', icon: Workflow },
     { id: 'profiles', label: '方案管理', icon: SlidersHorizontal }
   ];
 

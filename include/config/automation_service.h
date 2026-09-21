@@ -79,11 +79,17 @@ public:
                         const std::string& expected_revision,
                         std::string& out_new_revision);
 
+    // Stage 5A contract. All mutating calls require expected_revision.
+    struct AuthoringResult { int http_status; nlohmann::json body; };
+    AuthoringResult Author(const std::string& operation, const nlohmann::json& request = nlohmann::json::object());
+    static nlohmann::json AuthoringCapabilities();
+
 private:
     std::filesystem::path config_path_;
     FileReplacerFunc file_replacer_;
 
     static bool ValidateWriteRequestSecurity(const httplib::Request& req, httplib::Response& res);
+    void RegisterAuthoringRoutes(httplib::Server& svr);
 };
 
 } // namespace aura

@@ -367,6 +367,7 @@ AutomationControlService::OpResult AutomationControlService::DeleteRule(
 }
 
 void AutomationControlService::RegisterRoutes(httplib::Server& svr) {
+    RegisterAuthoringRoutes(svr);
     // 1. GET /api/automation/rules - 获取应用规则列表
     svr.Get("/api/automation/rules", [this](const httplib::Request&, httplib::Response& res) {
         std::vector<AutomationRule> rules;

@@ -59,6 +59,7 @@ set(DAEMON_SOURCES
     src/gsi/gsi_adapter.cpp
     src/config/lighting_service.cpp
     src/config/automation_service.cpp
+    src/config/automation_authoring.cpp
     src/config/config_writer_util.cpp
 )
 
@@ -163,6 +164,7 @@ add_executable(test_gsi_rules
     src/web/web_server.cpp
     src/config/lighting_service.cpp
     src/config/automation_service.cpp
+    src/config/automation_authoring.cpp
     src/config/config_writer_util.cpp
 )
 
@@ -227,6 +229,7 @@ add_executable(test_lighting_service
     tests/test_lighting_service.cpp
     src/config/lighting_service.cpp
     src/config/automation_service.cpp
+    src/config/automation_authoring.cpp
     src/config/config_writer_util.cpp
     src/config/rule_engine.cpp
     src/config/automation_evaluation.cpp
@@ -259,6 +262,7 @@ target_link_libraries(test_lighting_service PRIVATE
 add_executable(test_automation_service
     tests/test_automation_service.cpp
     src/config/automation_service.cpp
+    src/config/automation_authoring.cpp
     src/config/config_writer_util.cpp
     src/config/lighting_service.cpp
     src/config/rule_engine.cpp
@@ -365,6 +369,10 @@ get_target_property(AUTOMATION_RULE_TEST_LIBRARIES test_gsi_rules LINK_LIBRARIES
 target_link_libraries(test_automation_v2 PRIVATE ${AUTOMATION_RULE_TEST_LIBRARIES})
 add_test(NAME automation_v2 COMMAND test_automation_v2)
 set_tests_properties(automation_v2 PROPERTIES TIMEOUT 30)
+add_executable(test_automation_authoring tests/test_automation_authoring.cpp ${AUTOMATION_RULE_TEST_SOURCES})
+target_link_libraries(test_automation_authoring PRIVATE ${AUTOMATION_RULE_TEST_LIBRARIES})
+add_test(NAME automation_authoring COMMAND test_automation_authoring)
+set_tests_properties(automation_authoring PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" TIMEOUT 30)
 
 # Synthetic lifecycle DLLs are test-only targets, never deployment inputs.
 add_library(automation_lifecycle_old SHARED tests/fixtures/automation_lifecycle_fixture.cpp)

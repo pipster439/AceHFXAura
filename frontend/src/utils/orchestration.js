@@ -1,6 +1,14 @@
-// One authoritative rule list. Old arrays are imported once, in their original
+export function hasAutomationV2(config) {
+  return Array.isArray(config?.orchestration?.rules) && config.orchestration.rules.some(r => r?.model === 'automation_v2');
+}
+export function assertLegacyEditable(config) {
+  if (hasAutomationV2(config)) throw new Error('此配置含 Automation v2；旧整表编辑器为只读，请使用 Automation。');
+}
+// Legacy-only projection. Never migrate or reconstruct a V2-bearing config.
+// Old arrays are imported once, in their original
 // runtime precedence order, then replaced by projections in the simple editors.
 export function canonicalConfig(config = {}) {
+  if (hasAutomationV2(config)) return config;
   if (config.orchestration?.version === 2) return config;
   const modern = (config.orchestration?.rules || []).map((r, i) => ({ ...r, id: r.id || `advanced_${i}` }));
   const gsi = (config.gsi_bindings || []).map((r, i) => ({
@@ -18,14 +26,17 @@ export function canonicalConfig(config = {}) {
 }
 
 export function processRows(config) {
+  if (hasAutomationV2(config)) return config.rules || [];
   return canonicalConfig(config).orchestration.rules.filter(r => !Object.keys(r.condition || {}).length && (r.source === 'process' || r.process)).map(r => ({ id: r.id, process: r.process, profile: r.target_profile, suppress_web_ui: !!r.dnd }));
 }
 
 export function gsiRows(config) {
+  if (hasAutomationV2(config)) return config.gsi_bindings || [];
   return canonicalConfig(config).orchestration.rules.filter(r => r.process === 'cs2.exe' && r.condition?.field && !r.condition.field.startsWith('process')).map(r => ({ id: r.id, field: r.condition.field, operator: r.condition.op, value: r.condition.value, profile: r.target_profile }));
 }
 
 export function replaceSimpleRows(config, kind, rows) {
+  assertLegacyEditable(config);
   const next = canonicalConfig(config);
   const old = kind === 'process' ? processRows(next) : gsiRows(next);
   const ids = new Set(old.map(r => r.id));

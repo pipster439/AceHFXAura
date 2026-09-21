@@ -1,6 +1,6 @@
 import { studioExample } from '../blockly/studioExample.js';
 import { stageEffect, effectConfig } from '../utils/applyEffect.js';
-import { canonicalConfig } from '../utils/orchestration.js';
+import { canonicalConfig, hasAutomationV2, assertLegacyEditable } from '../utils/orchestration.js';
 import React, { useState, useEffect, useRef } from 'react';
 import Blockly, { loadSafeWorkspaceJson } from '../blockly/index.js';
 import { registerCustomBlocks } from '../blockly/customBlocks';
@@ -50,6 +50,7 @@ export default function OrchestratorStudio({
 
   // 初始化 Blockly 画布
   useEffect(() => {
+    if (hasAutomationV2(configRef.current)) return;
     registerCustomBlocks();
     if (!blocklyDivRef.current) return;
 
@@ -102,6 +103,7 @@ export default function OrchestratorStudio({
     if (!workspaceRef.current || isBatchCompiling) return;
     setIsBatchCompiling(true);
     try {
+      assertLegacyEditable(configRef.current);
       const serialized = OrchestratorSerializer.serializeWorkspace(workspaceRef.current, config?.orchestration?.fallback_profile || config?.default_profile || 'desktop');
       let next = canonicalConfig(config);
       if (exampleAssets) next = { ...next, profiles: { ...next.profiles, ...exampleAssets.profiles }, blockly_effects: { ...next.blockly_effects, ...exampleAssets.effects } };
@@ -141,6 +143,7 @@ export default function OrchestratorStudio({
   const overlaysCount = orchestrationData?.orchestration?.event_overlays?.length || 0;
   const fallbackProfile = orchestrationData?.orchestration?.fallback_profile || 'desktop';
 
+  if (hasAutomationV2(config)) return <p className="p-4">此配置含 Automation v2，旧 Blockly 编排编辑器为只读。请使用 Automation 管理规则。</p>;
   return (
     <div className="flex flex-col gap-4 p-1 h-full min-h-[560px]">
       {/* 顶部控制栏 (MD3E Top App Bar) */}

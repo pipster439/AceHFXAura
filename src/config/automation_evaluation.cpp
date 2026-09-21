@@ -218,6 +218,15 @@ AutomationRule RuleEngine::ParseAutomationRule(const nlohmann::json& item) {
 std::vector<RulePlanEntry> RuleEngine::GetEvaluationPlan() const {
     std::lock_guard<std::mutex> lock(mutex_); return plan_;
 }
+void RuleEngine::ValidateAutomationReferences(const AutomationRule& rule,
+    const std::function<bool(const std::string&)>& profile_exists) {
+    const auto& action = rule.action;
+    std::string name;
+    if (action.at("type") == "activate_profile") name = action.at("profile").get<std::string>();
+    else if (action.at("effect").at("kind") == "profile_effect") name = action.at("effect").at("name").get<std::string>();
+    else return; // Plugin resolution belongs to the effect runtime.
+    if (!profile_exists(name)) throw std::runtime_error("Referenced profile '" + name + "' does not exist");
+}
 uint64_t RuleEngine::GetAutomationFreshnessMs() const {
     std::lock_guard<std::mutex> lock(mutex_); return automation_freshness_ms_;
 }

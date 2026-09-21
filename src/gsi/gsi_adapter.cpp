@@ -39,7 +39,7 @@ std::string FormatEpochMs(uint64_t ms) {
 
 } // namespace
 
-std::string CanonicalAutomationEvent(const std::string& name) {
+static const std::unordered_map<std::string,std::string>& AutomationEventAliases() {
     static const std::unordered_map<std::string, std::string> names = {
         {"PlayerGotKill", "event.kill"}, {"PlayerGotHeadshotKill", "event.headshot"},
         {"PlayerAce", "event.ace"}, {"PlayerTookDamage", "event.damage"},
@@ -56,6 +56,16 @@ std::string CanonicalAutomationEvent(const std::string& name) {
         {"event.damage_taken", "event.damage"}, {"event.flash", "event.flashed"},
         {"event.round_won", "event.round_victory"}, {"event.round_lost", "event.round_loss"}
     };
+    return names;
+}
+std::vector<std::string> AutomationEventNames() {
+    std::vector<std::string> names;
+    for(const auto& pair:AutomationEventAliases()) names.push_back(pair.second);
+    std::sort(names.begin(),names.end()); names.erase(std::unique(names.begin(),names.end()),names.end());
+    return names;
+}
+std::string CanonicalAutomationEvent(const std::string& name) {
+    const auto& names=AutomationEventAliases();
     const auto it = names.find(name);
     if (it != names.end()) return it->second;
     for (const auto& entry : names) if (entry.second == name) return name;

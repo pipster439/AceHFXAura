@@ -885,6 +885,24 @@ void WebServer::SetupRoutes() {
         }
     });
 
+    // Same-origin authoring transport. Validation and publication stay in daemon.
+    auto automation_proxy = [this](const httplib::Request& req, httplib::Response& res) {
+        if (req.method != "GET" && !ValidateWriteRequest(req,res)) return;
+        httplib::Client client("127.0.0.1",19897);
+        client.set_connection_timeout(1,0); client.set_read_timeout(8,0);
+        httplib::Request forwarded;
+        forwarded.method=req.method; forwarded.path=req.path; forwarded.body=req.body;
+        forwarded.set_header("Content-Type","application/json");
+        const auto reply=client.send(forwarded);
+        res.set_header("Cache-Control","no-store");
+        if (!reply) { res.status=503; res.set_content(R"({"error":"daemon_unavailable","message":"Automation authoring requires the daemon"})","application/json"); return; }
+        res.status=reply->status; res.set_content(reply->body,"application/json; charset=utf-8");
+    };
+    for (const auto* route : {R"(/api/automation/v2/(capabilities|records|rules|validate|promotions/(propose|commit)))", R"(/api/automation/rules(/[0-9]+)?)"}) {
+        svr_.Get(route,automation_proxy); svr_.Post(route,automation_proxy);
+        svr_.Patch(route,automation_proxy); svr_.Put(route,automation_proxy); svr_.Delete(route,automation_proxy);
+    }
+
     // 保存更新配置文件 (强制 If-Match 乐观并发检查与 R7 写接口防御保护)
     svr_.Post("/api/config", [this](const httplib::Request& req, httplib::Response& res) {
         if (!ValidateWriteRequest(req, res)) {
@@ -940,6 +958,23 @@ void WebServer::SetupRoutes() {
         try {
             // 5. 校验 JSON 格式合法性
             auto j = nlohmann::json::parse(req.body);
+            // A legacy whole-config writer may preserve V2 records, never author
+            // or reconstruct them. This also closes a shadow-ack bypass route.
+            auto v2_records = [](const nlohmann::json& config) {
+                auto records=nlohmann::json::array();
+                if (config.contains("orchestration") && config["orchestration"].is_object() &&
+                    config["orchestration"].contains("rules") && config["orchestration"]["rules"].is_array())
+                    for (size_t i=0;i<config["orchestration"]["rules"].size();++i) {
+                        const auto& rule=config["orchestration"]["rules"][i];
+                        if(rule.is_object() && rule.value("model",nlohmann::json())=="automation_v2") records.push_back({{"position",i},{"record",rule}});
+                    }
+                return records;
+            };
+            if(v2_records(nlohmann::json::parse(current_content))!=v2_records(j)) {
+                res.status=409;
+                res.set_content(R"({"error":"v2_authoring_required","message":"Use revision-safe Automation v2 authoring to change V2 records; legacy whole-list save was blocked"})","application/json");
+                return;
+            }
             if (!j.is_object() || !j.contains("profiles") || !j.contains("rules")) {
                 res.status = 400;
                 res.set_content(R"json({"status":"error","message":"配置数据缺少 profiles 或 rules 核心字段"})json", "application/json; charset=utf-8");

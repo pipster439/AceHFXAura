@@ -11,6 +11,7 @@ namespace aura {
 // One v2 adapter mapping for detector names, canonical IDs and truthful public aliases.
 // Deliberately excludes the legacy synthetic round_mvp alias.
 std::string CanonicalAutomationEvent(const std::string& name);
+std::vector<std::string> AutomationEventNames();
 inline uint64_t AutomationMonotonicMs() {
     return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now().time_since_epoch()).count());

@@ -1,5 +1,5 @@
 import Blockly, { loadSafeWorkspaceJson } from './index.js';
-import { canonicalConfig } from '../utils/orchestration.js';
+import { canonicalConfig, assertLegacyEditable } from '../utils/orchestration.js';
 
 /**
  * Serializer & Deserializer for Profile & GSI Event Orchestrator
@@ -409,6 +409,7 @@ export class OrchestratorSerializer {
    * Restores workspace from blockly_orchestrator state or migrates legacy rules
    */
   static restoreWorkspace(workspace, config) {
+    assertLegacyEditable(config); // fail before clearing any existing workspace
     if (!workspace) return;
     workspace.clear();
 

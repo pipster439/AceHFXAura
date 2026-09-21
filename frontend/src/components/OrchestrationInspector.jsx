@@ -10,11 +10,15 @@ import {
   Clock
 } from 'lucide-react';
 
-import { evalCondition, evaluateOverlayStatus } from '../utils/orchestration';
+import { evalCondition, evaluateOverlayStatus, hasAutomationV2 } from '../utils/orchestration';
 
 export { evalCondition, evaluateOverlayStatus };
 
-export default function OrchestrationInspector({
+export default function OrchestrationInspector(props) {
+  if (hasAutomationV2(props.config)) return <p>旧模拟器不解释 Automation v2；请在 Automation 查看规则来源与服务端校验结果。</p>;
+  return <LegacyOrchestrationInspector {...props}/>;
+}
+function LegacyOrchestrationInspector({
   config,
   currentProfileName
 }) {

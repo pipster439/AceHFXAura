@@ -199,6 +199,10 @@ public:
     std::shared_ptr<const Profile> GetProfile(const std::string& name) const;
 
     static std::string ToLower(const std::string& s);
+    // Shared runtime/authoring validation; no effect construction or publication.
+    static AutomationRule ParseAutomationRule(const nlohmann::json& item);
+    static void ValidateAutomationReferences(const AutomationRule& rule,
+        const std::function<bool(const std::string&)>& profile_exists);
 
 private:
     static FILETIME GetConfigFileTime(const std::string& path);
@@ -225,7 +229,6 @@ private:
     std::unordered_map<std::string, EdgeMemory> edge_memory_;
     uint64_t automation_freshness_ms_{3000};
     uint64_t config_generation_{0};
-    static AutomationRule ParseAutomationRule(const nlohmann::json& item);
     AutomationEvaluation EvaluateProfilesLocked(const std::string& process, const GsiState* legacy,
         const AutomationInputSnapshot& input) const;
     mutable std::mutex mutex_;

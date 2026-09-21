@@ -698,17 +698,10 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
         for (const auto& entry : new_plan) {
             if (entry.provenance != RuleProvenance::AutomationV2) continue;
             const auto& rule = entry.automation;
-            const auto& action = rule.action;
-            std::string profile_name;
-            if (action.at("type") == "activate_profile") {
-                profile_name = action.at("profile").get<std::string>();
-            } else if (action.at("effect").at("kind") == "profile_effect") {
-                profile_name = action.at("effect").at("name").get<std::string>();
-            } else {
-                continue; // plugin reference: generation resolution is deferred
-            }
-            if (new_profiles.find(profile_name) == new_profiles.end()) {
-                LOG_ERROR("[Automation] Rule '" << rule.id << "' references missing candidate profile '" << profile_name << "'");
+            try {
+                ValidateAutomationReferences(rule, [&](const std::string& name) { return new_profiles.count(name) != 0; });
+            } catch (const std::exception& error) {
+                LOG_ERROR("[Automation] Rule '" << rule.id << "': " << error.what());
                 valid = false;
             }
         }
