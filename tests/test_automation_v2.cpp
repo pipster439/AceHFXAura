@@ -117,8 +117,27 @@ void TruthAndSnapshot(const std::filesystem::path& dir) {
     h.Load(Config(json::array({ProfileRule("snapshot",Logic("and",json::array({Low(),Field("process","cs2")})))})));
     h.Packet(200,10); int captures=0;
     auto out=h.engine.EvaluateAutomation(h.gsi,[&]{++captures; h.gsi.UpdateFromPayloadAt(Payload(99),201); return "cs2.exe";},200);
-    Check(captures==2,"one foreground capture per packet/current batch");
+    Check(captures==1,"one foreground capture per evaluation including packet/current snapshots");
     Check(out.profile->name=="low","admitted snapshots immutable despite capture-time update");
+}
+void CoherentAdmission(const std::filesystem::path& dir) {
+    auto shot=EffectRule("coherent","event",Event("event.kill"));
+    shot["scope"]=Field("process","cs2.exe");
+    Harness h(dir,Config(json::array({shot,ProfileRule("current",Field("process","cs2.exe"))})));
+    h.Packet(100,100);h.Tick(100);
+    h.Packet(200,100,1);h.Packet(300,100,2);
+    int calls=0;
+    auto result=h.engine.EvaluateAutomation(h.gsi,[&]{return ++calls==1?"cs2.exe":"desktop.exe";},400);
+    Check(calls==1,"backlog and reconciliation capture foreground exactly once");
+    Check(Shots(result,"coherent")==2,"both backlog admissions use same captured process");
+    Check(result.foreground_process=="cs2.exe" && result.profile->name=="low","current profile snapshot shares admission foreground");
+    Check(result.rule_status.size()==1 && result.rule_status[0].continuation==ConditionTruth::True,"later reconciliation cannot invalidate earlier admission through resampling");
+    std::vector<uint64_t> sequences;
+    for(const auto& decision:result.decisions) if(decision.admitted && decision.rule_id=="coherent") sequences.push_back(decision.packet_sequence);
+    Check(sequences.size()==2 && sequences[0]<sequences[1],"coherent admission preserves packet sequence order");
+    h.Packet(500,100,3);calls=0;
+    result=h.engine.EvaluateAutomation(h.gsi,[&]{++calls;return "desktop.exe";},500);
+    Check(calls==1 && Shots(result)==0,"foreground remains admission-time rather than packet-occurrence-time");
 }
 void Events(const std::filesystem::path& dir) {
     auto kill=EffectRule("kill","event",Event("event.kill")); kill["scope"]=Field("process","cs2.exe");
@@ -357,7 +376,7 @@ int main() {
     const auto dir=std::filesystem::temp_directory_path()/("aura-v2-conformance-"+std::to_string(GetCurrentProcessId()));
     try {
         std::filesystem::create_directories(dir);
-        StateAndRising(dir); TruthAndSnapshot(dir); Events(dir); PacketCoherenceAndLegacy(dir); ValidationAndPrecedence(dir); CandidateValidation(dir);
+        StateAndRising(dir); TruthAndSnapshot(dir); CoherentAdmission(dir); Events(dir); PacketCoherenceAndLegacy(dir); ValidationAndPrecedence(dir); CandidateValidation(dir);
         std::filesystem::remove_all(dir);
         std::cout << "PASS: " << checks << " deterministic Automation v2 assertions\n"; return 0;
     } catch(const std::exception& e) { std::cerr << "FAIL after " << checks << ": " << e.what() << "\n"; return 1; }

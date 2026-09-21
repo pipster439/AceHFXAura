@@ -13,8 +13,10 @@ uint64_t AutomationEffectRuntime::Revision() const { std::lock_guard<std::mutex>
 size_t AutomationEffectRuntime::ActiveCount() const { std::lock_guard<std::mutex> lock(mutex_); return layers_.size(); }
 size_t AutomationEffectRuntime::DiagnosticCount() const { std::lock_guard<std::mutex> lock(mutex_); return diagnostics_.size(); }
 void AutomationEffectRuntime::Clear() {
+    std::vector<Layer> retired_layers;
+    std::deque<Token> retired_tokens;
     std::lock_guard<std::mutex> lock(mutex_);
-    ++revision_; layers_.clear(); true_intervals_.clear(); interval_semantics_.clear(); interval_recipes_.clear(); diagnostics_.clear(); pending_.clear();
+    ++revision_; retired_layers.swap(layers_); true_intervals_.clear(); interval_semantics_.clear(); interval_recipes_.clear(); diagnostics_.clear(); retired_tokens.swap(pending_);
 }
 void AutomationEffectRuntime::Diagnose(const std::string& id, const char* reason) {
     if (diagnostics_.size() >= 64) return;
@@ -23,11 +25,18 @@ void AutomationEffectRuntime::Diagnose(const std::string& id, const char* reason
 }
 void AutomationEffectRuntime::Consume(const AutomationEvaluation& evaluation, const Resolver& resolve,
                                       uint64_t now, uint64_t expected_revision, const Preparer& prepare) {
+    // Declared before the lock: even exception/early-return unwinding unlocks
+    // before releasing any retired or temporary generation ownership.
+    std::vector<Layer> retired_layers;
+    retired_layers.reserve(AutomationRetriggerLimits::active_global + evaluation.decisions.size());
+    std::deque<Token> retired_tokens;
+    std::deque<PreparedEffectSource> prepared_sources;
+    std::deque<TriggeredEffectInstance> constructed_instances;
     std::lock_guard<std::mutex> lock(mutex_);
     // A rebuild completed after the caller began evaluating: consume no old work.
     if (expected_revision != revision_ || evaluation.config_generation < config_generation_) return;
     if (evaluation.config_generation != config_generation_ && !evaluation.reconciliation_complete) {
-        layers_.clear(); true_intervals_.clear(); interval_semantics_.clear(); interval_recipes_.clear(); diagnostics_.clear(); pending_.clear();
+        retired_layers.swap(layers_); true_intervals_.clear(); interval_semantics_.clear(); interval_recipes_.clear(); diagnostics_.clear(); retired_tokens.swap(pending_);
     }
     config_generation_ = evaluation.config_generation;
     auto status_for = [&](const std::string& id) -> const AutomationEvaluation::RuleStatus* {
@@ -38,7 +47,9 @@ void AutomationEffectRuntime::Consume(const AutomationEvaluation& evaluation, co
         for (auto it = layers_.begin(); it != layers_.end();) {
             const auto* status = status_for(it->id);
             if (!status || !status->enabled || it->semantic_identity != status->semantic_identity ||
-                (!it->persistent && status->continuation != ConditionTruth::True)) it = layers_.erase(it);
+                (!it->persistent && status->continuation != ConditionTruth::True)) {
+                retired_layers.push_back(std::move(*it)); it = layers_.erase(it);
+            }
             else { std::get<1>(it->order) = status->rule_order; ++it; }
         }
         for (auto it = interval_semantics_.begin(); it != interval_semantics_.end();) {
@@ -53,9 +64,9 @@ void AutomationEffectRuntime::Consume(const AutomationEvaluation& evaluation, co
         const auto* status=status_for(it->id);
         if (evaluation.reconciliation_complete && (!status || !status->enabled ||
             status->semantic_identity!=it->semantic_identity || status->continuation!=ConditionTruth::True)) {
-            Count(counters_.cancelled); it=pending_.erase(it);
+            Count(counters_.cancelled); retired_tokens.push_back(std::move(*it)); it=pending_.erase(it);
         } else if (now>=it->admitted && now-it->admitted>AutomationRetriggerLimits::pending_ttl_ms) {
-            Count(counters_.expired); Diagnose(it->id,"pending token expired"); it=pending_.erase(it);
+            Count(counters_.expired); Diagnose(it->id,"pending token expired"); retired_tokens.push_back(std::move(*it)); it=pending_.erase(it);
         } else { if(status) it->rule_order=status->rule_order; ++it; }
     }
     // At most four pending factory attempts, at most one per rule, per frame.
@@ -63,11 +74,14 @@ void AutomationEffectRuntime::Consume(const AutomationEvaluation& evaluation, co
     size_t attempts=0; std::set<std::string> visited;
     for (auto it=pending_.begin();it!=pending_.end() && attempts<AutomationRetriggerLimits::pending_attempts_per_frame && layers_.size()<AutomationRetriggerLimits::active_global;) {
         if (!visited.insert(it->id).second || std::any_of(layers_.begin(),layers_.end(),[&](const Layer& layer){return layer.id==it->id;})) { ++it; continue; }
-        auto token=std::move(*it); it=pending_.erase(it); ++attempts;
+        retired_tokens.push_back(std::move(*it)); it=pending_.erase(it); ++attempts;
+        auto& token=retired_tokens.back();
         try {
-            auto instance=token.source.Create();
+            constructed_instances.emplace_back();
+            auto& instance=constructed_instances.back();
+            instance=token.source.Create();
             if (!instance) { Count(counters_.factory_failures); Diagnose(token.id,"queued factory failed; token consumed"); continue; }
-            auto layer=MakeLayer(token.id,token.action,token.rule_order,std::move(instance),now);
+            auto layer=MakeLayer(token.id,token.action,token.rule_order,instance,now);
             layer.semantic_identity=token.semantic_identity; layers_.push_back(std::move(layer));
         } catch (...) { Count(counters_.factory_failures); Diagnose(token.id,"queued factory threw; token consumed"); }
     }
@@ -84,7 +98,7 @@ void AutomationEffectRuntime::Consume(const AutomationEvaluation& evaluation, co
             if (decision.eligibility != ConditionTruth::True) {
                 true_intervals_.erase(decision.rule_id);
                 interval_recipes_.erase(decision.rule_id);
-                if (existing != layers_.end()) layers_.erase(existing);
+                if (existing != layers_.end()) { retired_layers.push_back(std::move(*existing)); layers_.erase(existing); }
                 continue;
             }
             // Includes completed or failed instances for this True interval.
@@ -113,15 +127,19 @@ void AutomationEffectRuntime::Consume(const AutomationEvaluation& evaluation, co
                 Count(counters_.capacity_drops); Diagnose(decision.rule_id,"pending limit reached; newest admission dropped"); continue;
             }
             try {
-                auto source=prepare?prepare(action.at("effect")):PreparedEffectSource{};
+                prepared_sources.emplace_back();
+                auto& source=prepared_sources.back();
+                source=prepare?prepare(action.at("effect")):PreparedEffectSource{};
                 if (!source) { Count(counters_.unavailable); Diagnose(decision.rule_id,"source unavailable at admission; consumed"); continue; }
                 if (immediate) {
-                    auto instance=source.Create();
+                    constructed_instances.emplace_back();
+                    auto& instance=constructed_instances.back();
+                    instance=source.Create();
                     if (!instance) { Count(counters_.factory_failures); Diagnose(decision.rule_id,"queue initial factory failed; admission consumed"); continue; }
-                    auto layer=MakeLayer(decision.rule_id,action,decision.rule_order,std::move(instance),now);
+                    auto layer=MakeLayer(decision.rule_id,action,decision.rule_order,instance,now);
                     if(status) layer.semantic_identity=status->semantic_identity;
                     layers_.push_back(std::move(layer));
-                } else pending_.push_back({decision.rule_id,status?status->semantic_identity:"",action,decision.rule_order,now,std::move(source)});
+                } else pending_.push_back({decision.rule_id,status?status->semantic_identity:"",action,decision.rule_order,now,source});
             } catch (...) { Count(counters_.unavailable); Diagnose(decision.rule_id,"queue source preparation/construction failed; admission consumed"); }
             continue;
         }
@@ -136,14 +154,16 @@ void AutomationEffectRuntime::Consume(const AutomationEvaluation& evaluation, co
         try {
             if (persistent) interval_recipes_[decision.rule_id] = target_identity;
             if (persistent && existing != layers_.end()) existing->attempted_identity = target_identity;
-            auto instance = resolve(action.at("effect"));
+            constructed_instances.emplace_back();
+            auto& instance=constructed_instances.back();
+            instance = resolve(action.at("effect"));
             if (!instance) { Diagnose(decision.rule_id, "effect unavailable; admission consumed"); continue; }
-            Layer layer=MakeLayer(decision.rule_id,action,decision.rule_order,std::move(instance),now);
+            Layer layer=MakeLayer(decision.rule_id,action,decision.rule_order,instance,now);
             if (status) { layer.semantic_identity=status->semantic_identity; layer.recipe_identity=status->recipe_identity; layer.attempted_identity=target_identity; }
             const auto& generation=layer.instance.GetGeneration();
             if (persistent && status) interval_recipes_[decision.rule_id]=status->recipe_identity+":generation="+std::to_string(generation?generation->generation_id:0);
             if (existing == layers_.end()) layers_.push_back(std::move(layer));
-            else *existing = std::move(layer); // construct successfully before retiring old object
+            else { retired_layers.push_back(std::move(*existing)); *existing = std::move(layer); } // retire after unlock
         } catch (...) { Diagnose(decision.rule_id, "effect construction threw; previous instance retained"); }
     }
     std::sort(layers_.begin(), layers_.end(), [](const Layer& a, const Layer& b) { return a.order < b.order; });
@@ -216,9 +236,13 @@ bool AutomationEffectRuntime::Render(Layer& layer, uint64_t now, FrameBuffer& lo
 }
 void AutomationEffectRuntime::Apply(bool persistent, uint64_t now, FrameBuffer& lower,
                                     const Keymap& keymap, const IGsiReader* gsi) {
+    std::vector<Layer> retired_layers;
+    retired_layers.reserve(AutomationRetriggerLimits::active_global);
     std::lock_guard<std::mutex> lock(mutex_);
     for (auto it = layers_.begin(); it != layers_.end();) {
-        if (it->persistent == persistent && !Render(*it, now, lower, keymap, gsi)) it = layers_.erase(it);
+        if (it->persistent == persistent && !Render(*it, now, lower, keymap, gsi)) {
+            retired_layers.push_back(std::move(*it)); it = layers_.erase(it);
+        }
         else ++it;
     }
 }

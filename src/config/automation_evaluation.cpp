@@ -301,13 +301,12 @@ AutomationEvaluation RuleEngine::EvaluateAutomation(GsiState& gsi,
     const std::function<std::string()>& foreground, std::optional<uint64_t> admitted_at_ms) {
     std::lock_guard<std::mutex> lock(mutex_);
     const auto input = gsi.DrainAutomationInputs();
-    // Capture each batch exactly once, before any rule traversal.
+    // One admission context for the entire drain, including reconciliation.
+    // Capture after draining so receipt timestamps cannot be newer than admission.
+    const auto process = foreground();
+    const auto now = admitted_at_ms ? *admitted_at_ms : AutomationMonotonicMs();
     auto capture = [&](std::shared_ptr<const AutomationTelemetry> telemetry, std::vector<std::string> events = {}) {
-        auto process = foreground();
-        // Production admission follows the locked input drain, so a concurrently
-        // arriving packet cannot accidentally have a receipt newer than admission.
-        const auto now = admitted_at_ms ? *admitted_at_ms : AutomationMonotonicMs();
-        return AutomationInputSnapshot::Capture(std::move(process), std::move(telemetry), now,
+        return AutomationInputSnapshot::Capture(process, std::move(telemetry), now,
             automation_freshness_ms_, std::move(events));
     };
     std::vector<AutomationInputSnapshot> batches;

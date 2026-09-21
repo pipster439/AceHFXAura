@@ -99,6 +99,76 @@ void Dlls(const fs::path& binaries,const fs::path& dir) {
     Check(api.count(0)==attempted+4 && h.runtime.PendingCount()==12,"pending failures capped at four per frame globally");
     h.Consume({},102);Check(api.count(0)==attempted+8,"failed tokens are dropped; later FIFO work remains bounded");
 }
+
+// Test-only observer: re-enter public mutex-taking accessors synchronously from
+// both Effect destruction and final generation deletion. A locked retirement
+// deadlocks this test (CTest timeout), rather than reporting a false try_lock win.
+struct RetirementObserver {
+    AutomationEffectRuntime* runtime{};
+    DWORD caller=GetCurrentThreadId();
+    PfnAuraDestroyEffect destroy{};
+    unsigned effects=0,generations=0;
+    bool same_thread=true;
+    void Observe(bool generation) {
+        same_thread &= GetCurrentThreadId()==caller;
+        (void)runtime->ActiveCount(); (void)runtime->PendingCount();
+        if(generation) ++generations; else ++effects;
+    }
+};
+RetirementObserver* observer=nullptr;
+void ObservedDestroy(Effect* effect) { observer->Observe(false);observer->destroy(effect); }
+std::shared_ptr<const PluginEntry> ObservedGeneration(PluginManager& manager,const fs::path& binary,RetirementObserver& probe) {
+    auto original=manager.PrepareEffectGeneration(binary.string());
+    if(!original) throw std::runtime_error("retirement fixture load failed");
+    Api(original).configure(0,100);
+    probe.destroy=original->destroy_fn;
+    auto* copy=new PluginEntry(*original);copy->destroy_fn=ObservedDestroy;
+    return std::shared_ptr<const PluginEntry>(copy,[&probe](const PluginEntry* generation){
+        probe.Observe(true);delete generation;
+    });
+}
+void Retirement(const fs::path& binaries) {
+    for(int mode=0;mode<7;++mode) {
+        PluginManager manager;auto h=std::make_unique<Harness>();
+        RetirementObserver probe;probe.runtime=&h->runtime;observer=&probe;
+        auto generation=ObservedGeneration(manager,binaries/"retrigger_old.dll",probe);
+        auto shadow=generation->handle->GetShadowPath();std::weak_ptr<const PluginEntry> weak=generation;
+        h->source=PreparedEffectSource::Plugin(generation);generation.reset();
+        auto d=Decision("shot","stack");h->Consume({d},0);h->Consume({d},20);h->source={};
+        if(mode==0) {
+            h->Render(100);Check(probe.effects==1 && probe.generations==0 && !weak.expired(),"Apply retires one stack sibling outside lock without unloading other owner");
+            h->Render(120);
+        } else if(mode==1) { h->Status("shot","",ConditionTruth::False);h->Consume({},30); }
+        else if(mode==2) h->runtime.Clear();
+        else if(mode==3) h.reset();
+        else if(mode==4) { ++h->evaluation.config_generation;h->Consume({},30); }
+        else if(mode==5) { // Restart replaces the first existing layer as before.
+            h->source=Recipe(50);h->Consume({Decision("shot","restart")},30);
+            Check(probe.effects==1 && probe.generations==0,"restart replacement retires only replaced stack owner outside lock");
+            h->runtime.Clear();
+        } else { h->Status("shot","semantic edit");h->Consume({},30); }
+        Check(probe.effects==2 && probe.generations==1 && probe.same_thread,"Effect and final generation destructors re-enter runtime unlocked on caller thread");
+        Check(weak.expired() && !fs::exists(shadow) && !GetModuleHandleW(shadow.c_str()),"retirement synchronously unloads DLL and deletes shadow after final owner");
+        observer=nullptr;
+    }
+    for(int mode=0;mode<4;++mode) {
+        PluginManager manager;Harness h;RetirementObserver probe;probe.runtime=&h.runtime;observer=&probe;
+        for(int i=0;i<8;++i){auto d=Decision(std::to_string(i),"stack");h.Consume({d,d,d,d},0);}
+        auto generation=ObservedGeneration(manager,binaries/"retrigger_old.dll",probe);
+        auto shadow=generation->handle->GetShadowPath();std::weak_ptr<const PluginEntry> weak=generation;
+        h.source=PreparedEffectSource::Plugin(generation);h.Consume({Decision()},0);h.source={};generation.reset();
+        Check(probe.effects==0 && !weak.expired(),"pending-only pin without constructed Effect");
+        if(mode==0)h.Consume({},2001);
+        else if(mode==1){h.Status("shot","",ConditionTruth::Unknown);h.Consume({},1);}
+        else if(mode==2)h.runtime.Clear();
+        else { h.Render(100);observer->destroy=nullptr; // failed head factory has no Effect to destroy
+            auto pin=weak.lock();Api(pin).configure(1,100);pin.reset();h.Consume({},101); }
+        Check(probe.generations==1 && probe.effects==0 && probe.same_thread,"pending expiry/cancellation/clear/failed start releases final generation outside lock on caller thread");
+        Check(weak.expired() && !fs::exists(shadow) && !GetModuleHandleW(shadow.c_str()),"pending final owner unloads immediately");
+        observer=nullptr;
+    }
+    std::cout<<"Retirement instrumentation: synchronous caller thread "<<GetCurrentThreadId()<<"; no background destruction\n";
+}
 void StackGeneration(const fs::path& binaries,const fs::path& dir) {
     PluginManager manager;auto path=dir/"stack.dll";fs::copy_file(binaries/"retrigger_old.dll",path,fs::copy_options::overwrite_existing);
     Check(manager.ReloadPlugin(path.string()),"initial stack plugin publish");auto old=manager.GetGeneration(path.string());Api api(old);api.configure(0,100);
@@ -130,4 +200,4 @@ void Detector(const fs::path& dir) {
         tick(3006);Check(runtime.ActiveCount()==0 && runtime.PendingCount()==0,"real RuleEngine staleness reconciles stack/queue without packet");
     }
 }
-int main(int argc,char**argv){SetErrorMode(SEM_FAILCRITICALERRORS|SEM_NOOPENFILEERRORBOX);auto dir=fs::temp_directory_path()/("aura-retrigger-"+std::to_string(GetCurrentProcessId()));try{Check(argc==2,"fixtures path");fs::create_directories(dir);StackAndQueue();Bounds();Reconciliation();Dlls(argv[1],dir);StackGeneration(argv[1],dir);Detector(dir);fs::remove_all(dir);std::cout<<"PASS: "<<checks<<" Stage 6 retrigger assertions\n";return 0;}catch(const std::exception&e){std::cerr<<"FAIL after "<<checks<<": "<<e.what()<<"\n";return 1;}}
+int main(int argc,char**argv){SetErrorMode(SEM_FAILCRITICALERRORS|SEM_NOOPENFILEERRORBOX);auto dir=fs::temp_directory_path()/("aura-retrigger-"+std::to_string(GetCurrentProcessId()));try{Check(argc==2,"fixtures path");fs::create_directories(dir);StackAndQueue();Bounds();Reconciliation();Dlls(argv[1],dir);StackGeneration(argv[1],dir);Retirement(argv[1]);Detector(dir);fs::remove_all(dir);std::cout<<"PASS: "<<checks<<" Stage 6 retrigger assertions\n";return 0;}catch(const std::exception&e){std::cerr<<"FAIL after "<<checks<<": "<<e.what()<<"\n";return 1;}}

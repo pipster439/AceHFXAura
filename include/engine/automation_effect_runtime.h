@@ -34,6 +34,7 @@ PreparedEffectSource PrepareAutomationEffect(const nlohmann::json& reference, co
 // Executes already-made decisions only. No GsiState or condition evaluator here.
 class AutomationEffectRuntime {
 public:
+    ~AutomationEffectRuntime() { Clear(); }
     using Resolver = std::function<TriggeredEffectInstance(const nlohmann::json&)>;
     using Preparer = std::function<PreparedEffectSource(const nlohmann::json&)>;
     using LayerOrder = std::tuple<int, size_t, uint64_t>;
