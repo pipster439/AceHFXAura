@@ -12,6 +12,7 @@
 #include <string>
 #include <unordered_map>
 #include <memory>
+#include <optional>
 #include <mutex>
 #include <thread>
 #include <atomic>
@@ -23,6 +24,7 @@
 #include "third_party/httplib.h"
 #include "engine/plugin_interface.h"
 #include "aura/runtime_status.h"
+#include "gsi/automation_input.h"
 
 namespace aura {
 
@@ -69,6 +71,10 @@ public:
 
     // 解析并扁平化来自 CS2 的 JSON Payload，同时执行状态跃迁比对，触发完整游戏事件
     void UpdateFromPayload(const nlohmann::json& payload);
+    // Explicit monotonic time makes observation/freshness conformance deterministic.
+    void UpdateFromPayloadAt(const nlohmann::json& payload, uint64_t received_at_ms);
+    AutomationInputDrain DrainAutomationInputs();
+    std::shared_ptr<const AutomationTelemetry> GetAutomationTelemetry() const;
 
     // 评估某条绑定条件是否满足 (支持常规字段与 event.* 动态脉冲事件)
     bool Evaluate(const std::string& field, const std::string& op, const nlohmann::json& target_val) const;
@@ -103,7 +109,8 @@ public:
     std::string GetForegroundProcess() const;
 
 private:
-    static void FlattenJsonRecursive(const std::string& prefix, 
+    void UpdateFromPayloadImpl(const nlohmann::json& payload, std::optional<uint64_t> receipt_override);
+    static void FlattenJsonRecursive(const std::string& prefix,
                                      const nlohmann::json& node, 
                                      std::unordered_map<std::string, GsiValue>& out_map);
 
@@ -126,6 +133,13 @@ private:
     mutable uint64_t last_event_sync_ms_{0};
     uint64_t last_update_ms_{0};
     uint64_t packet_count_{0};
+    uint64_t automation_epoch_{1}, automation_sequence_{0}, automation_received_ms_{0};
+    uint64_t automation_dropped_{0};
+    bool automation_overflow_{false};
+    std::shared_ptr<const AutomationTelemetry> automation_latest_;
+    std::deque<std::shared_ptr<const AutomationObservation>> automation_batches_;
+    std::vector<std::string> packet_occurrences_;
+    bool collecting_occurrences_{false};
     std::string foreground_process_;
 
     // 完整游戏事件历史与脉冲时钟

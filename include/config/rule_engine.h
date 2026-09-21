@@ -1,6 +1,9 @@
 #pragma once
 
 #include "engine/effect.h"
+#include "gsi/automation_input.h"
+#include <functional>
+#include <optional>
 #include "third_party/json.hpp"
 #include <string>
 #include <vector>
@@ -32,10 +35,17 @@ struct GsiBinding {
 enum class LogicOp { None, And, Or, Not };
 enum class CompareOp { Eq, Ne, Lt, Le, Gt, Ge, Contains };
 
+enum class ConditionTruth { False, True, Unknown };
+struct ConditionResult {
+    ConditionTruth truth{ConditionTruth::Unknown};
+    bool positive_occurrence{false};
+};
+
 struct ConditionNode {
     LogicOp logic_op{LogicOp::None};
     std::vector<ConditionNode> children;
 
+    std::string event; // v2 occurrence leaf only; legacy parser never sets this
     std::string field;
     CompareOp comp_op{CompareOp::Eq};
     nlohmann::json target_value;
@@ -43,6 +53,9 @@ struct ConditionNode {
     // Evaluates AST against GSI telemetry state and current foreground process
     bool Evaluate(const GsiState* gsi, const std::string& foreground_proc) const;
 
+    ConditionResult Evaluate(const AutomationInputSnapshot& snapshot) const;
+    static ConditionNode FromAutomationJson(const nlohmann::json& j, bool allow_events);
+    bool UsesGsi() const;
     static ConditionNode FromJson(const nlohmann::json& j);
     nlohmann::json ToJson() const;
 
@@ -83,11 +96,53 @@ struct OrchestrationConfig {
     std::string fallback_profile;
 };
 
+enum class RuleProvenance { Application, GsiBinding, Orchestration, EventOverlay, AutomationV2 };
+enum class CompatibilityPolicy { LegacyBoolean, LegacyCs2Binding, LegacyApplication, LegacyOverlayExecutor, V2Snapshot };
+struct AutomationRule {
+    std::string id, mode;
+    bool enabled{true}, dnd{false};
+    ConditionNode scope, condition;
+    nlohmann::json action;
+    std::string fingerprint;
+};
+struct RulePlanEntry {
+    RuleProvenance provenance{RuleProvenance::Application};
+    CompatibilityPolicy compatibility{CompatibilityPolicy::LegacyApplication};
+    size_t config_order{0};
+    RuleEntry application;
+    GsiBinding binding;
+    OrchestrationRule orchestration;
+    EventOverlayRule overlay;
+    AutomationRule automation;
+};
+struct AutomationDecision {
+    std::string rule_id;
+    nlohmann::json action;
+    ConditionTruth eligibility{ConditionTruth::Unknown};
+    bool admitted{false}; // one_shot only; while_true uses eligibility
+    uint64_t source_epoch{0}, packet_sequence{0};
+};
+struct AutomationEvaluation {
+    std::string foreground_process;
+    std::shared_ptr<const Profile> profile;
+    bool suppress_web_ui{false};
+    std::vector<AutomationDecision> decisions;
+    uint64_t dropped_input_batches{0};
+    bool rebased{false};
+    size_t profile_plan_entries_evaluated{0};
+};
+
 class RuleEngine {
 public:
     RuleEngine();
 
     bool LoadConfig(const std::string& config_path);
+    // One owning decision consumer; callback called once per immutable input batch.
+    AutomationEvaluation EvaluateAutomation(GsiState& gsi,
+        const std::function<std::string()>& foreground, std::optional<uint64_t> admitted_at_ms = std::nullopt);
+    std::vector<RulePlanEntry> GetEvaluationPlan() const;
+    uint64_t GetAutomationFreshnessMs() const;
+
 
     // Checks file modification time and reloads if changed
     bool CheckAndReload();
@@ -119,10 +174,7 @@ public:
         std::lock_guard<std::mutex> lock(mutex_);
         return orchestration_;
     }
-    std::vector<EventOverlayRule> GetEventOverlayRules() const {
-        std::lock_guard<std::mutex> lock(mutex_);
-        return orchestration_.event_overlays;
-    }
+    std::vector<EventOverlayRule> GetEventOverlayRules() const;
     int GetFps() const {
         std::lock_guard<std::mutex> lock(mutex_);
         return target_fps_;
@@ -151,6 +203,18 @@ private:
     OrchestrationConfig orchestration_;
     std::unordered_map<std::string, std::shared_ptr<Profile>> profiles_;
 
+    struct EdgeMemory {
+        std::string fingerprint;
+        ConditionTruth previous{ConditionTruth::Unknown};
+        bool initialized{false}, in_scope{false};
+        uint64_t epoch{0}, sequence{0}, receipt{0};
+    };
+    std::vector<RulePlanEntry> plan_;
+    std::unordered_map<std::string, EdgeMemory> edge_memory_;
+    uint64_t automation_freshness_ms_{3000};
+    static AutomationRule ParseAutomationRule(const nlohmann::json& item);
+    AutomationEvaluation EvaluateProfilesLocked(const std::string& process, const GsiState* legacy,
+        const AutomationInputSnapshot& input) const;
     mutable std::mutex mutex_;
 };
 

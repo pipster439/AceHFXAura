@@ -39,6 +39,29 @@ std::string FormatEpochMs(uint64_t ms) {
 
 } // namespace
 
+std::string CanonicalAutomationEvent(const std::string& name) {
+    static const std::unordered_map<std::string, std::string> names = {
+        {"PlayerGotKill", "event.kill"}, {"PlayerGotHeadshotKill", "event.headshot"},
+        {"PlayerAce", "event.ace"}, {"PlayerTookDamage", "event.damage"},
+        {"PlayerDied", "event.death"}, {"PlayerRespawned", "event.respawn"},
+        {"PlayerFlashed", "event.flashed"}, {"PlayerBurning", "event.burning"},
+        {"BombPlanting", "event.bomb_planting"}, {"BombPlanted", "event.bomb_planted"},
+        {"BombDefusing", "event.bomb_defusing"}, {"BombDefused", "event.bomb_defused"},
+        {"BombExploded", "event.bomb_exploded"}, {"BombDropped", "event.bomb_dropped"},
+        {"BombPickedup", "event.bomb_pickedup"}, {"FreezetimeStarted", "event.freezetime"},
+        {"RoundStarted", "event.round_started"}, {"RoundConcluded", "event.round_concluded"},
+        {"TeamRoundVictory", "event.round_victory"}, {"TeamRoundLoss", "event.round_loss"},
+        {"WarmupStarted", "event.warmup"}, {"MatchStarted", "event.match_started"},
+        {"IntermissionStarted", "event.intermission"}, {"Gameover", "event.gameover"},
+        {"event.damage_taken", "event.damage"}, {"event.flash", "event.flashed"},
+        {"event.round_won", "event.round_victory"}, {"event.round_lost", "event.round_loss"}
+    };
+    const auto it = names.find(name);
+    if (it != names.end()) return it->second;
+    for (const auto& entry : names) if (entry.second == name) return name;
+    return {};
+}
+
 void GsiState::FlattenJsonRecursive(const std::string& prefix, 
                                     const nlohmann::json& node, 
                                     std::unordered_map<std::string, GsiValue>& out_map) {
@@ -62,9 +85,36 @@ void GsiState::FlattenJsonRecursive(const std::string& prefix,
 }
 
 void GsiState::UpdateFromPayload(const nlohmann::json& payload) {
+    UpdateFromPayloadImpl(payload, std::nullopt);
+}
+
+std::shared_ptr<const AutomationTelemetry> GsiState::GetAutomationTelemetry() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return automation_latest_;
+}
+
+AutomationInputDrain GsiState::DrainAutomationInputs() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    AutomationInputDrain out;
+    out.latest = automation_latest_;
+    out.batches.assign(automation_batches_.begin(), automation_batches_.end());
+    out.dropped_batches = automation_dropped_;
+    out.overflowed = automation_overflow_;
+    automation_batches_.clear(); automation_overflow_ = false;
+    return out;
+}
+
+void GsiState::UpdateFromPayloadAt(const nlohmann::json& payload, uint64_t received_at_ms) {
+    UpdateFromPayloadImpl(payload, received_at_ms);
+}
+
+void GsiState::UpdateFromPayloadImpl(const nlohmann::json& payload, std::optional<uint64_t> receipt_override) {
     if (!payload.is_object()) return;
 
     std::lock_guard<std::mutex> lock(mutex_);
+    // Receipt order and packet sequence share this lock. Concurrent HTTP workers
+    // must not manufacture a backwards-clock epoch by sampling before acquisition.
+    const uint64_t received_at_ms = receipt_override ? *receipt_override : AutomationMonotonicMs();
 
     // 针对 payload 包含的顶层分类节点，先清除旧的对应字段，再写入新数据
     // 杜绝跨回合瞬态字段（如 round.bomb）残存导致的假阳性
@@ -157,7 +207,38 @@ void GsiState::UpdateFromPayload(const nlohmann::json& payload) {
     packet_count_++;
 
     // 完整的游戏事件状态跃迁比对与触发
+    // Observe the existing detector; do not alter legacy trackers/pulses.
+    packet_occurrences_.clear();
+    collecting_occurrences_ = true;
     DetectGameEvents(payload, now_ms);
+    collecting_occurrences_ = false;
+    if (automation_latest_ && (received_at_ms < automation_received_ms_ ||
+        received_at_ms - automation_received_ms_ > 10000)) {
+        ++automation_epoch_; automation_sequence_ = 0;
+        automation_batches_.clear();
+    }
+    auto telemetry = std::make_shared<AutomationTelemetry>();
+    telemetry->source_epoch = automation_epoch_;
+    telemetry->packet_sequence = ++automation_sequence_;
+    telemetry->received_at_ms = received_at_ms;
+    automation_received_ms_ = received_at_ms;
+    for (const auto& [key, value] : flat_state_) {
+        // Pulse/sequence views remain legacy-only; occurrences come from detector calls.
+        if (key.rfind("event.", 0) == 0 || key.rfind("event_sequence.", 0) == 0) continue;
+        switch (value.type) {
+            case GsiValue::Type::Number: telemetry->fields[key] = value.num_val; break;
+            case GsiValue::Type::String: telemetry->fields[key] = value.str_val; break;
+            case GsiValue::Type::Boolean: telemetry->fields[key] = value.bool_val; break;
+            default: break;
+        }
+    }
+    auto batch = std::make_shared<AutomationObservation>();
+    batch->telemetry = telemetry; batch->occurrences = packet_occurrences_;
+    automation_latest_ = telemetry;
+    if (automation_batches_.size() == 256) {
+        automation_batches_.pop_front(); ++automation_dropped_; automation_overflow_ = true;
+    }
+    automation_batches_.push_back(std::move(batch));
 
     // 将动态事件脉冲字段同步写入 flat_state_
     SyncEventFieldsToFlatState(now_ms);
@@ -383,6 +464,10 @@ void GsiState::TriggerEvent(const std::string& name,
         {"WarmupStarted", "event_sequence.event.warmup"},
         {"Gameover", "event_sequence.event.gameover"}
     };
+    if (collecting_occurrences_) {
+        auto id = CanonicalAutomationEvent(name);
+        if (!id.empty()) packet_occurrences_.push_back(std::move(id));
+    }
     auto alias = aliases.find(name);
     if (alias != aliases.end()) flat_state_[alias->second] = GsiValue(static_cast<double>(++event_sequences_[name]));
 
@@ -694,6 +779,9 @@ std::string GsiState::GetForegroundProcess() const {
 
 void GsiState::Clear() {
     std::lock_guard<std::mutex> lock(mutex_);
+    ++automation_epoch_; automation_sequence_ = 0; automation_received_ms_ = 0;
+    automation_latest_.reset(); automation_batches_.clear(); packet_occurrences_.clear();
+    automation_overflow_ = false;
     flat_state_.clear();
     recent_events_.clear();
     event_timestamps_.clear();

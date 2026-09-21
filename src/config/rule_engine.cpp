@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cctype>
 #include <filesystem>
+#include <set>
 
 namespace aura {
 
@@ -111,6 +112,7 @@ ConditionNode ConditionNode::FromJson(const nlohmann::json& j) {
 }
 
 nlohmann::json ConditionNode::ToJson() const {
+    if (!event.empty()) return {{"event", event}};
     nlohmann::json j;
     if (logic_op == LogicOp::And) {
         j["type"] = "and";
@@ -508,8 +510,17 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
         }
 
         OrchestrationConfig new_orchestration;
+        std::vector<RulePlanEntry> new_plan;
+        std::set<std::string> v2_ids;
+        uint64_t new_freshness = 3000;
         if (j.contains("orchestration") && j["orchestration"].is_object()) {
             const auto& orch = j["orchestration"];
+            if (orch.contains("automation_freshness_ms")) {
+                const auto& freshness = orch["automation_freshness_ms"];
+                if (!freshness.is_number_integer() || freshness.get<int64_t>() <= 0)
+                    throw std::runtime_error("automation_freshness_ms must be a positive integer");
+                new_freshness = freshness.get<uint64_t>();
+            }
             if (orch.contains("fallback_profile") && orch["fallback_profile"].is_string()) {
                 new_orchestration.fallback_profile = orch["fallback_profile"].get<std::string>();
             }
@@ -518,6 +529,16 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
                     if (!item.is_object()) {
                         LOG_ERROR("编排规则项必须为 JSON 对象: " << item.dump());
                         valid = false;
+                        continue;
+                    }
+                    if (item.contains("model") && item["model"].is_string() && item["model"] == "automation_v2") {
+                        RulePlanEntry entry;
+                        entry.provenance = RuleProvenance::AutomationV2;
+                        entry.compatibility = CompatibilityPolicy::V2Snapshot;
+                        entry.config_order = static_cast<size_t>(&item - &orch["rules"][0]);
+                        entry.automation = ParseAutomationRule(item);
+                        if (!v2_ids.insert(entry.automation.id).second) throw std::runtime_error("duplicate v2 id");
+                        new_plan.push_back(std::move(entry));
                         continue;
                     }
                     if (!item.value("enabled", true)) continue;
@@ -536,6 +557,12 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
                         continue;
                     }
                     new_orchestration.rules.push_back(r);
+                    RulePlanEntry entry;
+                    entry.provenance = RuleProvenance::Orchestration;
+                    entry.compatibility = CompatibilityPolicy::LegacyBoolean;
+                    entry.config_order = static_cast<size_t>(&item - &orch["rules"][0]);
+                    entry.orchestration = r;
+                    new_plan.push_back(std::move(entry));
                 }
             }
             if (orch.contains("event_overlays") && orch["event_overlays"].is_array()) {
@@ -572,6 +599,22 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
             }
         }
 
+        // One executable plan; legacy vectors below remain compatibility/introspection data only.
+        for (size_t i = 0; i < new_gsi_bindings.size(); ++i) {
+            RulePlanEntry e; e.provenance = RuleProvenance::GsiBinding;
+            e.compatibility = CompatibilityPolicy::LegacyCs2Binding; e.config_order = i;
+            e.binding = new_gsi_bindings[i]; new_plan.push_back(std::move(e));
+        }
+        for (size_t i = 0; i < new_rules.size(); ++i) {
+            RulePlanEntry e; e.provenance = RuleProvenance::Application;
+            e.compatibility = CompatibilityPolicy::LegacyApplication; e.config_order = i;
+            e.application = new_rules[i]; new_plan.push_back(std::move(e));
+        }
+        for (size_t i = 0; i < new_orchestration.event_overlays.size(); ++i) {
+            RulePlanEntry e; e.provenance = RuleProvenance::EventOverlay;
+            e.compatibility = CompatibilityPolicy::LegacyOverlayExecutor; e.config_order = i;
+            e.overlay = new_orchestration.event_overlays[i]; new_plan.push_back(std::move(e));
+        }
         std::unordered_map<std::string, std::shared_ptr<Profile>> new_profiles;
         if (!j.contains("profiles") || !j["profiles"].is_object() || j["profiles"].empty()) {
             LOG_ERROR("配置文件缺少有效的 'profiles' 节点或 profiles 为空: " << config_path);
@@ -613,6 +656,27 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
                 }
 
                 new_profiles[pname] = prof;
+            }
+        }
+
+        // Resolve config-local v2 references against the complete candidate, never
+        // the previous live profiles. Validate disabled rules too. Plugin generation
+        // resolution belongs to Stage 3; this pass must not load/instantiate plugins.
+        for (const auto& entry : new_plan) {
+            if (entry.provenance != RuleProvenance::AutomationV2) continue;
+            const auto& rule = entry.automation;
+            const auto& action = rule.action;
+            std::string profile_name;
+            if (action.at("type") == "activate_profile") {
+                profile_name = action.at("profile").get<std::string>();
+            } else if (action.at("effect").at("kind") == "profile_effect") {
+                profile_name = action.at("effect").at("name").get<std::string>();
+            } else {
+                continue; // plugin reference: generation resolution is deferred
+            }
+            if (new_profiles.find(profile_name) == new_profiles.end()) {
+                LOG_ERROR("[Automation] Rule '" << rule.id << "' references missing candidate profile '" << profile_name << "'");
+                valid = false;
             }
         }
 
@@ -684,6 +748,13 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
             gsi_bindings_ = std::move(new_gsi_bindings);
             orchestration_ = std::move(new_orchestration);
             profiles_ = std::move(new_profiles);
+            // Preserve unchanged rule memory; edited/enabled records seed on next decision.
+            if (automation_freshness_ms_ != new_freshness) edge_memory_.clear();
+            for (auto it = edge_memory_.begin(); it != edge_memory_.end();) {
+                if (!v2_ids.count(it->first)) it = edge_memory_.erase(it); else ++it;
+            }
+            plan_ = std::move(new_plan);
+            automation_freshness_ms_ = new_freshness;
             last_write_time_ = file_ft;
         }
 
@@ -732,134 +803,17 @@ bool RuleEngine::CheckAndReload() {
 
 std::shared_ptr<const Profile> RuleEngine::MatchProfile(const std::string& process_name, const GsiState* gsi_state) {
     std::lock_guard<std::mutex> lock(mutex_);
-
-    std::string lower_proc = ToLower(process_name);
-    bool is_cs2 = (lower_proc == "cs2.exe" || lower_proc == "cs2" || lower_proc == "csgo.exe" || lower_proc == "csgo");
-
-    // 1. 如果配置了现代声明式编排规则 (orchestration.rules)，优先顺序评估
-    for (const auto& rule : orchestration_.rules) {
-        if (!rule.process.empty()) {
-            bool matches = (lower_proc == rule.process);
-            if (!matches && rule.process.size() > 4 && rule.process.substr(rule.process.size() - 4) == ".exe") {
-                matches = (lower_proc == rule.process.substr(0, rule.process.size() - 4));
-            }
-            if (!matches && lower_proc.size() > 4 && lower_proc.substr(lower_proc.size() - 4) == ".exe") {
-                matches = (lower_proc.substr(0, lower_proc.size() - 4) == rule.process);
-            }
-            if (!matches) continue;
-        }
-
-        if (rule.condition.Evaluate(gsi_state, lower_proc)) {
-            auto it = profiles_.find(rule.target_profile);
-            if (it != profiles_.end()) {
-                return it->second;
-            }
-        }
-    }
-
-    // 2. 如果当前处于 CS2 游戏中，优先按优先级顺序评估传统 GSI 绑定 (靠前优先)
-    if (is_cs2 && gsi_state != nullptr && gsi_state->IsActive()) {
-        for (const auto& binding : gsi_bindings_) {
-            if (gsi_state->Evaluate(binding.field, binding.op, binding.target_value)) {
-                auto it = profiles_.find(binding.profile_name);
-                if (it != profiles_.end()) {
-                    return it->second;
-                }
-            }
-        }
-    }
-
-    // 3. 匹配具体的前台进程规则
-    if (!lower_proc.empty()) {
-        for (const auto& rule : rules_) {
-            if (rule.process_name == lower_proc) {
-                auto it = profiles_.find(rule.profile_name);
-                if (it != profiles_.end()) {
-                    return it->second;
-                }
-            }
-            // Also try without .exe if applicable
-            if (rule.process_name.size() > 4 && rule.process_name.substr(rule.process_name.size() - 4) == ".exe") {
-                std::string base = rule.process_name.substr(0, rule.process_name.size() - 4);
-                if (base == lower_proc) {
-                    auto it = profiles_.find(rule.profile_name);
-                    if (it != profiles_.end()) {
-                        return it->second;
-                    }
-                }
-            }
-        }
-    }
-
-    // 4. 编排兜底方案
-    if (!orchestration_.fallback_profile.empty()) {
-        auto fb_it = profiles_.find(orchestration_.fallback_profile);
-        if (fb_it != profiles_.end()) {
-            return fb_it->second;
-        }
-    }
-
-    // 5. Fallback to default profile (前台不是 cs2.exe 且无其他命中时，GSI 绑定绝不生效)
-    auto def_it = profiles_.find(default_profile_name_);
-    if (def_it != profiles_.end()) {
-        return def_it->second;
-    }
-
-    // If default profile name not found, return first available profile or nullptr
-    if (!profiles_.empty()) {
-        return profiles_.begin()->second;
-    }
-
-    return nullptr;
+    const auto input = AutomationInputSnapshot::Capture(process_name,
+        gsi_state ? gsi_state->GetAutomationTelemetry() : nullptr, AutomationMonotonicMs(), automation_freshness_ms_);
+    return EvaluateProfilesLocked(process_name, gsi_state, input).profile;
 }
 
 bool RuleEngine::ShouldSuppressWebUi(const std::string& process_name, const GsiState* gsi) {
     std::lock_guard<std::mutex> lock(mutex_);
-
-    std::string lower_proc = ToLower(process_name);
-
-    // 1. 优先检查编排规则的 DND 抑制
-    for (const auto& rule : orchestration_.rules) {
-        bool proc_matches = true;
-        if (!rule.process.empty()) {
-            proc_matches = (lower_proc == rule.process);
-            if (!proc_matches && rule.process.size() > 4 && rule.process.substr(rule.process.size() - 4) == ".exe") {
-                proc_matches = (lower_proc == rule.process.substr(0, rule.process.size() - 4));
-            }
-            if (!proc_matches && lower_proc.size() > 4 && lower_proc.substr(lower_proc.size() - 4) == ".exe") {
-                proc_matches = (lower_proc.substr(0, lower_proc.size() - 4) == rule.process);
-            }
-        }
-        if (proc_matches) {
-            bool cond_matches = true;
-            if (rule.condition.logic_op != LogicOp::None || !rule.condition.field.empty() || !rule.condition.children.empty()) {
-                cond_matches = rule.condition.Evaluate(gsi, lower_proc);
-            }
-            if (cond_matches && rule.dnd) {
-                return true;
-            }
-        }
-    }
-
-    // 2. 检查传统进程规则
-    if (!lower_proc.empty()) {
-        for (const auto& rule : rules_) {
-            if (rule.process_name == lower_proc) {
-                return rule.suppress_web_ui;
-            }
-            if (rule.process_name.size() > 4 && rule.process_name.substr(rule.process_name.size() - 4) == ".exe") {
-                std::string base = rule.process_name.substr(0, rule.process_name.size() - 4);
-                if (base == lower_proc) {
-                    return rule.suppress_web_ui;
-                }
-            }
-        }
-    }
-
-    // Default policy: unmapped (desktop / unknown) => false (do not suppress)
-    return false;
+    const auto input = AutomationInputSnapshot::Capture(process_name,
+        gsi ? gsi->GetAutomationTelemetry() : nullptr, AutomationMonotonicMs(), automation_freshness_ms_);
+    return EvaluateProfilesLocked(process_name, gsi, input).suppress_web_ui;
 }
-
 
 bool RuleEngine::HasProfile(const std::string& name) const {
     std::lock_guard<std::mutex> lock(mutex_);

@@ -770,9 +770,12 @@ int main(int argc, char* argv[]) {
 
         // 主线程统一评估当前前台进程与 GSI 状态驱动的灯效方案
         // (严格遵循主线程独占 COM/HAL 纪律，绝不在网络线程执行硬件调用)
-        std::string cur_proc = monitor.GetCurrentProcessName();
+        // V2 effect output remains decisions only until Stage 3. One consumer drains input.
+        const auto automation = rule_engine.EvaluateAutomation(gsi_adapter.GetState(),
+            [&monitor]() { return monitor.GetCurrentProcessName(); });
+        const std::string& cur_proc = automation.foreground_process;
         gsi_adapter.GetState().SetForegroundProcess(cur_proc);
-        std::shared_ptr<const aura::Profile> matched = rule_engine.MatchProfile(cur_proc, &gsi_adapter.GetState());
+        std::shared_ptr<const aura::Profile> matched = automation.profile;
         std::string prof_name = matched ? matched->name : "(None)";
         if (prof_name != current_active_profile_name) {
             current_active_profile_name = prof_name;
@@ -797,13 +800,13 @@ int main(int argc, char* argv[]) {
         // SetSuppressed 内部为原子交换，且仅在值真正变化时才 notify，重复调用无副作用。
         if (cur_proc != last_proc_seen) {
             last_proc_seen = cur_proc;
-            bool suppress = rule_engine.ShouldSuppressWebUi(cur_proc, &gsi_adapter.GetState());
+            bool suppress = automation.suppress_web_ui;
             web_supervisor.SetSuppressed(suppress);
             LOG_INFO("前台进程变更 -> [" + (cur_proc.empty() ? "桌面/未知" : cur_proc) + "]" +
                      (suppress ? " (网页服务已抑制)" : ""));
         }
 
-        web_supervisor.SetSuppressed(rule_engine.ShouldSuppressWebUi(cur_proc, &gsi_adapter.GetState()));
+        web_supervisor.SetSuppressed(automation.suppress_web_ui);
 
         // 零分配计算当前帧 (包含 GSI 原子读取与瞬态事件叠加)
         effect_engine.GetOverlayManager().UpdateBindingsFromGsi(&gsi_adapter.GetState(), effect_engine.GetElapsedMs(), aura::RuleEngine::ToLower(cur_proc));
@@ -825,8 +828,9 @@ int main(int argc, char* argv[]) {
             last_reload_check = now_reload;
             if (rule_engine.CheckAndReload()) {
                 sync_event_overlays();
-                std::string cur_proc_now = monitor.GetCurrentProcessName();
-                std::shared_ptr<const aura::Profile> reload_matched = rule_engine.MatchProfile(cur_proc_now, &gsi_adapter.GetState());
+                const auto reload_decision = rule_engine.EvaluateAutomation(gsi_adapter.GetState(),
+                    [&monitor]() { return monitor.GetCurrentProcessName(); });
+                std::shared_ptr<const aura::Profile> reload_matched = reload_decision.profile;
                 current_active_profile_name = reload_matched ? reload_matched->name : "(None)";
                 effect_engine.SetActiveProfile(reload_matched);
 
@@ -838,7 +842,7 @@ int main(int argc, char* argv[]) {
                     next_tick = std::chrono::steady_clock::now();
                 }
 
-                bool suppress = rule_engine.ShouldSuppressWebUi(cur_proc_now, &gsi_adapter.GetState());
+                bool suppress = reload_decision.suppress_web_ui;
                 web_supervisor.SetSuppressed(suppress);
 
                 LOG_INFO("配置实时重载生效，当前活跃方案更新为: [" + current_active_profile_name + "]" + 

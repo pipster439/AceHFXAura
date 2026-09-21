@@ -49,6 +49,7 @@ set(DAEMON_SOURCES
     src/aura/keymap.cpp
     src/monitor/foreground_monitor.cpp
     src/config/rule_engine.cpp
+    src/config/automation_evaluation.cpp
     src/engine/effect_engine.cpp
     src/engine/builtin_effects.cpp
     src/engine/plugin_manager.cpp
@@ -147,6 +148,7 @@ add_custom_command(TARGET aura_web_ui POST_BUILD
 add_executable(test_gsi_rules
     tests/test_gsi_rules.cpp
     src/config/rule_engine.cpp
+    src/config/automation_evaluation.cpp
     src/engine/builtin_effects.cpp
     src/engine/effect_engine.cpp
     src/engine/plugin_manager.cpp
@@ -225,6 +227,7 @@ add_executable(test_lighting_service
     src/config/automation_service.cpp
     src/config/config_writer_util.cpp
     src/config/rule_engine.cpp
+    src/config/automation_evaluation.cpp
     src/engine/builtin_effects.cpp
     src/engine/effect_engine.cpp
     src/engine/plugin_manager.cpp
@@ -256,6 +259,7 @@ add_executable(test_automation_service
     src/config/config_writer_util.cpp
     src/config/lighting_service.cpp
     src/config/rule_engine.cpp
+    src/config/automation_evaluation.cpp
     src/engine/builtin_effects.cpp
     src/engine/effect_engine.cpp
     src/engine/plugin_manager.cpp
@@ -348,3 +352,12 @@ if (Python3_Interpreter_FOUND)
 endif()
 
 
+
+# Same production sources/libraries as the legacy rules suite, independent conformance test.
+get_target_property(AUTOMATION_RULE_TEST_SOURCES test_gsi_rules SOURCES)
+list(REMOVE_ITEM AUTOMATION_RULE_TEST_SOURCES tests/test_gsi_rules.cpp)
+add_executable(test_automation_v2 tests/test_automation_v2.cpp ${AUTOMATION_RULE_TEST_SOURCES})
+get_target_property(AUTOMATION_RULE_TEST_LIBRARIES test_gsi_rules LINK_LIBRARIES)
+target_link_libraries(test_automation_v2 PRIVATE ${AUTOMATION_RULE_TEST_LIBRARIES})
+add_test(NAME automation_v2 COMMAND test_automation_v2)
+set_tests_properties(automation_v2 PROPERTIES TIMEOUT 30)
