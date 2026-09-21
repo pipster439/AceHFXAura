@@ -30,6 +30,42 @@ int main() {
     // 因此全面使用 CHECK 宏，保证在 Release 与 Debug 下均具有真实校验力。
     int failures = 0;
 
+#ifdef AURA_STAGE0_FIXTURE_DIR
+    // Frozen/derived Stage 0 configs run through the unchanged legacy RuleEngine.
+    // This verifies compatibility only; no v2 promotion or execution is implemented.
+    {
+        const std::filesystem::path fixtures(AURA_STAGE0_FIXTURE_DIR);
+        aura::RuleEngine legacy;
+        CHECK(legacy.LoadConfig((fixtures / "legacy_rules_gsi_bindings.json").string()), "Stage 0 legacy rules/GSI config loads");
+        auto process_profile = legacy.MatchProfile("cs2.exe");
+        CHECK(process_profile && process_profile->name == "cs2_gamer", "Stage 0 legacy process mapping preserved");
+        aura::GsiState health;
+        health.UpdateFromPayload({{"player", {{"state", {{"health", 10}}}}}});
+        auto health_profile = legacy.MatchProfile("cs2.exe", &health);
+        CHECK(health_profile && health_profile->name == "danger_red", "Stage 0 legacy GSI precedence preserved");
+
+        aura::RuleEngine phase4;
+        CHECK(phase4.LoadConfig((fixtures / "phase4_dnd_application_rules.json").string()), "Stage 0 Phase 4 DND config loads");
+        CHECK(phase4.ShouldSuppressWebUi("cs2.exe"), "Stage 0 suppress_web_ui=true preserved");
+        CHECK(!phase4.ShouldSuppressWebUi("devenv.exe"), "Stage 0 suppress_web_ui=false preserved");
+        auto coding = phase4.MatchProfile("devenv.exe");
+        CHECK(coding && coding->name == "coding", "Stage 0 Phase 4 target preserved");
+
+        aura::RuleEngine orchestration;
+        CHECK(orchestration.LoadConfig((fixtures / "legacy_orchestration_event_overlays.json").string()), "Stage 0 orchestration/event_overlays config loads");
+        auto danger = orchestration.MatchProfile("cs2.exe", &health);
+        CHECK(danger && danger->name == "danger_high_priority", "Stage 0 orchestration AST preserved");
+        CHECK(orchestration.ShouldSuppressWebUi("cs2.exe", &health), "Stage 0 rule-level dnd preserved");
+        const auto overlays = orchestration.GetEventOverlayRules();
+        CHECK(overlays.size() == 1, "Stage 0 legacy overlay retained");
+        if (!overlays.empty()) {
+            CHECK(overlays[0].event == "event.kill" && overlays[0].duration_ms == 900 &&
+                  overlays[0].attack_ms == 60 && overlays[0].fade_out_ms == 300 &&
+                  overlays[0].blend_mode == "replace", "Stage 0 legacy overlay fields preserved");
+        }
+    }
+#endif
+
     std::cout << "=========================================================\n";
     std::cout << "  GSI 前台进程隔离与绑定仲裁专项单元测试\n";
     std::cout << "=========================================================\n";

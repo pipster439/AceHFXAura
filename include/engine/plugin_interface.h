@@ -55,12 +55,18 @@ struct EffectContext {
 
 #ifdef _WIN32
   #define AURA_PLUGIN_EXPORT extern "C" __declspec(dllexport)
+  #define AURA_PLUGIN_CALL __cdecl
 #else
   #define AURA_PLUGIN_EXPORT extern "C"
+  #define AURA_PLUGIN_CALL
 #endif
 
 // Canonical Plugin API version
 constexpr uint32_t AURA_PLUGIN_API_VERSION = 1;
+
+// Optional C exports; independent of the unchanged Plugin ABI v1 class layouts.
+// All callbacks are serial, nonblocking and must not throw across the DLL boundary.
+constexpr uint32_t AURA_EFFECT_LIFECYCLE_VERSION = 1;
 
 extern "C" {
     // Canonical Plugin C Export Function Prototypes
@@ -69,6 +75,12 @@ extern "C" {
     typedef aura::Effect* (*PfnAuraCreateEffect)();
     typedef void (*PfnAuraDestroyEffect)(aura::Effect*);
     typedef void (*PfnAuraRenderEffectWithContext)(aura::Effect*, const aura::EffectContext*, aura::FrameBuffer*);
+
+    typedef uint32_t (AURA_PLUGIN_CALL *PfnAuraGetEffectLifecycleVersion)();
+    // Query the exact object returned by this generation's factory, after rendering
+    // with the same elapsed_ms. Finished returns 0/1; opacity must be finite [0,1].
+    typedef uint32_t (AURA_PLUGIN_CALL *PfnAuraIsEffectFinished)(const aura::Effect*, uint64_t elapsed_ms);
+    typedef float (AURA_PLUGIN_CALL *PfnAuraGetEffectOpacity)(const aura::Effect*, uint64_t elapsed_ms);
 
     // Aliases without Aura prefix
     typedef uint32_t (*PfnGetPluginApiVersion)();

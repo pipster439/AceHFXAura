@@ -15,11 +15,27 @@
 #include <mutex>
 #include <filesystem>
 #include <chrono>
+#include <optional>
 
 #include "engine/effect.h"
 #include "engine/plugin_interface.h"
 
 namespace aura {
+
+enum class PluginAbiVersion { Unsupported, V1_0 };
+
+// Only the two existing spellings (and historical absence) are supported.
+PluginAbiVersion NormalizePluginApiVersion(std::optional<uint32_t> raw_version) noexcept;
+
+struct EffectLifecycleExports {
+    std::optional<uint32_t> version;
+    bool has_finished_export{false};
+    bool has_opacity_export{false};
+    // Effective capabilities: unknown revision or opacity-only => both null.
+    // Finished-only is usable with host opacity=1; no timing is executed here.
+    PfnAuraIsEffectFinished is_finished{nullptr};
+    PfnAuraGetEffectOpacity get_opacity{nullptr};
+};
 
 /**
  * @brief Manages the lifecycle of a loaded DLL module and its temporary shadow file.
@@ -51,6 +67,7 @@ public:
     PluginHandle& operator=(const PluginHandle&) = delete;
 
 private:
+    friend class PluginManager;
     HMODULE module_{nullptr};
     std::filesystem::path shadow_path_;
     PfnAuraDestroyEffect destroy_fn_{nullptr};
@@ -60,9 +77,13 @@ private:
  * @brief Metadata and function pointers for a loaded plugin.
  */
 struct PluginEntry {
+    uint64_t generation_id{0};
     std::string effect_name;
     std::filesystem::path original_path;
-    uint32_t api_version{0};
+    uint32_t api_version{0}; // Raw export value, or historical default 1 if absent.
+    bool version_export_present{false};
+    PluginAbiVersion normalized_version{PluginAbiVersion::Unsupported};
+    EffectLifecycleExports lifecycle;
     std::shared_ptr<PluginHandle> handle;
     PfnAuraCreateEffect create_fn{nullptr};
     PfnAuraDestroyEffect destroy_fn{nullptr};
@@ -70,8 +91,29 @@ struct PluginEntry {
     PfnAuraGetPluginApiVersion version_fn{nullptr};
 };
 
+/** Host-only factory result. No trigger, timing, composition or rule execution.
+ * Effect and immutable metadata are captured from the same DLL generation.
+ * The Effect's deleter also owns that generation, so copying out the Effect is safe.
+ * Consumers must never combine these callbacks with an object from another result.
+ */
+class TriggeredEffectInstance {
+public:
+    TriggeredEffectInstance() = default;
+    explicit operator bool() const { return effect_ != nullptr; }
+    const std::shared_ptr<Effect>& GetEffect() const { return effect_; }
+    const std::shared_ptr<const PluginEntry>& GetGeneration() const { return generation_; }
+
+private:
+    friend class PluginManager;
+    TriggeredEffectInstance(std::shared_ptr<const PluginEntry> generation, std::shared_ptr<Effect> effect)
+        : generation_(std::move(generation)), effect_(std::move(effect)) {}
+    // Reverse member destruction order: object first, generation last.
+    std::shared_ptr<const PluginEntry> generation_;
+    std::shared_ptr<Effect> effect_;
+};
+
 /**
- * @brief Dynamic Plugin Manager supporting shadow-copy loading and lock-free hot swapping.
+ * @brief Shadow-copy loading with transactional, mutex-protected generation publication.
  */
 class PluginManager {
 public:
@@ -89,6 +131,10 @@ public:
     // Creates an instance of an effect managed by a plugin
     std::shared_ptr<Effect> CreateEffect(const std::string& effect_name);
 
+    // Generation-bound equivalents. Legacy entry points delegate to these.
+    TriggeredEffectInstance LoadPluginInstance(const std::string& name_or_path);
+    TriggeredEffectInstance CreateEffectInstance(const std::string& effect_name);
+
     // Checks if a plugin with the given effect name is loaded
     bool HasPlugin(const std::string& effect_name) const;
 
@@ -105,10 +151,16 @@ public:
     static std::filesystem::path ResolvePluginPath(const std::string& name_or_path, const std::filesystem::path& base_dir = "plugins");
 
 private:
-    std::shared_ptr<PluginEntry> LoadPluginInternal(const std::filesystem::path& dll_path);
+    std::shared_ptr<const PluginEntry> LoadPluginInternal(const std::filesystem::path& dll_path);
+    static TriggeredEffectInstance Instantiate(std::shared_ptr<const PluginEntry> generation,
+                                              std::shared_ptr<bool> destruction_failed = {});
+    std::shared_ptr<const PluginEntry> FindByPath(const std::filesystem::path& path) const;
+    bool PublishGeneration(const std::shared_ptr<const PluginEntry>& candidate,
+                           const std::string& requested_alias,
+                           const std::shared_ptr<const PluginEntry>& expected_previous);
 
     mutable std::mutex mutex_;
-    std::unordered_map<std::string, std::shared_ptr<PluginEntry>> plugins_;
+    std::unordered_map<std::string, std::shared_ptr<const PluginEntry>> plugins_;
     std::filesystem::path plugins_dir_{"plugins"};
     std::filesystem::path cache_dir_{"plugins/.cache"};
 };

@@ -291,6 +291,41 @@ add_dependencies(test_plugin_runtime plugin_fixture_v1 plugin_fixture_v2)
 add_test(NAME plugin_runtime COMMAND test_plugin_runtime
     $<TARGET_FILE:plugin_fixture_v1> $<TARGET_FILE:plugin_fixture_v2>)
 set_tests_properties(plugin_runtime PROPERTIES TIMEOUT 30)
+
+# Stage 1 generated regression DLLs are separate from frozen Stage 0 evidence.
+function(add_abi_fixture name)
+    add_library(${name} SHARED tests/fixtures/plugin_abi_fixture.cpp)
+    target_compile_definitions(${name} PRIVATE ${ARGN})
+endfunction()
+add_abi_fixture(abi_full_old FIXTURE_VALUE=17)
+add_abi_fixture(abi_full_new FIXTURE_VALUE=93 FIXTURE_ABI=0x00010000)
+add_abi_fixture(abi_unprefixed FIXTURE_UNPREFIXED)
+add_abi_fixture(abi_absent FIXTURE_NO_VERSION)
+add_abi_fixture(abi_finished_only FIXTURE_NO_OPACITY)
+add_abi_fixture(abi_opacity_only FIXTURE_NO_FINISHED)
+add_abi_fixture(abi_no_lifecycle FIXTURE_NO_LIFECYCLE_VERSION FIXTURE_NO_FINISHED FIXTURE_NO_OPACITY)
+add_abi_fixture(abi_lifecycle_unknown FIXTURE_LIFECYCLE=2)
+add_abi_fixture(abi_lifecycle_no_revision FIXTURE_NO_LIFECYCLE_VERSION)
+add_abi_fixture(abi_zero FIXTURE_ABI=0)
+add_abi_fixture(abi_two FIXTURE_ABI=2)
+add_abi_fixture(abi_minor FIXTURE_ABI=0x00010001)
+add_abi_fixture(abi_missing_destroy FIXTURE_NO_DESTROY)
+add_abi_fixture(abi_factory_null FIXTURE_FACTORY_NULL)
+add_abi_fixture(abi_factory_throw FIXTURE_FACTORY_THROWS)
+add_abi_fixture(abi_version_throw FIXTURE_VERSION_THROWS)
+add_abi_fixture(abi_destroy_throw FIXTURE_DESTROY_THROWS)
+add_abi_fixture(abi_renamed FIXTURE_NAME="renamed_fixture" FIXTURE_VALUE=93)
+add_abi_fixture(abi_other FIXTURE_NAME="other_fixture")
+add_executable(test_plugin_abi tests/test_plugin_abi.cpp src/engine/plugin_manager.cpp)
+add_dependencies(test_plugin_abi
+    abi_full_old abi_full_new abi_unprefixed abi_absent abi_finished_only abi_opacity_only
+    abi_no_lifecycle abi_lifecycle_unknown abi_lifecycle_no_revision abi_zero abi_two abi_minor
+    abi_missing_destroy abi_factory_null abi_factory_throw abi_version_throw abi_destroy_throw abi_renamed abi_other)
+add_test(NAME plugin_abi COMMAND test_plugin_abi $<TARGET_FILE_DIR:abi_full_old>
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/automation_v2_stage0")
+set_tests_properties(plugin_abi PROPERTIES TIMEOUT 30)
+target_compile_definitions(test_gsi_rules PRIVATE
+    AURA_STAGE0_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/automation_v2_stage0/configs")
 add_test(NAME runtime_status COMMAND test_runtime_status)
 set_tests_properties(runtime_status PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
 add_test(NAME lighting_service COMMAND test_lighting_service)
@@ -304,6 +339,10 @@ set_tests_properties(native_hid PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SO
 
 find_package(Python3 COMPONENTS Interpreter QUIET)
 if (Python3_Interpreter_FOUND)
+    add_test(NAME stage0_fixture_integrity COMMAND ${Python3_EXECUTABLE}
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/verify_stage0_fixtures.py")
+    set_tests_properties(stage0_fixture_integrity PROPERTIES FIXTURES_SETUP stage0_evidence)
+    set_tests_properties(plugin_abi PROPERTIES FIXTURES_REQUIRED stage0_evidence)
     add_test(NAME aura_hal_py COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_aura_hal.py")
     set_tests_properties(aura_hal_py PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
 endif()
