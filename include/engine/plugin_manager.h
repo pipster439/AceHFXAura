@@ -41,7 +41,7 @@ struct EffectLifecycleExports {
  * @brief Manages the lifecycle of a loaded DLL module and its temporary shadow file.
  * 
  * Safe teardown: FreeLibrary is only invoked when this handle's reference count drops to 0,
- * which happens only after all std::shared_ptr<Effect> instances referencing it have been destroyed.
+ * after all Effect instances and prepared sources referencing it have been released.
  */
 class PluginHandle {
 public:
@@ -148,6 +148,12 @@ public:
     // Destruction exception containment/diagnostics remain owned by the deleter.
     TriggeredEffectInstance LoadPluginInstance(const std::string& name_or_path, bool quiet = false);
     TriggeredEffectInstance CreateEffectInstance(const std::string& effect_name, bool quiet = false);
+    // Pin/load validated exports without invoking CreateEffect. Unpublished cold
+    // generations are owned by the returned source, never an unbounded cache.
+    std::shared_ptr<const PluginEntry> PrepareEffectGeneration(const std::string& name);
+    static TriggeredEffectInstance CreateFromGeneration(std::shared_ptr<const PluginEntry> generation) {
+        return Instantiate(std::move(generation), {}, true);
+    }
 
     // Checks if a plugin with the given effect name is loaded
     bool HasPlugin(const std::string& effect_name) const;

@@ -382,6 +382,21 @@ TriggeredEffectInstance ResolveAutomationEffect(const nlohmann::json& reference,
     const auto profile = rules.GetProfile(name);
     return profile ? CreateProfileEffectInstance(*profile) : TriggeredEffectInstance{};
 }
+TriggeredEffectInstance PreparedEffectSource::Create() const {
+    if (generation_) return PluginManager::CreateFromGeneration(generation_);
+    if (recipe_.empty()) return {};
+    return TriggeredEffectInstance::FromHostEffect(CreateEffectFromProfile("queued",nlohmann::json::parse(recipe_)));
+}
+PreparedEffectSource PrepareAutomationEffect(const nlohmann::json& reference, const RuleEngine& rules) {
+    const auto name=reference.at("name").get<std::string>();
+    if (reference.at("kind")=="plugin") return PreparedEffectSource::Plugin(PluginManager::Instance().PrepareEffectGeneration(name));
+    const auto profile=rules.GetProfile(name);
+    if (!profile || profile->effect_recipe.empty()) return {};
+    const auto plugin=ProfilePluginName(*profile);
+    if (nlohmann::json::parse(profile->effect_recipe).value("type","static")=="plugin")
+        return plugin.empty()?PreparedEffectSource{}:PreparedEffectSource::Plugin(PluginManager::Instance().PrepareEffectGeneration(plugin));
+    return PreparedEffectSource::Recipe(ProfileEffectIdentity(*profile));
+}
 
 std::string RuleEngine::ToLower(const std::string& s) {
     std::string res = s;

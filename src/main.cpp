@@ -781,7 +781,8 @@ int main(int argc, char* argv[]) {
             [&monitor]() { return monitor.GetCurrentProcessName(); });
         effect_engine.GetAutomationEffects().Consume(automation,
             [&rule_engine](const nlohmann::json& reference) { return aura::ResolveAutomationEffect(reference, rule_engine); },
-            effect_engine.GetElapsedMs(), effect_revision);
+            effect_engine.GetElapsedMs(), effect_revision,
+            [&rule_engine](const nlohmann::json& reference) { return aura::PrepareAutomationEffect(reference, rule_engine); });
         const std::string& cur_proc = automation.foreground_process;
         gsi_adapter.GetState().SetForegroundProcess(cur_proc);
         std::shared_ptr<const aura::Profile> matched = automation.profile;

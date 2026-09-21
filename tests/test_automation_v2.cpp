@@ -332,7 +332,7 @@ void ValidationAndPrecedence(const std::filesystem::path& dir) {
     bad["when"]["mode"]="rising"; invalid.push_back(bad);
     bad=EffectRule("bad","state",Low()); bad["action"]["lifetime"]="one_shot"; invalid.push_back(bad);
     for(auto mode:{"rising","event"}) { bad=EffectRule("bad",mode,mode==std::string("event")?Event("event.kill"):Low()); bad["action"]["lifetime"]="while_true"; invalid.push_back(bad); }
-    for(auto policy:{"stack","queue"}) { bad=EffectRule("bad","event",Event("event.kill")); bad["action"]["retrigger"]=policy; invalid.push_back(bad); }
+    for(auto policy:{"unknown_policy"}) { bad=EffectRule("bad","event",Event("event.kill")); bad["action"]["retrigger"]=policy; invalid.push_back(bad); }
     bad=EffectRule("bad","event",Event("event.kill")); bad["action"]["lifetime"]="latch_until_scope_exit"; invalid.push_back(bad);
     bad=ProfileRule("bad",Low()); bad["action"]["activation"]="latch_until_scope_exit"; invalid.push_back(bad);
     bad=EffectRule("bad","state",Event("event.kill")); invalid.push_back(bad);

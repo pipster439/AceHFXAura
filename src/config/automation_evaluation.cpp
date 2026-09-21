@@ -175,7 +175,11 @@ AutomationRule RuleEngine::ParseAutomationRule(const nlohmann::json& item) {
         const auto lifetime = action.at("lifetime").get<std::string>();
         Require(lifetime == (r.mode == "state" ? "while_true" : "one_shot"), "unsupported mode/lifetime pairing");
         const auto retrigger = action.value("retrigger", "restart");
-        Require(retrigger == "restart" || retrigger == "ignore_while_active", "stack/queue are deferred");
+        Require(retrigger == "restart" || retrigger == "ignore_while_active" || retrigger == "stack" || retrigger == "queue", "unknown retrigger policy");
+        if (retrigger=="stack" || retrigger=="queue") {
+            for (const auto* setting:{"stack","queue","limits","pending_ttl_ms","max_pending_per_rule","max_pending_global","max_active_per_rule","max_active_v2"})
+                Require(!action.contains(setting),"advanced retrigger limits are fixed, not configurable");
+        }
         Require(r.mode != "state" || !action.contains("retrigger"), "while_true has no retrigger policy");
         const auto& effect = action.at("effect");
         const auto kind = effect.at("kind").get<std::string>();

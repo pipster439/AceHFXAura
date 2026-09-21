@@ -373,6 +373,14 @@ add_executable(test_automation_authoring tests/test_automation_authoring.cpp ${A
 target_link_libraries(test_automation_authoring PRIVATE ${AUTOMATION_RULE_TEST_LIBRARIES})
 add_test(NAME automation_authoring COMMAND test_automation_authoring)
 set_tests_properties(automation_authoring PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" TIMEOUT 30)
+add_library(retrigger_old SHARED tests/fixtures/retrigger_fixture.cpp)
+add_library(retrigger_new SHARED tests/fixtures/retrigger_fixture.cpp)
+target_compile_definitions(retrigger_new PRIVATE RETRIGGER_MARKER=93)
+add_executable(test_automation_retrigger tests/test_automation_retrigger.cpp ${AUTOMATION_RULE_TEST_SOURCES})
+target_link_libraries(test_automation_retrigger PRIVATE ${AUTOMATION_RULE_TEST_LIBRARIES})
+add_dependencies(test_automation_retrigger retrigger_old retrigger_new)
+add_test(NAME automation_retrigger COMMAND test_automation_retrigger $<TARGET_FILE_DIR:retrigger_old>)
+set_tests_properties(automation_retrigger PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" TIMEOUT 30)
 
 # Synthetic lifecycle DLLs are test-only targets, never deployment inputs.
 add_library(automation_lifecycle_old SHARED tests/fixtures/automation_lifecycle_fixture.cpp)

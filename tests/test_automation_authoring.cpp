@@ -53,8 +53,18 @@ void Crud(Harness& h) {
     auto invalid=Rule("bad");invalid["when"]["condition"]={{"not",Json::object()}};
     Check(h.Call("create",{{"rule",invalid}}).http_status==422,"invalid AST rejected");
     auto shot=Rule("shot");shot["when"]={{"mode","event"},{"condition",{{"event","event.kill"}}}};
-    shot["action"]={{"type","trigger_effect"},{"lifetime","one_shot"},{"effect",{{"kind","profile_effect"},{"name","base"}}},{"retrigger","queue"}};
+    shot["action"]={{"type","trigger_effect"},{"lifetime","one_shot"},{"effect",{{"kind","profile_effect"},{"name","base"}}},{"retrigger","unknown_policy"}};
     Check(h.Call("create",{{"rule",shot}}).http_status==422,"unsupported retrigger rejected");
+    for(const auto* policy:{"stack","queue"}) {
+        shot["action"]["retrigger"]=policy;
+        Check(h.Call("validate",{{"rule",shot}}).http_status==200,"advanced one-shot policy accepted");
+        auto created=h.Call("create",{{"rule",shot}});Check(created.http_status==201 && created.body["rule"]["action"]["retrigger"]==policy,"advanced policy authoring round trip");
+        Check(h.Call("delete",{{"id","shot"}}).http_status==200,"advanced rule delete round trip");
+        auto sized=shot;sized["action"]["pending_ttl_ms"]=999;
+        Check(h.Call("validate",{{"rule",sized}}).http_status==422,"advanced limits cannot be configured");
+        auto persistent=shot;persistent["when"]={{"mode","state"},{"condition",{{"field","process"},{"value","other"}}}};persistent["action"]["lifetime"]="while_true";
+        Check(h.Call("validate",{{"rule",persistent}}).http_status==422,"advanced policy invalid for persistent");
+    }
     shot["action"]["retrigger"]="restart";shot["action"]["effect"]["name"]="missing";
     auto missing=h.Call("create",{{"rule",shot}});Check(missing.http_status==422 && missing.body["errors"][0]["path"]=="/rule/action/effect/name","reference diagnostic path");
     Check(h.Call("delete",{{"id","v2"}}).http_status==200 && h.Read()["orchestration"]["rules"].size()==1,"delete stable id preserves legacy");

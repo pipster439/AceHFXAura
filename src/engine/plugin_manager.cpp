@@ -371,6 +371,14 @@ TriggeredEffectInstance PluginManager::CreateEffectInstance(const std::string& e
 std::shared_ptr<Effect> PluginManager::CreateEffect(const std::string& effect_name) {
     return CreateEffectInstance(effect_name).GetEffect();
 }
+std::shared_ptr<const PluginEntry> PluginManager::PrepareEffectGeneration(const std::string& name) {
+    if (auto current=GetGeneration(name)) return current;
+    try {
+        const auto path=PluginSourcePath(ResolvePluginPath(name,plugins_dir_));
+        if (auto current=FindByPath(path)) return current;
+        return LoadPluginInternal(path,true);
+    } catch (...) { return {}; }
+}
 
 bool PluginManager::HasPlugin(const std::string& effect_name) const {
     std::lock_guard<std::mutex> lock(mutex_);

@@ -1,5 +1,6 @@
 #include "config/automation_service.h"
 #include "config/rule_engine.h"
+#include "config/automation_limits.h"
 #include <set>
 
 namespace aura {
@@ -122,7 +123,10 @@ nlohmann::json AutomationControlService::AuthoringCapabilities() {
     return {{"api_version",2},{"model","automation_v2"},{"stable_identity","id"},{"revision_field","expected_revision"},
         {"pairings",Json::array({{{"mode","state"},{"action","activate_profile"}},{{"mode","state"},{"action","trigger_effect"},{"lifetime","while_true"}},
             {{"mode","rising"},{"action","trigger_effect"},{"lifetime","one_shot"}},{{"mode","event"},{"action","trigger_effect"},{"lifetime","one_shot"}}})},
-        {"retrigger",{"restart","ignore_while_active"}},{"effect_kinds",{"profile_effect","plugin"}},{"events",AutomationEventNames()},
+        {"retrigger",{"restart","ignore_while_active","stack","queue"}},{"effect_kinds",{"profile_effect","plugin"}},{"events",AutomationEventNames()},
+        {"stack",{{"max_active_per_rule",AutomationRetriggerLimits::stack_active}}},
+        {"queue",{{"max_pending_per_rule",AutomationRetriggerLimits::pending_per_rule},{"max_pending_global",AutomationRetriggerLimits::pending_global},{"pending_ttl_ms",AutomationRetriggerLimits::pending_ttl_ms}}},
+        {"global",{{"max_active_v2",AutomationRetriggerLimits::active_global}}},
         {"composition",{"overlay","replace"}},{"blend",{"alpha","additive"}},
         {"ast",{{"max_depth",32},{"max_nodes_per_rule",256},{"logic",{"and","or","not"}},{"comparison_operators",{"==","!=","<","<=",">",">=","contains"}},
             {"process_operators",{"==","!="}},{"process_fields",{"process","process.name","process_name"}},

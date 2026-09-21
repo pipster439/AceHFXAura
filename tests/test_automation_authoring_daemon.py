@@ -40,7 +40,7 @@ class TestAutomationAuthoringDaemon(unittest.TestCase):
             revision = listing["revision"]
             self.assertEqual(listing["records"][0]["provenance"], "application")
             self.assertEqual(path.read_bytes(), initial)
-            self.assertEqual(request(19897, "/api/automation/v2/capabilities")[1]["retrigger"], ["restart", "ignore_while_active"])
+            self.assertEqual(request(19897, "/api/automation/v2/capabilities")[1]["retrigger"], ["restart", "ignore_while_active", "stack", "queue"])
             rule = {"id": "http-stable", "model": "automation_v2", "when": {"mode": "state", "condition": {"field": "process", "value": "NOTRUNNING"}},
                     "action": {"type": "activate_profile", "profile": "other"}, "future": {"keep": 7}}
             payload = {"rule": rule, "expected_revision": revision, "position": 0}
