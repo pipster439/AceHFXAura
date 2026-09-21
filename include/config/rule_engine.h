@@ -121,8 +121,10 @@ struct AutomationDecision {
     ConditionTruth eligibility{ConditionTruth::Unknown};
     bool admitted{false}; // one_shot only; while_true uses eligibility
     uint64_t source_epoch{0}, packet_sequence{0};
+    size_t rule_order{0};
 };
 struct AutomationEvaluation {
+    uint64_t config_generation{0};
     std::string foreground_process;
     std::shared_ptr<const Profile> profile;
     bool suppress_web_ui{false};
@@ -212,6 +214,7 @@ private:
     std::vector<RulePlanEntry> plan_;
     std::unordered_map<std::string, EdgeMemory> edge_memory_;
     uint64_t automation_freshness_ms_{3000};
+    uint64_t config_generation_{0};
     static AutomationRule ParseAutomationRule(const nlohmann::json& item);
     AutomationEvaluation EvaluateProfilesLocked(const std::string& process, const GsiState* legacy,
         const AutomationInputSnapshot& input) const;

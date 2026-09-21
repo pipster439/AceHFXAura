@@ -79,14 +79,14 @@ std::filesystem::path PluginManager::ResolvePluginPath(const std::string& name_o
     return cand1;
 }
 
-std::shared_ptr<const PluginEntry> PluginManager::LoadPluginInternal(const std::filesystem::path& dll_path) {
+std::shared_ptr<const PluginEntry> PluginManager::LoadPluginInternal(const std::filesystem::path& dll_path, bool quiet) {
     // Keep the module alive through catch handlers and destruction of any exception
     // object whose type_info/vtable/destructor may itself live inside the DLL.
     std::shared_ptr<PluginHandle> handle;
     try {
         std::error_code ec;
         if (!std::filesystem::exists(dll_path, ec) || std::filesystem::is_directory(dll_path, ec)) {
-            LOG_ERROR("[PluginManager] 无法找到插件 DLL 文件: " << dll_path.string());
+            if (!quiet) LOG_ERROR("[PluginManager] 无法找到插件 DLL 文件: " << dll_path.string());
             return nullptr;
         }
 
@@ -105,7 +105,7 @@ std::shared_ptr<const PluginEntry> PluginManager::LoadPluginInternal(const std::
         // 拷贝至影子路径
         std::filesystem::copy_file(dll_path, shadow_path, std::filesystem::copy_options::overwrite_existing, ec);
         if (ec) {
-            LOG_ERROR("[PluginManager] 拷贝影子文件失败: " << ec.message() << " -> " << shadow_path.string());
+            if (!quiet) LOG_ERROR("[PluginManager] 拷贝影子文件失败: " << ec.message() << " -> " << shadow_path.string());
             return nullptr;
         }
 
@@ -116,7 +116,7 @@ std::shared_ptr<const PluginEntry> PluginManager::LoadPluginInternal(const std::
         HMODULE hMod = LoadLibraryW(absolute_shadow_path.c_str());
         if (!hMod) {
             DWORD err = GetLastError();
-            LOG_ERROR("[PluginManager] LoadLibraryW 失败 (错误码: " << err << ") 路径: " << shadow_path.string());
+            if (!quiet) LOG_ERROR("[PluginManager] LoadLibraryW 失败 (错误码: " << err << ") 路径: " << shadow_path.string());
             std::filesystem::remove(shadow_path, ec);
             return nullptr;
         }
@@ -153,7 +153,7 @@ std::shared_ptr<const PluginEntry> PluginManager::LoadPluginInternal(const std::
         }
 
         if (!pfn_create || !pfn_destroy) {
-            LOG_ERROR("[PluginManager] 插件缺失必备工厂导出函数 (CreateEffect / DestroyEffect): " << dll_path.string());
+            if (!quiet) LOG_ERROR("[PluginManager] 插件缺失必备工厂导出函数 (CreateEffect / DestroyEffect): " << dll_path.string());
             return nullptr;
         }
         handle->destroy_fn_ = pfn_destroy;
@@ -161,12 +161,12 @@ std::shared_ptr<const PluginEntry> PluginManager::LoadPluginInternal(const std::
         const std::optional<uint32_t> raw_version = pfn_version ? std::optional<uint32_t>(pfn_version()) : std::nullopt;
         const auto normalized = NormalizePluginApiVersion(raw_version);
         if (normalized == PluginAbiVersion::Unsupported) {
-            LOG_ERROR("[PluginManager] Unsupported plugin ABI raw=" << *raw_version << " in " << dll_path.string()
+            if (!quiet) LOG_ERROR("[PluginManager] Unsupported plugin ABI raw=" << *raw_version << " in " << dll_path.string()
                       << "; accepted: absent, 1, 0x00010000 (v1.0). Previous generation retained.");
             return nullptr;
         }
         if (!raw_version) {
-            LOG_WARN("[PluginManager] Missing version export; using historical ABI v1.0 for " << dll_path.string());
+            if (!quiet) LOG_WARN("[PluginManager] Missing version export; using historical ABI v1.0 for " << dll_path.string());
         }
 
         // Version validation precedes name, optional lifecycle negotiation and factory calls.
@@ -181,7 +181,7 @@ std::shared_ptr<const PluginEntry> PluginManager::LoadPluginInternal(const std::
             lifecycle.is_finished = finished;
             lifecycle.get_opacity = opacity;
         } else if (lifecycle_version || finished || opacity) {
-            LOG_WARN("[PluginManager] Unsupported/partial lifecycle capability in " << dll_path.string()
+            if (!quiet) LOG_WARN("[PluginManager] Unsupported/partial lifecycle capability in " << dll_path.string()
                      << "; legacy envelope required (no lifecycle callbacks enabled).");
         }
 
@@ -213,14 +213,14 @@ std::shared_ptr<const PluginEntry> PluginManager::LoadPluginInternal(const std::
         entry->name_fn = pfn_name;
         entry->version_fn = pfn_version;
 
-        LOG_INFO("[PluginManager] Prepared '" << effect_name << "' generation " << generation_id
+        if (!quiet) LOG_INFO("[PluginManager] Prepared '" << effect_name << "' generation " << generation_id
                  << " (raw ABI " << (raw_version ? std::to_string(*raw_version) : "absent")
                  << " -> v1.0) from " << dll_path.string());
         return entry;
     } catch (const std::exception& error) {
-        LOG_ERROR("[PluginManager] Candidate load failed: " << dll_path.string() << ": " << error.what());
+        if (!quiet) LOG_ERROR("[PluginManager] Candidate load failed: " << dll_path.string() << ": " << error.what());
     } catch (...) {
-        LOG_ERROR("[PluginManager] Candidate export threw: " << dll_path.string());
+        if (!quiet) LOG_ERROR("[PluginManager] Candidate export threw: " << dll_path.string());
     }
     return nullptr;
 }
@@ -235,7 +235,7 @@ std::shared_ptr<const PluginEntry> PluginManager::FindByPath(const std::filesyst
 
 bool PluginManager::PublishGeneration(const std::shared_ptr<const PluginEntry>& candidate,
                                      const std::string& requested_alias,
-                                     const std::shared_ptr<const PluginEntry>& expected_previous) {
+                                     const std::shared_ptr<const PluginEntry>& expected_previous, bool quiet) {
     // Preflight the complete alias set, then swap a prepared registry. A collision,
     // concurrent publication or allocation failure cannot leave half-updated aliases.
     std::unordered_map<std::string, std::shared_ptr<const PluginEntry>> next;
@@ -252,21 +252,21 @@ bool PluginManager::PublishGeneration(const std::shared_ptr<const PluginEntry>& 
             }
         }
         if (current != expected_previous) {
-            LOG_WARN("[PluginManager] Concurrent generation publication for " << candidate->original_path.string()
+            if (!quiet) LOG_WARN("[PluginManager] Concurrent generation publication for " << candidate->original_path.string()
                      << "; rejecting stale candidate.");
             return false;
         }
         for (const auto& alias : aliases) {
             auto found = plugins_.find(alias);
             if (found != plugins_.end() && !SameSource(found->second->original_path, candidate->original_path)) {
-                LOG_ERROR("[PluginManager] Plugin alias collision '" << alias << "': "
+                if (!quiet) LOG_ERROR("[PluginManager] Plugin alias collision '" << alias << "': "
                           << found->second->original_path.string() << " vs " << candidate->original_path.string()
                           << "; candidate rejected, existing aliases retained.");
                 return false;
             }
         }
         if (current && current->effect_name != candidate->effect_name) {
-            LOG_WARN("[PluginManager] Export name changed '" << current->effect_name << "' -> '"
+            if (!quiet) LOG_WARN("[PluginManager] Export name changed '" << current->effect_name << "' -> '"
                      << candidate->effect_name << "'; preserving prior aliases for this source only.");
         }
         next = plugins_;
@@ -278,12 +278,12 @@ bool PluginManager::PublishGeneration(const std::shared_ptr<const PluginEntry>& 
 }
 
 TriggeredEffectInstance PluginManager::Instantiate(std::shared_ptr<const PluginEntry> generation,
-                                                   std::shared_ptr<bool> destruction_failed) {
+                                                   std::shared_ptr<bool> destruction_failed, bool quiet) {
     if (!generation || !generation->create_fn || !generation->destroy_fn) return {};
     try {
         Effect* raw = generation->create_fn();
         if (!raw) {
-            LOG_ERROR("[PluginManager] Factory returned null for " << generation->effect_name);
+            if (!quiet) LOG_ERROR("[PluginManager] Factory returned null for " << generation->effect_name);
             return {};
         }
         auto effect = std::shared_ptr<Effect>(raw, [owner = generation, destruction_failed](Effect* p) mutable noexcept {
@@ -303,23 +303,23 @@ TriggeredEffectInstance PluginManager::Instantiate(std::shared_ptr<const PluginE
         });
         return TriggeredEffectInstance(std::move(generation), std::move(effect));
     } catch (const std::exception& error) {
-        LOG_ERROR("[PluginManager] Effect construction failed: " << error.what());
+        if (!quiet) LOG_ERROR("[PluginManager] Effect construction failed: " << error.what());
     } catch (...) {
-        LOG_ERROR("[PluginManager] Effect factory threw.");
+        if (!quiet) LOG_ERROR("[PluginManager] Effect factory threw.");
     }
     return {};
 }
 
-TriggeredEffectInstance PluginManager::LoadPluginInstance(const std::string& name_or_path) {
+TriggeredEffectInstance PluginManager::LoadPluginInstance(const std::string& name_or_path, bool quiet) {
     try {
         const auto path = PluginSourcePath(ResolvePluginPath(name_or_path, plugins_dir_));
         const auto previous = FindByPath(path);
-        auto entry = LoadPluginInternal(path);
-        auto instance = Instantiate(entry);
-        if (!instance || !PublishGeneration(entry, name_or_path, previous)) return {};
+        auto entry = LoadPluginInternal(path, quiet);
+        auto instance = Instantiate(entry, {}, quiet);
+        if (!instance || !PublishGeneration(entry, name_or_path, previous, quiet)) return {};
         return instance;
     } catch (const std::exception& error) {
-        LOG_ERROR("[PluginManager] Plugin publication failed: " << error.what());
+        if (!quiet) LOG_ERROR("[PluginManager] Plugin publication failed: " << error.what());
     }
     return {};
 }
@@ -362,7 +362,7 @@ bool PluginManager::ReloadPlugin(const std::string& effect_name) {
     return false;
 }
 
-TriggeredEffectInstance PluginManager::CreateEffectInstance(const std::string& effect_name) {
+TriggeredEffectInstance PluginManager::CreateEffectInstance(const std::string& effect_name, bool quiet) {
     std::shared_ptr<const PluginEntry> entry;
     {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -372,7 +372,7 @@ TriggeredEffectInstance PluginManager::CreateEffectInstance(const std::string& e
         }
     }
 
-    return entry ? Instantiate(std::move(entry)) : LoadPluginInstance(effect_name);
+    return entry ? Instantiate(std::move(entry), {}, quiet) : LoadPluginInstance(effect_name, quiet);
 }
 
 std::shared_ptr<Effect> PluginManager::CreateEffect(const std::string& effect_name) {

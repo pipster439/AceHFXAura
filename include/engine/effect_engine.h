@@ -2,6 +2,7 @@
 
 #include "engine/effect.h"
 #include "engine/overlay_manager.h"
+#include "engine/automation_effect_runtime.h"
 #include "aura/aura_types.h"
 #include "aura/keymap.h"
 #include <memory>
@@ -20,6 +21,9 @@ public:
 
     // Zero-allocation render tick for the current elapsed time with optional GSI reader and overlays
     void Tick(FrameBuffer& out_frame, const Keymap& keymap, const IGsiReader* gsi = nullptr);
+    // Explicit clock entry point for deterministic frame tests; same production path.
+    void TickAt(uint64_t elapsed_ms, FrameBuffer& out_frame, const Keymap& keymap, const IGsiReader* gsi = nullptr);
+    AutomationEffectRuntime& GetAutomationEffects() { return automation_effects_; }
 
     uint64_t GetElapsedMs() const;
 
@@ -41,6 +45,7 @@ private:
     std::chrono::steady_clock::time_point start_time_;
 
     OverlayManager overlay_manager_;
+    AutomationEffectRuntime automation_effects_;
 
     mutable std::mutex preview_mutex_;
     FrameBuffer preview_frame_;

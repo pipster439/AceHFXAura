@@ -49,7 +49,10 @@ bool EffectEngine::HasActivePreview() const {
 }
 
 void EffectEngine::Tick(FrameBuffer& out_frame, const Keymap& keymap, const IGsiReader* gsi) {
-    uint64_t elapsed_ms = GetElapsedMs();
+    TickAt(GetElapsedMs(), out_frame, keymap, gsi);
+}
+
+void EffectEngine::TickAt(uint64_t elapsed_ms, FrameBuffer& out_frame, const Keymap& keymap, const IGsiReader* gsi) {
 
     // 1. Check edit-time preview frame
     bool is_preview = false;
@@ -80,8 +83,10 @@ void EffectEngine::Tick(FrameBuffer& out_frame, const Keymap& keymap, const IGsi
         }
     }
 
-    // 3. Blend active CS2 transient event overlays (0 heap allocation)
+    // Fixed class placement; legacy group keeps its own unchanged executor/order.
+    automation_effects_.Apply(true, elapsed_ms, out_frame, keymap, gsi);
     overlay_manager_.ApplyOverlays(elapsed_ms, out_frame, keymap, gsi);
+    automation_effects_.Apply(false, elapsed_ms, out_frame, keymap, gsi);
 }
 
 } // namespace aura

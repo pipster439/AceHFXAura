@@ -590,6 +590,7 @@ int main(int argc, char* argv[]) {
 
     // 同步编排事件覆盖规则至 OverlayManager
     auto sync_event_overlays = [&rule_engine, &effect_engine]() {
+        effect_engine.GetAutomationEffects().Clear(); // Stage 3 conservative rebuild cancellation
         auto& om = effect_engine.GetOverlayManager();
         om.ClearBindings();
         for (const auto& r : rule_engine.GetEventOverlayRules()) {
@@ -770,9 +771,12 @@ int main(int argc, char* argv[]) {
 
         // 主线程统一评估当前前台进程与 GSI 状态驱动的灯效方案
         // (严格遵循主线程独占 COM/HAL 纪律，绝不在网络线程执行硬件调用)
-        // V2 effect output remains decisions only until Stage 3. One consumer drains input.
+        const auto effect_revision = effect_engine.GetAutomationEffects().Revision();
         const auto automation = rule_engine.EvaluateAutomation(gsi_adapter.GetState(),
             [&monitor]() { return monitor.GetCurrentProcessName(); });
+        effect_engine.GetAutomationEffects().Consume(automation,
+            [&rule_engine](const nlohmann::json& reference) { return aura::ResolveAutomationEffect(reference, rule_engine); },
+            effect_engine.GetElapsedMs(), effect_revision);
         const std::string& cur_proc = automation.foreground_process;
         gsi_adapter.GetState().SetForegroundProcess(cur_proc);
         std::shared_ptr<const aura::Profile> matched = automation.profile;
@@ -828,8 +832,12 @@ int main(int argc, char* argv[]) {
             last_reload_check = now_reload;
             if (rule_engine.CheckAndReload()) {
                 sync_event_overlays();
+                const auto reload_effect_revision = effect_engine.GetAutomationEffects().Revision();
                 const auto reload_decision = rule_engine.EvaluateAutomation(gsi_adapter.GetState(),
                     [&monitor]() { return monitor.GetCurrentProcessName(); });
+                effect_engine.GetAutomationEffects().Consume(reload_decision,
+                    [&rule_engine](const nlohmann::json& reference) { return aura::ResolveAutomationEffect(reference, rule_engine); },
+                    effect_engine.GetElapsedMs(), reload_effect_revision);
                 std::shared_ptr<const aura::Profile> reload_matched = reload_decision.profile;
                 current_active_profile_name = reload_matched ? reload_matched->name : "(None)";
                 effect_engine.SetActiveProfile(reload_matched);

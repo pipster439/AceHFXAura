@@ -181,6 +181,24 @@ AutomationRule RuleEngine::ParseAutomationRule(const nlohmann::json& item) {
         Require((kind == "profile_effect" || kind == "plugin") && !effect.at("name").get<std::string>().empty(), "invalid effect reference");
         const auto composition = action.value("composition", "overlay"), blend = action.value("blend", "alpha");
         Require((composition == "overlay" || composition == "replace") && (blend == "alpha" || blend == "additive"), "invalid composition metadata");
+        if (action.contains("priority")) {
+            const auto& priority = action["priority"];
+            Require(priority.is_number_integer() && priority >= INT32_MIN && priority <= INT32_MAX, "invalid layer priority");
+        }
+        if (action.contains("watchdog_ms")) {
+            const auto& watchdog = action["watchdog_ms"];
+            Require(r.mode != "state" && watchdog.is_number_integer() && watchdog >= 1 && watchdog <= 60000,
+                    "one-shot watchdog_ms must be 1..60000");
+        }
+        if (action.contains("compatibility")) {
+            const auto& envelope = action["compatibility"];
+            Require(envelope.is_object() && envelope.value("lifecycle", "legacy_envelope") == "legacy_envelope", "invalid compatibility lifecycle");
+            for (const auto* key : {"duration_ms", "fade_out_ms", "attack_ms"}) {
+                if (!envelope.contains(key)) continue;
+                const auto& time = envelope[key];
+                Require(time.is_number_integer() && time >= 0 && (std::string(key) != "duration_ms" || time > 0), "invalid compatibility envelope time");
+            }
+        }
     }
     r.action = action;
     auto semantic = item; semantic.erase("name"); semantic.erase("description");
@@ -204,6 +222,7 @@ std::vector<EventOverlayRule> RuleEngine::GetEventOverlayRules() const {
 AutomationEvaluation RuleEngine::EvaluateProfilesLocked(const std::string& process, const GsiState* legacy,
                                                         const AutomationInputSnapshot& input) const {
     AutomationEvaluation out;
+    out.config_generation = config_generation_;
     const auto proc = ToLower(process);
     const bool cs2 = proc == "cs2" || proc == "cs2.exe" || proc == "csgo" || proc == "csgo.exe";
     bool application_dnd_seen = false;
@@ -283,7 +302,7 @@ AutomationEvaluation RuleEngine::EvaluateAutomation(GsiState& gsi,
         if (r.action.at("type") == "activate_profile") continue; // already evaluated once in arbitration
         if (r.mode == "state") {
             const auto truth = EvaluateRule(r, current).value.truth;
-            out.decisions.push_back({r.id, r.action, truth, false, current.source_epoch, current.packet_sequence});
+            out.decisions.push_back({r.id, r.action, truth, false, current.source_epoch, current.packet_sequence, p.config_order});
             continue;
         }
         auto& mem = edge_memory_[r.id];
@@ -302,7 +321,7 @@ AutomationEvaluation RuleEngine::EvaluateAutomation(GsiState& gsi,
             if (r.mode == "rising") admitted = mem.previous == ConditionTruth::False && value.truth == ConditionTruth::True;
             if (r.mode == "event") admitted = !seed && scoped && mem.in_scope && !gap &&
                 s.automation_fresh && value.truth == ConditionTruth::True && value.positive_occurrence;
-            if (admitted) out.decisions.push_back({r.id, r.action, value.truth, true, s.source_epoch, s.packet_sequence});
+            if (admitted) out.decisions.push_back({r.id, r.action, value.truth, true, s.source_epoch, s.packet_sequence, p.config_order});
             mem.previous = value.truth; mem.in_scope = scoped;
             mem.receipt = s.received_at_ms; mem.epoch = s.source_epoch; mem.sequence = s.packet_sequence;
         };

@@ -51,6 +51,7 @@ set(DAEMON_SOURCES
     src/config/rule_engine.cpp
     src/config/automation_evaluation.cpp
     src/engine/effect_engine.cpp
+    src/engine/automation_effect_runtime.cpp
     src/engine/builtin_effects.cpp
     src/engine/plugin_manager.cpp
     src/engine/overlay_manager.cpp
@@ -151,6 +152,7 @@ add_executable(test_gsi_rules
     src/config/automation_evaluation.cpp
     src/engine/builtin_effects.cpp
     src/engine/effect_engine.cpp
+    src/engine/automation_effect_runtime.cpp
     src/engine/plugin_manager.cpp
     src/engine/overlay_manager.cpp
     src/gsi/gsi_adapter.cpp
@@ -230,6 +232,7 @@ add_executable(test_lighting_service
     src/config/automation_evaluation.cpp
     src/engine/builtin_effects.cpp
     src/engine/effect_engine.cpp
+    src/engine/automation_effect_runtime.cpp
     src/engine/plugin_manager.cpp
     src/engine/overlay_manager.cpp
     src/gsi/gsi_adapter.cpp
@@ -262,6 +265,7 @@ add_executable(test_automation_service
     src/config/automation_evaluation.cpp
     src/engine/builtin_effects.cpp
     src/engine/effect_engine.cpp
+    src/engine/automation_effect_runtime.cpp
     src/engine/plugin_manager.cpp
     src/engine/overlay_manager.cpp
     src/gsi/gsi_adapter.cpp
@@ -361,3 +365,14 @@ get_target_property(AUTOMATION_RULE_TEST_LIBRARIES test_gsi_rules LINK_LIBRARIES
 target_link_libraries(test_automation_v2 PRIVATE ${AUTOMATION_RULE_TEST_LIBRARIES})
 add_test(NAME automation_v2 COMMAND test_automation_v2)
 set_tests_properties(automation_v2 PROPERTIES TIMEOUT 30)
+
+# Synthetic lifecycle DLLs are test-only targets, never deployment inputs.
+add_library(automation_lifecycle_old SHARED tests/fixtures/automation_lifecycle_fixture.cpp)
+add_library(automation_lifecycle_new SHARED tests/fixtures/automation_lifecycle_fixture.cpp)
+target_compile_definitions(automation_lifecycle_new PRIVATE LIFECYCLE_MARKER=100)
+add_executable(test_automation_effect_runtime tests/test_automation_effect_runtime.cpp ${AUTOMATION_RULE_TEST_SOURCES})
+target_link_libraries(test_automation_effect_runtime PRIVATE ${AUTOMATION_RULE_TEST_LIBRARIES})
+add_dependencies(test_automation_effect_runtime automation_lifecycle_old automation_lifecycle_new abi_finished_only
+    abi_opacity_only abi_no_lifecycle abi_lifecycle_unknown abi_lifecycle_no_revision)
+add_test(NAME automation_effect_runtime COMMAND test_automation_effect_runtime $<TARGET_FILE_DIR:automation_lifecycle_old>)
+set_tests_properties(automation_effect_runtime PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" TIMEOUT 30)

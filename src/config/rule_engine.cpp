@@ -351,6 +351,26 @@ std::shared_ptr<Effect> CreateEffectFromProfile(const std::string& pname, const 
     }
 }
 
+TriggeredEffectInstance ResolveAutomationEffect(const nlohmann::json& reference, const RuleEngine& rules) {
+    const auto kind = reference.at("kind").get<std::string>();
+    const auto name = reference.at("name").get<std::string>();
+    auto plugin = [](const std::string& id) {
+        auto& manager = PluginManager::Instance();
+        return manager.HasPlugin(id) ? manager.CreateEffectInstance(id, true) : manager.LoadPluginInstance(id, true);
+    };
+    if (kind == "plugin") return plugin(name);
+    if (kind != "profile_effect") return {};
+    const auto profile = rules.GetProfile(name);
+    if (!profile || profile->effect_recipe.empty()) return {};
+    const auto recipe = nlohmann::json::parse(profile->effect_recipe);
+    if (recipe.value("type", "static") == "plugin") {
+        const auto id = recipe.value("plugin_name", recipe.value("plugin", recipe.value("effect",
+            recipe.value("effect_name", recipe.value("plugin_path", "")))));
+        return id.empty() ? TriggeredEffectInstance{} : plugin(id);
+    }
+    return TriggeredEffectInstance::FromHostEffect(CreateEffectFromProfile(name, recipe));
+}
+
 std::string RuleEngine::ToLower(const std::string& s) {
     std::string res = s;
     std::transform(res.begin(), res.end(), res.begin(), [](unsigned char c) {
@@ -628,6 +648,7 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
                 }
                 auto prof = std::make_shared<Profile>();
                 prof->name = pname;
+                prof->effect_recipe = pval.dump();
                 prof->plugin_name = pval.value("plugin_name", "");
                 prof->brightness = ParseBrightness(pname, pval);
                 int prof_fps = new_fps;
@@ -754,6 +775,7 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
                 if (!v2_ids.count(it->first)) it = edge_memory_.erase(it); else ++it;
             }
             plan_ = std::move(new_plan);
+            ++config_generation_;
             automation_freshness_ms_ = new_freshness;
             last_write_time_ = file_ft;
         }

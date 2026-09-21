@@ -102,6 +102,10 @@ public:
     explicit operator bool() const { return effect_ != nullptr; }
     const std::shared_ptr<Effect>& GetEffect() const { return effect_; }
     const std::shared_ptr<const PluginEntry>& GetGeneration() const { return generation_; }
+    // Builtins have no DLL callbacks; only host-owned effects may use this path.
+    static TriggeredEffectInstance FromHostEffect(std::shared_ptr<Effect> effect) {
+        return TriggeredEffectInstance({}, std::move(effect));
+    }
 
 private:
     friend class PluginManager;
@@ -132,8 +136,10 @@ public:
     std::shared_ptr<Effect> CreateEffect(const std::string& effect_name);
 
     // Generation-bound equivalents. Legacy entry points delegate to these.
-    TriggeredEffectInstance LoadPluginInstance(const std::string& name_or_path);
-    TriggeredEffectInstance CreateEffectInstance(const std::string& effect_name);
+    // Automation uses quiet=true and supplies bounded rule-level failure diagnostics.
+    // Destruction exception containment/diagnostics remain owned by the deleter.
+    TriggeredEffectInstance LoadPluginInstance(const std::string& name_or_path, bool quiet = false);
+    TriggeredEffectInstance CreateEffectInstance(const std::string& effect_name, bool quiet = false);
 
     // Checks if a plugin with the given effect name is loaded
     bool HasPlugin(const std::string& effect_name) const;
@@ -151,13 +157,13 @@ public:
     static std::filesystem::path ResolvePluginPath(const std::string& name_or_path, const std::filesystem::path& base_dir = "plugins");
 
 private:
-    std::shared_ptr<const PluginEntry> LoadPluginInternal(const std::filesystem::path& dll_path);
+    std::shared_ptr<const PluginEntry> LoadPluginInternal(const std::filesystem::path& dll_path, bool quiet = false);
     static TriggeredEffectInstance Instantiate(std::shared_ptr<const PluginEntry> generation,
-                                              std::shared_ptr<bool> destruction_failed = {});
+                                              std::shared_ptr<bool> destruction_failed = {}, bool quiet = false);
     std::shared_ptr<const PluginEntry> FindByPath(const std::filesystem::path& path) const;
     bool PublishGeneration(const std::shared_ptr<const PluginEntry>& candidate,
                            const std::string& requested_alias,
-                           const std::shared_ptr<const PluginEntry>& expected_previous);
+                           const std::shared_ptr<const PluginEntry>& expected_previous, bool quiet = false);
 
     mutable std::mutex mutex_;
     std::unordered_map<std::string, std::shared_ptr<const PluginEntry>> plugins_;

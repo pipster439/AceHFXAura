@@ -26,6 +26,8 @@ struct KeyOverride {
 };
 
 struct Profile {
+    // Host-side recipe retained for fresh Automation instances; never a cloned Effect.
+    std::string effect_recipe;
     std::string name;
     std::string plugin_name;
     std::shared_ptr<Effect> base_effect;
