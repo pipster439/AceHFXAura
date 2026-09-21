@@ -121,6 +121,11 @@ private:
  */
 class PluginManager {
 public:
+    struct PreparedReload {
+        std::shared_ptr<const PluginEntry> candidate, previous;
+        std::string alias;
+        explicit operator bool() const { return candidate != nullptr; }
+    };
     static PluginManager& Instance();
 
     PluginManager();
@@ -131,6 +136,9 @@ public:
 
     // Forces a reload of a plugin from disk
     bool ReloadPlugin(const std::string& effect_name);
+    PreparedReload PrepareReload(const std::string& name, bool require_lifecycle = false);
+    bool PublishReload(const PreparedReload& prepared);
+    std::shared_ptr<const PluginEntry> GetGeneration(const std::string& name) const;
 
     // Creates an instance of an effect managed by a plugin
     std::shared_ptr<Effect> CreateEffect(const std::string& effect_name);

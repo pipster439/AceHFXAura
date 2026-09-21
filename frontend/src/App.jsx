@@ -225,7 +225,9 @@ export default function App() {
   }, [isGameModalOpen, fetchConfig]);
 
   // 直接保存配置到后端（携带 If-Match 乐观并发保护与 generation 防覆盖队列）
-  const saveConfigDirectly = useCallback(async (newConfig) => {
+  const saveConfigDirectly = useCallback(async (newConfig, expectedConfig) => {
+    if (expectedConfig && expectedConfig !== configRef.current) return false;
+    const expectedRevision = expectedConfig ? coordinatorRef.current?.getRevision() : null;
     if (!newConfig || !coordinatorRef.current) return false;
     coordinatorRef.current.fetchConfigFn = fetchConfig;
     coordinatorRef.current.beforeSave = async (cfg) => {
@@ -246,7 +248,7 @@ export default function App() {
     };
 
     try {
-      return await coordinatorRef.current.saveConfig(newConfig);
+      return await coordinatorRef.current.saveConfig(newConfig, fetch, expectedRevision);
     } finally {
       setIsSaving(false);
     }

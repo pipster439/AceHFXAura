@@ -328,38 +328,31 @@ std::shared_ptr<Effect> PluginManager::LoadPlugin(const std::string& name_or_pat
     return LoadPluginInstance(name_or_path).GetEffect();
 }
 
-bool PluginManager::ReloadPlugin(const std::string& effect_name) {
+PluginManager::PreparedReload PluginManager::PrepareReload(const std::string& effect_name, bool require_lifecycle) {
     try {
-        std::filesystem::path path;
-        std::shared_ptr<const PluginEntry> previous;
-        {
-            std::lock_guard<std::mutex> lock(mutex_);
-            auto it = plugins_.find(effect_name);
-            if (it != plugins_.end()) {
-                previous = it->second;
-                path = previous->original_path;
-            }
-        }
-        if (path.empty()) {
-            path = PluginSourcePath(ResolvePluginPath(effect_name, plugins_dir_));
-            previous = FindByPath(path);
-        }
+        auto previous = GetGeneration(effect_name);
+        auto path = previous ? previous->original_path : PluginSourcePath(ResolvePluginPath(effect_name, plugins_dir_));
+        if (!previous) previous = FindByPath(path);
         auto entry = LoadPluginInternal(path);
-        // Validate one factory/destructor roundtrip before publishing a reload.
-        // No Render or lifecycle animation callback is executed by this substrate.
+        if (!entry || (require_lifecycle && (entry->lifecycle.version != 1 || !entry->lifecycle.is_finished))) return {};
         auto destruction_failed = std::make_shared<bool>(false);
-        {
-            auto probe = Instantiate(entry, destruction_failed);
-            if (!probe) return false;
-        }
-        if (*destruction_failed) return false;
-        if (!PublishGeneration(entry, effect_name, previous)) return false;
-        LOG_INFO("[PluginManager] Published reload '" << effect_name << "' generation " << entry->generation_id);
-        return true;
-    } catch (const std::exception& error) {
-        LOG_ERROR("[PluginManager] Reload failed; previous generation retained: " << error.what());
-    }
-    return false;
+        { auto probe = Instantiate(entry, destruction_failed); if (!probe) return {}; }
+        if (*destruction_failed) return {};
+        return {entry, previous, effect_name};
+    } catch (...) { LOG_ERROR("[PluginManager] Prepare failed; old generation retained"); return {}; }
+}
+bool PluginManager::PublishReload(const PreparedReload& prepared) {
+    if (!prepared) return false;
+    try { return PublishGeneration(prepared.candidate, prepared.alias, prepared.previous); }
+    catch (...) { LOG_ERROR("[PluginManager] Publication failed; old generation retained"); return false; }
+}
+bool PluginManager::ReloadPlugin(const std::string& name) {
+    return PublishReload(PrepareReload(name));
+}
+std::shared_ptr<const PluginEntry> PluginManager::GetGeneration(const std::string& name) const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto found = plugins_.find(name);
+    return found == plugins_.end() ? nullptr : found->second;
 }
 
 TriggeredEffectInstance PluginManager::CreateEffectInstance(const std::string& effect_name, bool quiet) {

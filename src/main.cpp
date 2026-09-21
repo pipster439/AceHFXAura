@@ -1,3 +1,4 @@
+#include "engine/plugin_publication_queue.h"
 #include "aura/aura_adapter.h"
 #include "aura/hal_compat.h"
 #include "aura/keymap.h"
@@ -590,7 +591,6 @@ int main(int argc, char* argv[]) {
 
     // 同步编排事件覆盖规则至 OverlayManager
     auto sync_event_overlays = [&rule_engine, &effect_engine]() {
-        effect_engine.GetAutomationEffects().Clear(); // Stage 3 conservative rebuild cancellation
         auto& om = effect_engine.GetOverlayManager();
         om.ClearBindings();
         for (const auto& r : rule_engine.GetEventOverlayRules()) {
@@ -626,14 +626,10 @@ int main(int argc, char* argv[]) {
     sync_event_overlays();
 
     // 注册守护进程插件热重载 IPC 处理回调
-    gsi_adapter.SetPluginReloadHandler([&rule_engine, &effect_engine, &sync_event_overlays](const std::string& name) {
-        LOG_INFO("[Daemon] 收到插件热重载 IPC 请求: " << name);
-        bool reloaded = aura::PluginManager::Instance().ReloadPlugin(name);
-        if (reloaded) {
-            rule_engine.CheckAndReload();
-            sync_event_overlays();
-        }
-        return reloaded;
+    aura::PluginPublicationQueue plugin_publications;
+    gsi_adapter.SetPluginReloadHandler([&plugin_publications](const std::string& name, bool require_lifecycle) {
+        auto candidate = aura::PluginManager::Instance().PrepareReload(name, require_lifecycle);
+        return plugin_publications.Submit(std::move(candidate));
     });
 
     // 注册守护进程编辑态推流硬件预览 IPC 回调
@@ -769,6 +765,15 @@ int main(int argc, char* argv[]) {
             break;
         }
 
+        bool config_reloaded = false;
+        const auto reload_now = std::chrono::steady_clock::now();
+        if (std::chrono::duration_cast<std::chrono::milliseconds>(reload_now - last_reload_check).count() >= 50) {
+            last_reload_check = reload_now;
+            config_reloaded = rule_engine.CheckAndReload();
+        }
+        const bool plugin_reloaded = plugin_publications.ApplyAtFrameBoundary(aura::PluginManager::Instance());
+        if (config_reloaded || plugin_reloaded) sync_event_overlays(); // legacy reload policy only
+
         // 主线程统一评估当前前台进程与 GSI 状态驱动的灯效方案
         // (严格遵循主线程独占 COM/HAL 纪律，绝不在网络线程执行硬件调用)
         const auto effect_revision = effect_engine.GetAutomationEffects().Revision();
@@ -781,9 +786,15 @@ int main(int argc, char* argv[]) {
         gsi_adapter.GetState().SetForegroundProcess(cur_proc);
         std::shared_ptr<const aura::Profile> matched = automation.profile;
         std::string prof_name = matched ? matched->name : "(None)";
-        if (prof_name != current_active_profile_name) {
-            current_active_profile_name = prof_name;
-            effect_engine.SetActiveProfile(matched);
+        const bool v2_config = automation.has_v2_rules;
+        bool base_changed = false;
+        if (v2_config) base_changed = effect_engine.ReconcileProfile(matched);
+        else if (prof_name != current_active_profile_name || config_reloaded || plugin_reloaded) {
+            effect_engine.SetActiveProfile(matched); base_changed = true;
+        }
+        if (base_changed) {
+            matched = effect_engine.GetActiveProfile();
+            current_active_profile_name = matched ? matched->name : "(None)";
             int new_fps = (matched && matched->fps >= 10 && matched->fps <= 100) ? matched->fps : rule_engine.GetFps();
             if (new_fps < 10 || new_fps > 100) new_fps = 25;
             if (new_fps != target_fps) {
@@ -825,39 +836,6 @@ int main(int argc, char* argv[]) {
 
         total_frames++;
         frames_since_stat++;
-
-        // 实时热重载检测 (每 50ms 轮询一次文件修改时间，保障网页调参实时生效)
-        auto now_reload = std::chrono::steady_clock::now();
-        if (std::chrono::duration_cast<std::chrono::milliseconds>(now_reload - last_reload_check).count() >= 50) {
-            last_reload_check = now_reload;
-            if (rule_engine.CheckAndReload()) {
-                sync_event_overlays();
-                const auto reload_effect_revision = effect_engine.GetAutomationEffects().Revision();
-                const auto reload_decision = rule_engine.EvaluateAutomation(gsi_adapter.GetState(),
-                    [&monitor]() { return monitor.GetCurrentProcessName(); });
-                effect_engine.GetAutomationEffects().Consume(reload_decision,
-                    [&rule_engine](const nlohmann::json& reference) { return aura::ResolveAutomationEffect(reference, rule_engine); },
-                    effect_engine.GetElapsedMs(), reload_effect_revision);
-                std::shared_ptr<const aura::Profile> reload_matched = reload_decision.profile;
-                current_active_profile_name = reload_matched ? reload_matched->name : "(None)";
-                effect_engine.SetActiveProfile(reload_matched);
-
-                int new_fps = (reload_matched && reload_matched->fps >= 10 && reload_matched->fps <= 100) ? reload_matched->fps : rule_engine.GetFps();
-                if (new_fps < 10 || new_fps > 100) new_fps = 25;
-                if (new_fps != target_fps) {
-                    target_fps = new_fps;
-                    frame_time = std::chrono::milliseconds(1000 / target_fps);
-                    next_tick = std::chrono::steady_clock::now();
-                }
-
-                bool suppress = reload_decision.suppress_web_ui;
-                web_supervisor.SetSuppressed(suppress);
-
-                LOG_INFO("配置实时重载生效，当前活跃方案更新为: [" + current_active_profile_name + "]" + 
-                         (suppress ? " (网页服务已抑制)" : "") +
-                         ", 帧率: " + std::to_string(target_fps) + " FPS");
-            }
-        }
 
         // 统计与长效稳定性监控 (每 60 秒打印一次)
         auto now = std::chrono::steady_clock::now();

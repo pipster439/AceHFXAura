@@ -1,6 +1,7 @@
 #include "config/rule_engine.h"
 #include "gsi/gsi_adapter.h"
 #include "utils/logger.h"
+#include "engine/automation_effect_runtime.h"
 #include <algorithm>
 #include <cmath>
 #include <set>
@@ -201,7 +202,15 @@ AutomationRule RuleEngine::ParseAutomationRule(const nlohmann::json& item) {
         }
     }
     r.action = action;
-    auto semantic = item; semantic.erase("name"); semantic.erase("description");
+    auto semantic_action = action;
+    if (type == "trigger_effect") {
+        semantic_action["composition"] = action.value("composition", "overlay");
+        semantic_action["blend"] = action.value("blend", "alpha");
+        semantic_action["priority"] = action.value("priority", 10);
+        if (r.mode != "state") semantic_action["retrigger"] = action.value("retrigger", "restart");
+    }
+    const nlohmann::json semantic = {{"mode", r.mode}, {"enabled", r.enabled}, {"dnd", r.dnd},
+        {"scope", r.scope.ToJson()}, {"condition", r.condition.ToJson()}, {"action", semantic_action}};
     r.fingerprint = semantic.dump();
     return r;
 }
@@ -294,6 +303,37 @@ AutomationEvaluation RuleEngine::EvaluateAutomation(GsiState& gsi,
     const auto current = capture(input.latest);
     auto out = EvaluateProfilesLocked(current.foreground_process, &gsi, current);
     out.foreground_process = current.foreground_process;
+    out.reconciliation_complete = true;
+    out.has_v2_rules = std::any_of(plan_.begin(), plan_.end(), [](const auto& entry) { return entry.provenance == RuleProvenance::AutomationV2; });
+    for (const auto& entry : plan_) {
+        if (entry.provenance != RuleProvenance::AutomationV2 || entry.automation.action.at("type") != "trigger_effect") continue;
+        const auto& rule = entry.automation;
+        AutomationEvaluation::RuleStatus status;
+        status.id = rule.id; status.semantic_identity = rule.fingerprint;
+        const bool uses_gsi = rule.scope.UsesGsi() || rule.condition.UsesGsi();
+        if (uses_gsi) status.semantic_identity += ":freshness=" + std::to_string(automation_freshness_ms_);
+        status.enabled = rule.enabled; status.persistent = rule.mode == "state"; status.rule_order = entry.config_order;
+        status.scope = rule.scope.Evaluate(current).truth;
+        status.continuation = status.scope;
+        // Event-time false is not a continuing predicate. Only explicit scope and
+        // required telemetry validity cancel; independent true process branches survive.
+        if (!rule.enabled) status.continuation = ConditionTruth::False;
+        else if (status.continuation == ConditionTruth::True && uses_gsi && !current.automation_fresh &&
+                 rule.condition.Evaluate(current).truth != ConditionTruth::True)
+            status.continuation = ConditionTruth::Unknown;
+        const auto& effect = rule.action.at("effect");
+        status.action_identity = effect.dump();
+        std::string plugin;
+        if (effect.at("kind") == "profile_effect") {
+            const auto profile = profiles_.find(effect.at("name").get<std::string>());
+            if (profile != profiles_.end()) { status.recipe_identity = ProfileEffectIdentity(*profile->second); plugin = ProfilePluginName(*profile->second); }
+        } else { plugin = effect.at("name").get<std::string>(); status.recipe_identity = effect.dump(); }
+        if (!plugin.empty()) {
+            const auto generation = PluginManager::Instance().GetGeneration(plugin);
+            if (generation) status.plugin_generation = generation->generation_id;
+        }
+        out.rule_status.push_back(std::move(status));
+    }
     out.dropped_input_batches = input.dropped_batches; out.rebased = input.overflowed;
     if (input.overflowed) LOG_WARN("[Automation] Input overflow; dropped=" << input.dropped_batches << "; rebasing at latest snapshot");
     for (const auto& p : plan_) {

@@ -1,3 +1,4 @@
+import { normalizePublication } from '../blockly/publication.js';
 export async function fetchPublishReadiness() {
   try {
     const res = await fetch('/api/status', { cache: 'no-store' });
@@ -75,7 +76,8 @@ export async function requestJson(url, body) {
 
 // Stage an immutable build before switching any profile references. Failed
 // compilation, daemon reload or config save leaves the previous version usable.
-export async function stageEffect(name, workspace, transpiler, onLog = () => {}) {
+export async function stageEffect(name, workspace, transpiler, onLog = () => {}, options = {}) {
+  const publication = normalizePublication(options);
   if (!/^[a-zA-Z_][a-zA-Z0-9_]{0,47}$/.test(name)) throw new Error('插件名非法：须以字母或下划线开头，最多 48 个字符。');
   let progress = '';
   const report = line => { progress += `${line}\n`; onLog(progress); };
@@ -88,8 +90,8 @@ export async function stageEffect(name, workspace, transpiler, onLog = () => {})
   let canonicalCode, code;
   const pluginName = `studio_${name.slice(0, 20)}_${crypto.randomUUID().replaceAll('-', '').slice(0, 20)}`;
   try {
-    canonicalCode = transpiler.transpile(name, workspace);
-    code = transpiler.transpile(pluginName, workspace);
+    canonicalCode = transpiler.transpile(name, workspace, publication);
+    code = transpiler.transpile(pluginName, workspace, publication);
   } catch (err) {
     throw new Error(`C++ 源码生成失败：${err.message}`);
   }
@@ -99,10 +101,11 @@ export async function stageEffect(name, workspace, transpiler, onLog = () => {})
   const compiled = await requestJson('/api/compile_effect', { name: pluginName, code });
   report(`MSVC 输出：\n${compiled.compiler_output || '(无输出)'}`);
   report('4/5 加载 DLL 并等待 daemon 确认…');
-  const loaded = await requestJson('/api/reload_plugin', { name: pluginName });
+  const loaded = await requestJson('/api/reload_plugin', { name: pluginName, require_lifecycle: publication.mode === 'one_shot' });
   if (loaded.daemon_synced !== true) throw new Error('守护进程尚未确认加载，当前方案仍使用上一版。请确认后台已启动后重试。');
+  if (publication.mode === 'one_shot' && loaded.lifecycle_verified !== true) throw new Error('One-shot lifecycle was not validated; previous publication retained');
   report('5/5 daemon 已确认插件加载，正在保存配置…');
-  return { pluginName, revision };
+  return { pluginName, revision, publication };
 }
 
 export function getEffectLifecycleStatus(effect) {
@@ -121,12 +124,13 @@ export function getEffectLifecycleStatus(effect) {
   return { status: 'published', label: '已发布', color: 'emerald', badgeClass: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' };
 }
 
-export function effectConfig(config, name, blocklyJson, build) {
+export function effectConfig(config, name, blocklyJson, build, options) {
   const previous = config.blockly_effects?.[name] || {};
   const now = Date.now();
   const effect = {
     ...previous,
     name,
+    publication: normalizePublication(options ?? build?.publication ?? previous.publication),
     version: 2,
     blockly_json: blocklyJson,
     source_updated_at: now,
@@ -137,6 +141,7 @@ export function effectConfig(config, name, blocklyJson, build) {
     effect.published_at = now;
     effect.source_updated_at = now;
     effect.applied_revision = build.revision;
+    effect.applied_publication = normalizePublication(build.publication);
     effect.applied_blockly_json = blocklyJson;
     effect.applied_plugin_name = build.pluginName;
     profiles[name] = { ...(profiles[name] || {}), type: 'plugin', plugin_name: build.pluginName, title: name, fps: profiles[name]?.fps || 25 };

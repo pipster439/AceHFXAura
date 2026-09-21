@@ -1,3 +1,4 @@
+import { normalizePublication } from './publication.js';
 import { compileSequence } from './sequenceCompiler.js';
 /**
  * C++17 Transpiler for Google Blockly Lighting Effects
@@ -11,13 +12,15 @@ export class CppTranspiler {
    * @param {import('blockly').WorkspaceSvg} workspace 
    * @returns {string} C++ source code
    */
-  static transpile(effectName, workspace) {
+  static transpile(effectName, workspace, options = {}) {
+    const publication = normalizePublication(options);
+    const oneShot = publication.mode === "one_shot";
     const safeName = this.sanitizeIdentifier(effectName);
-    const program = compileSequence(workspace, { language: 'cpp', value: this.valueToCpp.bind(this), statement: this.blockToCpp.bind(this) });
+    const program = compileSequence(workspace, { language: 'cpp', oneShot, value: this.valueToCpp.bind(this), statement: this.blockToCpp.bind(this) });
     const members = (workspace?.getAllVariables?.() || []).map(v => `double var_${v.name.replace(/[^a-zA-Z0-9_]/g, '_')} = 0.0;`).join('\n');
     const resetVars = (workspace?.getAllVariables?.() || []).map(v => `var_${v.name.replace(/[^a-zA-Z0-9_]/g, '_')} = 0.0;`).join('\n');
     const bodyCode = `
-        if (!_initialized || elapsed_ms < _last) {
+        if (!_initialized ${oneShot ? '' : '|| elapsed_ms < _last'}) {
             static constexpr const char* _key_names[68] = { ${program.keyNames} };
             for (size_t i = 0; i < 68; ++i) {
                 auto it = keymap.GetAllKeys().find(_key_names[i]);
@@ -27,6 +30,14 @@ export class CppTranspiler {
             ${resetVars}
         }
         _last = elapsed_ms;
+        ${oneShot ? `if (_terminal) {
+            if (${publication.fade_out_ms} == 0 || _zero_rendered) _finished = true;
+            else {
+                _opacity = static_cast<float>(std::clamp(1.0 - static_cast<double>(elapsed_ms - _terminal_at) / ${publication.fade_out_ms || 1}.0, 0.0, 1.0));
+                if (_opacity == 0) _zero_rendered = true;
+            }
+            out_frame = _frame; return;
+        }` : ''}
         if (elapsed_ms < _wake) { out_frame = _frame; return; }
         const KeyInfo info{};
         for (int _budget = 0; _budget < 4096; ++_budget) {
@@ -73,6 +84,7 @@ public:
     double _wake = 0;
     uint64_t _last = 0;
     bool _initialized = false;
+    ${oneShot ? 'bool _terminal = false, _finished = false, _zero_rendered = false; uint64_t _terminal_at = 0; float _opacity = 1.0f;' : ''}
     FrameBuffer _frame{};
     const KeyInfo* _keys[68]{};
     int _indices[${program.slots}]{};
@@ -97,6 +109,13 @@ ${bodyCode}
 } // namespace aura
 
 extern "C" {
+    ${oneShot ? `__declspec(dllexport) uint32_t AURA_PLUGIN_CALL AuraGetEffectLifecycleVersion() { return 1; }
+    __declspec(dllexport) uint32_t AURA_PLUGIN_CALL AuraIsEffectFinished(const aura::Effect* effect, uint64_t) {
+        return static_cast<const aura::Effect_${safeName}*>(effect)->_finished ? 1 : 0;
+    }
+    __declspec(dllexport) float AURA_PLUGIN_CALL AuraGetEffectOpacity(const aura::Effect* effect, uint64_t) {
+        return static_cast<const aura::Effect_${safeName}*>(effect)->_opacity;
+    }` : ''}
     __declspec(dllexport) uint32_t AuraGetPluginApiVersion() {
         return 0x00010000;
     }

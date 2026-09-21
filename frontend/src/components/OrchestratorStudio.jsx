@@ -112,7 +112,7 @@ export default function OrchestratorStudio({
           const ws = new Blockly.Workspace();
           try {
             loadSafeWorkspaceJson(draft.blockly_json, ws, true);
-            const build = await stageEffect(name, ws, CppTranspiler);
+            const build = await stageEffect(name, ws, CppTranspiler, () => {}, draft.publication);
             next = effectConfig(next, name, draft.blockly_json, build);
           } finally { ws.dispose(); }
         } else if (!next.profiles?.[name]) throw new Error(`光效“${name}”不存在，请先制作或选择已有光效`);

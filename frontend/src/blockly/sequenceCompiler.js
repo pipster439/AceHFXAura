@@ -49,7 +49,9 @@ export function compileSequence(workspace, target) {
     let body;
     const idx = `_indices[${n.slot}]`, limit = `_limits[${n.slot}]`;
     switch (n.kind) {
-      case 'end': body = `_pc = ${entry}; ${cpp ? 'out_frame = _frame; return;' : 'return frame;'} `; break;
+      case 'end': body = target.oneShot
+        ? `${cpp ? '_terminal = true; _terminal_at = elapsed_ms; out_frame = _frame; return;' : 'state.terminal = true; state.terminalAt = elapsed_ms; return frame;'}`
+        : `_pc = ${entry}; ${cpp ? 'out_frame = _frame; return;' : 'return frame;'} `; break;
       case 'jump': body = go(n.next); break;
       case 'if': body = `_pc = (${expr(n, n.input, 'false')}) ? ${n.yes} : ${n.no}; break;`; break;
       case 'wait': body = `_wake = elapsed_ms + ${cpp ? 'std::clamp<double>' : 'Math.min'}(${cpp ? expr(n, 'MS', '0') + ', 0.0, 60000.0' : '60000, Math.max(0, ' + expr(n, 'MS', '0') + ')'}); _pc = ${n.next}; ${cpp ? 'out_frame = _frame; return;' : 'return frame;'}`; break;

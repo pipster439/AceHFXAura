@@ -1,3 +1,4 @@
+import { normalizePublication } from './publication.js';
 import { compileSequence } from './sequenceCompiler.js';
 /**
  * JavaScript Runtime & Transpiler for Real-Time Google Blockly Live Preview
@@ -34,7 +35,7 @@ export class JsTranspiler {
    * @param {import('blockly').WorkspaceSvg} workspace 
    * @returns {(elapsed_ms: number, gsi: any, decays: Record<string, number>) => Array<[number, number, number]>}
    */
-  static compile(workspace) {
+  static compile(workspace, options = {}) {
     if (!workspace) {
       return () => PREVIEW_68_KEYS.map(() => [0, 0, 0]);
     }
@@ -44,18 +45,20 @@ export class JsTranspiler {
       return () => PREVIEW_68_KEYS.map(() => [0, 0, 0]);
     }
 
-    const code = this.generateJsFunctionBody(topBlocks);
+    const code = this.generateJsFunctionBody(topBlocks, options);
     const fn = new Function('elapsed_ms', 'keymap', 'gsi', 'decays', 'state', code);
     const state = {};
     return (elapsed_ms, gsi, decays) => fn(elapsed_ms, PREVIEW_68_KEYS, gsi || {}, decays || {}, state);
   }
 
-  static generateJsFunctionBody(topBlocks) {
+  static generateJsFunctionBody(topBlocks, options = {}) {
+    const publication = normalizePublication(options);
+    const oneShot = publication.mode === "one_shot";
     const ws = topBlocks[0]?.workspace || { getTopBlocks: () => topBlocks };
-    const program = compileSequence(ws, { language: 'js', value: this.valueToJs.bind(this), statement: this.blockToJs.bind(this) });
+    const program = compileSequence(ws, { language: 'js', oneShot, value: this.valueToJs.bind(this), statement: this.blockToJs.bind(this) });
     const variables = (ws.getAllVariables?.() || []).map(v => `var_${v.name.replace(/[^a-zA-Z0-9_]/g, '_')}`);
     return `
-      if (!state.frame || elapsed_ms < state.last) {
+      if (!state.frame ${oneShot ? '' : '|| elapsed_ms < state.last'}) {
         state.frame = keymap.map(() => [0, 0, 0]);
         state.pc = ${program.entry}; state.wake = 0;
         state.indices = new Array(${program.slots}).fill(0);
@@ -63,6 +66,10 @@ export class JsTranspiler {
         state.vars = {};
       }
       state.last = elapsed_ms;
+      ${oneShot ? `if (state.terminal) {
+        const opacity = ${publication.fade_out_ms} ? Math.max(0, 1 - (elapsed_ms - state.terminalAt) / ${publication.fade_out_ms || 1}) : 1;
+        return state.frame.map(rgb => rgb.map(channel => Math.floor(channel * opacity)));
+      }` : ''}
       const frame = state.frame, info = null;
       let _pc = state.pc, _wake = state.wake;
       const _indices = state.indices, _limits = state.limits;

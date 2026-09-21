@@ -10,7 +10,7 @@ size_t AutomationEffectRuntime::ActiveCount() const { std::lock_guard<std::mutex
 size_t AutomationEffectRuntime::DiagnosticCount() const { std::lock_guard<std::mutex> lock(mutex_); return diagnostics_.size(); }
 void AutomationEffectRuntime::Clear() {
     std::lock_guard<std::mutex> lock(mutex_);
-    ++revision_; layers_.clear(); true_intervals_.clear(); diagnostics_.clear();
+    ++revision_; layers_.clear(); true_intervals_.clear(); interval_semantics_.clear(); interval_recipes_.clear(); diagnostics_.clear();
 }
 void AutomationEffectRuntime::Diagnose(const std::string& id, const char* reason) {
     if (diagnostics_.size() >= 64) return;
@@ -22,23 +22,58 @@ void AutomationEffectRuntime::Consume(const AutomationEvaluation& evaluation, co
     std::lock_guard<std::mutex> lock(mutex_);
     // A rebuild completed after the caller began evaluating: consume no old work.
     if (expected_revision != revision_ || evaluation.config_generation < config_generation_) return;
-    if (evaluation.config_generation != config_generation_) {
-        layers_.clear(); true_intervals_.clear(); diagnostics_.clear();
-        config_generation_ = evaluation.config_generation;
+    if (evaluation.config_generation != config_generation_ && !evaluation.reconciliation_complete) {
+        layers_.clear(); true_intervals_.clear(); interval_semantics_.clear(); interval_recipes_.clear(); diagnostics_.clear();
+    }
+    config_generation_ = evaluation.config_generation;
+    auto status_for = [&](const std::string& id) -> const AutomationEvaluation::RuleStatus* {
+        for (const auto& status : evaluation.rule_status) if (status.id == id) return &status;
+        return nullptr;
+    };
+    if (evaluation.reconciliation_complete) {
+        for (auto it = layers_.begin(); it != layers_.end();) {
+            const auto* status = status_for(it->id);
+            if (!status || !status->enabled || it->semantic_identity != status->semantic_identity ||
+                (!it->persistent && status->continuation != ConditionTruth::True)) it = layers_.erase(it);
+            else { std::get<1>(it->order) = status->rule_order; ++it; }
+        }
+        for (auto it = interval_semantics_.begin(); it != interval_semantics_.end();) {
+            const auto* status = status_for(it->first);
+            if (!status || !status->enabled || status->semantic_identity != it->second) {
+                true_intervals_.erase(it->first); interval_recipes_.erase(it->first); it = interval_semantics_.erase(it);
+            } else ++it;
+        }
     }
     for (const auto& decision : evaluation.decisions) {
         const auto& action = decision.action;
         if (action.at("type") != "trigger_effect") continue;
         const bool persistent = action.at("lifetime") == "while_true";
+        const auto* status = status_for(decision.rule_id);
+        if (evaluation.reconciliation_complete && (!status || !status->enabled ||
+            (!persistent && status->continuation != ConditionTruth::True))) continue;
         auto existing = std::find_if(layers_.begin(), layers_.end(), [&](const Layer& layer) { return layer.id == decision.rule_id; });
+        const std::string target_identity = status ? status->recipe_identity + ":generation=" + std::to_string(status->plugin_generation) : "";
         if (persistent) {
             if (decision.eligibility != ConditionTruth::True) {
                 true_intervals_.erase(decision.rule_id);
+                interval_recipes_.erase(decision.rule_id);
                 if (existing != layers_.end()) layers_.erase(existing);
                 continue;
             }
             // Includes completed or failed instances for this True interval.
-            if (!true_intervals_.insert(decision.rule_id).second) continue;
+            const bool entered = true_intervals_.insert(decision.rule_id).second;
+            if (status) interval_semantics_[decision.rule_id] = status->semantic_identity;
+            if (!entered) {
+                if (!status) continue;
+                if (existing == layers_.end()) {
+                    if (interval_recipes_[decision.rule_id] == target_identity) continue;
+                } else {
+                const auto generation = existing->instance.GetGeneration();
+                const bool changed = existing->recipe_identity != status->recipe_identity ||
+                    (status->plugin_generation && (!generation || generation->generation_id != status->plugin_generation));
+                if (!changed || existing->attempted_identity == target_identity) continue;
+                }
+            }
         } else {
             if (!decision.admitted) continue;
             if (existing != layers_.end() && action.value("retrigger", "restart") == "ignore_while_active") continue;
@@ -47,15 +82,19 @@ void AutomationEffectRuntime::Consume(const AutomationEvaluation& evaluation, co
             Diagnose(decision.rule_id, "instance limit reached; admission consumed"); continue;
         }
         try {
+            if (persistent) interval_recipes_[decision.rule_id] = target_identity;
+            if (persistent && existing != layers_.end()) existing->attempted_identity = target_identity;
             auto instance = resolve(action.at("effect"));
             if (!instance) { Diagnose(decision.rule_id, "effect unavailable; admission consumed"); continue; }
             Layer layer;
             layer.id = decision.rule_id; layer.instance = std::move(instance);
+            if (status) { layer.semantic_identity = status->semantic_identity; layer.recipe_identity = status->recipe_identity; layer.attempted_identity = target_identity; }
             layer.persistent = persistent; layer.started = now;
             layer.replace = action.value("composition", "overlay") == "replace";
             layer.additive = action.value("blend", "alpha") == "additive";
             layer.order = {action.value("priority", 10), decision.rule_order, ++sequence_};
             const auto& generation = layer.instance.GetGeneration();
+            if (persistent && status) interval_recipes_[decision.rule_id] = status->recipe_identity + ":generation=" + std::to_string(generation ? generation->generation_id : 0);
             layer.capable = generation && generation->lifecycle.version == 1 && generation->lifecycle.is_finished;
             const auto envelope = action.value("compatibility", nlohmann::json::object());
             layer.duration = envelope.value("duration_ms", uint64_t{1200});

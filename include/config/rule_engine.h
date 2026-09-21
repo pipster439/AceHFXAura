@@ -132,6 +132,16 @@ struct AutomationEvaluation {
     uint64_t dropped_input_batches{0};
     bool rebased{false};
     size_t profile_plan_entries_evaluated{0};
+    struct RuleStatus {
+        std::string id, semantic_identity, action_identity, recipe_identity;
+        uint64_t plugin_generation{0};
+        size_t rule_order{0};
+        bool enabled{false}, persistent{false};
+        ConditionTruth scope{ConditionTruth::Unknown}, continuation{ConditionTruth::Unknown};
+    };
+    bool reconciliation_complete{false};
+    bool has_v2_rules{false};
+    std::vector<RuleStatus> rule_status;
 };
 
 class RuleEngine {

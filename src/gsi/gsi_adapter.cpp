@@ -940,14 +940,15 @@ void GsiAdapter::SetupRoutes() {
 
     // 守护进程插件热重载 IPC 入口
     svr_->Post("/api/plugin/reload", [this](const httplib::Request& req, httplib::Response& res) {
-        std::string name;
+        std::string name; bool require_lifecycle = false;
         try {
             auto j = nlohmann::json::parse(req.body);
             name = j.value("name", j.value("plugin_name", ""));
+            require_lifecycle = j.value("require_lifecycle", false);
         } catch (...) {}
-        bool ok = true;
+        bool ok = false;
         if (on_reload_plugin_) {
-            ok = on_reload_plugin_(name);
+            ok = on_reload_plugin_(name, require_lifecycle);
         }
         res.status = ok ? 200 : 400;
         res.set_content(ok ? "{\"status\":\"ok\",\"message\":\"Plugin reloaded\"}" : "{\"status\":\"error\",\"message\":\"Plugin reload failed\"}", "application/json; charset=utf-8");

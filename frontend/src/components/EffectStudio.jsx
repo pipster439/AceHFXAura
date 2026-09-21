@@ -1,3 +1,4 @@
+import { normalizePublication } from '../blockly/publication.js';
 import { canonicalConfig } from '../utils/orchestration.js';
 import { stageEffect, effectConfig, getEffectLifecycleStatus, fetchPublishReadiness } from '../utils/applyEffect.js';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -38,6 +39,9 @@ export default function EffectStudio({
   const [effectName, setEffectName] = useState(activeEffectName || 'custom_rainbow');
   const effectNameRef = useRef(effectName);
   effectNameRef.current = effectName;
+  const [publication, setPublication] = useState(() => normalizePublication(config?.blockly_effects?.[activeEffectName]?.publication));
+  const publicationRef = useRef(publication);
+  publicationRef.current = publication;
   const [isPlaying, setIsPlaying] = useState(true);
   const [cppCode, setCppCode] = useState('');
   const [isCodeModalOpen, setIsCodeModalOpen] = useState(false);
@@ -101,6 +105,7 @@ export default function EffectStudio({
     // 默认加载第一个样例模板
     const defaultPreset = EFFECT_PRESETS[0];
     if (localDraft?.json) {
+      publicationRef.current = normalizePublication(localDraft.publication); setPublication(publicationRef.current);
       loadSafeWorkspaceJson(localDraft.json, ws); setEffectName(localDraft.name); effectNameRef.current = localDraft.name;
     } else if (defaultPreset?.blocklyJson) {
       loadSafeWorkspaceJson(defaultPreset.blocklyJson, ws);
@@ -109,9 +114,9 @@ export default function EffectStudio({
     const onWorkspaceChange = (event) => {
       if (event?.isUiEvent) return;
       try {
-        compiledJsRef.current = JsTranspiler.compile(ws);
+        compiledJsRef.current = JsTranspiler.compile(ws, publicationRef.current);
         previewClockRef.current = { elapsed: 0, last: null };
-        setCppCode(CppTranspiler.transpile(effectNameRef.current, ws));
+        setCppCode(CppTranspiler.transpile(effectNameRef.current, ws, publicationRef.current));
         setEditError(null);
       } catch (err) {
         compiledJsRef.current = null;
@@ -127,7 +132,7 @@ export default function EffectStudio({
 
     return () => {
       window.removeEventListener('resize', handleResize);
-      try { sessionStorage.setItem('aura-effect-draft', JSON.stringify({ name: effectNameRef.current, json: Blockly.serialization.workspaces.save(ws) })); } catch {}
+      try { sessionStorage.setItem('aura-effect-draft', JSON.stringify({ name: effectNameRef.current, publication: publicationRef.current, json: Blockly.serialization.workspaces.save(ws) })); } catch {}
       ws.dispose();
       workspaceRef.current = null;
     };
@@ -137,6 +142,7 @@ export default function EffectStudio({
   useEffect(() => {
     if (activeEffectName && activeEffectName !== effectNameRef.current && workspaceRef.current) {
       const effectData = config?.blockly_effects?.[activeEffectName];
+      publicationRef.current = normalizePublication(effectData?.publication); setPublication(publicationRef.current);
       workspaceRef.current.clear();
       if (effectData?.blockly_json) {
         loadSafeWorkspaceJson(effectData.blockly_json, workspaceRef.current);
@@ -155,10 +161,14 @@ export default function EffectStudio({
   // 当 effectName 改变时更新 C++ 源码
   useEffect(() => {
     if (workspaceRef.current) {
-      try { setCppCode(CppTranspiler.transpile(effectName, workspaceRef.current)); setEditError(null); }
+      try { setCppCode(CppTranspiler.transpile(effectName, workspaceRef.current, publication)); setEditError(null); }
       catch (err) { setEditError(err.message); }
     }
-  }, [effectName]);
+      if (workspaceRef.current) {
+        compiledJsRef.current = JsTranspiler.compile(workspaceRef.current, publication);
+        previewClockRef.current = { elapsed: 0, last: null };
+      }
+  }, [effectName, publication]);
 
   // 25~60 FPS 实时渲染循环
   useEffect(() => {
@@ -262,10 +272,10 @@ export default function EffectStudio({
       let build;
       if (apply) {
         setCompilerLog('正在准备发布光效…');
-        build = await stageEffect(name, workspaceRef.current, CppTranspiler, setCompilerLog);
+        build = await stageEffect(name, workspaceRef.current, CppTranspiler, setCompilerLog, publication);
       }
-      const next = effectConfig(config, name, json, build);
-      const ok = await onSaveConfig(next);
+      const next = effectConfig(config, name, json, build, publication);
+      const ok = await onSaveConfig(next, apply ? config : undefined);
       if (!ok) throw new Error('配置保存失败，请重试；原有运行版本保留');
       setCompilerSuccess(true);
       if (apply) setIsPlaying(false);
@@ -282,6 +292,15 @@ export default function EffectStudio({
 
   return (
     <div className="flex flex-col gap-4 p-1 h-full min-h-[560px]">
+      <div className="flex items-center gap-3">
+        <label>发布方式 <select aria-label="发布方式" disabled={isCompiling} value={publication.mode}
+          onChange={e => setPublication(normalizePublication({ ...publication, mode: e.target.value }))}>
+          <option value="continuous">持续循环</option><option value="one_shot">单次播放</option>
+        </select></label>
+        {publication.mode === 'one_shot' && <label>序列结束后淡出（毫秒） <input type="number" min="0" max="60000"
+          disabled={isCompiling} value={publication.fade_out_ms}
+          onChange={e => setPublication({ ...publication, fade_out_ms: Math.min(60000, Math.max(0, Math.trunc(Number(e.target.value) || 0))) })} /></label>}
+      </div>
       {/* 顶部控制栏 (MD3E Top App Bar) */}
       <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-md-surface-container-low border border-md-outline-variant rounded-md-lg shadow-md-level1">
         <div className="flex items-center gap-3">

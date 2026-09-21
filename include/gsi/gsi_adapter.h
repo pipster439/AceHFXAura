@@ -188,7 +188,7 @@ public:
     bool IsRunning() const { return is_running_.load(std::memory_order_acquire); }
     int GetPort() const { return port_; }
 
-    void SetPluginReloadHandler(std::function<bool(const std::string&)> handler) {
+    void SetPluginReloadHandler(std::function<bool(const std::string&, bool)> handler) {
         on_reload_plugin_ = std::move(handler);
     }
     void SetPreviewHandler(std::function<bool(const std::string&)> handler) {
@@ -207,7 +207,7 @@ public:
 private:
     void SetupRoutes();
 
-    std::function<bool(const std::string&)> on_reload_plugin_;
+    std::function<bool(const std::string&, bool)> on_reload_plugin_;
     std::function<bool(const std::string&)> on_preview_frame_;
     std::shared_ptr<const RuntimeStatusStore> status_store_;
     std::shared_ptr<LightingControlService> lighting_service_;

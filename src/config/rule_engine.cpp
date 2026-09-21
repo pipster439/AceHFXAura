@@ -2,6 +2,7 @@
 #include "config/lighting_service.h"
 #include "engine/builtin_effects.h"
 #include "engine/plugin_manager.h"
+#include "engine/automation_effect_runtime.h"
 #include "gsi/gsi_adapter.h"
 #include "third_party/json.hpp"
 #include "utils/logger.h"
@@ -351,24 +352,35 @@ std::shared_ptr<Effect> CreateEffectFromProfile(const std::string& pname, const 
     }
 }
 
+std::string ProfilePluginName(const Profile& profile) {
+    if (profile.effect_recipe.empty()) return profile.plugin_name;
+    const auto recipe = nlohmann::json::parse(profile.effect_recipe);
+    if (recipe.value("type", "static") != "plugin") return "";
+    return recipe.value("plugin_name", recipe.value("plugin", recipe.value("effect",
+        recipe.value("effect_name", recipe.value("plugin_path", "")))));
+}
+std::string ProfileEffectIdentity(const Profile& profile) {
+    if (profile.effect_recipe.empty()) return profile.name;
+    auto recipe = nlohmann::json::parse(profile.effect_recipe);
+    for (const auto* key : {"brightness", "fps", "keys", "title", "name", "description"}) recipe.erase(key);
+    return recipe.dump();
+}
+TriggeredEffectInstance CreateProfileEffectInstance(const Profile& profile) {
+    if (profile.effect_recipe.empty()) return {};
+    const auto recipe = nlohmann::json::parse(profile.effect_recipe);
+    if (recipe.value("type", "static") == "plugin") {
+        const auto id = ProfilePluginName(profile);
+        return id.empty() ? TriggeredEffectInstance{} : PluginManager::Instance().CreateEffectInstance(id, true);
+    }
+    return TriggeredEffectInstance::FromHostEffect(CreateEffectFromProfile(profile.name, recipe));
+}
 TriggeredEffectInstance ResolveAutomationEffect(const nlohmann::json& reference, const RuleEngine& rules) {
     const auto kind = reference.at("kind").get<std::string>();
     const auto name = reference.at("name").get<std::string>();
-    auto plugin = [](const std::string& id) {
-        auto& manager = PluginManager::Instance();
-        return manager.HasPlugin(id) ? manager.CreateEffectInstance(id, true) : manager.LoadPluginInstance(id, true);
-    };
-    if (kind == "plugin") return plugin(name);
+    if (kind == "plugin") return PluginManager::Instance().CreateEffectInstance(name, true);
     if (kind != "profile_effect") return {};
     const auto profile = rules.GetProfile(name);
-    if (!profile || profile->effect_recipe.empty()) return {};
-    const auto recipe = nlohmann::json::parse(profile->effect_recipe);
-    if (recipe.value("type", "static") == "plugin") {
-        const auto id = recipe.value("plugin_name", recipe.value("plugin", recipe.value("effect",
-            recipe.value("effect_name", recipe.value("plugin_path", "")))));
-        return id.empty() ? TriggeredEffectInstance{} : plugin(id);
-    }
-    return TriggeredEffectInstance::FromHostEffect(CreateEffectFromProfile(name, recipe));
+    return profile ? CreateProfileEffectInstance(*profile) : TriggeredEffectInstance{};
 }
 
 std::string RuleEngine::ToLower(const std::string& s) {
@@ -772,7 +784,11 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
             // Preserve unchanged rule memory; edited/enabled records seed on next decision.
             if (automation_freshness_ms_ != new_freshness) edge_memory_.clear();
             for (auto it = edge_memory_.begin(); it != edge_memory_.end();) {
-                if (!v2_ids.count(it->first)) it = edge_memory_.erase(it); else ++it;
+                const auto found = std::find_if(new_plan.begin(), new_plan.end(), [&](const RulePlanEntry& entry) {
+                    return entry.provenance == RuleProvenance::AutomationV2 && entry.automation.id == it->first &&
+                        entry.automation.enabled && entry.automation.fingerprint == it->second.fingerprint;
+                });
+                if (found == new_plan.end()) it = edge_memory_.erase(it); else ++it;
             }
             plan_ = std::move(new_plan);
             ++config_generation_;

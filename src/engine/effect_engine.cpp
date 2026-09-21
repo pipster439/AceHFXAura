@@ -1,5 +1,6 @@
 #include "engine/effect_engine.h"
 #include "engine/plugin_manager.h"
+#include "utils/logger.h"
 
 namespace aura {
 
@@ -19,6 +20,30 @@ void EffectEngine::SetActiveProfile(std::shared_ptr<const Profile> profile) {
     }
     profile_started_ms_ = GetElapsedMs();
     active_profile_ = std::move(profile);
+    base_identity_.clear(); attempted_base_identity_.clear();
+}
+
+bool EffectEngine::ReconcileProfile(std::shared_ptr<const Profile> profile) {
+    if (!profile) return false; // retain last runnable base on failed/missing selection
+    const auto plugin = ProfilePluginName(*profile);
+    const auto generation = plugin.empty() ? nullptr : PluginManager::Instance().GetGeneration(plugin);
+    std::string identity = profile->name + ":" + ProfileEffectIdentity(*profile) + ":" + std::to_string(profile->brightness) + ":" + std::to_string(profile->fps);
+    for (const auto& key : profile->key_overrides) identity += key.key_spec + ":" + std::to_string(key.color.r) + "," + std::to_string(key.color.g) + "," + std::to_string(key.color.b);
+    identity += ":generation=" + std::to_string(generation ? generation->generation_id : 0);
+    { std::lock_guard<std::mutex> lock(profile_mutex_);
+      if (identity == base_identity_ || identity == attempted_base_identity_) return false;
+      attempted_base_identity_ = identity; }
+    try {
+        auto candidate = std::make_shared<Profile>(*profile);
+        if (!plugin.empty()) {
+            auto fresh = CreateProfileEffectInstance(*profile);
+            if (!fresh) { LOG_WARN("[Automation base] Replacement unavailable; retaining prior base"); return false; }
+            candidate->base_effect = fresh.GetEffect();
+        }
+        std::lock_guard<std::mutex> lock(profile_mutex_);
+        active_profile_ = std::move(candidate); base_identity_ = identity; profile_started_ms_ = GetElapsedMs();
+        return true;
+    } catch (...) { LOG_WARN("[Automation base] Replacement failed; retaining prior base"); return false; }
 }
 
 std::shared_ptr<const Profile> EffectEngine::GetActiveProfileCopy() const {

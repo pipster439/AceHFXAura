@@ -57,7 +57,7 @@ export class ConfigSaveCoordinator {
    *    - Updates revision with new ETag.
    *    - Invokes success callback.
    */
-  async saveConfig(newConfig, fetchImpl = fetch) {
+  async saveConfig(newConfig, fetchImpl = fetch, expectedRevision = null) {
     if (!newConfig) return false;
 
     // Capture current generation at enqueue time
@@ -80,6 +80,7 @@ export class ConfigSaveCoordinator {
         await this.beforeSave(newConfig);
       }
 
+      if (expectedRevision !== null && this.revision !== expectedRevision) return false;
       const headers = { 'Content-Type': 'application/json' };
       if (this.revision) {
         headers['If-Match'] = `"${this.revision}"`;

@@ -5,9 +5,12 @@
 #ifndef LIFECYCLE_MARKER
 #define LIFECYCLE_MARKER 200
 #endif
+#ifndef LIFECYCLE_FINISH
+#define LIFECYCLE_FINISH 100
+#endif
 namespace {
 int mode = 0;
-uint64_t finish_at = 100;
+uint64_t finish_at = LIFECYCLE_FINISH;
 float opacity = 0.5f;
 unsigned created = 0, destroyed = 0, renders = 0, finished_calls = 0, opacity_calls = 0;
 void Trace(const char* text) {
@@ -28,6 +31,7 @@ public:
     void Render(uint64_t elapsed, aura::FrameBuffer& out, const aura::Keymap&) override {
         ++renders; ++ticks; last_render = elapsed;
         Trace("render\n");
+        Trace(marker == 200 ? "old_render\n" : "new_render\n");
         out.buffer[0] = marker; out.buffer[1] = marker; out.buffer[2] = marker;
         if (behavior == 1) throw std::runtime_error("render failure after buffer write");
     }

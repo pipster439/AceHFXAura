@@ -376,3 +376,26 @@ add_dependencies(test_automation_effect_runtime automation_lifecycle_old automat
     abi_opacity_only abi_no_lifecycle abi_lifecycle_unknown abi_lifecycle_no_revision)
 add_test(NAME automation_effect_runtime COMMAND test_automation_effect_runtime $<TARGET_FILE_DIR:automation_lifecycle_old>)
 set_tests_properties(automation_effect_runtime PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" TIMEOUT 30)
+
+find_program(AURA_NODE_EXECUTABLE node)
+# Native production targets must not acquire a Node dependency from test fixtures.
+if(AURA_NODE_EXECUTABLE AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/frontend/node_modules/blockly")
+set(STUDIO_FIXTURE_DIR "${CMAKE_CURRENT_BINARY_DIR}/studio_stage4")
+add_custom_command(OUTPUT "${STUDIO_FIXTURE_DIR}/studio_old.cpp" "${STUDIO_FIXTURE_DIR}/studio_continuous.cpp" "${STUDIO_FIXTURE_DIR}/studio_one_shot.cpp"
+    COMMAND "${AURA_NODE_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/frontend/tests/generate-publication-fixtures.mjs" "${STUDIO_FIXTURE_DIR}"
+    DEPENDS frontend/tests/generate-publication-fixtures.mjs frontend/src/blockly/cppTranspiler.js frontend/src/blockly/sequenceCompiler.js frontend/src/blockly/publication.js)
+foreach(studio_fixture studio_old studio_continuous studio_one_shot)
+    add_library(${studio_fixture} SHARED "${STUDIO_FIXTURE_DIR}/${studio_fixture}.cpp")
+endforeach()
+add_library(automation_reload_old SHARED tests/fixtures/automation_lifecycle_fixture.cpp)
+target_compile_definitions(automation_reload_old PRIVATE LIFECYCLE_FINISH=10000)
+add_library(automation_reload_new SHARED tests/fixtures/automation_lifecycle_fixture.cpp)
+target_compile_definitions(automation_reload_new PRIVATE LIFECYCLE_FINISH=10000 LIFECYCLE_MARKER=100)
+add_executable(test_automation_reconciliation tests/test_automation_reconciliation.cpp ${AUTOMATION_RULE_TEST_SOURCES})
+target_link_libraries(test_automation_reconciliation PRIVATE ${AUTOMATION_RULE_TEST_LIBRARIES})
+add_dependencies(test_automation_reconciliation studio_old studio_continuous studio_one_shot automation_lifecycle_old automation_lifecycle_new abi_two abi_no_lifecycle automation_reload_old automation_reload_new)
+add_test(NAME automation_reconciliation COMMAND test_automation_reconciliation $<TARGET_FILE_DIR:studio_old>)
+set_tests_properties(automation_reconciliation PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" TIMEOUT 30)
+else()
+    message(STATUS "Studio publication fixture tests unavailable: install Node and frontend dependencies to enable")
+endif()

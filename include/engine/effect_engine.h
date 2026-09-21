@@ -18,6 +18,8 @@ public:
     // Holds a shared_ptr copy so a concurrent config hot reload can never
     // invalidate the profile currently being rendered (no dangling pointers).
     void SetActiveProfile(std::shared_ptr<const Profile> profile);
+    bool ReconcileProfile(std::shared_ptr<const Profile> profile);
+    std::shared_ptr<const Profile> GetActiveProfile() const { return GetActiveProfileCopy(); }
 
     // Zero-allocation render tick for the current elapsed time with optional GSI reader and overlays
     void Tick(FrameBuffer& out_frame, const Keymap& keymap, const IGsiReader* gsi = nullptr);
@@ -42,6 +44,7 @@ private:
     mutable std::mutex profile_mutex_;
     std::shared_ptr<const Profile> active_profile_;
     uint64_t profile_started_ms_{0};
+    std::string base_identity_, attempted_base_identity_;
     std::chrono::steady_clock::time_point start_time_;
 
     OverlayManager overlay_manager_;

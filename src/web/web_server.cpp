@@ -17,6 +17,7 @@
 #include <cctype>
 #include <algorithm>
 #include <vector>
+#include <atomic>
 
 namespace aura {
 
@@ -376,6 +377,13 @@ bool CompileCppSourceToDll(const std::string& effect_name,
     std::filesystem::path dll_file = plugins_dir / (base_name + ".dll");
     std::filesystem::path obj_file = plugins_dir / (base_name + ".obj");
 
+    // An immutable Studio name may only be compiled once; never overwrite a live DLL.
+    static std::mutex compile_mutex;
+    std::lock_guard<std::mutex> compile_lock(compile_mutex);
+    if (std::filesystem::exists(dll_file)) {
+        out_log = "Publication name already exists; choose a fresh immutable name";
+        out_exit_code = -7; return false;
+    }
     // 3. 写入 C++ 源码
     {
         std::ofstream ofs(src_file, std::ios::binary | std::ios::trunc);
@@ -410,7 +418,15 @@ bool CompileCppSourceToDll(const std::string& effect_name,
     }
 
     std::filesystem::path abs_src = std::filesystem::absolute(src_file);
-    std::filesystem::path abs_dll = std::filesystem::absolute(dll_file);
+    static std::atomic<uint64_t> candidate_sequence{0};
+    const auto staging_dir = plugins_dir / ".staging";
+    std::filesystem::create_directories(staging_dir);
+    const auto candidate_dll = staging_dir / (base_name + "_" + std::to_string(GetCurrentProcessId()) + "_" + std::to_string(++candidate_sequence) + ".dll");
+    struct CandidateCleanup {
+        std::filesystem::path path;
+        ~CandidateCleanup() { std::error_code error; std::filesystem::remove(path, error); }
+    } cleanup{candidate_dll};
+    std::filesystem::path abs_dll = std::filesystem::absolute(candidate_dll);
     std::filesystem::path abs_obj = std::filesystem::absolute(obj_file);
 
     // 4. 构造编译器命令行
@@ -506,7 +522,13 @@ bool CompileCppSourceToDll(const std::string& effect_name,
 
     out_log = EnsureValidUtf8(pipe_output);
     out_dll_path = dll_file.string();
-    return (exit_code == 0 && std::filesystem::exists(dll_file));
+    if (exit_code != 0 || !std::filesystem::exists(candidate_dll)) return false;
+    // No REPLACE_EXISTING: even another process cannot race us into overwriting
+    // an applied immutable publication. Failed candidates never replace its bytes.
+    if (!MoveFileExW(candidate_dll.c_str(), dll_file.c_str(), MOVEFILE_WRITE_THROUGH)) {
+        out_exit_code = -7; out_log += "\nImmutable publication name already exists or move failed"; return false;
+    }
+    return true;
 }
  
 namespace {
@@ -1209,7 +1231,7 @@ void WebServer::SetupRoutes() {
             httplib::Client cli("127.0.0.1", 19897);
             cli.set_connection_timeout(1, 0);
             cli.set_read_timeout(2, 0);
-            nlohmann::json payload = {{"plugin_name", name}, {"name", name}};
+            nlohmann::json payload = {{"plugin_name", name}, {"name", name}, {"require_lifecycle", j.value("require_lifecycle", false)}};
             auto cli_res = cli.Post("/api/plugin/reload", payload.dump(), "application/json");
 
             bool daemon_synced = (cli_res && cli_res->status == 200);
@@ -1221,7 +1243,8 @@ void WebServer::SetupRoutes() {
                 {"success", daemon_synced},
                 {"message", daemon_synced ? "插件已由 daemon 确认加载" : daemon_offline ? "daemon 不在线；旧版本保持运行" : dll_load_failed ? "daemon 未能加载 DLL；旧版本保持运行，请查看 aura_daemon.log" : "daemon 重载未确认或已超时；旧版本保持运行"},
                 {"stage", daemon_synced ? "loaded" : daemon_offline ? "daemon_offline" : dll_load_failed ? "dll_load" : "daemon_reload"},
-                {"daemon_synced", daemon_synced}
+                {"daemon_synced", daemon_synced},
+                {"lifecycle_verified", daemon_synced && j.value("require_lifecycle", false)}
             };
             res.status = daemon_synced ? 200 : 503;
             res.set_content(resp.dump(), "application/json; charset=utf-8");
