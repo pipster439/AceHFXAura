@@ -7,6 +7,7 @@
 #include <fstream>
 #include <iostream>
 #include <cmath>
+#include <chrono>
 
 namespace {
 
@@ -269,6 +270,12 @@ int main() {
 
     std::cout << "[Test 9] RuleEngine::CheckAndReload 集成热重载检测\n";
     {
+        // CheckAndReload watches mtime. Backdate only this temporary input so
+        // the real atomic writer cannot share its timestamp on a coarse clock.
+        // Do not touch the file after UpdateProfile: that write must trigger reload.
+        const auto initial_time = std::filesystem::last_write_time(test_cfg_path)
+            - std::chrono::seconds(2);
+        std::filesystem::last_write_time(test_cfg_path, initial_time);
         aura::RuleEngine engine;
         bool loaded = engine.LoadConfig(test_cfg_path);
         CHECK(loaded, "RuleEngine 初始化加载配置文件成功");
@@ -285,6 +292,9 @@ int main() {
         std::string new_rev;
         auto op = svc.UpdateProfile("desktop", p, new_rev);
         CHECK(op.http_status == 200, "UpdateProfile 更新成功");
+
+        CHECK(std::filesystem::last_write_time(test_cfg_path) != initial_time,
+              "atomic profile write changes the watched modification time");
 
         // RuleEngine 检测热重载
         bool reloaded = engine.CheckAndReload();
