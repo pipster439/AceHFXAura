@@ -13,6 +13,7 @@ Current code is the implementation authority. Guides below have distinct roles; 
 | [Studio workflow](studio/STUDIO_WORKFLOW.md) | Blockly editing, preview, publishing and orchestration |
 | [Packaging](development/PACKAGING.md) / [Release checklist](development/RELEASE_CHECKLIST.md) | Legacy launcher packaging and release gates |
 | [Cleanup audit](development/REPOSITORY_CLEANUP.md) | Complete pre-cleanup tracked-file inventory and decisions |
+| [Repository hygiene](development/REPOSITORY_HYGIENE.md) | Tracking boundaries, audit artifact policy and Git rules |
 | [History](archive/README.md) | Superseded decisions, reports and patch snapshots |
 | [Changelog](../CHANGELOG.md) | Version history |
 
