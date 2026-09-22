@@ -113,16 +113,11 @@ ORIGINAL_REQUEST.md
 # Local hardware probe observations (review before publishing as evidence)
 /physical_test_log.json
 /docs/hardware/PHYSICAL_TEST_LOG.md
-changes.patch
-automation_v2_red_blue_audit.md
-automation_v2_legacy_retirement_report.md
-.gitignore
-automation_v2_review_summary.md
-automation_v2_stage6_report.md
-automation_v2_stage5a_report.md
-automation_v2_stage4_report.md
-automation_v2_stage3_report.md
-automation_v2_stage2_report.md
-automation_v2_stage2_final_report.md
-automation_v2_review_summary.md
-automation_v2_legacy_retirement.patch
+# ---- 审计、排查与补丁临时产物 ----
+/audit_artifacts/
+/audit_repros/
+/*.patch
+/*_audit.md
+/*_report.md
+/*_report*.md
+/*_summary.md

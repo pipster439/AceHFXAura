@@ -21,6 +21,15 @@ Use current code as the source of truth. Start with [README](README.md) and the 
 - Update links and the relevant current guide when moving files. Archive completed investigation reports; do not add chronological reports to the repository root.
 - Run the [test matrix](docs/testing/TESTING.md), report failures/skips separately, and distinguish automated checks from [physical acceptance](docs/testing/MANUAL_TESTS.md).
 
+## Repository hygiene and audit artifact rules
+
+- **Temporary workspace isolation**: All agent and audit temporary artifacts (repro scripts, logs, draft patches, intermediate reports, test scratch data) MUST only be written to `/audit_artifacts/` (or `/audit_repros/`).
+- **No root pollution**: Strictly prohibit creating temporary reports (`*_audit.md`, `*_report.md`, `*_summary.md`), patches (`*.patch`), or source snapshots in the repository root.
+- **No source duplication**: Strictly prohibit copying full or partial source trees into audit directories and committing them to Git.
+- **Default exclusion**: `/audit_artifacts/` is ignored by `.gitignore` by default and must never enter Git version control.
+- **Curation of long-term findings**: If an audit or research finding needs long-term retention, curate it into formal documentation under `docs/archive/reports/`, `docs/architecture/`, `docs/hardware/`, or other appropriate `docs/` subdirectories. Never commit raw audit workspaces.
+- Refer to [Repository Hygiene Policy](docs/development/REPOSITORY_HYGIENE.md) for detailed guidelines.
+
 ## Local Windows toolchain and CI
 
 - Local Windows validation uses the installed/default supported CMake generator. Do not explicitly request VS2022 merely to mirror CI.
