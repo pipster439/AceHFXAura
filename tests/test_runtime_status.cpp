@@ -6,7 +6,7 @@
 #include <thread>
 #include <vector>
 #include <atomic>
-#include <chrono>
+#include <future>
 
 int main() {
     int failures = 0;
@@ -44,55 +44,74 @@ int main() {
     std::cout << "[Test 3] RuntimeStatusStore 多线程并发读写安全压力测试\n";
     {
         aura::RuntimeStatusStore store;
-        std::atomic<bool> run{true};
-        std::atomic<uint64_t> read_count{0};
-        std::atomic<uint64_t> write_count{0};
+        constexpr int reader_count = 4, writer_count = 2;
+        constexpr int reads_per_thread = 4000, writes_per_thread = 2000;
+        std::atomic<uint64_t> read_count{0}, write_count{0}, incoherent_count{0};
+        std::atomic<int> ready{0};
+        std::promise<void> start;
+        const auto gate = start.get_future().share();
 
-        // 4 个 reader 线程
-        std::vector<std::thread> readers;
-        for (int i = 0; i < 4; ++i) {
+        auto make_snapshot = [](int writer, int phase) {
+            aura::RuntimeStatusSnapshot snap;
+            snap.hardware_connected = (phase % 2 == 0);
+            snap.adapter_state = snap.hardware_connected ? "connected" : "disconnected";
+            snap.active_backend = writer == 0 ? "native_hid" : "legacy_hal";
+            snap.active_profile = "profile_" + std::to_string(phase % 10);
+            snap.target_fps = 20 + phase;
+            snap.dry_run = writer == 1;
+            snap.gsi_active = phase % 3 == 0;
+            snap.foreground_process = "app_" + std::to_string(phase) + ".exe";
+            return snap;
+        };
+        // Seed a valid tuple so readers can verify every snapshot, even before
+        // either writer is scheduled. No throughput assumption about CI hosts.
+        store.Update(make_snapshot(0, 0));
+        auto coherent = [&](const aura::RuntimeStatusSnapshot& snap) {
+            const int phase = snap.target_fps - 20;
+            if (phase < 0 || phase >= 40) return false;
+            const auto expected = make_snapshot(snap.dry_run ? 1 : 0, phase);
+            return snap.hardware_connected == expected.hardware_connected &&
+                snap.adapter_state == expected.adapter_state &&
+                snap.active_backend == expected.active_backend &&
+                snap.active_profile == expected.active_profile &&
+                snap.gsi_active == expected.gsi_active &&
+                snap.foreground_process == expected.foreground_process;
+        };
+
+        std::vector<std::thread> readers, writers;
+        for (int i = 0; i < reader_count; ++i) {
             readers.emplace_back([&]() {
-                while (run.load(std::memory_order_relaxed)) {
-                    auto snap = store.GetSnapshot();
-                    // 校验读取出的数据逻辑自洽 (非零未受损)
-                    if (snap.target_fps >= 10 && snap.target_fps <= 100) {
-                        read_count.fetch_add(1, std::memory_order_relaxed);
-                    }
-                }
-            });
-        }
-
-        // 2 个 writer 线程
-        std::vector<std::thread> writers;
-        for (int i = 0; i < 2; ++i) {
-            writers.emplace_back([&, i]() {
-                int tick = 0;
-                while (run.load(std::memory_order_relaxed)) {
-                    aura::RuntimeStatusSnapshot snap;
-                    snap.hardware_connected = (tick % 2 == 0);
-                    snap.adapter_state = (tick % 2 == 0) ? "connected" : "disconnected";
-                    snap.active_backend = (i == 0) ? "native_hid" : "legacy_hal";
-                    snap.active_profile = "profile_" + std::to_string(tick % 10);
-                    snap.target_fps = 20 + (tick % 40);
-                    snap.dry_run = (i == 1);
-                    snap.gsi_active = (tick % 3 == 0);
-                    snap.foreground_process = "app_" + std::to_string(tick) + ".exe";
-                    store.Update(snap);
-                    write_count.fetch_add(1, std::memory_order_relaxed);
-                    ++tick;
+                ++ready;
+                gate.wait();
+                for (int read = 0; read < reads_per_thread; ++read) {
+                    if (!coherent(store.GetSnapshot())) ++incoherent_count;
+                    ++read_count;
                     std::this_thread::yield();
                 }
             });
         }
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(150));
-        run.store(false, std::memory_order_relaxed);
-
+        for (int i = 0; i < writer_count; ++i) {
+            writers.emplace_back([&, i]() {
+                ++ready;
+                gate.wait();
+                for (int tick = 0; tick < writes_per_thread; ++tick) {
+                    store.Update(make_snapshot(i, tick % 40));
+                    ++write_count;
+                    std::this_thread::yield();
+                }
+            });
+        }
+        while (ready.load() != reader_count + writer_count) std::this_thread::yield();
+        start.set_value();
         for (auto& r : readers) r.join();
         for (auto& w : writers) w.join();
 
-        CHECK(read_count.load() > 1000, "多线程高频读取正常执行 (count > 1000)");
-        CHECK(write_count.load() > 100, "多线程高频写入正常执行 (count > 100)");
+        CHECK(read_count.load() == reader_count * reads_per_thread, "all scheduled snapshot reads complete");
+        CHECK(write_count.load() == writer_count * writes_per_thread, "all scheduled snapshot writes complete");
+        CHECK(incoherent_count.load() == 0, "every concurrent snapshot contains a coherent field tuple");
+        const auto final = store.GetSnapshot();
+        CHECK(coherent(final) && final.target_fps == 20 + (writes_per_thread - 1) % 40,
+              "final snapshot contains a completed writer's last update");
     }
 
     std::cout << "[Test 4] JSON Schema 基本字段与结构校验\n";

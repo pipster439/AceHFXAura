@@ -339,7 +339,7 @@ set_tests_properties(plugin_abi PROPERTIES TIMEOUT 30)
 target_compile_definitions(test_gsi_rules PRIVATE
     AURA_STAGE0_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/automation_v2_stage0/configs")
 add_test(NAME runtime_status COMMAND test_runtime_status)
-set_tests_properties(runtime_status PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
+set_tests_properties(runtime_status PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" TIMEOUT 30)
 add_test(NAME lighting_service COMMAND test_lighting_service)
 set_tests_properties(lighting_service PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
 add_test(NAME automation_service COMMAND test_automation_service)
