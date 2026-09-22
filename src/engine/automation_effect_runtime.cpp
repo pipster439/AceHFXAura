@@ -1,5 +1,4 @@
 #include "engine/automation_effect_runtime.h"
-#include "engine/overlay_manager.h"
 #include "utils/logger.h"
 #include <algorithm>
 #include <cmath>
@@ -216,10 +215,13 @@ bool AutomationEffectRuntime::Render(Layer& layer, uint64_t now, FrameBuffer& lo
             opacity = std::clamp(opacity, 0.0, 1.0);
             if (overdue()) { Diagnose(layer.id, "watchdog expired"); return false; }
         } else if (!layer.persistent) {
-            // Reuse the exact legacy envelope math; legacy executor remains unchanged.
-            ActiveOverlay envelope;
-            envelope.duration_ms = layer.duration; envelope.fade_out_ms = layer.fade; envelope.attack_ms = layer.attack;
-            opacity = envelope.ComputeWeight(elapsed);
+            // Host LegacyEnvelope fallback: preserve the established attack/fade equation.
+            if (elapsed >= layer.duration) opacity = 0;
+            else if (layer.attack > 0 && elapsed < layer.attack)
+                opacity = std::clamp(static_cast<double>(elapsed) / layer.attack, 0.0, 1.0);
+            else if (layer.fade > 0 && layer.duration > layer.fade && elapsed >= layer.duration-layer.fade)
+                opacity = std::clamp(1.0-static_cast<double>(elapsed-(layer.duration-layer.fade))/layer.fade,0.0,1.0);
+
         }
         for (size_t led = 0; led < TOTAL_LEDS; ++led) {
             const size_t offset = led * RGB_CHANNELS;

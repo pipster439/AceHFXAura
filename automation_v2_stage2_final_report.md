@@ -1,3 +1,5 @@
+> HISTORICAL: pre-retirement implementation evidence. Current Automation supports V2 only; see docs/architecture/AUTOMATION_V2.md.
+
 # Automation v2 Stage 2 final report
 
 Status: merge-ready within the approved Stage 2 scope; staged and uncommitted. Final audit and Release verification: 2026-09-21. Stop before Stage 3.

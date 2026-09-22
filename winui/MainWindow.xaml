@@ -60,13 +60,7 @@
                         <FontIcon Glyph="&#xE790;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem
-                    Content="Automation"
-                    Tag="automation">
-                    <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE895;" />
-                    </NavigationViewItem.Icon>
-                </NavigationViewItem>
+
                 <NavigationViewItem
                     Content="Game Integration"
                     Tag="gsi">

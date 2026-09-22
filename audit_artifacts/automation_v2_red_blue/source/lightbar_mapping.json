@@ -1,0 +1,1560 @@
+{
+  "device_profile": {
+    "device_name": "ROG FALCHION ACE HFX",
+    "device_name_zh": "ROG 魔导士 ACE HFX 竞技版磁轴键盘",
+    "model_id": 7038,
+    "usb_pid": "0x1B7E",
+    "usb_vid": "0x0B05",
+    "total_hardware_leds": 128,
+    "lighting_interface": "USB HID Interface 3 (Set_L_STD_SINGLE_XY)",
+    "operating_mode": "Volatile High-Speed Direct RAM Stream (Zero EEPROM Wear)",
+    "export_version": "1.1.0",
+    "last_exported_at": "2026-09-17 12:56:48"
+  },
+  "summary": {
+    "total_lightbar_leds": 0,
+    "total_keyboard_keys": 68,
+    "total_indicators": 0,
+    "total_no_response": 60,
+    "total_unknown": 0
+  },
+  "lightbar": [],
+  "mapping": [
+    {
+      "led_id": 0,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 0,
+        "matrix_row": 0,
+        "formula": "col * 8 + row = 0 * 8 + 0 = 0"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 1,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 0,
+        "matrix_row": 1,
+        "formula": "col * 8 + row = 0 * 8 + 1 = 1"
+      },
+      "notes": "Key: ESC"
+    },
+    {
+      "led_id": 2,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 0,
+        "matrix_row": 2,
+        "formula": "col * 8 + row = 0 * 8 + 2 = 2"
+      },
+      "notes": "Key: TAB"
+    },
+    {
+      "led_id": 3,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 0,
+        "matrix_row": 3,
+        "formula": "col * 8 + row = 0 * 8 + 3 = 3"
+      },
+      "notes": "Key: CAPS"
+    },
+    {
+      "led_id": 4,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 0,
+        "matrix_row": 4,
+        "formula": "col * 8 + row = 0 * 8 + 4 = 4"
+      },
+      "notes": "Key: L_SHIFT"
+    },
+    {
+      "led_id": 5,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 0,
+        "matrix_row": 5,
+        "formula": "col * 8 + row = 0 * 8 + 5 = 5"
+      },
+      "notes": "Key: L_CTRL"
+    },
+    {
+      "led_id": 6,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 0,
+        "matrix_row": 6,
+        "formula": "col * 8 + row = 0 * 8 + 6 = 6"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 7,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 0,
+        "matrix_row": 7,
+        "formula": "col * 8 + row = 0 * 8 + 7 = 7"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 8,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 1,
+        "matrix_row": 0,
+        "formula": "col * 8 + row = 1 * 8 + 0 = 8"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 9,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 1,
+        "matrix_row": 1,
+        "formula": "col * 8 + row = 1 * 8 + 1 = 9"
+      },
+      "notes": "Key: 1"
+    },
+    {
+      "led_id": 10,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 1,
+        "matrix_row": 2,
+        "formula": "col * 8 + row = 1 * 8 + 2 = 10"
+      },
+      "notes": "Key: Q"
+    },
+    {
+      "led_id": 11,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 1,
+        "matrix_row": 3,
+        "formula": "col * 8 + row = 1 * 8 + 3 = 11"
+      },
+      "notes": "Key: A"
+    },
+    {
+      "led_id": 12,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 1,
+        "matrix_row": 4,
+        "formula": "col * 8 + row = 1 * 8 + 4 = 12"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 13,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 1,
+        "matrix_row": 5,
+        "formula": "col * 8 + row = 1 * 8 + 5 = 13"
+      },
+      "notes": "Key: L_WIN"
+    },
+    {
+      "led_id": 14,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 1,
+        "matrix_row": 6,
+        "formula": "col * 8 + row = 1 * 8 + 6 = 14"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 15,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 1,
+        "matrix_row": 7,
+        "formula": "col * 8 + row = 1 * 8 + 7 = 15"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 16,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 2,
+        "matrix_row": 0,
+        "formula": "col * 8 + row = 2 * 8 + 0 = 16"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 17,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 2,
+        "matrix_row": 1,
+        "formula": "col * 8 + row = 2 * 8 + 1 = 17"
+      },
+      "notes": "Key: 2"
+    },
+    {
+      "led_id": 18,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 2,
+        "matrix_row": 2,
+        "formula": "col * 8 + row = 2 * 8 + 2 = 18"
+      },
+      "notes": "Key: W"
+    },
+    {
+      "led_id": 19,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 2,
+        "matrix_row": 3,
+        "formula": "col * 8 + row = 2 * 8 + 3 = 19"
+      },
+      "notes": "Key: S"
+    },
+    {
+      "led_id": 20,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 2,
+        "matrix_row": 4,
+        "formula": "col * 8 + row = 2 * 8 + 4 = 20"
+      },
+      "notes": "Key: Z"
+    },
+    {
+      "led_id": 21,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 2,
+        "matrix_row": 5,
+        "formula": "col * 8 + row = 2 * 8 + 5 = 21"
+      },
+      "notes": "Key: L_ALT"
+    },
+    {
+      "led_id": 22,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 2,
+        "matrix_row": 6,
+        "formula": "col * 8 + row = 2 * 8 + 6 = 22"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 23,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 2,
+        "matrix_row": 7,
+        "formula": "col * 8 + row = 2 * 8 + 7 = 23"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 24,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 3,
+        "matrix_row": 0,
+        "formula": "col * 8 + row = 3 * 8 + 0 = 24"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 25,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 3,
+        "matrix_row": 1,
+        "formula": "col * 8 + row = 3 * 8 + 1 = 25"
+      },
+      "notes": "Key: 3"
+    },
+    {
+      "led_id": 26,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 3,
+        "matrix_row": 2,
+        "formula": "col * 8 + row = 3 * 8 + 2 = 26"
+      },
+      "notes": "Key: E"
+    },
+    {
+      "led_id": 27,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 3,
+        "matrix_row": 3,
+        "formula": "col * 8 + row = 3 * 8 + 3 = 27"
+      },
+      "notes": "Key: D"
+    },
+    {
+      "led_id": 28,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 3,
+        "matrix_row": 4,
+        "formula": "col * 8 + row = 3 * 8 + 4 = 28"
+      },
+      "notes": "Key: X"
+    },
+    {
+      "led_id": 29,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 3,
+        "matrix_row": 5,
+        "formula": "col * 8 + row = 3 * 8 + 5 = 29"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 30,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 3,
+        "matrix_row": 6,
+        "formula": "col * 8 + row = 3 * 8 + 6 = 30"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 31,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 3,
+        "matrix_row": 7,
+        "formula": "col * 8 + row = 3 * 8 + 7 = 31"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 32,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 4,
+        "matrix_row": 0,
+        "formula": "col * 8 + row = 4 * 8 + 0 = 32"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 33,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 4,
+        "matrix_row": 1,
+        "formula": "col * 8 + row = 4 * 8 + 1 = 33"
+      },
+      "notes": "Key: 4"
+    },
+    {
+      "led_id": 34,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 4,
+        "matrix_row": 2,
+        "formula": "col * 8 + row = 4 * 8 + 2 = 34"
+      },
+      "notes": "Key: R"
+    },
+    {
+      "led_id": 35,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 4,
+        "matrix_row": 3,
+        "formula": "col * 8 + row = 4 * 8 + 3 = 35"
+      },
+      "notes": "Key: F"
+    },
+    {
+      "led_id": 36,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 4,
+        "matrix_row": 4,
+        "formula": "col * 8 + row = 4 * 8 + 4 = 36"
+      },
+      "notes": "Key: C"
+    },
+    {
+      "led_id": 37,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 4,
+        "matrix_row": 5,
+        "formula": "col * 8 + row = 4 * 8 + 5 = 37"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 38,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 4,
+        "matrix_row": 6,
+        "formula": "col * 8 + row = 4 * 8 + 6 = 38"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 39,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 4,
+        "matrix_row": 7,
+        "formula": "col * 8 + row = 4 * 8 + 7 = 39"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 40,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 5,
+        "matrix_row": 0,
+        "formula": "col * 8 + row = 5 * 8 + 0 = 40"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 41,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 5,
+        "matrix_row": 1,
+        "formula": "col * 8 + row = 5 * 8 + 1 = 41"
+      },
+      "notes": "Key: 5"
+    },
+    {
+      "led_id": 42,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 5,
+        "matrix_row": 2,
+        "formula": "col * 8 + row = 5 * 8 + 2 = 42"
+      },
+      "notes": "Key: T"
+    },
+    {
+      "led_id": 43,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 5,
+        "matrix_row": 3,
+        "formula": "col * 8 + row = 5 * 8 + 3 = 43"
+      },
+      "notes": "Key: G"
+    },
+    {
+      "led_id": 44,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 5,
+        "matrix_row": 4,
+        "formula": "col * 8 + row = 5 * 8 + 4 = 44"
+      },
+      "notes": "Key: V"
+    },
+    {
+      "led_id": 45,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 5,
+        "matrix_row": 5,
+        "formula": "col * 8 + row = 5 * 8 + 5 = 45"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 46,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 5,
+        "matrix_row": 6,
+        "formula": "col * 8 + row = 5 * 8 + 6 = 46"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 47,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 5,
+        "matrix_row": 7,
+        "formula": "col * 8 + row = 5 * 8 + 7 = 47"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 48,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 6,
+        "matrix_row": 0,
+        "formula": "col * 8 + row = 6 * 8 + 0 = 48"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 49,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 6,
+        "matrix_row": 1,
+        "formula": "col * 8 + row = 6 * 8 + 1 = 49"
+      },
+      "notes": "Key: 6"
+    },
+    {
+      "led_id": 50,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 6,
+        "matrix_row": 2,
+        "formula": "col * 8 + row = 6 * 8 + 2 = 50"
+      },
+      "notes": "Key: Y"
+    },
+    {
+      "led_id": 51,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 6,
+        "matrix_row": 3,
+        "formula": "col * 8 + row = 6 * 8 + 3 = 51"
+      },
+      "notes": "Key: H"
+    },
+    {
+      "led_id": 52,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 6,
+        "matrix_row": 4,
+        "formula": "col * 8 + row = 6 * 8 + 4 = 52"
+      },
+      "notes": "Key: B"
+    },
+    {
+      "led_id": 53,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 6,
+        "matrix_row": 5,
+        "formula": "col * 8 + row = 6 * 8 + 5 = 53"
+      },
+      "notes": "Key: SPACE"
+    },
+    {
+      "led_id": 54,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 6,
+        "matrix_row": 6,
+        "formula": "col * 8 + row = 6 * 8 + 6 = 54"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 55,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 6,
+        "matrix_row": 7,
+        "formula": "col * 8 + row = 6 * 8 + 7 = 55"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 56,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 7,
+        "matrix_row": 0,
+        "formula": "col * 8 + row = 7 * 8 + 0 = 56"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 57,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 7,
+        "matrix_row": 1,
+        "formula": "col * 8 + row = 7 * 8 + 1 = 57"
+      },
+      "notes": "Key: 7"
+    },
+    {
+      "led_id": 58,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 7,
+        "matrix_row": 2,
+        "formula": "col * 8 + row = 7 * 8 + 2 = 58"
+      },
+      "notes": "Key: U"
+    },
+    {
+      "led_id": 59,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 7,
+        "matrix_row": 3,
+        "formula": "col * 8 + row = 7 * 8 + 3 = 59"
+      },
+      "notes": "Key: J"
+    },
+    {
+      "led_id": 60,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 7,
+        "matrix_row": 4,
+        "formula": "col * 8 + row = 7 * 8 + 4 = 60"
+      },
+      "notes": "Key: N"
+    },
+    {
+      "led_id": 61,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 7,
+        "matrix_row": 5,
+        "formula": "col * 8 + row = 7 * 8 + 5 = 61"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 62,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 7,
+        "matrix_row": 6,
+        "formula": "col * 8 + row = 7 * 8 + 6 = 62"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 63,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 7,
+        "matrix_row": 7,
+        "formula": "col * 8 + row = 7 * 8 + 7 = 63"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 64,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 8,
+        "matrix_row": 0,
+        "formula": "col * 8 + row = 8 * 8 + 0 = 64"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 65,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 8,
+        "matrix_row": 1,
+        "formula": "col * 8 + row = 8 * 8 + 1 = 65"
+      },
+      "notes": "Key: 8"
+    },
+    {
+      "led_id": 66,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 8,
+        "matrix_row": 2,
+        "formula": "col * 8 + row = 8 * 8 + 2 = 66"
+      },
+      "notes": "Key: I"
+    },
+    {
+      "led_id": 67,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 8,
+        "matrix_row": 3,
+        "formula": "col * 8 + row = 8 * 8 + 3 = 67"
+      },
+      "notes": "Key: K"
+    },
+    {
+      "led_id": 68,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 8,
+        "matrix_row": 4,
+        "formula": "col * 8 + row = 8 * 8 + 4 = 68"
+      },
+      "notes": "Key: M"
+    },
+    {
+      "led_id": 69,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 8,
+        "matrix_row": 5,
+        "formula": "col * 8 + row = 8 * 8 + 5 = 69"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 70,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 8,
+        "matrix_row": 6,
+        "formula": "col * 8 + row = 8 * 8 + 6 = 70"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 71,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 8,
+        "matrix_row": 7,
+        "formula": "col * 8 + row = 8 * 8 + 7 = 71"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 72,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 9,
+        "matrix_row": 0,
+        "formula": "col * 8 + row = 9 * 8 + 0 = 72"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 73,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 9,
+        "matrix_row": 1,
+        "formula": "col * 8 + row = 9 * 8 + 1 = 73"
+      },
+      "notes": "Key: 9"
+    },
+    {
+      "led_id": 74,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 9,
+        "matrix_row": 2,
+        "formula": "col * 8 + row = 9 * 8 + 2 = 74"
+      },
+      "notes": "Key: O"
+    },
+    {
+      "led_id": 75,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 9,
+        "matrix_row": 3,
+        "formula": "col * 8 + row = 9 * 8 + 3 = 75"
+      },
+      "notes": "Key: L"
+    },
+    {
+      "led_id": 76,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 9,
+        "matrix_row": 4,
+        "formula": "col * 8 + row = 9 * 8 + 4 = 76"
+      },
+      "notes": "Key: ,"
+    },
+    {
+      "led_id": 77,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 9,
+        "matrix_row": 5,
+        "formula": "col * 8 + row = 9 * 8 + 5 = 77"
+      },
+      "notes": "Key: R_ALT"
+    },
+    {
+      "led_id": 78,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 9,
+        "matrix_row": 6,
+        "formula": "col * 8 + row = 9 * 8 + 6 = 78"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 79,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 9,
+        "matrix_row": 7,
+        "formula": "col * 8 + row = 9 * 8 + 7 = 79"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 80,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 10,
+        "matrix_row": 0,
+        "formula": "col * 8 + row = 10 * 8 + 0 = 80"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 81,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 10,
+        "matrix_row": 1,
+        "formula": "col * 8 + row = 10 * 8 + 1 = 81"
+      },
+      "notes": "Key: 0"
+    },
+    {
+      "led_id": 82,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 10,
+        "matrix_row": 2,
+        "formula": "col * 8 + row = 10 * 8 + 2 = 82"
+      },
+      "notes": "Key: P"
+    },
+    {
+      "led_id": 83,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 10,
+        "matrix_row": 3,
+        "formula": "col * 8 + row = 10 * 8 + 3 = 83"
+      },
+      "notes": "Key: ;"
+    },
+    {
+      "led_id": 84,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 10,
+        "matrix_row": 4,
+        "formula": "col * 8 + row = 10 * 8 + 4 = 84"
+      },
+      "notes": "Key: ."
+    },
+    {
+      "led_id": 85,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 10,
+        "matrix_row": 5,
+        "formula": "col * 8 + row = 10 * 8 + 5 = 85"
+      },
+      "notes": "Key: FN"
+    },
+    {
+      "led_id": 86,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 10,
+        "matrix_row": 6,
+        "formula": "col * 8 + row = 10 * 8 + 6 = 86"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 87,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 10,
+        "matrix_row": 7,
+        "formula": "col * 8 + row = 10 * 8 + 7 = 87"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 88,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 11,
+        "matrix_row": 0,
+        "formula": "col * 8 + row = 11 * 8 + 0 = 88"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 89,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 11,
+        "matrix_row": 1,
+        "formula": "col * 8 + row = 11 * 8 + 1 = 89"
+      },
+      "notes": "Key: -"
+    },
+    {
+      "led_id": 90,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 11,
+        "matrix_row": 2,
+        "formula": "col * 8 + row = 11 * 8 + 2 = 90"
+      },
+      "notes": "Key: ["
+    },
+    {
+      "led_id": 91,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 11,
+        "matrix_row": 3,
+        "formula": "col * 8 + row = 11 * 8 + 3 = 91"
+      },
+      "notes": "Key: '"
+    },
+    {
+      "led_id": 92,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 11,
+        "matrix_row": 4,
+        "formula": "col * 8 + row = 11 * 8 + 4 = 92"
+      },
+      "notes": "Key: /"
+    },
+    {
+      "led_id": 93,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 11,
+        "matrix_row": 5,
+        "formula": "col * 8 + row = 11 * 8 + 5 = 93"
+      },
+      "notes": "Key: COPILOT"
+    },
+    {
+      "led_id": 94,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 11,
+        "matrix_row": 6,
+        "formula": "col * 8 + row = 11 * 8 + 6 = 94"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 95,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 11,
+        "matrix_row": 7,
+        "formula": "col * 8 + row = 11 * 8 + 7 = 95"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 96,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 12,
+        "matrix_row": 0,
+        "formula": "col * 8 + row = 12 * 8 + 0 = 96"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 97,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 12,
+        "matrix_row": 1,
+        "formula": "col * 8 + row = 12 * 8 + 1 = 97"
+      },
+      "notes": "Key: ="
+    },
+    {
+      "led_id": 98,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 12,
+        "matrix_row": 2,
+        "formula": "col * 8 + row = 12 * 8 + 2 = 98"
+      },
+      "notes": "Key: ]"
+    },
+    {
+      "led_id": 99,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 12,
+        "matrix_row": 3,
+        "formula": "col * 8 + row = 12 * 8 + 3 = 99"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 100,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 12,
+        "matrix_row": 4,
+        "formula": "col * 8 + row = 12 * 8 + 4 = 100"
+      },
+      "notes": "Key: R_SHIFT"
+    },
+    {
+      "led_id": 101,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 12,
+        "matrix_row": 5,
+        "formula": "col * 8 + row = 12 * 8 + 5 = 101"
+      },
+      "notes": "Key: LEFT"
+    },
+    {
+      "led_id": 102,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 12,
+        "matrix_row": 6,
+        "formula": "col * 8 + row = 12 * 8 + 6 = 102"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 103,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 12,
+        "matrix_row": 7,
+        "formula": "col * 8 + row = 12 * 8 + 7 = 103"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 104,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 13,
+        "matrix_row": 0,
+        "formula": "col * 8 + row = 13 * 8 + 0 = 104"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 105,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 13,
+        "matrix_row": 1,
+        "formula": "col * 8 + row = 13 * 8 + 1 = 105"
+      },
+      "notes": "Key: BACKSPACE"
+    },
+    {
+      "led_id": 106,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 13,
+        "matrix_row": 2,
+        "formula": "col * 8 + row = 13 * 8 + 2 = 106"
+      },
+      "notes": "Key: \\"
+    },
+    {
+      "led_id": 107,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 13,
+        "matrix_row": 3,
+        "formula": "col * 8 + row = 13 * 8 + 3 = 107"
+      },
+      "notes": "Key: ENTER"
+    },
+    {
+      "led_id": 108,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 13,
+        "matrix_row": 4,
+        "formula": "col * 8 + row = 13 * 8 + 4 = 108"
+      },
+      "notes": "Key: UP"
+    },
+    {
+      "led_id": 109,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 13,
+        "matrix_row": 5,
+        "formula": "col * 8 + row = 13 * 8 + 5 = 109"
+      },
+      "notes": "Key: DOWN"
+    },
+    {
+      "led_id": 110,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 13,
+        "matrix_row": 6,
+        "formula": "col * 8 + row = 13 * 8 + 6 = 110"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 111,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 13,
+        "matrix_row": 7,
+        "formula": "col * 8 + row = 13 * 8 + 7 = 111"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 112,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 14,
+        "matrix_row": 0,
+        "formula": "col * 8 + row = 14 * 8 + 0 = 112"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 113,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 14,
+        "matrix_row": 1,
+        "formula": "col * 8 + row = 14 * 8 + 1 = 113"
+      },
+      "notes": "Key: INS"
+    },
+    {
+      "led_id": 114,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 14,
+        "matrix_row": 2,
+        "formula": "col * 8 + row = 14 * 8 + 2 = 114"
+      },
+      "notes": "Key: DEL"
+    },
+    {
+      "led_id": 115,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 14,
+        "matrix_row": 3,
+        "formula": "col * 8 + row = 14 * 8 + 3 = 115"
+      },
+      "notes": "Key: PGUP"
+    },
+    {
+      "led_id": 116,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 14,
+        "matrix_row": 4,
+        "formula": "col * 8 + row = 14 * 8 + 4 = 116"
+      },
+      "notes": "Key: PGDN"
+    },
+    {
+      "led_id": 117,
+      "classification": "Keyboard Key",
+      "physical_position": null,
+      "controllable": true,
+      "matrix_hardware_coords": {
+        "matrix_col": 14,
+        "matrix_row": 5,
+        "formula": "col * 8 + row = 14 * 8 + 5 = 117"
+      },
+      "notes": "Key: RIGHT"
+    },
+    {
+      "led_id": 118,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 14,
+        "matrix_row": 6,
+        "formula": "col * 8 + row = 14 * 8 + 6 = 118"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 119,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 14,
+        "matrix_row": 7,
+        "formula": "col * 8 + row = 14 * 8 + 7 = 119"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 120,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 15,
+        "matrix_row": 0,
+        "formula": "col * 8 + row = 15 * 8 + 0 = 120"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 121,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 15,
+        "matrix_row": 1,
+        "formula": "col * 8 + row = 15 * 8 + 1 = 121"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 122,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 15,
+        "matrix_row": 2,
+        "formula": "col * 8 + row = 15 * 8 + 2 = 122"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 123,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 15,
+        "matrix_row": 3,
+        "formula": "col * 8 + row = 15 * 8 + 3 = 123"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 124,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 15,
+        "matrix_row": 4,
+        "formula": "col * 8 + row = 15 * 8 + 4 = 124"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 125,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 15,
+        "matrix_row": 5,
+        "formula": "col * 8 + row = 15 * 8 + 5 = 125"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 126,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 15,
+        "matrix_row": 6,
+        "formula": "col * 8 + row = 15 * 8 + 6 = 126"
+      },
+      "notes": ""
+    },
+    {
+      "led_id": 127,
+      "classification": "No Response",
+      "physical_position": null,
+      "controllable": false,
+      "matrix_hardware_coords": {
+        "matrix_col": 15,
+        "matrix_row": 7,
+        "formula": "col * 8 + row = 15 * 8 + 7 = 127"
+      },
+      "notes": ""
+    }
+  ]
+}

@@ -144,13 +144,12 @@ void Events(const std::filesystem::path& dir) {
     auto head=EffectRule("both","event",Logic("and",json::array({Event("event.kill"),Event("event.headshot")})));
     auto nothead=EffectRule("body","event",Logic("and",json::array({Event("event.kill"),Logic("not",json::array({Event("event.headshot")}))})));
     auto witness=EffectRule("witness","event",Logic("or",json::array({Field("process","cs2"),Event("event.kill")})));
-    auto negative=EffectRule("negative","event",Logic("not",json::array({Event("event.headshot")})));
-    Harness h(dir,Config(json::array({kill,head,nothead,witness,negative})));
+    Harness h(dir,Config(json::array({kill,head,nothead,witness})));
     h.Packet(100,100); h.Tick(100);
     h.Packet(200,100,1); h.Packet(500,100,2);
     auto two=h.Tick(500);
     Check(Shots(two,"kill")==2 && Shots(two,"body")==2,"two packets before tick retain two admissions");
-    Check(Shots(two,"both")==0 && Shots(two,"negative")==0,"same batch and positive witness");
+    Check(Shots(two,"both")==0,"same batch and positive witness");
     uint64_t prior_sequence=0;
     for(const auto& d:two.decisions) if(d.admitted) {
         Check(d.packet_sequence>=prior_sequence,"global packet-major admission order"); prior_sequence=d.packet_sequence;
@@ -183,7 +182,7 @@ void Events(const std::filesystem::path& dir) {
     Harness startup(dir,Config(json::array({kill})));
     startup.Packet(1,100); startup.Packet(2,100,1); Check(Shots(startup.Tick(2))==0,"startup history discarded");
 }
-void PacketCoherenceAndLegacy(const std::filesystem::path& dir) {
+void PacketCoherence(const std::filesystem::path& dir) {
     GsiState concurrent;
     std::atomic<bool> start{false};
     std::vector<std::thread> writers;
@@ -234,14 +233,27 @@ void PacketCoherenceAndLegacy(const std::filesystem::path& dir) {
     Harness zero(dir,Config(json::array({EffectRule("zero","rising",Low())})));
     zero.Packet(0,20); zero.Tick(0); zero.Packet(3001,10);
     Check(Shots(zero.Tick(3001))==0,"zero receipt is valid; gap recovery must seed");
-    // Legacy != missing and NOT retain their historical boolean rules; new NOT is unknown.
-    Harness old(dir,Config(json::array({{{"target_profile","legacy"},{"condition",{{"not",Field("absent",1)}}}}})));
-    Check(old.Tick(3001).profile->name=="legacy","legacy NOT missing still true");
-    auto legacy=Config(); legacy["gsi_bindings"]=json::array({{{"field","player.state.health"},{"operator","<"},{"value","15"},{"profile","legacy"}}});
-    old.Load(legacy); old.Packet(1,10);
-    Check(old.Tick(5000).profile->name=="legacy","legacy coercion/freshness unchanged above v2 3s");
-    legacy["orchestration"]["rules"]=json::array({{{"target_profile","low"},{"condition",Low()},{"model",42}}});
-    old.Load(legacy); Check(old.Tick(5000).profile->name=="low","legacy unknown model metadata preserved");
+
+}
+void PositiveOccurrenceValidation(const std::filesystem::path& dir) {
+    Harness h(dir,Config());
+    const auto kill=Event("event.kill");
+    for(const auto& condition:json::array({Low(),json{{"not",kill}},json{{"not",{{"not",kill}}}}})) {
+        const auto rule=EffectRule("invalid-event","event",condition);
+        bool rejected=false;
+        try { RuleEngine::ParseAutomationRule(rule); }
+        catch(const std::exception& e) { rejected=std::string(e.what()).find("positive occurrence")!=std::string::npos; }
+        Check(rejected,"event without positive witness rejected by authoritative parser");
+        Check(!h.Write(Config(json::array({rule}))),"config loader rejects unwitnessable event rule");
+    }
+    for(const auto& condition:json::array({kill,json{{"and",json::array({kill,Low()})}},json{{"or",json::array({kill,Low()})}}})) {
+        const auto rule=EffectRule("valid-event","event",condition);
+        Check(RuleEngine::ParseAutomationRule(rule).mode=="event","positive event witness accepted");
+        h.Load(Config(json::array({rule})));
+    }
+    for(const auto* mode:{"state","rising"})
+        for(const auto& condition:json::array({Low(),json{{"not",Low()}}}))
+            h.Load(Config(json::array({EffectRule("comparison",mode,condition)})));
 }
 void CandidateValidation(const std::filesystem::path& dir) {
     const auto active=ProfileRule("active",Field("process","cs2.exe"));
@@ -324,28 +336,22 @@ void CandidateValidation(const std::filesystem::path& dir) {
     plugin["action"]["effect"]={{"kind","plugin"},{"name","stage2_uninstalled_plugin"}};
     h.Load(Config(json::array({plugin})));
     Check(h.engine.GetEvaluationPlan().front().automation.action["effect"]["kind"]=="plugin","plugin resolution deferred to Stage 3");
-    // Legacy parser still has no new v2 limits or shared AST budget.
-    auto legacy=Config(json::array({{{"target_profile","low"},{"condition",chain(33)}}}));
-    h.Load(legacy); Check(h.Tick(100).profile->name=="low","legacy depth 33 retains boolean behavior");
-    legacy["orchestration"]["rules"][0]["condition"]=wide(256);
-    h.Load(legacy); Check(h.Tick(100).profile->name=="low","legacy 257-node AST remains valid");
+
 }
 void ValidationAndPrecedence(const std::filesystem::path& dir) {
     auto cfg=Config(json::array({ProfileRule("v2",Field("process","cs2.exe"))}));
-    cfg["rules"]=json::array({{{"process","cs2.exe"},{"profile","legacy"},{"suppress_web_ui",true}}});
-    cfg["gsi_bindings"]=json::array({{{"field","player.state.health"},{"operator","<"},{"value",50},{"profile","legacy"}}});
-    cfg["orchestration"]["event_overlays"]=json::array({{{"event","event.kill"},{"effect","low"}}});
     Harness h(dir,cfg); h.Packet(100,10);
-    auto out=h.Tick(100); Check(out.profile->name=="low" && out.suppress_web_ui,"v2 orchestration precedes GSI/application; DND orthogonal");
-    Check(h.engine.GetEvaluationPlan().size()==4 && h.engine.GetEventOverlayRules().size()==1,"one plan entry per source; legacy overlay sole executor");
-    Check(out.decisions.size()==1 && Shots(out)==0 && out.profile_plan_entries_evaluated==2,"one arbitration pass; legacy entries not translated into duplicate admissions");
-    auto legacy=json{{"id","legacy-orch"},{"target_profile","legacy"},{"condition",json::object()}};
-    cfg["orchestration"]["rules"].insert(cfg["orchestration"]["rules"].begin(),legacy); h.Load(cfg);
-    Check(h.Tick(101).profile->name=="legacy","legacy orchestration before v2 at config order");
-    std::swap(cfg["orchestration"]["rules"][0],cfg["orchestration"]["rules"][1]); h.Load(cfg);
-    Check(h.Tick(102).profile->name=="low","v2 before legacy at config order");
-    auto plan=h.engine.GetEvaluationPlan();
-    Check(plan[0].config_order==0 && plan[1].config_order==1 && plan[1].compatibility==CompatibilityPolicy::LegacyBoolean,"explicit provenance/order/compatibility");
+    Check(h.Tick(100).profile->name=="low", "V2 profile selected");
+    for(const auto* key:{"rules","gsi_bindings"}) {
+        auto retired=cfg;retired[key]=json::array({{{"profile","low"}}});
+        Check(!h.Write(retired), "retired nonempty section rejected");
+        retired[key]=json::array();Check(h.Write(retired),"empty compatibility container tolerated");
+    }
+    auto retired=cfg;retired["orchestration"]["event_overlays"]=json::array({{{"effect","low"}}});
+    Check(!h.Write(retired),"retired event overlay rejected");
+    retired=cfg;retired["orchestration"]["rules"]=json::array({{{"target_profile","low"}}});
+    Check(!h.Write(retired),"non-V2 orchestration rejected");
+    h.Load(cfg);
     std::vector<json> invalid;
     auto bad=ProfileRule("bad",Low()); bad["when"]["mode"]="event"; invalid.push_back(bad);
     bad["when"]["mode"]="rising"; invalid.push_back(bad);
@@ -376,7 +382,7 @@ int main() {
     const auto dir=std::filesystem::temp_directory_path()/("aura-v2-conformance-"+std::to_string(GetCurrentProcessId()));
     try {
         std::filesystem::create_directories(dir);
-        StateAndRising(dir); TruthAndSnapshot(dir); CoherentAdmission(dir); Events(dir); PacketCoherenceAndLegacy(dir); ValidationAndPrecedence(dir); CandidateValidation(dir);
+        StateAndRising(dir); TruthAndSnapshot(dir); CoherentAdmission(dir); Events(dir); PacketCoherence(dir); ValidationAndPrecedence(dir); CandidateValidation(dir); PositiveOccurrenceValidation(dir);
         std::filesystem::remove_all(dir);
         std::cout << "PASS: " << checks << " deterministic Automation v2 assertions\n"; return 0;
     } catch(const std::exception& e) { std::cerr << "FAIL after " << checks << ": " << e.what() << "\n"; return 1; }

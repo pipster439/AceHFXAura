@@ -24,8 +24,7 @@ import {
   X
 } from 'lucide-react';
 import EffectStudio from './EffectStudio';
-import OrchestratorStudio from './OrchestratorStudio';
-import OrchestrationInspector from './OrchestrationInspector';
+import AutomationAuthoring from './AutomationAuthoring';
 import KeyboardVisualizer from './KeyboardVisualizer';
 import { 
   getEffectLifecycleStatus, 
@@ -35,7 +34,6 @@ import {
   renameEffectInConfig
 } from '../utils/applyEffect';
 import { EFFECT_PRESETS } from '../blockly/presets';
-import { canonicalConfig } from '../utils/orchestration';
 
 export default function Studio({
   config,
@@ -57,8 +55,7 @@ export default function Studio({
   onToggleKeySelection,
   bgColor,
   fpsVal,
-  onSwitchToLegacyRules,
-  onSwitchToLegacyGsi
+  onConfigChanged
 }) {
   // 当前激活的作品类型：'effect' (光效) 或 'orchestration' (自动化)
   const [activeWorkType, setActiveWorkType] = useState('effect');
@@ -121,12 +118,11 @@ export default function Studio({
   // 处理删除光效
   const handleDeleteEffect = async (name, e) => {
     e?.stopPropagation?.();
-    const c = canonicalConfig(config);
+    const c = config;
     if (
       c.default_profile === name || 
       c.orchestration?.fallback_profile === name || 
-      c.orchestration?.rules?.some(r => r.target_profile === name) || 
-      c.orchestration?.event_overlays?.some(r => r.effect === name)
+      c.orchestration?.rules?.some(r => r.action?.profile === name || r.action?.effect?.name === name)
     ) {
       showToast?.('此光效正在被方案或联动引用，请先更换引用后再删除', 'error');
       return;
@@ -516,26 +512,7 @@ export default function Studio({
             <span>高级与兼容功能</span>
           </div>
           <div className="flex items-center gap-1.5">
-            {onSwitchToLegacyRules && (
-              <button
-                type="button"
-                onClick={onSwitchToLegacyRules}
-                className="flex-1 py-1 px-2 rounded-md-sm bg-md-surface-container hover:bg-md-surface-container-high text-[11px] text-md-on-surface border border-md-outline-variant text-center transition-colors cursor-pointer truncate"
-                title="打开传统进程规则表格"
-              >
-                传统规则表
-              </button>
-            )}
-            {onSwitchToLegacyGsi && (
-              <button
-                type="button"
-                onClick={onSwitchToLegacyGsi}
-                className="flex-1 py-1 px-2 rounded-md-sm bg-md-surface-container hover:bg-md-surface-container-high text-[11px] text-md-on-surface border border-md-outline-variant text-center transition-colors cursor-pointer truncate"
-                title="打开 CS2 官方 GSI 数据诊断与 CFG 部署"
-              >
-                CS2 遥测诊断
-              </button>
-            )}
+
           </div>
         </div>
       </div>
@@ -552,13 +529,13 @@ export default function Studio({
             onEffectNameChange={(name) => setActiveEffectName(name)}
           />
         ) : (
-          <OrchestratorStudio
+          <AutomationAuthoring
             config={config}
             onSaveConfig={onSaveConfig}
             profiles={config?.profiles}
             currentProfileName={currentProfileName}
             showToast={showToast}
-            onSwitchToLegacyRules={onSwitchToLegacyRules}
+            onConfigChanged={onConfigChanged}
           />
         )}
       </div>
@@ -642,10 +619,7 @@ export default function Studio({
             </div>
           </>
         ) : (
-          <OrchestrationInspector
-            config={config}
-            currentProfileName={currentProfileName}
-          />
+          <p>Automation 模拟使用 daemon 实际输出；编辑光效预览仅用于单效果。</p>
         )}
       </div>
 

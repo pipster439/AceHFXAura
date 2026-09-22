@@ -1,7 +1,6 @@
 /**
  * Blockly Toolboxes for ROG Falchion Ace HFX
  * 1. Effect Studio Toolbox (5 Scratch-Style Domain Categories: Control, Math & Logic, Variables, Sensing, Color & Keys)
- * 2. Orchestrator Studio Toolbox (Control Flow, Sensing & Conditions, Actions, Legacy)
  */
 
 export const EFFECT_STUDIO_TOOLBOX = {
@@ -294,104 +293,6 @@ export const EFFECT_STUDIO_TOOLBOX = {
             }
           ]
         }
-      ]
-    }
-  ]
-};
-
-export const ORCHESTRATOR_STUDIO_TOOLBOX = {
-  kind: 'categoryToolbox',
-  contents: [
-    {
-      kind: 'category',
-      name: '🕹️ 控制流 (Control Flow)',
-      colour: '#FFAB19',
-      contents: [
-        { kind: 'block', type: 'orch_root_flow' },
-        { kind: 'block', type: 'controls_if' },
-        // Timing belongs to effect scripts; orchestration is declarative.
-      ]
-    },
-    {
-      kind: 'category',
-      name: '🔍 侦测与条件 (Sensing & Conditions)',
-      colour: '#4CBFE6',
-      contents: [
-        { kind: 'block', type: 'gsi_player_health_condition' },
-        { kind: 'block', type: 'gsi_c4_state_condition' },
-        { kind: 'block', type: 'gsi_state_match' },
-        { kind: 'block', type: 'gsi_numeric_compare' },
-        { kind: 'block', type: 'gsi_enum_constant' },
-        { kind: 'block', type: 'orch_current_process' },
-        {
-          kind: 'block',
-          type: 'orch_gsi_num',
-          inputs: {
-            DEFAULT: { shadow: { type: 'math_number', fields: { NUM: 100 } } }
-          }
-        },
-        {
-          kind: 'block',
-          type: 'orch_gsi_str',
-          inputs: {
-            DEFAULT: { shadow: { type: 'text', fields: { TEXT: '' } } }
-          }
-        },
-        {
-          kind: 'block',
-          type: 'orch_gsi_bool',
-          inputs: {
-            DEFAULT: { shadow: { type: 'logic_boolean', fields: { BOOL: 'FALSE' } } }
-          }
-        },
-        { kind: 'block', type: 'orch_event_triggered' },
-        {
-          kind: 'block',
-          type: 'orch_text_equals',
-          inputs: {
-            A: { shadow: { type: 'text', fields: { TEXT: 'cs2.exe' } } },
-            B: { shadow: { type: 'text', fields: { TEXT: 'cs2.exe' } } }
-          }
-        },
-        {
-          kind: 'block',
-          type: 'logic_compare',
-          inputs: {
-            A: { shadow: { type: 'math_number', fields: { NUM: 100 } } },
-            B: { shadow: { type: 'math_number', fields: { NUM: 30 } } }
-          }
-        },
-        { kind: 'block', type: 'logic_operation' },
-        { kind: 'block', type: 'logic_negate' },
-        { kind: 'block', type: 'logic_boolean' },
-        { kind: 'block', type: 'math_number' },
-        { kind: 'block', type: 'text' }
-      ]
-    },
-    {
-      kind: 'category',
-      name: '⚡ 执行动作 (Actions)',
-      colour: '#9966FF',
-      contents: [
-        { kind: 'block', type: 'orch_action_switch_profile' },
-        { kind: 'block', type: 'orch_action_overlay_pulse' },
-        { kind: 'block', type: 'orch_action_overlay_state' },
-        { kind: 'block', type: 'orch_action_set_dnd' }
-      ]
-    },
-    { kind: 'sep' },
-    {
-      kind: 'category',
-      name: '🏛️ 经典模块 (Legacy)',
-      colour: '#705D00',
-      contents: [
-        { kind: 'block', type: 'orchestrator_root' },
-        { kind: 'block', type: 'event_overlay' },
-        { kind: 'block', type: 'match_process' },
-        { kind: 'block', type: 'condition_compare' },
-        { kind: 'block', type: 'condition_and' },
-        { kind: 'block', type: 'condition_or' },
-        { kind: 'block', type: 'condition_not' }
       ]
     }
   ]

@@ -729,7 +729,7 @@ class TestLauncherEntrypoint(unittest.TestCase):
                                 cwd=self.tmp_dir, env=self.env,
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                 text=True, encoding="utf-8", errors="replace")
-        log_path = os.path.join(self.tmp_dir, "aura_daemon.log")
+        log_path = os.path.join(self.env["LOCALAPPDATA"], "Aura", "aura_daemon.log")
         try:
             # 确认启动器透明转发显式配置给守护进程，并在日志中确认加载成功
             loaded_ok = wait_for_daemon_log_match(log_path, "默认方案: launcher_explicit_prof", proc, timeout=6.0)
@@ -750,10 +750,10 @@ class TestLauncherEntrypoint(unittest.TestCase):
                                 cwd=self.tmp_dir, env=self.env,
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                 text=True, encoding="utf-8", errors="replace")
-        log_path = os.path.join(self.tmp_dir, "aura_daemon.log")
+        log_path = os.path.join(self.env["LOCALAPPDATA"], "Aura", "aura_daemon.log")
         try:
-            # 等待启动器完成自解压并在 CWD 释放默认 config.json
-            created_config = os.path.join(self.tmp_dir, "config.json")
+            # 等待启动器在隔离 LOCALAPPDATA 初始化默认 config.json
+            created_config = os.path.join(self.env["LOCALAPPDATA"], "Aura", "config.json")
             for _ in range(40):
                 if os.path.isfile(created_config):
                     break
@@ -765,9 +765,9 @@ class TestLauncherEntrypoint(unittest.TestCase):
         finally:
             terminate_proc(proc)
 
-        created_config = os.path.join(self.tmp_dir, "config.json")
+        created_config = os.path.join(self.env["LOCALAPPDATA"], "Aura", "config.json")
         self.assertTrue(os.path.isfile(created_config),
-                        "Aura.exe must create default config.json in CWD upon launch")
+                        "Single-file Aura.exe must create canonical config.json in isolated LOCALAPPDATA")
         with open(created_config, "r", encoding="utf-8") as f:
             data = json.load(f)
         self.assertIn("profiles", data)
@@ -790,7 +790,7 @@ class TestLauncherEntrypoint(unittest.TestCase):
                                 cwd=self.tmp_dir, env=self.env,
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                 text=True, encoding="utf-8", errors="replace")
-        log_path = os.path.join(self.tmp_dir, "aura_daemon.log")
+        log_path = os.path.join(self.env["LOCALAPPDATA"], "Aura", "aura_daemon.log")
         try:
             # 确认子进程实际加载并激活了既有配置中的自定义默认方案
             loaded_ok = wait_for_daemon_log_match(log_path, "默认方案: launcher_skip_prof", proc, timeout=6.0)

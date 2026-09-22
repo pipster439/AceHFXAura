@@ -1,3 +1,5 @@
+> HISTORICAL: pre-retirement implementation evidence. Current Automation supports V2 only; see docs/architecture/AUTOMATION_V2.md.
+
 # Automation v2 Stage 6 acceptance report
 
 Status: implemented and verified; stopped after Stage 6. The reviewed Stage 5A checkpoint was committed separately as `ddde10f` (`Checkpoint accepted Automation v2 Stage 5A authoring and migration`). Stage 4 and earlier commits were not amended. This patch is relative to that Stage 5A checkpoint.

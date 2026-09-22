@@ -1,3 +1,5 @@
+> HISTORICAL: Automation configuration snapshots here are pre-retirement migration/rejection evidence, not supported runtime inputs. Frozen plugin binaries remain protected; the ABI integrity test verifies binaries independently.
+
 # Stage 0 compatibility evidence
 
 Captured before any Stage 1 build, from approved HEAD `7b2e1c7887cf9c6f7e5a9601530b19b00282ed24`. [manifest.json](manifest.json) records exact bytes, SHA-256, source paths, timestamps, categories and the bounded inventory. CMake must never rebuild or overwrite `binaries/`.

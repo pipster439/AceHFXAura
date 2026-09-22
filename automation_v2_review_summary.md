@@ -1,3 +1,5 @@
+> HISTORICAL / PRE-RETIREMENT: this document records an earlier design. Current product behavior is documented in docs/architecture/AUTOMATION_V2.md. Legacy Automation execution and coexistence are no longer supported.
+
 # Automation v2 — Owner review decisions
 
 Status: **approved for implementation**. Phase 4 v1 is accepted and merged into main. Approved starting baseline and historical source audit: `7b2e1c7887cf9c6f7e5a9601530b19b00282ed24`. Current authorization is Stage 0 then Stage 1 only; stop after Stage 1. Full evidence, examples, compatibility and stages: [design spike](docs/architecture/automation_v2_design_spike.md). Product boundary: [architecture review](docs/architecture/automation_architecture_review.md).

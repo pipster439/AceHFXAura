@@ -1,3 +1,5 @@
+> HISTORICAL / PRE-RETIREMENT: this document records an earlier design. Current product behavior is documented in docs/architecture/AUTOMATION_V2.md. Legacy Automation execution and coexistence are no longer supported.
+
 # AceHFXAura: Automation / Studio / Effect / GSI 职责边界审计与架构基线 (Architecture Review & Baseline)
 
 - **版本**: v1.1.0 (Owner 审阅修订版)

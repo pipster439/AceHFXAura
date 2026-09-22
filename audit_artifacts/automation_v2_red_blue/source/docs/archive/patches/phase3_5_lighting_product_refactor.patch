@@ -1,0 +1,2241 @@
+diff --git a/include/config/lighting_service.h b/include/config/lighting_service.h
+index 686d371..6ef8e5c 100644
+--- a/include/config/lighting_service.h
++++ b/include/config/lighting_service.h
+@@ -69,6 +69,21 @@ bool IsPeriodSupported(const std::string& effect_type);
+ uint64_t GetEffectDefaultPeriod(const std::string& effect_type);
+ uint64_t ResolveEffectivePeriodMs(const std::string& effect_type, const nlohmann::json& pval, const std::string& pname = "");
+ 
++// ========================================================
++// 内建预设 (Builtin Lighting Preset) Catalog 规范
++// ========================================================
++struct BuiltinLightingPreset {
++    std::string id;
++    std::string display_name;
++    std::string effect_type;
++    bool supports_period{false};
++    uint64_t default_period_ms{0};
++    nlohmann::json canonical_params;
++};
++
++const std::vector<BuiltinLightingPreset>& GetBuiltinLightingPresets();
++const BuiltinLightingPreset* FindBuiltinLightingPreset(const std::string& id_or_type);
++
+ // ========================================================
+ // 亮度 (brightness) 规范化
+ // ========================================================
+@@ -122,6 +137,29 @@ public:
+         int fps{25};
+     };
+ 
++    // Phase 3.5: Base Lighting 与 Builtin Preset 语义模型
++    struct BaseLightingDetail {
++        std::string profile_name;
++        std::string effect;
++        std::string preset_id;
++        bool is_builtin_preset{false};
++        double brightness{1.0};
++        bool supports_period{false};
++        bool has_period{false};
++        uint64_t period_ms{0};
++        std::string revision;
++    };
++
++    struct BaseLightingPatchInput {
++        std::string expected_revision;
++        bool has_preset{false};
++        std::string preset;
++        bool has_brightness{false};
++        double brightness{1.0};
++        bool has_period_ms{false};
++        uint64_t period_ms{0};
++    };
++
+     struct OpResult {
+         int http_status{200};
+         std::string error_code;
+@@ -133,6 +171,11 @@ public:
+     OpResult GetProfileDetail(const std::string& name, ProfileDetail& out_detail);
+     OpResult UpdateProfile(const std::string& name, const PatchInput& patch, std::string& out_new_revision);
+ 
++    // Phase 3.5 新增方法
++    OpResult GetPresetCatalog(std::vector<BuiltinLightingPreset>& out_presets);
++    OpResult GetBaseLighting(BaseLightingDetail& out_detail);
++    OpResult UpdateBaseLighting(const BaseLightingPatchInput& patch, std::string& out_new_revision);
++
+ private:
+     std::filesystem::path config_path_;
+     FileReplacerFunc file_replacer_;
+diff --git a/src/config/lighting_service.cpp b/src/config/lighting_service.cpp
+index 5a59bcf..b1e462d 100644
+--- a/src/config/lighting_service.cpp
++++ b/src/config/lighting_service.cpp
+@@ -34,34 +34,170 @@ std::string ComputeFileRevision(const std::string& content) {
+     return FormatFnv1aHex(h);
+ }
+ 
++// ========================================================
++// 内建预设 (Builtin Lighting Preset) Catalog 规范与单一事实来源
++// ========================================================
++const std::vector<BuiltinLightingPreset>& GetBuiltinLightingPresets() {
++    static const std::vector<BuiltinLightingPreset> kPresets = {
++        {
++            "static",
++            "Static",
++            "static",
++            false,
++            0,
++            {
++                {"type", "static"},
++                {"color", {0, 80, 200}},
++                {"analog", true}
++            }
++        },
++        {
++            "breathing",
++            "Breathing",
++            "breathing",
++            true,
++            3000,
++            {
++                {"type", "breathing"},
++                {"color1", {0, 100, 255}},
++                {"color2", {0, 10, 50}},
++                {"period_ms", 3000}
++            }
++        },
++        {
++            "color_cycle",
++            "Color Cycle",
++            "color_cycle",
++            true,
++            3500,
++            {
++                {"type", "color_cycle"},
++                {"period_ms", 3500}
++            }
++        },
++        {
++            "wave",
++            "Wave",
++            "wave",
++            true,
++            3500,
++            {
++                {"type", "wave"},
++                {"direction", "diag_dl"},
++                {"thickness", 1.0},
++                {"period_ms", 3500}
++            }
++        },
++        {
++            "reactive",
++            "Reactive",
++            "reactive",
++            true,
++            2500,
++            {
++                {"type", "reactive"},
++                {"bg", {0, 5, 15}},
++                {"color", {255, 25, 41}},
++                {"period_ms", 2500}
++            }
++        },
++        {
++            "ripple",
++            "Ripple",
++            "ripple",
++            true,
++            2500,
++            {
++                {"type", "ripple"},
++                {"bg", {0, 0, 0}},
++                {"color", {0, 240, 255}},
++                {"thickness", 1.0},
++                {"period_ms", 2500}
++            }
++        },
++        {
++            "starry_night",
++            "Starry Night",
++            "starry_night",
++            true,
++            2500,
++            {
++                {"type", "starry_night"},
++                {"color", {0, 240, 255}},
++                {"random_colors", true},
++                {"period_ms", 2500}
++            }
++        },
++        {
++            "quicksand",
++            "Quicksand",
++            "quicksand",
++            true,
++            3500,
++            {
++                {"type", "quicksand"},
++                {"color1", {255, 25, 41}},
++                {"color2", {20, 138, 196}},
++                {"direction", "diag_dl"},
++                {"thickness", 1.0},
++                {"period_ms", 3500}
++            }
++        },
++        {
++            "current",
++            "Current",
++            "current",
++            true,
++            2000,
++            {
++                {"type", "current"},
++                {"color", {0, 240, 255}},
++                {"thickness", 1.0},
++                {"period_ms", 2000}
++            }
++        },
++        {
++            "raindrop",
++            "Raindrop",
++            "raindrop",
++            true,
++            2500,
++            {
++                {"type", "raindrop"},
++                {"color", {0, 240, 255}},
++                {"period_ms", 2500}
++            }
++        }
++    };
++    return kPresets;
++}
++
++const BuiltinLightingPreset* FindBuiltinLightingPreset(const std::string& id_or_type) {
++    const auto& presets = GetBuiltinLightingPresets();
++    for (const auto& p : presets) {
++        if (p.id == id_or_type || p.effect_type == id_or_type) {
++            return &p;
++        }
++    }
++    return nullptr;
++}
++
+ // ========================================================
+ // 动画周期共享元数据
+ // ========================================================
+ bool IsPeriodSupported(const std::string& effect_type) {
+-    static const std::unordered_set<std::string> kPeriodEffects = {
+-        "breathing",
+-        "color_cycle",
+-        "wave",
+-        "reactive",
+-        "ripple",
+-        "starry_night",
+-        "quicksand",
+-        "current",
+-        "raindrop"
+-    };
+-    return kPeriodEffects.find(effect_type) != kPeriodEffects.end();
++    const auto* p = FindBuiltinLightingPreset(effect_type);
++    if (p != nullptr) {
++        return p->supports_period;
++    }
++    return false;
+ }
+ 
+ uint64_t GetEffectDefaultPeriod(const std::string& effect_type) {
+-    if (effect_type == "breathing") return 3000;
+-    if (effect_type == "color_cycle") return 3500;
+-    if (effect_type == "wave") return 3500;
+-    if (effect_type == "quicksand") return 3500;
+-    if (effect_type == "reactive") return 2500;
+-    if (effect_type == "ripple") return 2500;
+-    if (effect_type == "starry_night") return 2500;
+-    if (effect_type == "raindrop") return 2500;
+-    if (effect_type == "current") return 2000;
++    const auto* p = FindBuiltinLightingPreset(effect_type);
++    if (p != nullptr && p->supports_period) {
++        return p->default_period_ms;
++    }
+     return 2500;
+ }
+ 
+@@ -328,6 +464,197 @@ LightingControlService::OpResult LightingControlService::UpdateProfile(
+     }
+ }
+ 
++LightingControlService::OpResult LightingControlService::GetPresetCatalog(
++    std::vector<BuiltinLightingPreset>& out_presets) {
++    out_presets = GetBuiltinLightingPresets();
++    return {200, "", "", ""};
++}
++
++LightingControlService::OpResult LightingControlService::GetBaseLighting(BaseLightingDetail& out_detail) {
++    std::string content;
++    std::string rev;
++    if (!ReadRawConfigFile(content, rev)) {
++        return {500, "Internal Error", "Failed to read configuration file", ""};
++    }
++
++    try {
++        auto root = nlohmann::ordered_json::parse(content);
++        if (!root.is_object()) {
++            return {500, "Config Error", "Configuration root must be a JSON object", rev};
++        }
++
++        if (!root.contains("default_profile") || !root["default_profile"].is_string()) {
++            return {500, "Config Error", "Configuration root missing valid string 'default_profile'", rev};
++        }
++
++        std::string def_name = root["default_profile"].get<std::string>();
++        if (!root.contains("profiles") || !root["profiles"].is_object()) {
++            return {500, "Config Error", "Configuration root missing 'profiles' object", rev};
++        }
++
++        if (!root["profiles"].contains(def_name)) {
++            return {404, "Profile Not Found", "Default profile '" + def_name + "' does not exist in 'profiles'", rev};
++        }
++
++        if (!root["profiles"][def_name].is_object()) {
++            return {500, "Config Error", "Default profile '" + def_name + "' is not a valid JSON object", rev};
++        }
++
++        const auto& pval = root["profiles"][def_name];
++        BaseLightingDetail d;
++        d.profile_name = def_name;
++        d.effect = pval.value("type", "static");
++        d.brightness = NormalizeBrightnessToRatio(pval);
++        d.revision = rev;
++
++        const auto* preset = FindBuiltinLightingPreset(d.effect);
++        if (preset != nullptr) {
++            d.is_builtin_preset = true;
++            d.preset_id = preset->id;
++            d.supports_period = preset->supports_period;
++            if (d.supports_period) {
++                d.has_period = true;
++                d.period_ms = ResolveEffectivePeriodMs(d.effect, pval, def_name);
++            } else {
++                d.has_period = false;
++                d.period_ms = 0;
++            }
++        } else {
++            // 支持高级效果 (custom_keymap, plugin, etc.)
++            d.is_builtin_preset = false;
++            d.preset_id = "";
++            d.supports_period = false;
++            d.has_period = false;
++            d.period_ms = 0;
++        }
++
++        out_detail = std::move(d);
++        return {200, "", "", rev};
++    } catch (const std::exception& e) {
++        return {500, "Internal Error", std::string("JSON parsing error: ") + e.what(), rev};
++    }
++}
++
++LightingControlService::OpResult LightingControlService::UpdateBaseLighting(
++    const BaseLightingPatchInput& patch, std::string& out_new_revision) {
++    if (patch.expected_revision.empty()) {
++        return {400, "Validation Error", "Missing required field 'expected_revision'", ""};
++    }
++
++    // 1. 获取跨进程 Windows Named Mutex 互斥锁
++    NamedConfigLock lock(L"Local\\AceHFXAuraConfigWriteMutex", 5000);
++    if (!lock.IsAcquired()) {
++        return {500, "Internal Error", "Failed to acquire cross-process configuration lock", ""};
++    }
++
++    // 2. 锁内重新读取最新文件内容与版本
++    std::string content;
++    std::string current_rev;
++    if (!ReadRawConfigFile(content, current_rev)) {
++        return {500, "Internal Error", "Failed to read configuration file", ""};
++    }
++
++    // 3. 版本指纹比对 (FNV-1a 64-bit 严格一致性，409 Conflict)
++    if (current_rev != patch.expected_revision) {
++        return {409, "Conflict", "Configuration has been modified externally", current_rev};
++    }
++
++    try {
++        auto root = nlohmann::ordered_json::parse(content);
++        if (!root.is_object()) {
++            return {500, "Config Error", "Configuration root must be a JSON object", current_rev};
++        }
++
++        if (!root.contains("default_profile") || !root["default_profile"].is_string()) {
++            return {500, "Config Error", "Configuration root missing valid string 'default_profile'", current_rev};
++        }
++
++        std::string def_name = root["default_profile"].get<std::string>();
++        if (!root.contains("profiles") || !root["profiles"].is_object()) {
++            return {500, "Config Error", "Configuration root missing 'profiles' object", current_rev};
++        }
++
++        if (!root["profiles"].contains(def_name)) {
++            return {404, "Profile Not Found", "Default profile '" + def_name + "' does not exist in 'profiles'", current_rev};
++        }
++
++        if (!root["profiles"][def_name].is_object()) {
++            return {500, "Config Error", "Default profile '" + def_name + "' is not a valid JSON object", current_rev};
++        }
++
++        auto& prof = root["profiles"][def_name];
++
++        // 4. Targeted Patch: 写入 preset 与 canonical params
++        const BuiltinLightingPreset* target_preset = nullptr;
++        if (patch.has_preset) {
++            target_preset = FindBuiltinLightingPreset(patch.preset);
++            if (!target_preset) {
++                return {400, "Validation Error", "Preset '" + patch.preset + "' is not a supported builtin preset", current_rev};
++            }
++
++            // 写入该 preset 拥有的 canonical 参数，绝不清空 profile (保留 unknown keys, fps, keys 等)
++            for (auto it = target_preset->canonical_params.begin(); it != target_preset->canonical_params.end(); ++it) {
++                prof[it.key()] = it.value();
++            }
++        } else {
++            // 如果未指定切换 preset，根据当前 profile 中的 type 判定是否为 builtin preset
++            std::string cur_type = prof.value("type", "static");
++            target_preset = FindBuiltinLightingPreset(cur_type);
++        }
++
++        // 5. 校验与更新 brightness
++        if (patch.has_brightness) {
++            if (!std::isfinite(patch.brightness) || patch.brightness < 0.0 || patch.brightness > 1.0) {
++                return {400, "Validation Error", "Field 'brightness' must be a valid number in [0.0, 1.0]", current_rev};
++            }
++            prof["brightness"] = patch.brightness;
++        }
++
++        // 6. 校验与更新 period_ms
++        if (patch.has_period_ms) {
++            bool supports_period = target_preset ? target_preset->supports_period : IsPeriodSupported(prof.value("type", "static"));
++            if (!supports_period) {
++                return {400, "Validation Error", "Target effect does not support 'period_ms'", current_rev};
++            }
++            if (patch.period_ms < 33) {
++                return {400, "Validation Error", "Field 'period_ms' must be at least 33ms", current_rev};
++            }
++            prof["period_ms"] = patch.period_ms;
++        }
++
++        // 7. 格式化输出 (保持 2 格缩进)
++        std::string formatted = root.dump(2);
++
++        // 8. 写入临时文件并原子替换
++        std::filesystem::path tmp_path = config_path_.wstring() + L".tmp";
++        {
++            std::ofstream f(tmp_path, std::ios::binary | std::ios::trunc);
++            if (!f.is_open()) {
++                return {500, "Internal Error", "Failed to create temporary configuration file", current_rev};
++            }
++            f.write(formatted.data(), formatted.size());
++            f.flush();
++            if (!f.good()) {
++                f.close();
++                std::error_code ec;
++                std::filesystem::remove(tmp_path, ec);
++                return {500, "Internal Error", "Failed to write temporary configuration data", current_rev};
++            }
++        }
++
++        if (!file_replacer_(tmp_path.wstring(), config_path_.wstring())) {
++            std::error_code ec;
++            std::filesystem::remove(tmp_path, ec);
++            return {500, "Internal Error", "Failed to atomically replace configuration file", current_rev};
++        }
++
++        out_new_revision = ComputeFileRevision(formatted);
++        return {200, "", "Base lighting updated", out_new_revision};
++    } catch (const std::exception& e) {
++        return {500, "Internal Error", std::string("Failed to mutate configuration: ") + e.what(), current_rev};
++    }
++}
++
+ // ========================================================
+ // HTTP 安全防御检查 (127.0.0.1:19897 写接口防御)
+ // ========================================================
+@@ -554,6 +881,190 @@ void LightingControlService::RegisterRoutes(httplib::Server& svr) {
+             res.set_content(err_j.dump(), "application/json; charset=utf-8");
+         }
+     });
++
++    // 4. GET /api/lighting/presets & GET /api/lighting/effects - 获取内建预设 Catalog
++    auto handle_presets = [this](const httplib::Request&, httplib::Response& res) {
++        std::vector<BuiltinLightingPreset> presets;
++        GetPresetCatalog(presets);
++
++        nlohmann::json arr = nlohmann::json::array();
++        for (const auto& p : presets) {
++            nlohmann::json item = {
++                {"id", p.id},
++                {"display_name", p.display_name},
++                {"effect", p.effect_type},
++                {"supports_period", p.supports_period}
++            };
++            if (p.supports_period) {
++                item["default_period_ms"] = p.default_period_ms;
++            } else {
++                item["default_period_ms"] = nullptr;
++            }
++            arr.push_back(std::move(item));
++        }
++
++        nlohmann::json j;
++        j["status"] = "ok";
++        j["api_version"] = 1;
++        j["presets"] = arr;
++        j["effects"] = arr;
++        res.status = 200;
++        res.set_content(j.dump(), "application/json; charset=utf-8");
++    };
++
++    svr.Get("/api/lighting/presets", handle_presets);
++    svr.Get("/api/lighting/effects", handle_presets);
++
++    // 5. GET /api/lighting/base - 获取基础/默认灯效配置
++    svr.Get("/api/lighting/base", [this](const httplib::Request&, httplib::Response& res) {
++        BaseLightingDetail detail;
++        auto op = GetBaseLighting(detail);
++        if (op.http_status != 200) {
++            res.status = op.http_status;
++            nlohmann::json err = {
++                {"status", "error"},
++                {"error", op.error_code},
++                {"message", op.message}
++            };
++            if (!op.current_revision.empty()) {
++                err["current_revision"] = op.current_revision;
++            }
++            res.set_content(err.dump(), "application/json; charset=utf-8");
++            return;
++        }
++
++        nlohmann::json j;
++        j["status"] = "ok";
++        j["api_version"] = 1;
++        j["revision"] = detail.revision;
++        j["lighting"] = {
++            {"profile_name", detail.profile_name},
++            {"effect", detail.effect},
++            {"preset_id", detail.preset_id},
++            {"is_builtin_preset", detail.is_builtin_preset},
++            {"brightness", detail.brightness},
++            {"supports_period", detail.supports_period}
++        };
++        if (detail.supports_period) {
++            j["lighting"]["period_ms"] = detail.period_ms;
++        } else {
++            j["lighting"]["period_ms"] = nullptr;
++        }
++
++        res.status = 200;
++        res.set_content(j.dump(), "application/json; charset=utf-8");
++    });
++
++    // 6. PATCH /api/lighting/base - 修改基础/默认灯效配置
++    svr.Patch("/api/lighting/base", [this](const httplib::Request& req, httplib::Response& res) {
++        if (!ValidatePatchRequestSecurity(req, res)) {
++            return;
++        }
++
++        BaseLightingPatchInput patch;
++        try {
++            auto j = nlohmann::json::parse(req.body);
++            if (!j.is_object()) {
++                res.status = 400;
++                res.set_content(R"json({"status":"error","error":"Validation Error","message":"Request body must be a JSON object"})json", "application/json; charset=utf-8");
++                return;
++            }
++
++            // 严格白名单校验
++            static const std::unordered_set<std::string> kAllowedKeys = {
++                "expected_revision", "preset", "effect", "brightness", "period_ms"
++            };
++            for (auto it = j.begin(); it != j.end(); ++it) {
++                if (kAllowedKeys.find(it.key()) == kAllowedKeys.end()) {
++                    res.status = 400;
++                    nlohmann::json err = {
++                        {"status", "error"},
++                        {"error", "Validation Error"},
++                        {"message", "Modifying field '" + it.key() + "' is not permitted via Base Lighting API"}
++                    };
++                    res.set_content(err.dump(), "application/json; charset=utf-8");
++                    return;
++                }
++            }
++
++            if (!j.contains("expected_revision") || !j["expected_revision"].is_string()) {
++                res.status = 400;
++                res.set_content(R"json({"status":"error","error":"Validation Error","message":"Missing required string field 'expected_revision'"})json", "application/json; charset=utf-8");
++                return;
++            }
++            patch.expected_revision = j["expected_revision"].get<std::string>();
++
++            if (j.contains("preset")) {
++                if (!j["preset"].is_string()) {
++                    res.status = 400;
++                    res.set_content(R"json({"status":"error","error":"Validation Error","message":"'preset' must be a string"})json", "application/json; charset=utf-8");
++                    return;
++                }
++                patch.has_preset = true;
++                patch.preset = j["preset"].get<std::string>();
++            } else if (j.contains("effect")) {
++                if (!j["effect"].is_string()) {
++                    res.status = 400;
++                    res.set_content(R"json({"status":"error","error":"Validation Error","message":"'effect' must be a string"})json", "application/json; charset=utf-8");
++                    return;
++                }
++                patch.has_preset = true;
++                patch.preset = j["effect"].get<std::string>();
++            }
++
++            if (j.contains("brightness")) {
++                if (!j["brightness"].is_number()) {
++                    res.status = 400;
++                    res.set_content(R"json({"status":"error","error":"Validation Error","message":"'brightness' must be a numeric ratio in [0.0, 1.0]"})json", "application/json; charset=utf-8");
++                    return;
++                }
++                patch.has_brightness = true;
++                patch.brightness = j["brightness"].get<double>();
++            }
++
++            if (j.contains("period_ms")) {
++                if (!j["period_ms"].is_number_unsigned()) {
++                    res.status = 400;
++                    res.set_content(R"json({"status":"error","error":"Validation Error","message":"'period_ms' must be an unsigned integer >= 33"})json", "application/json; charset=utf-8");
++                    return;
++                }
++                patch.has_period_ms = true;
++                patch.period_ms = j["period_ms"].get<uint64_t>();
++            }
++        } catch (const std::exception& e) {
++            res.status = 400;
++            nlohmann::json err = {
++                {"status", "error"},
++                {"error", "Validation Error"},
++                {"message", std::string("Malformed JSON payload: ") + e.what()}
++            };
++            res.set_content(err.dump(), "application/json; charset=utf-8");
++            return;
++        }
++
++        std::string new_rev;
++        auto op = UpdateBaseLighting(patch, new_rev);
++        res.status = op.http_status;
++        if (op.http_status == 200) {
++            nlohmann::json ok_j = {
++                {"status", "ok"},
++                {"api_version", 1},
++                {"message", op.message},
++                {"revision", new_rev}
++            };
++            res.set_content(ok_j.dump(), "application/json; charset=utf-8");
++        } else {
++            nlohmann::json err_j = {
++                {"status", "error"},
++                {"error", op.error_code},
++                {"message", op.message}
++            };
++            if (!op.current_revision.empty()) {
++                err_j["current_revision"] = op.current_revision;
++            }
++            res.set_content(err_j.dump(), "application/json; charset=utf-8");
++        }
++    });
+ }
+ 
+ } // namespace aura
+diff --git a/tests/Aura.Tests/AuraControlClientTests.cs b/tests/Aura.Tests/AuraControlClientTests.cs
+index edad2f4..dcea9d4 100644
+--- a/tests/Aura.Tests/AuraControlClientTests.cs
++++ b/tests/Aura.Tests/AuraControlClientTests.cs
+@@ -457,4 +457,267 @@ public sealed class AuraControlClientTests
+         Assert.IsFalse(result.IsSuccess);
+         Assert.AreEqual(UpdateProfileStatus.Failure, result.Status);
+     }
++
++    [TestMethod]
++    public async Task GetLightingPresetsAsync_WhenValidPayload_ParsesAllPresetsCorrectly()
++    {
++        var json = """
++        {
++          "status": "ok",
++          "api_version": 1,
++          "presets": [
++            {
++              "id": "static",
++              "display_name": "Static",
++              "effect": "static",
++              "supports_period": false,
++              "default_period_ms": null
++            },
++            {
++              "id": "breathing",
++              "display_name": "Breathing",
++              "effect": "breathing",
++              "supports_period": true,
++              "default_period_ms": 3000
++            }
++          ]
++        }
++        """;
++
++        var fakeHandler = new FakeHttpMessageHandler(req =>
++        {
++            Assert.AreEqual("http://127.0.0.1:19897/api/lighting/presets", req.RequestUri?.ToString());
++            return new HttpResponseMessage(HttpStatusCode.OK)
++            {
++                Content = new StringContent(json, Encoding.UTF8, "application/json")
++            };
++        });
++
++        var client = new AuraControlClient(new HttpClient(fakeHandler));
++        var result = await client.GetLightingPresetsAsync();
++
++        Assert.IsTrue(result.IsSuccess);
++        Assert.AreEqual(2, result.Presets.Count);
++        Assert.AreEqual("static", result.Presets[0].Id);
++        Assert.AreEqual("Static", result.Presets[0].DisplayName);
++        Assert.IsFalse(result.Presets[0].SupportsPeriod);
++        Assert.IsNull(result.Presets[0].DefaultPeriodMs);
++
++        Assert.AreEqual("breathing", result.Presets[1].Id);
++        Assert.AreEqual("Breathing", result.Presets[1].DisplayName);
++        Assert.IsTrue(result.Presets[1].SupportsPeriod);
++        Assert.AreEqual(3000, result.Presets[1].DefaultPeriodMs);
++    }
++
++    [TestMethod]
++    public async Task GetBaseLightingAsync_WhenSuccess_ParsesBaseLightingCorrectly()
++    {
++        var json = """
++        {
++          "status": "ok",
++          "api_version": 1,
++          "revision": "base_rev_12345",
++          "lighting": {
++            "profile_name": "desktop",
++            "effect": "breathing",
++            "preset_id": "breathing",
++            "is_builtin_preset": true,
++            "brightness": 0.85,
++            "supports_period": true,
++            "period_ms": 3200
++          }
++        }
++        """;
++
++        var fakeHandler = new FakeHttpMessageHandler(req =>
++        {
++            Assert.AreEqual("http://127.0.0.1:19897/api/lighting/base", req.RequestUri?.ToString());
++            return new HttpResponseMessage(HttpStatusCode.OK)
++            {
++                Content = new StringContent(json, Encoding.UTF8, "application/json")
++            };
++        });
++
++        var client = new AuraControlClient(new HttpClient(fakeHandler));
++        var result = await client.GetBaseLightingAsync();
++
++        Assert.IsTrue(result.IsSuccess);
++        Assert.AreEqual("base_rev_12345", result.Revision);
++        Assert.IsNotNull(result.Lighting);
++        Assert.AreEqual("desktop", result.Lighting.ProfileName);
++        Assert.AreEqual("breathing", result.Lighting.Effect);
++        Assert.AreEqual("breathing", result.Lighting.PresetId);
++        Assert.IsTrue(result.Lighting.IsBuiltinPreset);
++        Assert.AreEqual(0.85, result.Lighting.Brightness);
++        Assert.IsTrue(result.Lighting.SupportsPeriod);
++        Assert.AreEqual(3200, result.Lighting.PeriodMs);
++    }
++
++    [TestMethod]
++    public async Task GetBaseLightingAsync_WhenAdvancedEffect_ParsesNonBuiltinPresetGracefully()
++    {
++        var json = """
++        {
++          "status": "ok",
++          "api_version": 1,
++          "revision": "studio_rev_999",
++          "lighting": {
++            "profile_name": "custom_studio_prof",
++            "effect": "custom_keymap",
++            "preset_id": "",
++            "is_builtin_preset": false,
++            "brightness": 1.0,
++            "supports_period": false,
++            "period_ms": null
++          }
++        }
++        """;
++
++        var fakeHandler = new FakeHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
++        {
++            Content = new StringContent(json, Encoding.UTF8, "application/json")
++        });
++
++        var client = new AuraControlClient(new HttpClient(fakeHandler));
++        var result = await client.GetBaseLightingAsync();
++
++        Assert.IsTrue(result.IsSuccess);
++        Assert.IsNotNull(result.Lighting);
++        Assert.AreEqual("custom_studio_prof", result.Lighting.ProfileName);
++        Assert.AreEqual("custom_keymap", result.Lighting.Effect);
++        Assert.IsFalse(result.Lighting.IsBuiltinPreset);
++        Assert.AreEqual("", result.Lighting.PresetId);
++        Assert.IsFalse(result.Lighting.SupportsPeriod);
++        Assert.IsNull(result.Lighting.PeriodMs);
++    }
++
++    [TestMethod]
++    public async Task UpdateBaseLightingAsync_WhenSuccess_ReturnsSuccessWithNewRevision()
++    {
++        var responseJson = """
++        {
++          "status": "ok",
++          "api_version": 1,
++          "message": "Base lighting updated",
++          "revision": "new_base_rev_8888"
++        }
++        """;
++
++        var fakeHandler = new FakeHttpMessageHandler(req =>
++        {
++            Assert.AreEqual(new HttpMethod("PATCH"), req.Method);
++            Assert.AreEqual("http://127.0.0.1:19897/api/lighting/base", req.RequestUri?.ToString());
++            return new HttpResponseMessage(HttpStatusCode.OK)
++            {
++                Content = new StringContent(responseJson, Encoding.UTF8, "application/json")
++            };
++        });
++
++        var client = new AuraControlClient(new HttpClient(fakeHandler));
++        var patch = new BaseLightingPatchDto
++        {
++            ExpectedRevision = "old_rev",
++            Preset = "wave",
++            Brightness = 0.9,
++            PeriodMs = 3500
++        };
++
++        var result = await client.UpdateBaseLightingAsync(patch);
++
++        Assert.IsTrue(result.IsSuccess);
++        Assert.AreEqual(UpdateProfileStatus.Success, result.Status);
++        Assert.AreEqual("new_base_rev_8888", result.NewRevision);
++    }
++
++    [TestMethod]
++    public async Task UpdateBaseLightingAsync_SparseSerialization_OmitsNullFields()
++    {
++        string capturedBody = "";
++        var fakeHandler = new FakeHttpMessageHandler(req =>
++        {
++            capturedBody = req.Content?.ReadAsStringAsync().Result ?? "";
++            return new HttpResponseMessage(HttpStatusCode.OK)
++            {
++                Content = new StringContent("{\"status\":\"ok\",\"api_version\":1,\"revision\":\"rev2\"}", Encoding.UTF8, "application/json")
++            };
++        });
++
++        var client = new AuraControlClient(new HttpClient(fakeHandler));
++        var patch = new BaseLightingPatchDto
++        {
++            ExpectedRevision = "rev1",
++            Preset = "breathing"
++            // Brightness and PeriodMs are null
++        };
++
++        var result = await client.UpdateBaseLightingAsync(patch);
++        Assert.IsTrue(result.IsSuccess);
++
++        StringAssert.Contains(capturedBody, "\"preset\":\"breathing\"");
++        StringAssert.Contains(capturedBody, "\"expected_revision\":\"rev1\"");
++        Assert.IsFalse(capturedBody.Contains("brightness"), "Null brightness must not be serialized");
++        Assert.IsFalse(capturedBody.Contains("period_ms"), "Null period_ms must not be serialized");
++    }
++
++    [TestMethod]
++    public async Task UpdateBaseLightingAsync_WhenConflict409_ReturnsConflictWithCurrentRevision()
++    {
++        var conflictJson = """
++        {
++          "status": "error",
++          "error": "Conflict",
++          "message": "Configuration has been modified externally",
++          "current_revision": "latest_rev_777"
++        }
++        """;
++
++        var fakeHandler = new FakeHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.Conflict)
++        {
++            Content = new StringContent(conflictJson, Encoding.UTF8, "application/json")
++        });
++
++        var client = new AuraControlClient(new HttpClient(fakeHandler));
++        var patch = new BaseLightingPatchDto
++        {
++            ExpectedRevision = "stale_rev_1",
++            Brightness = 0.5
++        };
++
++        var result = await client.UpdateBaseLightingAsync(patch);
++
++        Assert.IsFalse(result.IsSuccess);
++        Assert.IsTrue(result.IsConflict);
++        Assert.AreEqual("latest_rev_777", result.CurrentRevision);
++        StringAssert.Contains(result.ErrorMessage, "modified externally");
++    }
++
++    [TestMethod]
++    public async Task UpdateBaseLightingAsync_WhenValidationError400_ReturnsValidationError()
++    {
++        var errJson = """
++        {
++          "status": "error",
++          "error": "Validation Error",
++          "message": "Preset 'ghost' is not a supported builtin preset"
++        }
++        """;
++
++        var fakeHandler = new FakeHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.BadRequest)
++        {
++            Content = new StringContent(errJson, Encoding.UTF8, "application/json")
++        });
++
++        var client = new AuraControlClient(new HttpClient(fakeHandler));
++        var patch = new BaseLightingPatchDto
++        {
++            ExpectedRevision = "rev1",
++            Preset = "ghost"
++        };
++
++        var result = await client.UpdateBaseLightingAsync(patch);
++
++        Assert.IsFalse(result.IsSuccess);
++        Assert.AreEqual(UpdateProfileStatus.ValidationError, result.Status);
++        StringAssert.Contains(result.ErrorMessage, "not a supported builtin preset");
++    }
+ }
+diff --git a/tests/test_lighting_service.cpp b/tests/test_lighting_service.cpp
+index aca104c..e6c7515 100644
+--- a/tests/test_lighting_service.cpp
++++ b/tests/test_lighting_service.cpp
+@@ -88,6 +88,7 @@ int main() {
+     "desktop": {
+       "type": "breathing",
+       "color1": [0, 80, 200],
++      "color2": [0, 10, 40],
+       "period_ms": 3500,
+       "brightness": 1.0,
+       "unknown_profile_tag": "keep_me"
+@@ -295,6 +296,176 @@ int main() {
+         CHECK(prof->brightness == static_cast<uint8_t>(std::round(0.8 * 255.0)), "RuleEngine 内存中 brightness 成功热重载为 0.8 (204)");
+     }
+ 
++    std::cout << "[Test 10] Builtin Presets Catalog 获取与排除校验\n";
++    {
++        aura::LightingControlService svc(test_cfg_path);
++        std::vector<aura::BuiltinLightingPreset> presets;
++        auto op = svc.GetPresetCatalog(presets);
++        CHECK(op.http_status == 200, "GetPresetCatalog 返回 200");
++        CHECK(presets.size() == 10, "预设数量严格为 10 种内建预设");
++
++        bool has_static = false;
++        bool has_breathing = false;
++        bool has_custom_keymap = false;
++        bool has_plugin = false;
++
++        for (const auto& p : presets) {
++            if (p.id == "static") {
++                has_static = true;
++                CHECK(!p.supports_period, "static 不支持周期");
++                CHECK(p.canonical_params.contains("color"), "static 预设包含 canonical color");
++            }
++            if (p.id == "breathing") {
++                has_breathing = true;
++                CHECK(p.supports_period, "breathing 支持周期");
++                CHECK(p.default_period_ms == 3000, "breathing 默认周期 3000");
++                CHECK(p.canonical_params.contains("color1"), "breathing 预设包含 color1");
++                CHECK(p.canonical_params.contains("color2"), "breathing 预设包含 color2");
++            }
++            if (p.id == "custom_keymap" || p.effect_type == "custom_keymap") has_custom_keymap = true;
++            if (p.id == "plugin" || p.effect_type == "plugin") has_plugin = true;
++        }
++        CHECK(has_static, "Catalog 包含 static");
++        CHECK(has_breathing, "Catalog 包含 breathing");
++        CHECK(!has_custom_keymap, "Catalog 排除 custom_keymap");
++        CHECK(!has_plugin, "Catalog 排除 plugin");
++    }
++
++    std::cout << "[Test 11] Base Lighting 读取 (正常预设与高级效果兼容)\n";
++    {
++        aura::LightingControlService svc(test_cfg_path);
++        aura::LightingControlService::BaseLightingDetail base_detail;
++        auto op = svc.GetBaseLighting(base_detail);
++        CHECK(op.http_status == 200, "GetBaseLighting 返回 200");
++        CHECK(base_detail.profile_name == "desktop", "默认方案名称为 desktop");
++        CHECK(base_detail.effect == "breathing", "默认方案效果为 breathing");
++        CHECK(base_detail.is_builtin_preset == true, "breathing 为内置预设");
++        CHECK(base_detail.preset_id == "breathing", "preset_id == breathing");
++        CHECK(base_detail.supports_period == true, "supports_period == true");
++        CHECK(base_detail.period_ms == 4500, "period_ms == 4500 (来自前序测试修改值)");
++        CHECK(base_detail.brightness == 0.8, "brightness == 0.8");
++
++        // 测试高级效果 default_profile 不报错 (Constraint 3)
++        std::string adv_cfg = R"json({
++          "default_profile": "my_studio",
++          "profiles": {
++            "my_studio": {
++              "type": "custom_keymap",
++              "bg": [0, 0, 0],
++              "brightness": 0.7,
++              "keys": {"W": [255, 0, 0]}
++            }
++          }
++        })json";
++        std::string adv_path = CreateTempConfigFile("test_adv_cfg", adv_cfg);
++        aura::LightingControlService adv_svc(adv_path);
++        aura::LightingControlService::BaseLightingDetail adv_detail;
++        auto adv_op = adv_svc.GetBaseLighting(adv_detail);
++        CHECK(adv_op.http_status == 200, "高级方案 GetBaseLighting 不得报错 (返回 200)");
++        CHECK(adv_detail.profile_name == "my_studio", "profile_name == my_studio");
++        CHECK(adv_detail.effect == "custom_keymap", "effect == custom_keymap");
++        CHECK(adv_detail.is_builtin_preset == false, "is_builtin_preset == false");
++        CHECK(adv_detail.preset_id.empty(), "preset_id 为空");
++        CHECK(!adv_detail.supports_period, "supports_period == false");
++        CHECK(adv_detail.brightness == 0.7, "brightness == 0.7");
++        std::error_code ec_adv;
++        std::filesystem::remove(adv_path, ec_adv);
++    }
++
++    std::cout << "[Test 12] Base Lighting 错误防御 (缺少 default_profile 或指向不存在方案)\n";
++    {
++        // 缺少 default_profile
++        std::string bad_cfg1 = R"json({"profiles": {"desktop": {"type": "static"}}})json";
++        std::string bad_path1 = CreateTempConfigFile("test_bad1", bad_cfg1);
++        aura::LightingControlService bad_svc1(bad_path1);
++        aura::LightingControlService::BaseLightingDetail dummy_d;
++        CHECK(bad_svc1.GetBaseLighting(dummy_d).http_status == 500, "缺少 default_profile 返回 500");
++        std::error_code ec1;
++        std::filesystem::remove(bad_path1, ec1);
++
++        // default_profile 指向不存在的方案
++        std::string bad_cfg2 = R"json({"default_profile": "ghost", "profiles": {"desktop": {"type": "static"}}})json";
++        std::string bad_path2 = CreateTempConfigFile("test_bad2", bad_cfg2);
++        aura::LightingControlService bad_svc2(bad_path2);
++        CHECK(bad_svc2.GetBaseLighting(dummy_d).http_status == 404, "不存在的默认方案返回 404");
++        std::error_code ec2;
++        std::filesystem::remove(bad_path2, ec2);
++    }
++
++    std::cout << "[Test 13] UpdateBaseLighting Targeted Patch (写入 canonical params 并保留无关字段)\n";
++    {
++        aura::LightingControlService svc(test_cfg_path);
++        aura::LightingControlService::BaseLightingDetail before;
++        svc.GetBaseLighting(before);
++
++        // 切换 preset 为 wave，调整 brightness 为 0.95
++        aura::LightingControlService::BaseLightingPatchInput patch;
++        patch.expected_revision = before.revision;
++        patch.has_preset = true;
++        patch.preset = "wave";
++        patch.has_brightness = true;
++        patch.brightness = 0.95;
++
++        std::string new_rev;
++        auto op = svc.UpdateBaseLighting(patch, new_rev);
++        CHECK(op.http_status == 200, "UpdateBaseLighting 切换至 wave 成功");
++
++        // 校验文件内容
++        std::ifstream f(test_cfg_path);
++        nlohmann::json reloaded;
++        f >> reloaded;
++        f.close();
++
++        const auto& prof = reloaded["profiles"]["desktop"];
++        CHECK(prof["type"] == "wave", "type 变更为 wave");
++        CHECK(prof["direction"] == "diag_dl", "写入 wave 的 canonical direction");
++        CHECK(prof["thickness"] == 1.0, "写入 wave 的 canonical thickness");
++        CHECK(prof["period_ms"] == 3500, "写入 wave 的 canonical period_ms (3500)");
++        CHECK(prof["brightness"] == 0.95, "brightness 变更为 0.95");
++
++        // 关键验证：原有的 color1/color2 未知标签严格保留，绝不清空
++        CHECK(prof.contains("color1"), "保留原有 color1 (历史调色保留)");
++        CHECK(prof.contains("color2"), "保留原有 color2");
++        CHECK(prof["unknown_profile_tag"] == "keep_me", "保留原有自定义标签");
++        CHECK(reloaded["custom_unknown_root_field"] == "preserved_value", "保留根节点未知属性");
++    }
++
++    std::cout << "[Test 14] UpdateBaseLighting 校验防范与 409 冲突\n";
++    {
++        aura::LightingControlService svc(test_cfg_path);
++        aura::LightingControlService::BaseLightingDetail cur;
++        svc.GetBaseLighting(cur);
++
++        // 1. 非法 preset (custom_keymap 或 plugin 不得作为普通 preset 写入)
++        aura::LightingControlService::BaseLightingPatchInput p_bad_preset;
++        p_bad_preset.expected_revision = cur.revision;
++        p_bad_preset.has_preset = true;
++        p_bad_preset.preset = "custom_keymap";
++        std::string dummy;
++        CHECK(svc.UpdateBaseLighting(p_bad_preset, dummy).http_status == 400, "custom_keymap 拒绝作为 builtin preset (400)");
++
++        p_bad_preset.preset = "non_existent_effect";
++        CHECK(svc.UpdateBaseLighting(p_bad_preset, dummy).http_status == 400, "未知 preset 拒绝 (400)");
++
++        // 2. 静态效果 static 拒绝 period_ms
++        aura::LightingControlService::BaseLightingPatchInput p_static;
++        p_static.expected_revision = cur.revision;
++        p_static.has_preset = true;
++        p_static.preset = "static";
++        p_static.has_period_ms = true;
++        p_static.period_ms = 1000;
++        CHECK(svc.UpdateBaseLighting(p_static, dummy).http_status == 400, "static 提供 period_ms 拒绝 (400)");
++
++        // 3. 409 Conflict 冲突
++        aura::LightingControlService::BaseLightingPatchInput p_stale;
++        p_stale.expected_revision = "outdated_rev_9999";
++        p_stale.has_brightness = true;
++        p_stale.brightness = 0.5;
++        auto op_stale = svc.UpdateBaseLighting(p_stale, dummy);
++        CHECK(op_stale.http_status == 409, "过期版本返回 409 Conflict");
++        CHECK(op_stale.current_revision == cur.revision, "409 返回当前最新 revision");
++    }
++
+     // 清理测试临时文件
+     std::error_code ec;
+     std::filesystem::remove(test_cfg_path, ec);
+diff --git a/winui/Pages/LightingPage.xaml b/winui/Pages/LightingPage.xaml
+index fa1dc0a..90f4ae1 100644
+--- a/winui/Pages/LightingPage.xaml
++++ b/winui/Pages/LightingPage.xaml
+@@ -13,13 +13,13 @@
+             <!-- 页面标题 -->
+             <StackPanel Spacing="4">
+                 <TextBlock Text="灯效管理 (Lighting)" Style="{ThemeResource TitleTextBlockStyle}" TextWrapping="Wrap" />
+-                <TextBlock Text="原生灯效方案配置与硬件渲染参数调控"
++                <TextBlock Text="基础灯效预设与渲染参数调控"
+                            Style="{ThemeResource BodyTextBlockStyle}"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            TextWrapping="Wrap" />
+             </StackPanel>
+ 
+-            <!-- 1. 当前运行态卡片 (只读，来自 /api/runtime/status) -->
++            <!-- 1. 当前运行态卡片 (来自 /api/lighting/base 与 /api/runtime/status) -->
+             <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                     BorderThickness="1"
+@@ -36,10 +36,10 @@
+                     </Grid.RowDefinitions>
+ 
+                     <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+-                        <FontIcon Glyph="&#xE781;" FontSize="20" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
++                        <FontIcon Glyph="&#xE790;" FontSize="20" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                         <StackPanel>
+-                            <TextBlock Text="当前活跃方案 (Active Profile)" Style="{ThemeResource SubtitleTextBlockStyle}" />
+-                            <TextBlock Text="由前台应用监控与 CS2 GSI 规则引擎实时计算判定 (只读)"
++                            <TextBlock Text="灯效状态" Style="{ThemeResource SubtitleTextBlockStyle}" />
++                            <TextBlock Text="默认基础灯效配置与当前设备实时渲染方案"
+                                        Style="{ThemeResource CaptionTextBlockStyle}"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                         </StackPanel>
+@@ -57,22 +57,28 @@
+ 
+                     <Grid Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" ColumnSpacing="24" RowSpacing="6">
+                         <Grid.ColumnDefinitions>
++                            <ColumnDefinition Width="Auto" />
+                             <ColumnDefinition Width="Auto" />
+                             <ColumnDefinition Width="Auto" />
+                             <ColumnDefinition Width="*" />
+                         </Grid.ColumnDefinitions>
+ 
+                         <StackPanel Grid.Column="0" Spacing="2">
+-                            <TextBlock Text="活跃方案名" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+-                            <TextBlock x:Name="ActiveProfileText" Text="正在读取..." FontWeight="SemiBold" Style="{ThemeResource BodyTextBlockStyle}" />
++                            <TextBlock Text="默认基础灯效" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
++                            <TextBlock x:Name="DefaultEffectText" Text="正在读取..." FontWeight="SemiBold" Style="{ThemeResource BodyTextBlockStyle}" />
+                         </StackPanel>
+ 
+                         <StackPanel Grid.Column="1" Spacing="2">
++                            <TextBlock Text="当前运行方案" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
++                            <TextBlock x:Name="ActiveProfileText" Text="正在读取..." FontWeight="SemiBold" Style="{ThemeResource BodyTextBlockStyle}" />
++                        </StackPanel>
++
++                        <StackPanel Grid.Column="2" Spacing="2">
+                             <TextBlock Text="推流帧率" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                             <TextBlock x:Name="ActiveFpsText" Text="--" FontWeight="SemiBold" Style="{ThemeResource BodyTextBlockStyle}" />
+                         </StackPanel>
+ 
+-                        <StackPanel Grid.Column="2" Spacing="2">
++                        <StackPanel Grid.Column="3" Spacing="2">
+                             <TextBlock Text="硬件接口" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                             <TextBlock x:Name="ActiveBackendText" Text="--" FontWeight="SemiBold" Style="{ThemeResource BodyTextBlockStyle}" />
+                         </StackPanel>
+@@ -80,37 +86,85 @@
+                 </Grid>
+             </Border>
+ 
+-            <!-- 2. 状态提示条 (保存成功 / 409 冲突 / 校验错误) -->
++            <!-- 2. 中性事实运行状态提示条 (active != base 时展开) -->
++            <InfoBar x:Name="StatusMismatchInfoBar"
++                     IsOpen="False"
++                     IsClosable="False"
++                     Severity="Informational" />
++
++            <!-- 3. 高级方案警告与 Studio 引导卡片 (default_profile 为 custom_keymap/plugin 时展示) -->
++            <InfoBar x:Name="AdvancedEffectBanner"
++                     IsOpen="False"
++                     IsClosable="False"
++                     Severity="Warning"
++                     Title="当前默认方案为高级效果 (Studio 管理)">
++                <InfoBar.ActionButton>
++                    <Button Content="打开 Studio" Click="OpenStudioBtn_Click" Style="{ThemeResource AccentButtonStyle}" />
++                </InfoBar.ActionButton>
++            </InfoBar>
++
++            <!-- 4. 通知提示条 (保存成功 / 409 冲突 / 错误提示) -->
+             <InfoBar x:Name="StatusInfoBar"
+                      IsOpen="False"
+                      IsClosable="True" />
+ 
+-            <!-- 3. Profile 编辑卡片 (Selected Profile) -->
++            <!-- 5. 预设灯效选择卡片 (Builtin Presets) -->
+             <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                     BorderThickness="1"
+                     CornerRadius="8"
+                     Padding="16">
+-                <StackPanel Spacing="20">
++                <StackPanel Spacing="16">
+                     <StackPanel Spacing="4">
+-                        <TextBlock Text="方案参数配置 (Selected Profile)" Style="{ThemeResource SubtitleTextBlockStyle}" />
+-                        <TextBlock Text="调整本地草稿，点击“保存更改”后通过原子写入生效，无需重启守护进程"
++                        <TextBlock Text="预设灯效 (Builtin Presets)" Style="{ThemeResource SubtitleTextBlockStyle}" />
++                        <TextBlock Text="选择系统内置的标准动态与静态光效预设；选择后将在下方加载规范参数"
+                                    Style="{ThemeResource CaptionTextBlockStyle}"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                     </StackPanel>
+ 
+-                    <!-- 方案选择 -->
+-                    <ComboBox x:Name="ProfileComboBox"
+-                              Header="编辑方案"
+-                              PlaceholderText="正在加载方案列表..."
+-                              MinWidth="280"
+-                              HorizontalAlignment="Left"
+-                              SelectionChanged="ProfileComboBox_SelectionChanged" />
++                    <!-- 预设卡片列表 -->
++                    <GridView x:Name="PresetsGridView"
++                              SelectionMode="Single"
++                              IsItemClickEnabled="True"
++                              SelectionChanged="PresetsGridView_SelectionChanged">
++                        <GridView.ItemTemplate>
++                            <DataTemplate>
++                                <Border Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
++                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
++                                        BorderThickness="1"
++                                        CornerRadius="6"
++                                        Width="160"
++                                        Height="68"
++                                        Padding="12,8">
++                                    <StackPanel VerticalAlignment="Center" Spacing="2">
++                                        <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" Style="{ThemeResource BodyStrongTextBlockStyle}" TextTrimming="CharacterEllipsis" />
++                                        <TextBlock Text="{Binding Effect}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" />
++                                    </StackPanel>
++                                </Border>
++                            </DataTemplate>
++                        </GridView.ItemTemplate>
++                    </GridView>
++                </StackPanel>
++            </Border>
+ 
+-                    <!-- 效果类型 (只读) -->
++            <!-- 6. 基础灯效参数调控卡片 -->
++            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
++                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
++                    BorderThickness="1"
++                    CornerRadius="8"
++                    Padding="16">
++                <StackPanel Spacing="20">
++                    <StackPanel Spacing="4">
++                        <TextBlock Text="参数调控 (Parameters)" Style="{ThemeResource SubtitleTextBlockStyle}" />
++                        <TextBlock Text="调整本地草稿，点击“应用更改”后写入系统默认配置，无需重启守护进程"
++                                   Style="{ThemeResource CaptionTextBlockStyle}"
++                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
++                    </StackPanel>
++
++                    <!-- 选中预设概要 -->
+                     <StackPanel Spacing="4">
+-                        <TextBlock Text="效果类型" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+-                        <TextBlock x:Name="EffectTypeText"
++                        <TextBlock Text="选中预设" Style="{ThemeResource BodyStrongTextBlockStyle}" />
++                        <TextBlock x:Name="SelectedPresetText"
+                                    Text="--"
+                                    Style="{ThemeResource BodyTextBlockStyle}"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+@@ -127,7 +181,7 @@
+                                 Maximum="100"
+                                 StepFrequency="1"
+                                 ValueChanged="BrightnessSlider_ValueChanged" />
+-                        <TextBlock Text="调节该方案下的整体灯光亮度比率 (0%–100%)"
++                        <TextBlock Text="调节默认灯效的整体发光亮度 (0%–100%)"
+                                    Style="{ThemeResource CaptionTextBlockStyle}"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                     </StackPanel>
+@@ -141,36 +195,20 @@
+                                    LargeChange="500"
+                                    SpinButtonPlacementMode="Compact"
+                                    ValueChanged="PeriodNumberBox_ValueChanged" />
+-                        <TextBlock Text="动态效果单次完整循环周期 (毫秒，最小 33ms)"
+-                                   Style="{ThemeResource CaptionTextBlockStyle}"
+-                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+-                    </StackPanel>
+-
+-                    <!-- 方案帧率 (10 - 100 FPS) -->
+-                    <StackPanel Spacing="6" MaxWidth="540" HorizontalAlignment="Left">
+-                        <TextBlock Text="方案推流帧率 (Profile FPS)" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+-                        <NumberBox x:Name="FpsNumberBox"
+-                                   Minimum="10"
+-                                   Maximum="100"
+-                                   SmallChange="1"
+-                                   LargeChange="5"
+-                                   SpinButtonPlacementMode="Compact"
+-                                   ValueChanged="FpsNumberBox_ValueChanged" />
+-                        <TextBlock x:Name="FpsHelperText"
+-                                   Text="继承全局默认帧率 (10–100 FPS)"
++                        <TextBlock Text="动态效果单次循环周期 (毫秒，最小 33ms)"
+                                    Style="{ThemeResource CaptionTextBlockStyle}"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                     </StackPanel>
+ 
+                     <!-- 底部操作栏 -->
+-                    <StackPanel Orientation="Horizontal" Spacing="16" VerticalAlignment="Center" Margin="0,12,0,0">
++                    <StackPanel Orientation="Horizontal" Spacing="16" VerticalAlignment="Center" Margin="0,8,0,0">
+                         <Button x:Name="SaveBtn"
+-                                Content="保存更改"
++                                Content="应用更改"
+                                 Style="{ThemeResource AccentButtonStyle}"
+                                 Click="SaveBtn_Click"
+                                 IsEnabled="False" />
+                         <TextBlock x:Name="DirtyHintText"
+-                                   Text="存在未保存的本地修改"
++                                   Text="存在未保存的修改"
+                                    VerticalAlignment="Center"
+                                    Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                    Style="{ThemeResource CaptionTextBlockStyle}"
+diff --git a/winui/Pages/LightingPage.xaml.cs b/winui/Pages/LightingPage.xaml.cs
+index 7e37fbb..0ca165e 100644
+--- a/winui/Pages/LightingPage.xaml.cs
++++ b/winui/Pages/LightingPage.xaml.cs
+@@ -1,5 +1,6 @@
+ using System;
+ using System.Collections.Generic;
++using System.Linq;
+ using System.Threading.Tasks;
+ using Microsoft.UI.Xaml;
+ using Microsoft.UI.Xaml.Controls;
+@@ -11,30 +12,27 @@ public sealed partial class LightingPage : Page
+ {
+     private readonly IAuraControlClient _client;
+ 
+-    private readonly List<ProfileListItemDto> _profiles = new();
+-    private ProfileDetailDto? _currentDetail;
++    // 预设列表与服务端干净状态
++    private readonly List<LightingPresetItemDto> _presets = new();
++    private BaseLightingDto? _cleanLighting;
+     private string _currentRevision = "";
+-    private ProfileListItemDto? _lastLoadedItem;
+ 
+-    // UI 事件抑制标记 (Constraint 5) - 构造期间默认启用抑制
++    // UI 事件抑制标记 (生命周期防御) - 构造期与异步数据灌入期间置 true
+     private bool _isApplyingModel = true;
+-    private bool _suppressSelectionChange = true;
+ 
+     // 本地草稿与脏状态追踪
++    private LightingPresetItemDto? _draftPreset;
+     private double _draftBrightnessRatio = 1.0;
+     private int? _draftPeriodMs;
+-    private int _draftFps = 25;
+     private bool _isDirty = false;
+ 
+     public LightingPage()
+     {
+         _isApplyingModel = true;
+-        _suppressSelectionChange = true;
+ 
+         InitializeComponent();
+ 
+         _isApplyingModel = false;
+-        _suppressSelectionChange = false;
+ 
+         _client = AuraControlClient.Instance;
+ 
+@@ -43,16 +41,31 @@ public sealed partial class LightingPage : Page
+ 
+     private async void LightingPage_Loaded(object sender, RoutedEventArgs e)
+     {
+-        // 页面 Loaded 时仅拉取一次，杜绝无限 polling 循环
++        await LoadLightingPageDataAsync();
+         await RefreshRuntimeStatusAsync();
+-        await LoadProfileListAsync();
+     }
+ 
+     private async void RefreshStatusBtn_Click(object sender, RoutedEventArgs e)
+     {
++        // 约束 4: 刷新状态按钮只刷新运行时状态，严禁覆盖或丢弃未保存的本地草稿
+         await RefreshRuntimeStatusAsync();
+     }
+ 
++    private void OpenStudioBtn_Click(object sender, RoutedEventArgs e)
++    {
++        // 约束 3: 提供直接跳转至 Studio 页面的入口
++        if (MainWindow.CurrentNavView != null)
++        {
++            var studioItem = MainWindow.CurrentNavView.MenuItems
++                .OfType<NavigationViewItem>()
++                .FirstOrDefault(i => string.Equals((string?)i.Tag, "studio", StringComparison.OrdinalIgnoreCase));
++            if (studioItem != null)
++            {
++                MainWindow.CurrentNavView.SelectedItem = studioItem;
++            }
++        }
++    }
++
+     private async Task RefreshRuntimeStatusAsync()
+     {
+         try
+@@ -62,17 +75,45 @@ public sealed partial class LightingPage : Page
+             {
+                 return;
+             }
++
+             if (status.IsOnline && status.Data != null)
+             {
+-                ActiveProfileText.Text = status.ActiveProfileDisplayName;
++                string activeProf = status.Data.Runtime.ActiveProfile;
++                string baseProf = _cleanLighting?.ProfileName ?? "";
++
+                 ActiveFpsText.Text = status.FpsDisplayName;
+                 ActiveBackendText.Text = status.BackendDisplayName;
++
++                // 约束 2: 中性事实文案，严禁无依据声称“一定由自动化规则控制”
++                if (!string.IsNullOrEmpty(activeProf) && !string.IsNullOrEmpty(baseProf) &&
++                    !string.Equals(activeProf, baseProf, StringComparison.OrdinalIgnoreCase))
++                {
++                    ActiveProfileText.Text = activeProf;
++                    if (StatusMismatchInfoBar != null)
++                    {
++                        StatusMismatchInfoBar.IsOpen = true;
++                        StatusMismatchInfoBar.Title = "当前运行方案与默认灯效不同";
++                        StatusMismatchInfoBar.Message = $"当前运行方案为 [{activeProf}]，可能由应用规则、游戏联动或编排配置选择。您在此页面修改的是默认灯效（{baseProf}）；当无特定规则覆盖时生效。";
++                    }
++                }
++                else
++                {
++                    ActiveProfileText.Text = string.IsNullOrEmpty(activeProf) ? "--" : $"{activeProf} (默认)";
++                    if (StatusMismatchInfoBar != null)
++                    {
++                        StatusMismatchInfoBar.IsOpen = false;
++                    }
++                }
+             }
+             else
+             {
+                 ActiveProfileText.Text = "守护进程未连接";
+                 ActiveFpsText.Text = "--";
+                 ActiveBackendText.Text = "Offline";
++                if (StatusMismatchInfoBar != null)
++                {
++                    StatusMismatchInfoBar.IsOpen = false;
++                }
+             }
+         }
+         catch (Exception ex)
+@@ -83,175 +124,188 @@ public sealed partial class LightingPage : Page
+         }
+     }
+ 
+-    private async Task LoadProfileListAsync(string? preferredSelection = null)
++    private async Task LoadLightingPageDataAsync()
+     {
+-        if (ProfileComboBox == null) return;
+-
+         try
+         {
+-            var res = await _client.GetProfilesAsync();
+-            if (!res.IsSuccess)
++            _isApplyingModel = true;
++
++            // 1. 加载预设 Catalog (单一事实来源)
++            var pRes = await _client.GetLightingPresetsAsync();
++            if (!pRes.IsSuccess)
+             {
+-                ShowNotification(InfoBarSeverity.Error, "加载方案列表失败", res.ErrorMessage);
++                _isApplyingModel = false;
++                ShowNotification(InfoBarSeverity.Error, "加载预设目录失败", pRes.ErrorMessage);
+                 return;
+             }
+ 
+-            _suppressSelectionChange = true;
+-            _profiles.Clear();
+-            _profiles.AddRange(res.Profiles);
++            _presets.Clear();
++            _presets.AddRange(pRes.Presets);
+ 
+-            ProfileComboBox.ItemsSource = null;
+-            ProfileComboBox.ItemsSource = _profiles;
+-            ProfileComboBox.DisplayMemberPath = "Name";
+-
+-            ProfileListItemDto? target = null;
+-            if (!string.IsNullOrEmpty(preferredSelection))
++            if (PresetsGridView != null)
+             {
+-                target = _profiles.Find(p => string.Equals(p.Name, preferredSelection, StringComparison.OrdinalIgnoreCase));
++                PresetsGridView.ItemsSource = null;
++                PresetsGridView.ItemsSource = _presets;
+             }
+-            target ??= _profiles.Count > 0 ? _profiles[0] : null;
+-
+-            ProfileComboBox.SelectedItem = target;
+-            _lastLoadedItem = target;
+-            _suppressSelectionChange = false;
+ 
+-            if (target != null)
++            // 2. 加载 Base Lighting
++            var bRes = await _client.GetBaseLightingAsync();
++            if (!bRes.IsSuccess || bRes.Lighting == null)
+             {
+-                await LoadProfileDetailAsync(target.Name);
++                _isApplyingModel = false;
++                ShowNotification(InfoBarSeverity.Error, "读取默认灯效失败", bRes.ErrorMessage);
++                return;
+             }
++
++            _cleanLighting = bRes.Lighting;
++            _currentRevision = bRes.Revision;
++
++            // 3. 将 cleanLighting 回填至 UI 与本地草稿
++            ApplyCleanLightingToUi();
++
++            _isApplyingModel = false;
++            SetDirty(false);
+         }
+         catch (Exception ex)
+         {
++            _isApplyingModel = false;
+             ShowNotification(InfoBarSeverity.Error, "初始化异常", ex.Message);
+         }
+     }
+ 
+-    private async Task LoadProfileDetailAsync(string profileName)
++    private void ApplyCleanLightingToUi()
+     {
+-        try
++        if (_cleanLighting == null) return;
++
++        // 亮度 0.0–1.0 -> 0–100%
++        int sliderVal = (int)Math.Round(_cleanLighting.Brightness * 100.0);
++        if (BrightnessSlider != null)
++        {
++            BrightnessSlider.Value = sliderVal;
++        }
++        if (BrightnessValueText != null)
++        {
++            BrightnessValueText.Text = $"{sliderVal}%";
++        }
++        _draftBrightnessRatio = _cleanLighting.Brightness;
++
++        // 约束 3: 支持高级方案 (custom_keymap / plugin)
++        if (!_cleanLighting.IsBuiltinPreset)
+         {
+-            var res = await _client.GetProfileAsync(profileName);
+-            if (!res.IsSuccess || res.Profile == null)
++            _draftPreset = null;
++            if (PresetsGridView != null)
+             {
+-                ShowNotification(InfoBarSeverity.Error, "读取方案失败", res.ErrorMessage);
+-                return;
++                PresetsGridView.SelectedItem = null;
+             }
+-
+-            _currentDetail = res.Profile;
+-            _currentRevision = res.Revision;
+-
+-            // 进入程序化数据绑定阶段，彻底抑制脏检测事件
+-            _isApplyingModel = true;
+-
+-            if (EffectTypeText != null)
++            if (DefaultEffectText != null)
+             {
+-                EffectTypeText.Text = _currentDetail.Type;
++                DefaultEffectText.Text = $"{_cleanLighting.Effect} (高级方案)";
+             }
+-
+-            // 亮度 0.0–1.0 -> 0–100%
+-            int sliderVal = (int)Math.Round(_currentDetail.Brightness * 100.0);
+-            if (BrightnessSlider != null)
++            if (SelectedPresetText != null)
+             {
+-                BrightnessSlider.Value = sliderVal;
++                SelectedPresetText.Text = $"{_cleanLighting.Effect} (由 Studio 管理的高级效果)";
+             }
+-            if (BrightnessValueText != null)
++            if (AdvancedEffectBanner != null)
+             {
+-                BrightnessValueText.Text = $"{sliderVal}%";
++                AdvancedEffectBanner.IsOpen = true;
++                AdvancedEffectBanner.Message = $"当前默认方案 [{_cleanLighting.Effect}] 包含逐键自定义或插件逻辑，由 Studio 管理。您可在此选择下方任一内建预设替换默认灯效，或打开 Studio 进行逐键编排。";
+             }
+-            _draftBrightnessRatio = _currentDetail.Brightness;
+-
+-            // 动画周期 (只有 supports_period == true 时显示)
+             if (PeriodPanel != null)
+             {
+-                if (_currentDetail.SupportsPeriod)
+-                {
+-                    PeriodPanel.Visibility = Visibility.Visible;
+-                    int periodVal = _currentDetail.PeriodMs ?? 3000;
+-                    if (PeriodNumberBox != null)
+-                    {
+-                        PeriodNumberBox.Value = periodVal;
+-                    }
+-                    _draftPeriodMs = periodVal;
+-                }
+-                else
+-                {
+-                    PeriodPanel.Visibility = Visibility.Collapsed;
+-                    _draftPeriodMs = null;
+-                }
++                PeriodPanel.Visibility = Visibility.Collapsed;
+             }
++            _draftPeriodMs = null;
++            return;
++        }
+ 
+-            // 方案独占帧率
+-            if (FpsNumberBox != null)
+-            {
+-                FpsNumberBox.Value = _currentDetail.Fps;
+-            }
+-            _draftFps = _currentDetail.Fps;
++        // 内置预设正常匹配
++        if (AdvancedEffectBanner != null)
++        {
++            AdvancedEffectBanner.IsOpen = false;
++        }
+ 
+-            if (FpsHelperText != null)
+-            {
+-                FpsHelperText.Text = _currentDetail.FpsInherited
+-                    ? $"当前继承全局默认 ({_currentDetail.Fps} FPS)"
+-                    : $"当前已显式指定独立帧率 ({_currentDetail.Fps} FPS)";
+-            }
++        _draftPreset = _presets.Find(p =>
++            string.Equals(p.Id, _cleanLighting.PresetId, StringComparison.OrdinalIgnoreCase) ||
++            string.Equals(p.Effect, _cleanLighting.Effect, StringComparison.OrdinalIgnoreCase));
+ 
+-            _isApplyingModel = false;
+-            SetDirty(false);
++        if (PresetsGridView != null)
++        {
++            PresetsGridView.SelectedItem = _draftPreset;
+         }
+-        catch (Exception ex)
++
++        string displayName = _draftPreset?.DisplayName ?? _cleanLighting.Effect;
++        if (DefaultEffectText != null)
+         {
+-            _isApplyingModel = false;
+-            ShowNotification(InfoBarSeverity.Error, "解析方案失败", ex.Message);
++            DefaultEffectText.Text = displayName;
++        }
++        if (SelectedPresetText != null)
++        {
++            SelectedPresetText.Text = _draftPreset != null
++                ? $"{_draftPreset.DisplayName} ({_draftPreset.Effect})"
++                : displayName;
+         }
+-    }
+ 
+-    private async void ProfileComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+-    {
+-        if (_suppressSelectionChange || _isApplyingModel)
++        if (PeriodPanel != null)
+         {
+-            return;
++            if (_cleanLighting.SupportsPeriod)
++            {
++                PeriodPanel.Visibility = Visibility.Visible;
++                int periodVal = _cleanLighting.PeriodMs ?? _draftPreset?.DefaultPeriodMs ?? 3000;
++                if (PeriodNumberBox != null)
++                {
++                    PeriodNumberBox.Value = periodVal;
++                }
++                _draftPeriodMs = periodVal;
++            }
++            else
++            {
++                PeriodPanel.Visibility = Visibility.Collapsed;
++                _draftPeriodMs = null;
++            }
+         }
++    }
++
++    private void PresetsGridView_SelectionChanged(object sender, SelectionChangedEventArgs e)
++    {
++        // 约束 6: 抑制程序化或构造期触发
++        if (_isApplyingModel) return;
++
++        var selected = PresetsGridView?.SelectedItem as LightingPresetItemDto;
++        if (selected == null) return;
+ 
+-        var selected = ProfileComboBox?.SelectedItem as ProfileListItemDto;
+-        if (selected == null || selected == _lastLoadedItem)
++        _draftPreset = selected;
++
++        if (SelectedPresetText != null)
+         {
+-            return;
++            SelectedPresetText.Text = $"{selected.DisplayName} ({selected.Effect})";
+         }
+ 
+-        if (_isDirty)
++        // 约束 5: 切换预设时动画周期联动
++        if (selected.SupportsPeriod)
+         {
+-            // 拦截未保存切换并弹窗提示
+-            var dialog = new ContentDialog
+-            {
+-                Title = "未保存的修改",
+-                Content = $"方案 [{_lastLoadedItem?.Name}] 存在尚未保存的配置修改，是否放弃修改并切换方案？",
+-                PrimaryButtonText = "放弃修改",
+-                CloseButtonText = "取消",
+-                XamlRoot = this.XamlRoot
+-            };
+-
+-            var diagRes = await dialog.ShowAsync();
+-            if (diagRes == ContentDialogResult.Primary)
++            if (PeriodPanel != null)
+             {
+-                // 用户明确放弃本地草稿
+-                _lastLoadedItem = selected;
+-                await LoadProfileDetailAsync(selected.Name);
++                PeriodPanel.Visibility = Visibility.Visible;
+             }
+-            else
++            int defPeriod = selected.DefaultPeriodMs ?? 2500;
++            _isApplyingModel = true;
++            if (PeriodNumberBox != null)
+             {
+-                // 取消切换：恢复原选择，抑制递归弹窗 (Constraint 5)
+-                _suppressSelectionChange = true;
+-                if (ProfileComboBox != null)
+-                {
+-                    ProfileComboBox.SelectedItem = _lastLoadedItem;
+-                }
+-                _suppressSelectionChange = false;
++                PeriodNumberBox.Value = defPeriod;
+             }
++            _isApplyingModel = false;
++            _draftPeriodMs = defPeriod;
+         }
+         else
+         {
+-            _lastLoadedItem = selected;
+-            await LoadProfileDetailAsync(selected.Name);
++            if (PeriodPanel != null)
++            {
++                PeriodPanel.Visibility = Visibility.Collapsed;
++            }
++            _draftPeriodMs = null;
+         }
++
++        EvaluateDirty();
+     }
+ 
+     private void BrightnessSlider_ValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
+@@ -275,28 +329,38 @@ public sealed partial class LightingPage : Page
+         EvaluateDirty();
+     }
+ 
+-    private void FpsNumberBox_ValueChanged(NumberBox sender, NumberBoxValueChangedEventArgs args)
+-    {
+-        if (_isApplyingModel) return;
+-        if (double.IsNaN(args.NewValue)) return;
+-
+-        _draftFps = (int)Math.Clamp(args.NewValue, 10, 100);
+-        EvaluateDirty();
+-    }
+-
+     private void EvaluateDirty()
+     {
+-        if (_currentDetail == null)
++        if (_cleanLighting == null)
+         {
+             SetDirty(false);
+             return;
+         }
+ 
+-        bool bDiff = Math.Abs(_draftBrightnessRatio - _currentDetail.Brightness) > 0.005;
+-        bool pDiff = _currentDetail.SupportsPeriod && (_draftPeriodMs != _currentDetail.PeriodMs);
+-        bool fDiff = _draftFps != _currentDetail.Fps;
++        // 预设变更判定
++        bool presetChanged = false;
++        if (!_cleanLighting.IsBuiltinPreset)
++        {
++            // 如果原先是高级方案，用户选中了任何一个内置预设即为 dirty
++            presetChanged = (_draftPreset != null);
++        }
++        else
++        {
++            presetChanged = (_draftPreset == null ||
++                             !string.Equals(_draftPreset.Id, _cleanLighting.PresetId, StringComparison.OrdinalIgnoreCase));
++        }
++
++        // 亮度变更判定
++        bool bDiff = Math.Abs(_draftBrightnessRatio - _cleanLighting.Brightness) > 0.005;
+ 
+-        SetDirty(bDiff || pDiff || fDiff);
++        // 周期变更判定 (仅当当前预设支持周期时计算)
++        bool perDiff = false;
++        if (_draftPreset != null && _draftPreset.SupportsPeriod)
++        {
++            perDiff = (_draftPeriodMs != _cleanLighting.PeriodMs);
++        }
++
++        SetDirty(presetChanged || bDiff || perDiff);
+     }
+ 
+     private void SetDirty(bool dirty)
+@@ -314,47 +378,60 @@ public sealed partial class LightingPage : Page
+ 
+     private async void SaveBtn_Click(object sender, RoutedEventArgs e)
+     {
+-        if (!_isDirty || _currentDetail == null)
++        if (!_isDirty || _cleanLighting == null)
+         {
+             return;
+         }
+ 
+         SaveBtn.IsEnabled = false;
+ 
+-        // 构建真正 Sparse Patch (Constraint 2)：仅序列化用户真正修改的字段
+-        var patch = new ProfilePatchDto
++        // 构建真正 Sparse Patch
++        var patch = new BaseLightingPatchDto
+         {
+             ExpectedRevision = _currentRevision
+         };
+ 
+-        if (Math.Abs(_draftBrightnessRatio - _currentDetail.Brightness) > 0.005)
++        bool presetChanged = false;
++        if (!_cleanLighting.IsBuiltinPreset)
+         {
+-            patch.Brightness = Math.Round(_draftBrightnessRatio, 4);
++            if (_draftPreset != null)
++            {
++                patch.Preset = _draftPreset.Id;
++                presetChanged = true;
++            }
++        }
++        else if (_draftPreset != null && !string.Equals(_draftPreset.Id, _cleanLighting.PresetId, StringComparison.OrdinalIgnoreCase))
++        {
++            patch.Preset = _draftPreset.Id;
++            presetChanged = true;
+         }
+ 
+-        if (_currentDetail.SupportsPeriod && _draftPeriodMs.HasValue && _draftPeriodMs != _currentDetail.PeriodMs)
++        if (Math.Abs(_draftBrightnessRatio - _cleanLighting.Brightness) > 0.005)
+         {
+-            patch.PeriodMs = _draftPeriodMs.Value;
++            patch.Brightness = Math.Round(_draftBrightnessRatio, 4);
+         }
+ 
+-        if (_draftFps != _currentDetail.Fps)
++        if (_draftPreset != null && _draftPreset.SupportsPeriod)
+         {
+-            patch.Fps = _draftFps;
++            if (presetChanged || (_draftPeriodMs.HasValue && _draftPeriodMs != _cleanLighting.PeriodMs))
++            {
++                patch.PeriodMs = _draftPeriodMs ?? _draftPreset.DefaultPeriodMs ?? 3000;
++            }
+         }
+ 
+-        var res = await _client.UpdateProfileAsync(_currentDetail.Name, patch);
++        var res = await _client.UpdateBaseLightingAsync(patch);
+ 
+         if (res.IsSuccess)
+         {
+-            ShowNotification(InfoBarSeverity.Success, "配置已保存", $"方案 [{_currentDetail.Name}] 参数已更新并通过热重载生效。");
+-            await LoadProfileDetailAsync(_currentDetail.Name);
++            ShowNotification(InfoBarSeverity.Success, "配置已保存", "系统默认灯效已成功更新并通过热重载生效。");
++            await LoadLightingPageDataAsync();
+             await RefreshRuntimeStatusAsync();
+         }
+         else if (res.IsConflict)
+         {
+-            // 409 冲突处理：提示外部修改并重新加载最新状态
++            // 约束 4: 409 冲突处理，明确提示后重新拉取并丢弃 stale draft
+             ShowNotification(InfoBarSeverity.Warning, "配置已被外部修改", "配置文件已被其他编辑器修改，已自动为您重新载入最新配置，本地草稿已丢弃。");
+-            await LoadProfileDetailAsync(_currentDetail.Name);
++            await LoadLightingPageDataAsync();
+             await RefreshRuntimeStatusAsync();
+         }
+         else
+diff --git a/winui/Services/AuraControlClient.cs b/winui/Services/AuraControlClient.cs
+index 2a66816..4db6849 100644
+--- a/winui/Services/AuraControlClient.cs
++++ b/winui/Services/AuraControlClient.cs
+@@ -276,6 +276,112 @@ public sealed class ProfilePatchResponseDto
+     public string Revision { get; set; } = "";
+ }
+ 
++// ========================================================
++// Phase 3.5: Lighting Presets & Base Lighting DTOs
++// ========================================================
++
++public sealed class LightingPresetItemDto
++{
++    [JsonPropertyName("id")]
++    public string Id { get; set; } = "";
++
++    [JsonPropertyName("display_name")]
++    public string DisplayName { get; set; } = "";
++
++    [JsonPropertyName("effect")]
++    public string Effect { get; set; } = "";
++
++    [JsonPropertyName("supports_period")]
++    public bool SupportsPeriod { get; set; }
++
++    [JsonPropertyName("default_period_ms")]
++    public int? DefaultPeriodMs { get; set; }
++}
++
++public sealed class LightingPresetListResponseDto
++{
++    [JsonPropertyName("status")]
++    public string Status { get; set; } = "";
++
++    [JsonPropertyName("api_version")]
++    public int ApiVersion { get; set; } = 1;
++
++    [JsonPropertyName("presets")]
++    public List<LightingPresetItemDto> Presets { get; set; } = new();
++}
++
++public sealed class BaseLightingDto
++{
++    [JsonPropertyName("profile_name")]
++    public string ProfileName { get; set; } = "";
++
++    [JsonPropertyName("effect")]
++    public string Effect { get; set; } = "";
++
++    [JsonPropertyName("preset_id")]
++    public string PresetId { get; set; } = "";
++
++    [JsonPropertyName("is_builtin_preset")]
++    public bool IsBuiltinPreset { get; set; }
++
++    [JsonPropertyName("brightness")]
++    public double Brightness { get; set; } = 1.0;
++
++    [JsonPropertyName("supports_period")]
++    public bool SupportsPeriod { get; set; }
++
++    [JsonPropertyName("period_ms")]
++    public int? PeriodMs { get; set; }
++}
++
++public sealed class BaseLightingResponseDto
++{
++    [JsonPropertyName("status")]
++    public string Status { get; set; } = "";
++
++    [JsonPropertyName("api_version")]
++    public int ApiVersion { get; set; } = 1;
++
++    [JsonPropertyName("revision")]
++    public string Revision { get; set; } = "";
++
++    [JsonPropertyName("lighting")]
++    public BaseLightingDto? Lighting { get; set; }
++}
++
++public sealed class BaseLightingPatchDto
++{
++    [JsonPropertyName("expected_revision")]
++    public string ExpectedRevision { get; set; } = "";
++
++    [JsonPropertyName("preset")]
++    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
++    public string? Preset { get; set; }
++
++    [JsonPropertyName("brightness")]
++    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
++    public double? Brightness { get; set; }
++
++    [JsonPropertyName("period_ms")]
++    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
++    public int? PeriodMs { get; set; }
++}
++
++public sealed class BaseLightingPatchResponseDto
++{
++    [JsonPropertyName("status")]
++    public string Status { get; set; } = "";
++
++    [JsonPropertyName("api_version")]
++    public int ApiVersion { get; set; } = 1;
++
++    [JsonPropertyName("message")]
++    public string Message { get; set; } = "";
++
++    [JsonPropertyName("revision")]
++    public string Revision { get; set; } = "";
++}
++
+ public sealed class ApiErrorResponseDto
+ {
+     [JsonPropertyName("status")]
+@@ -295,6 +401,75 @@ public sealed class ApiErrorResponseDto
+ // Client Result Models
+ // ========================================================
+ 
++public sealed class LightingPresetListResult
++{
++    public bool IsSuccess { get; init; }
++    public string ErrorMessage { get; init; } = "";
++    public IReadOnlyList<LightingPresetItemDto> Presets { get; init; } = Array.Empty<LightingPresetItemDto>();
++
++    public static LightingPresetListResult Success(IReadOnlyList<LightingPresetItemDto> presets) => new()
++    {
++        IsSuccess = true,
++        Presets = presets
++    };
++
++    public static LightingPresetListResult Failure(string error) => new()
++    {
++        IsSuccess = false,
++        ErrorMessage = error
++    };
++}
++
++public sealed class BaseLightingResult
++{
++    public bool IsSuccess { get; init; }
++    public string ErrorMessage { get; init; } = "";
++    public string Revision { get; init; } = "";
++    public BaseLightingDto? Lighting { get; init; }
++
++    public static BaseLightingResult Success(BaseLightingDto lighting, string revision) => new()
++    {
++        IsSuccess = true,
++        Lighting = lighting,
++        Revision = revision
++    };
++
++    public static BaseLightingResult Failure(string error) => new()
++    {
++        IsSuccess = false,
++        ErrorMessage = error
++    };
++}
++
++public sealed class UpdateBaseLightingResult
++{
++    public UpdateProfileStatus Status { get; init; }
++    public bool IsSuccess => Status == UpdateProfileStatus.Success;
++    public bool IsConflict => Status == UpdateProfileStatus.Conflict;
++    public string ErrorMessage { get; init; } = "";
++    public string NewRevision { get; init; } = "";
++    public string CurrentRevision { get; init; } = "";
++
++    public static UpdateBaseLightingResult Success(string newRevision) => new()
++    {
++        Status = UpdateProfileStatus.Success,
++        NewRevision = newRevision
++    };
++
++    public static UpdateBaseLightingResult Conflict(string currentRevision, string message) => new()
++    {
++        Status = UpdateProfileStatus.Conflict,
++        CurrentRevision = currentRevision,
++        ErrorMessage = string.IsNullOrEmpty(message) ? "配置已被其他编辑器修改" : message
++    };
++
++    public static UpdateBaseLightingResult Failure(UpdateProfileStatus status, string message) => new()
++    {
++        Status = status,
++        ErrorMessage = message
++    };
++}
++
+ public sealed class ProfileListResult
+ {
+     public bool IsSuccess { get; init; }
+@@ -378,6 +553,9 @@ public sealed class UpdateProfileResult
+ public interface IAuraControlClient
+ {
+     Task<RuntimeStatus> GetRuntimeStatusAsync(CancellationToken cancellationToken = default);
++    Task<LightingPresetListResult> GetLightingPresetsAsync(CancellationToken cancellationToken = default);
++    Task<BaseLightingResult> GetBaseLightingAsync(CancellationToken cancellationToken = default);
++    Task<UpdateBaseLightingResult> UpdateBaseLightingAsync(BaseLightingPatchDto patch, CancellationToken cancellationToken = default);
+     Task<ProfileListResult> GetProfilesAsync(CancellationToken cancellationToken = default);
+     Task<ProfileDetailResult> GetProfileAsync(string name, CancellationToken cancellationToken = default);
+     Task<UpdateProfileResult> UpdateProfileAsync(string name, ProfilePatchDto patch, CancellationToken cancellationToken = default);
+@@ -596,4 +774,147 @@ public sealed class AuraControlClient : IAuraControlClient
+             return UpdateProfileResult.Failure(UpdateProfileStatus.Failure, ex.Message);
+         }
+     }
++
++    public async Task<LightingPresetListResult> GetLightingPresetsAsync(CancellationToken cancellationToken = default)
++    {
++        try
++        {
++            using var req = new HttpRequestMessage(HttpMethod.Get, "http://127.0.0.1:19897/api/lighting/presets");
++            using var res = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
++
++            var json = await res.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
++            if (!res.IsSuccessStatusCode)
++            {
++                return LightingPresetListResult.Failure($"HTTP {(int)res.StatusCode}: {res.ReasonPhrase}");
++            }
++
++            var dto = JsonSerializer.Deserialize<LightingPresetListResponseDto>(json, JsonOptions);
++            if (dto == null)
++            {
++                return LightingPresetListResult.Failure("Empty or invalid JSON payload");
++            }
++
++            if (!string.Equals(dto.Status, "ok", StringComparison.OrdinalIgnoreCase))
++            {
++                return LightingPresetListResult.Failure($"Daemon returned non-ok status: {dto.Status}");
++            }
++
++            if (dto.ApiVersion != 1)
++            {
++                return LightingPresetListResult.Failure($"Unsupported API version: {dto.ApiVersion} (expected 1)");
++            }
++
++            return LightingPresetListResult.Success(dto.Presets);
++        }
++        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
++        {
++            return LightingPresetListResult.Failure("Request canceled");
++        }
++        catch (Exception ex)
++        {
++            return LightingPresetListResult.Failure(ex.Message);
++        }
++    }
++
++    public async Task<BaseLightingResult> GetBaseLightingAsync(CancellationToken cancellationToken = default)
++    {
++        try
++        {
++            using var req = new HttpRequestMessage(HttpMethod.Get, "http://127.0.0.1:19897/api/lighting/base");
++            using var res = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
++
++            var json = await res.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
++            if (!res.IsSuccessStatusCode)
++            {
++                return BaseLightingResult.Failure($"HTTP {(int)res.StatusCode}: {res.ReasonPhrase}");
++            }
++
++            var dto = JsonSerializer.Deserialize<BaseLightingResponseDto>(json, JsonOptions);
++            if (dto == null || dto.Lighting == null)
++            {
++                return BaseLightingResult.Failure("Empty or invalid JSON payload");
++            }
++
++            if (!string.Equals(dto.Status, "ok", StringComparison.OrdinalIgnoreCase))
++            {
++                return BaseLightingResult.Failure($"Daemon returned non-ok status: {dto.Status}");
++            }
++
++            if (dto.ApiVersion != 1)
++            {
++                return BaseLightingResult.Failure($"Unsupported API version: {dto.ApiVersion} (expected 1)");
++            }
++
++            return BaseLightingResult.Success(dto.Lighting, dto.Revision);
++        }
++        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
++        {
++            return BaseLightingResult.Failure("Request canceled");
++        }
++        catch (Exception ex)
++        {
++            return BaseLightingResult.Failure(ex.Message);
++        }
++    }
++
++    public async Task<UpdateBaseLightingResult> UpdateBaseLightingAsync(BaseLightingPatchDto patch, CancellationToken cancellationToken = default)
++    {
++        try
++        {
++            string url = "http://127.0.0.1:19897/api/lighting/base";
++            string patchJson = JsonSerializer.Serialize(patch, JsonOptions);
++
++            using var req = new HttpRequestMessage(new HttpMethod("PATCH"), url)
++            {
++                Content = new StringContent(patchJson, System.Text.Encoding.UTF8, "application/json")
++            };
++
++            using var res = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
++            var resJson = await res.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
++
++            if (res.StatusCode == System.Net.HttpStatusCode.OK)
++            {
++                var okDto = JsonSerializer.Deserialize<BaseLightingPatchResponseDto>(resJson, JsonOptions);
++                if (okDto != null && string.Equals(okDto.Status, "ok", StringComparison.OrdinalIgnoreCase))
++                {
++                    return UpdateBaseLightingResult.Success(okDto.Revision);
++                }
++                return UpdateBaseLightingResult.Failure(UpdateProfileStatus.Failure, "Unexpected non-ok response from daemon");
++            }
++
++            ApiErrorResponseDto? errDto = null;
++            try
++            {
++                errDto = JsonSerializer.Deserialize<ApiErrorResponseDto>(resJson, JsonOptions);
++            }
++            catch { }
++
++            string msg = errDto?.Message ?? res.ReasonPhrase ?? $"HTTP {(int)res.StatusCode}";
++
++            if (res.StatusCode == System.Net.HttpStatusCode.Conflict)
++            {
++                return UpdateBaseLightingResult.Conflict(errDto?.CurrentRevision ?? "", msg);
++            }
++
++            if (res.StatusCode == System.Net.HttpStatusCode.BadRequest)
++            {
++                return UpdateBaseLightingResult.Failure(UpdateProfileStatus.ValidationError, msg);
++            }
++
++            if (res.StatusCode == System.Net.HttpStatusCode.NotFound)
++            {
++                return UpdateBaseLightingResult.Failure(UpdateProfileStatus.NotFound, msg);
++            }
++
++            return UpdateBaseLightingResult.Failure(UpdateProfileStatus.Failure, msg);
++        }
++        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
++        {
++            return UpdateBaseLightingResult.Failure(UpdateProfileStatus.Failure, "Request canceled");
++        }
++        catch (Exception ex)
++        {
++            return UpdateBaseLightingResult.Failure(UpdateProfileStatus.Failure, ex.Message);
++        }
++    }
+ }

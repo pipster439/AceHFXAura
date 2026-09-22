@@ -1,7 +1,6 @@
 #pragma once
 
 #include "engine/effect.h"
-#include "engine/overlay_manager.h"
 #include "engine/automation_effect_runtime.h"
 #include "aura/aura_types.h"
 #include "aura/keymap.h"
@@ -30,8 +29,6 @@ public:
     uint64_t GetElapsedMs() const;
 
     // CS2 Transient Event Overlay Manager
-    OverlayManager& GetOverlayManager() { return overlay_manager_; }
-    const OverlayManager& GetOverlayManager() const { return overlay_manager_; }
 
     // Edit-time preview frame hardware push
     void SetPreviewFrame(const FrameBuffer& frame, uint64_t duration_ms = 300);
@@ -47,7 +44,6 @@ private:
     std::string base_identity_, attempted_base_identity_;
     std::chrono::steady_clock::time_point start_time_;
 
-    OverlayManager overlay_manager_;
     AutomationEffectRuntime automation_effects_;
 
     mutable std::mutex preview_mutex_;

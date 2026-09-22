@@ -30,19 +30,14 @@ export default function Sidebar({
   theme = 'dark',
   onToggleTheme
 }) {
-  const [showLegacy, setShowLegacy] = useState(() => ['rules', 'gsi'].includes(activeTab));
 
   const navItems = [
     { id: 'lighting', label: '预设灯效', icon: Palette },
     { id: 'perkey', label: '逐键涂装', icon: Keyboard },
     { id: 'studio', label: '工作室', icon: Sparkles },
+    { id: 'gsi', label: 'CS2 遥测诊断', icon: Crosshair },
     { id: 'automation', label: 'Automation', icon: Workflow },
     { id: 'profiles', label: '方案管理', icon: SlidersHorizontal }
-  ];
-
-  const legacyNavItems = [
-    { id: 'rules', label: '传统规则表', icon: Workflow },
-    { id: 'gsi', label: 'CS2 遥测诊断', icon: Crosshair }
   ];
 
   return (
@@ -147,42 +142,6 @@ export default function Sidebar({
           );
         })}
 
-        {/* 兼容与高级折叠区域 (已降级) */}
-        {!isCollapsed && (
-          <div className="pt-3 mt-2 border-t border-md-outline-variant/60">
-            <button
-              type="button"
-              onClick={() => setShowLegacy(!showLegacy)}
-              className="w-full px-2 py-1 flex items-center justify-between text-[11px] text-md-on-surface-variant/80 hover:text-md-on-surface cursor-pointer"
-            >
-              <span>兼容与高级功能</span>
-              <span>{showLegacy ? '▲' : '▼'}</span>
-            </button>
-            {showLegacy && (
-              <div className="mt-1 space-y-1">
-                {legacyNavItems.map(item => {
-                  const Icon = item.icon;
-                  const isActive = activeTab === item.id;
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => setActiveTab(item.id)}
-                      className={`w-full min-h-[36px] flex items-center gap-2.5 px-3 py-1.5 rounded-md-full text-xs transition-colors cursor-pointer ${
-                        isActive
-                          ? 'bg-md-surface-container-high text-md-primary font-bold'
-                          : 'text-md-on-surface-variant hover:bg-md-surface-container hover:text-md-on-surface'
-                      }`}
-                    >
-                      <Icon className="w-4 h-4 shrink-0" />
-                      <span className="truncate">{item.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
       </nav>
 
       {/* 底部功能区：明暗切换与服务状态 */}

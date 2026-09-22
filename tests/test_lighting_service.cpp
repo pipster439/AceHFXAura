@@ -79,24 +79,30 @@ int main() {
   "fps": 25,
   "hardware_backend": "auto",
   "custom_unknown_root_field": "preserved_value",
-  "rules": [
-    {"process": "cs2.exe", "profile": "desktop"}
-  ],
-  "gsi_bindings": [
-    {"field": "player_state.health", "operator": "<", "value": 20, "profile": "desktop"}
-  ],
   "profiles": {
     "desktop": {
       "type": "breathing",
-      "color1": [0, 80, 200],
-      "color2": [0, 10, 40],
+      "color1": [
+        0,
+        80,
+        200
+      ],
+      "color2": [
+        0,
+        10,
+        40
+      ],
       "period_ms": 3500,
       "brightness": 1.0,
       "unknown_profile_tag": "keep_me"
     },
     "coding": {
       "type": "static",
-      "color": [10, 30, 50],
+      "color": [
+        10,
+        30,
+        50
+      ],
       "brightness": 128
     },
     "wave_glow": {
@@ -104,6 +110,25 @@ int main() {
       "period_ms": 4000,
       "fps": 50
     }
+  },
+  "orchestration": {
+    "rules": [
+      {
+        "id": "retained",
+        "model": "automation_v2",
+        "when": {
+          "mode": "state",
+          "condition": {
+            "field": "process",
+            "value": "cs2.exe"
+          }
+        },
+        "action": {
+          "type": "activate_profile",
+          "profile": "desktop"
+        }
+      }
+    ]
   }
 })json";
 
@@ -184,8 +209,7 @@ int main() {
         CHECK(reloaded["profiles"]["desktop"]["period_ms"] == 3500, "desktop 未修改的 period_ms 保留");
         CHECK(reloaded["profiles"]["desktop"]["unknown_profile_tag"] == "keep_me", "desktop 未知字段保留");
         CHECK(reloaded["custom_unknown_root_field"] == "preserved_value", "根节点未知字段保留");
-        CHECK(reloaded["rules"].size() == 1, "进程规则 rules 保留");
-        CHECK(reloaded["gsi_bindings"].size() == 1, "GSI 绑定保留");
+        CHECK(reloaded["orchestration"]["rules"][0]["id"] == "retained", "V2 rules preserved");
     }
 
     std::cout << "[Test 6] 校验防范：非法参数拒绝\n";

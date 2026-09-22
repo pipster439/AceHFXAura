@@ -1,3 +1,6 @@
+#include "config/rule_engine.h"
+#include "config/config_writer_util.h"
+#include <set>
 #include "gsi/gsi_adapter.h"
 #include "config/lighting_service.h"
 #include "config/automation_service.h"
@@ -118,7 +121,7 @@ void GsiState::UpdateFromPayloadAt(const nlohmann::json& payload, uint64_t recei
     UpdateFromPayloadImpl(payload, received_at_ms);
 }
 
-void GsiState::UpdateFromPayloadImpl(const nlohmann::json& payload, std::optional<uint64_t> receipt_override) {
+void GsiState::UpdateFromPayloadImpl(const nlohmann::json& payload, std::optional<uint64_t> receipt_override, bool seed) {
     if (!payload.is_object()) return;
 
     std::lock_guard<std::mutex> lock(mutex_);
@@ -220,7 +223,9 @@ void GsiState::UpdateFromPayloadImpl(const nlohmann::json& payload, std::optiona
     // Observe the existing detector; do not alter legacy trackers/pulses.
     packet_occurrences_.clear();
     collecting_occurrences_ = true;
+    seeding_ = seed;
     DetectGameEvents(payload, now_ms);
+    seeding_ = false;
     collecting_occurrences_ = false;
     if (automation_latest_ && (received_at_ms < automation_received_ms_ ||
         received_at_ms - automation_received_ms_ > 10000)) {
@@ -446,6 +451,7 @@ void GsiState::TriggerEvent(const std::string& name,
                             const std::string& label, 
                             const std::string& desc, 
                             const nlohmann::json& details) {
+    if (seeding_) return;
     uint64_t now_ms = GetCurrentEpochMs();
     event_timestamps_[name] = now_ms;
     last_event_name_ = name;
@@ -601,106 +607,6 @@ bool GsiState::IsEventActive(const std::string& event_name, uint64_t pulse_windo
     return (now_ms >= it->second && (now_ms - it->second) <= pulse_window_ms);
 }
 
-bool GsiState::Evaluate(const std::string& field, const std::string& op, const nlohmann::json& target_val) const {
-    std::lock_guard<std::mutex> lock(mutex_);
-    return EvaluateLocked(field, op, target_val);
-}
-
-// 本函数为 Evaluate 的锁内实现。前置条件：调用方已持有 mutex_。
-// 拆分的唯一目的是让 op=="!=" 能安全递归（std::mutex 不可重入，直接递归 Evaluate 会死锁）。
-bool GsiState::EvaluateLocked(const std::string& field, const std::string& op, const nlohmann::json& target_val) const {
-    // 如果检查的是事件脉冲字段，即时刷新脉冲时效
-    if (field.rfind("event.", 0) == 0) {
-        SyncEventFieldsToFlatState(GetCurrentEpochMs());
-    }
-
-    auto it = flat_state_.find(field);
-    if (it == flat_state_.end()) {
-        // 尝试别名查找 (如果用户配的是 player.state.health 也能命中 player_state.health)
-        if (field.rfind("player_state.", 0) == 0) {
-            std::string alt = "player.state." + field.substr(13);
-            it = flat_state_.find(alt);
-        } else if (field.rfind("player.state.", 0) == 0) {
-            std::string alt = "player_state." + field.substr(13);
-            it = flat_state_.find(alt);
-        }
-    }
-
-    if (it == flat_state_.end()) {
-        return false;
-    }
-
-    const GsiValue& actual = it->second;
-
-    // 解析目标比较值
-    double target_num = 0.0;
-    bool has_target_num = false;
-    std::string target_str;
-    bool has_target_str = false;
-    bool target_bool = false;
-    bool has_target_bool = false;
-
-    if (target_val.is_number()) {
-        target_num = target_val.get<double>();
-        has_target_num = true;
-    } else if (target_val.is_string()) {
-        target_str = target_val.get<std::string>();
-        has_target_str = true;
-        // 尝试解析字符串中的数值
-        try {
-            size_t idx = 0;
-            target_num = std::stod(target_str, &idx);
-            if (idx == target_str.size()) has_target_num = true;
-        } catch (...) {}
-    } else if (target_val.is_boolean()) {
-        target_bool = target_val.get<bool>();
-        has_target_bool = true;
-    }
-
-    if (op == "<") {
-        if (actual.type == GsiValue::Type::Number && has_target_num) {
-            return actual.num_val < target_num;
-        }
-        return false;
-    } else if (op == "<=") {
-        if (actual.type == GsiValue::Type::Number && has_target_num) {
-            return actual.num_val <= target_num;
-        }
-        return false;
-    } else if (op == ">") {
-        if (actual.type == GsiValue::Type::Number && has_target_num) {
-            return actual.num_val > target_num;
-        }
-        return false;
-    } else if (op == ">=") {
-        if (actual.type == GsiValue::Type::Number && has_target_num) {
-            return actual.num_val >= target_num;
-        }
-        return false;
-    } else if (op == "==") {
-        if (actual.type == GsiValue::Type::Number && has_target_num) {
-            return std::abs(actual.num_val - target_num) < 1e-4;
-        }
-        if (actual.type == GsiValue::Type::Boolean && has_target_bool) {
-            return actual.bool_val == target_bool;
-        }
-        if (actual.type == GsiValue::Type::String && has_target_str) {
-            return ToLowerStr(actual.str_val) == ToLowerStr(target_str);
-        }
-        return false;
-    } else if (op == "!=") {
-        // 递归到锁内实现：不可调用公开的 Evaluate()，否则会二次锁定不可重入的 mutex_ → 死锁
-        return !EvaluateLocked(field, "==", target_val);
-    } else if (op == "contains") {
-        if (actual.type == GsiValue::Type::String && has_target_str) {
-            return ToLowerStr(actual.str_val).find(ToLowerStr(target_str)) != std::string::npos;
-        }
-        return false;
-    }
-
-    return false;
-}
-
 nlohmann::json GsiState::ToJson() const {
     std::lock_guard<std::mutex> lock(mutex_);
 
@@ -795,6 +701,7 @@ void GsiState::Clear() {
     flat_state_.clear();
     recent_events_.clear();
     event_timestamps_.clear();
+    event_sequences_.clear();
     last_event_name_.clear();
     last_event_label_.clear();
     foreground_process_.clear();
@@ -910,6 +817,109 @@ GsiAdapter::~GsiAdapter() {
     Stop();
 }
 
+void GsiState::SeedFromPayload(const nlohmann::json& payload, uint64_t now) {
+    Clear();
+    UpdateFromPayloadImpl(payload, now, true);
+}
+
+void GsiAdapter::AcceptLivePayload(const nlohmann::json& payload) {
+    if (!payload.is_object()) throw std::runtime_error("GSI payload must be an object");
+    std::lock_guard<std::mutex> lock(source_mutex_);
+    if (simulation_) return; // valid CS2 requests still receive normal 200 responses
+    if (live_baseline_) {
+        state_.SeedFromPayload(payload, AutomationMonotonicMs()); live_baseline_ = false;
+    } else state_.UpdateFromPayload(payload);
+}
+
+nlohmann::json GsiAdapter::QueueSimulation(const nlohmann::json& request) {
+    using Json = nlohmann::json;
+    if (!request.is_object() || request.empty()) throw std::runtime_error("Expected nonempty simulation object");
+    const std::set<std::string> allowed={"enabled","heartbeat","foreground_process","health","armor","round_kills","bomb","round_phase","increment_kill"};
+    for (const auto& field:request.items()) {
+        const auto& key=field.key(); const auto& value=field.value();
+        if (!allowed.count(key)) throw std::runtime_error("Unsupported simulation field: "+key);
+        if (key=="enabled" || key=="heartbeat" || key=="increment_kill") {
+            if (!value.is_boolean()) throw std::runtime_error(key+" must be boolean");
+        } else if(key=="health" || key=="armor" || key=="round_kills") {
+            if (!value.is_number_integer() || value<0 || value>(key=="round_kills"?1000000:100)) throw std::runtime_error("Invalid "+key);
+        } else if(key=="foreground_process") {
+            if (!value.is_string()) throw std::runtime_error("foreground_process must be a string");
+            const auto name=value.get<std::string>();
+            if(name.empty() || name.size()>260 || name.find_first_of("/\\\r\n")!=std::string::npos) throw std::runtime_error("Expected process filename");
+        } else {
+            const std::set<std::string> values=key=="bomb" ? std::set<std::string>{"carried","dropped","planting","planted","defusing","defused","exploded"} : std::set<std::string>{"freezetime","live","over"};
+            if(!value.is_string() || !values.count(value.get<std::string>())) throw std::runtime_error("Invalid "+key);
+        }
+    }
+    if (request.contains("round_kills") && request.value("increment_kill",false)) throw std::runtime_error("Choose round_kills or increment_kill");
+    std::lock_guard<std::mutex> lock(source_mutex_);
+    if (simulation_commands_.size()>=256) throw std::runtime_error("Simulation command queue full");
+    bool enabled=simulation_;
+    for (const auto& command:simulation_commands_) enabled=command.second.value("enabled",enabled);
+    enabled=request.value("enabled",enabled);
+    if (!enabled && (request.size()!=1 || !request.contains("enabled"))) throw std::runtime_error("Enable simulation before changing inputs");
+    simulation_commands_.emplace_back(++submitted_,request);
+    return {{"status","queued"},{"sequence",submitted_}};
+}
+
+nlohmann::json GsiAdapter::SimulationStatus() const {
+    std::lock_guard<std::mutex> lock(source_mutex_);
+    return {{"enabled",simulation_},{"source",simulation_?"simulation":"real"},{"heartbeat",heartbeat_},
+        {"heartbeat_ms",heartbeat_ms_},{"foreground_process",state_.GetForegroundProcess()},
+        {"freshness",automation_freshness_},{"payload",simulated_payload_},{"applied_sequence",applied_},{"pending",simulation_commands_.size()}};
+}
+
+AutomationEvaluation GsiAdapter::EvaluateAutomation(RuleEngine& engine, const std::string& real_process, std::optional<uint64_t> time) {
+    std::lock_guard<std::mutex> lock(source_mutex_);
+    const auto now=time.value_or(AutomationMonotonicMs());
+    heartbeat_ms_=std::max<uint64_t>(1,std::min<uint64_t>(1000,engine.GetAutomationFreshnessMs()/3));
+    bool switched=false, submitted=false;
+    if(!simulation_commands_.empty()) {
+        auto command=std::move(simulation_commands_.front()); simulation_commands_.pop_front();
+        const auto& request=command.second;
+        const bool enabled=request.value("enabled",simulation_);
+        switched=enabled!=simulation_;
+        if(switched) {
+            simulation_=enabled; heartbeat_=true; simulated_process_="cs2.exe";
+            state_.Clear(); engine.RebaseAutomationSource(); live_baseline_=!enabled;
+            if(enabled) simulated_payload_={{"player",{{"state",{{"health",100},{"armor",100},{"round_kills",0},{"round_killhs",0}}}}},
+                {"round",{{"phase","live"},{"bomb","carried"}}}};
+            else simulated_payload_=nlohmann::json::object();
+        }
+        if(simulation_) {
+            heartbeat_=request.value("heartbeat",heartbeat_);
+            simulated_process_=request.value("foreground_process",simulated_process_);
+            for(const auto* key:{"health","armor","round_kills"}) if(request.contains(key)) simulated_payload_["player"]["state"][key]=request[key];
+            if(request.value("increment_kill",false)) {
+                auto& kills=simulated_payload_["player"]["state"]["round_kills"];
+                kills=kills.get<int>()+1;
+            }
+            if(request.contains("bomb")) simulated_payload_["round"]["bomb"]=request["bomb"];
+            if(request.contains("round_phase")) simulated_payload_["round"]["phase"]=request["round_phase"];
+            // A heartbeat-only pause does not refresh freshness.
+            submitted=switched || request.size()!=1 || !request.contains("heartbeat");
+            if(submitted) {
+                if(switched) state_.SeedFromPayload(simulated_payload_,now);
+                else state_.UpdateFromPayloadAt(simulated_payload_,now);
+                last_heartbeat_=now;
+            }
+        }
+        applied_=command.first;
+    }
+    if(simulation_ && heartbeat_ && !submitted && now-last_heartbeat_>=heartbeat_ms_) {
+        state_.UpdateFromPayloadAt(simulated_payload_,now); last_heartbeat_=now;
+    }
+    const auto process=simulation_?simulated_process_:real_process;
+    state_.SetForegroundProcess(process);
+    auto result=engine.EvaluateAutomation(state_,[&]{return process;},now);
+    // Publish the owner's actual evaluation snapshot; HTTP/UI never recomputes freshness.
+    automation_freshness_={{"fresh",result.automation_fresh},
+        {"age_ms",result.telemetry_age_ms ? nlohmann::json(*result.telemetry_age_ms) : nlohmann::json(nullptr)},
+        {"threshold_ms",result.freshness_threshold_ms},{"evaluated_at_ms",result.evaluated_at_ms}};
+    result.source_changed=switched;
+    return result;
+}
+
 void GsiAdapter::SetupRoutes() {
     if (!svr_) return;
     // 限制请求体上限为 256KB，防止超大 payload 引发内存拒绝服务 (DoS)
@@ -920,12 +930,24 @@ void GsiAdapter::SetupRoutes() {
         }
     });
 
+    svr_->Get("/api/gsi/simulation", [this](const httplib::Request& req, httplib::Response& res) {
+        if(!IsAllowedLoopbackHost(req.get_header_value("Host"))) {res.status=403; return;}
+        res.set_header("Cache-Control","no-store"); res.set_content(SimulationStatus().dump(),"application/json");
+    });
+    svr_->Post("/api/gsi/simulation", [this](const httplib::Request& req, httplib::Response& res) {
+        if(!IsAllowedLoopbackHost(req.get_header_value("Host")) || !ValidateLoopbackOriginAndReferer(req.get_header_value("Origin"),req.get_header_value("Referer"))) {res.status=403;res.set_content(R"({"error":"forbidden"})","application/json");return;}
+        if(!IsJsonContentType(req.get_header_value("Content-Type"))) {res.status=415;return;}
+        if(req.body.size()>16384) {res.status=413;return;}
+        try { auto result=QueueSimulation(nlohmann::json::parse(req.body));res.status=202;res.set_content(result.dump(),"application/json"); }
+        catch(const std::exception& e) {res.status=422;res.set_content(nlohmann::json({{"error","invalid_simulation"},{"message",e.what()}}).dump(),"application/json");}
+    });
+
     // 处理来自 CS2 的 GSI POST Payload
     auto gsi_post_handler = [this](const httplib::Request& req, httplib::Response& res) {
         try {
             auto j = nlohmann::json::parse(req.body);
             // 严格纪律：HTTP 线程仅更新内存状态，绝对不触碰任何 COM/HAL 或驱动
-            state_.UpdateFromPayload(j);
+            AcceptLivePayload(j);
             res.status = 200;
             res.set_content("{\"status\":\"ok\"}", "application/json; charset=utf-8");
         } catch (const std::exception& e) {
@@ -966,6 +988,9 @@ void GsiAdapter::SetupRoutes() {
 
     // 守护进程编辑态硬件推流预览 IPC 入口
     svr_->Post("/api/preview", [this](const httplib::Request& req, httplib::Response& res) {
+        std::lock_guard<std::mutex> source_lock(source_mutex_);
+        if (simulation_) { res.status=409; res.set_content(R"({"error":"simulation_active","message":"Effect Preview cannot override Automation simulation"})","application/json"); return; }
+
         bool ok = true;
         if (on_preview_frame_) {
             ok = on_preview_frame_(req.body);

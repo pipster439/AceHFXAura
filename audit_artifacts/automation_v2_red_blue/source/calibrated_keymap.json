@@ -1,0 +1,1392 @@
+{
+  "device_profile": {
+    "device_name": "ROG FALCHION ACE HFX",
+    "device_name_zh": "ROG 魔导士 ACE HFX 竞技版磁轴键盘",
+    "model_id": 7038,
+    "usb_pid": "0x1B7E",
+    "usb_vid": "0x0B05",
+    "total_physical_keys": 68,
+    "layout_form_factor": "65% Compact (68-Key ANSI)",
+    "lighting_interface": "USB HID Interface 3 (UsagePage 0xFF00, Usage 0x01)",
+    "protocol_command": "Set_L_STD_SINGLE_XY (0x81 0xC0, 15-keys/packet)",
+    "operating_mode": "Volatile High-Speed Direct RAM Stream (Zero EEPROM Wear)",
+    "export_version": "2.0.0",
+    "last_exported_at": "2026-09-16 21:42:17"
+  },
+  "summary": {
+    "total_calibrated_keys": 68,
+    "rows_breakdown": {
+      "row_1_top_numeric": 15,
+      "row_2_qwerty": 15,
+      "row_3_home_asdf": 14,
+      "row_4_bottom_zxcv": 14,
+      "row_5_modifier_space_arrows": 10
+    }
+  },
+  "keys": {
+    "ESC": {
+      "key_name": "ESC",
+      "display_label": "Esc",
+      "physical_row": 1,
+      "physical_col": 1,
+      "physical_x": 0.5,
+      "physical_y": 1.0,
+      "row_description": "第 1 排 (顶部数字与功能区)",
+      "category": "Function",
+      "led_id": 1,
+      "matrix_hardware_coords": {
+        "matrix_col": 0,
+        "matrix_row": 1,
+        "formula": "col * 8 + row = 0 * 8 + 1 = 1"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "1": {
+      "key_name": "1",
+      "display_label": "1",
+      "physical_row": 1,
+      "physical_col": 2,
+      "physical_x": 1.5,
+      "physical_y": 1.0,
+      "row_description": "第 1 排 (顶部数字与功能区)",
+      "category": "Numeric",
+      "led_id": 9,
+      "matrix_hardware_coords": {
+        "matrix_col": 1,
+        "matrix_row": 1,
+        "formula": "col * 8 + row = 1 * 8 + 1 = 9"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "2": {
+      "key_name": "2",
+      "display_label": "2",
+      "physical_row": 1,
+      "physical_col": 3,
+      "physical_x": 2.5,
+      "physical_y": 1.0,
+      "row_description": "第 1 排 (顶部数字与功能区)",
+      "category": "Numeric",
+      "led_id": 17,
+      "matrix_hardware_coords": {
+        "matrix_col": 2,
+        "matrix_row": 1,
+        "formula": "col * 8 + row = 2 * 8 + 1 = 17"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "3": {
+      "key_name": "3",
+      "display_label": "3",
+      "physical_row": 1,
+      "physical_col": 4,
+      "physical_x": 3.5,
+      "physical_y": 1.0,
+      "row_description": "第 1 排 (顶部数字与功能区)",
+      "category": "Numeric",
+      "led_id": 25,
+      "matrix_hardware_coords": {
+        "matrix_col": 3,
+        "matrix_row": 1,
+        "formula": "col * 8 + row = 3 * 8 + 1 = 25"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "4": {
+      "key_name": "4",
+      "display_label": "4",
+      "physical_row": 1,
+      "physical_col": 5,
+      "physical_x": 4.5,
+      "physical_y": 1.0,
+      "row_description": "第 1 排 (顶部数字与功能区)",
+      "category": "Numeric",
+      "led_id": 33,
+      "matrix_hardware_coords": {
+        "matrix_col": 4,
+        "matrix_row": 1,
+        "formula": "col * 8 + row = 4 * 8 + 1 = 33"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "5": {
+      "key_name": "5",
+      "display_label": "5",
+      "physical_row": 1,
+      "physical_col": 6,
+      "physical_x": 5.5,
+      "physical_y": 1.0,
+      "row_description": "第 1 排 (顶部数字与功能区)",
+      "category": "Numeric",
+      "led_id": 41,
+      "matrix_hardware_coords": {
+        "matrix_col": 5,
+        "matrix_row": 1,
+        "formula": "col * 8 + row = 5 * 8 + 1 = 41"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "6": {
+      "key_name": "6",
+      "display_label": "6",
+      "physical_row": 1,
+      "physical_col": 7,
+      "physical_x": 6.5,
+      "physical_y": 1.0,
+      "row_description": "第 1 排 (顶部数字与功能区)",
+      "category": "Numeric",
+      "led_id": 49,
+      "matrix_hardware_coords": {
+        "matrix_col": 6,
+        "matrix_row": 1,
+        "formula": "col * 8 + row = 6 * 8 + 1 = 49"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "7": {
+      "key_name": "7",
+      "display_label": "7",
+      "physical_row": 1,
+      "physical_col": 8,
+      "physical_x": 7.5,
+      "physical_y": 1.0,
+      "row_description": "第 1 排 (顶部数字与功能区)",
+      "category": "Numeric",
+      "led_id": 57,
+      "matrix_hardware_coords": {
+        "matrix_col": 7,
+        "matrix_row": 1,
+        "formula": "col * 8 + row = 7 * 8 + 1 = 57"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "8": {
+      "key_name": "8",
+      "display_label": "8",
+      "physical_row": 1,
+      "physical_col": 9,
+      "physical_x": 8.5,
+      "physical_y": 1.0,
+      "row_description": "第 1 排 (顶部数字与功能区)",
+      "category": "Numeric",
+      "led_id": 65,
+      "matrix_hardware_coords": {
+        "matrix_col": 8,
+        "matrix_row": 1,
+        "formula": "col * 8 + row = 8 * 8 + 1 = 65"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "9": {
+      "key_name": "9",
+      "display_label": "9",
+      "physical_row": 1,
+      "physical_col": 10,
+      "physical_x": 9.5,
+      "physical_y": 1.0,
+      "row_description": "第 1 排 (顶部数字与功能区)",
+      "category": "Numeric",
+      "led_id": 73,
+      "matrix_hardware_coords": {
+        "matrix_col": 9,
+        "matrix_row": 1,
+        "formula": "col * 8 + row = 9 * 8 + 1 = 73"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "0": {
+      "key_name": "0",
+      "display_label": "0",
+      "physical_row": 1,
+      "physical_col": 11,
+      "physical_x": 10.5,
+      "physical_y": 1.0,
+      "row_description": "第 1 排 (顶部数字与功能区)",
+      "category": "Numeric",
+      "led_id": 81,
+      "matrix_hardware_coords": {
+        "matrix_col": 10,
+        "matrix_row": 1,
+        "formula": "col * 8 + row = 10 * 8 + 1 = 81"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "-": {
+      "key_name": "-",
+      "display_label": "-",
+      "physical_row": 1,
+      "physical_col": 12,
+      "physical_x": 11.5,
+      "physical_y": 1.0,
+      "row_description": "第 1 排 (顶部数字与功能区)",
+      "category": "Symbol",
+      "led_id": 89,
+      "matrix_hardware_coords": {
+        "matrix_col": 11,
+        "matrix_row": 1,
+        "formula": "col * 8 + row = 11 * 8 + 1 = 89"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "=": {
+      "key_name": "=",
+      "display_label": "=",
+      "physical_row": 1,
+      "physical_col": 13,
+      "physical_x": 12.5,
+      "physical_y": 1.0,
+      "row_description": "第 1 排 (顶部数字与功能区)",
+      "category": "Symbol",
+      "led_id": 97,
+      "matrix_hardware_coords": {
+        "matrix_col": 12,
+        "matrix_row": 1,
+        "formula": "col * 8 + row = 12 * 8 + 1 = 97"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "BACKSPACE": {
+      "key_name": "BACKSPACE",
+      "display_label": "Backspace",
+      "physical_row": 1,
+      "physical_col": 14,
+      "physical_x": 14.0,
+      "physical_y": 1.0,
+      "row_description": "第 1 排 (顶部数字与功能区)",
+      "category": "Function",
+      "led_id": 105,
+      "matrix_hardware_coords": {
+        "matrix_col": 13,
+        "matrix_row": 1,
+        "formula": "col * 8 + row = 13 * 8 + 1 = 105"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "INS": {
+      "key_name": "INS",
+      "display_label": "Ins",
+      "physical_row": 1,
+      "physical_col": 15,
+      "physical_x": 15.5,
+      "physical_y": 1.0,
+      "row_description": "第 1 排 (顶部数字与功能区)",
+      "category": "Navigation",
+      "led_id": 113,
+      "matrix_hardware_coords": {
+        "matrix_col": 14,
+        "matrix_row": 1,
+        "formula": "col * 8 + row = 14 * 8 + 1 = 113"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "TAB": {
+      "key_name": "TAB",
+      "display_label": "Tab",
+      "physical_row": 2,
+      "physical_col": 1,
+      "physical_x": 0.75,
+      "physical_y": 2.0,
+      "row_description": "第 2 排 (QWERTY 字母区)",
+      "category": "Function",
+      "led_id": 2,
+      "matrix_hardware_coords": {
+        "matrix_col": 0,
+        "matrix_row": 2,
+        "formula": "col * 8 + row = 0 * 8 + 2 = 2"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "Q": {
+      "key_name": "Q",
+      "display_label": "Q",
+      "physical_row": 2,
+      "physical_col": 2,
+      "physical_x": 2.0,
+      "physical_y": 2.0,
+      "row_description": "第 2 排 (QWERTY 字母区)",
+      "category": "Alpha",
+      "led_id": 10,
+      "matrix_hardware_coords": {
+        "matrix_col": 1,
+        "matrix_row": 2,
+        "formula": "col * 8 + row = 1 * 8 + 2 = 10"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "W": {
+      "key_name": "W",
+      "display_label": "W",
+      "physical_row": 2,
+      "physical_col": 3,
+      "physical_x": 3.0,
+      "physical_y": 2.0,
+      "row_description": "第 2 排 (QWERTY 字母区)",
+      "category": "Alpha",
+      "led_id": 18,
+      "matrix_hardware_coords": {
+        "matrix_col": 2,
+        "matrix_row": 2,
+        "formula": "col * 8 + row = 2 * 8 + 2 = 18"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "E": {
+      "key_name": "E",
+      "display_label": "E",
+      "physical_row": 2,
+      "physical_col": 4,
+      "physical_x": 4.0,
+      "physical_y": 2.0,
+      "row_description": "第 2 排 (QWERTY 字母区)",
+      "category": "Alpha",
+      "led_id": 26,
+      "matrix_hardware_coords": {
+        "matrix_col": 3,
+        "matrix_row": 2,
+        "formula": "col * 8 + row = 3 * 8 + 2 = 26"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "R": {
+      "key_name": "R",
+      "display_label": "R",
+      "physical_row": 2,
+      "physical_col": 5,
+      "physical_x": 5.0,
+      "physical_y": 2.0,
+      "row_description": "第 2 排 (QWERTY 字母区)",
+      "category": "Alpha",
+      "led_id": 34,
+      "matrix_hardware_coords": {
+        "matrix_col": 4,
+        "matrix_row": 2,
+        "formula": "col * 8 + row = 4 * 8 + 2 = 34"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "T": {
+      "key_name": "T",
+      "display_label": "T",
+      "physical_row": 2,
+      "physical_col": 6,
+      "physical_x": 6.0,
+      "physical_y": 2.0,
+      "row_description": "第 2 排 (QWERTY 字母区)",
+      "category": "Alpha",
+      "led_id": 42,
+      "matrix_hardware_coords": {
+        "matrix_col": 5,
+        "matrix_row": 2,
+        "formula": "col * 8 + row = 5 * 8 + 2 = 42"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "Y": {
+      "key_name": "Y",
+      "display_label": "Y",
+      "physical_row": 2,
+      "physical_col": 7,
+      "physical_x": 7.0,
+      "physical_y": 2.0,
+      "row_description": "第 2 排 (QWERTY 字母区)",
+      "category": "Alpha",
+      "led_id": 50,
+      "matrix_hardware_coords": {
+        "matrix_col": 6,
+        "matrix_row": 2,
+        "formula": "col * 8 + row = 6 * 8 + 2 = 50"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "U": {
+      "key_name": "U",
+      "display_label": "U",
+      "physical_row": 2,
+      "physical_col": 8,
+      "physical_x": 8.0,
+      "physical_y": 2.0,
+      "row_description": "第 2 排 (QWERTY 字母区)",
+      "category": "Alpha",
+      "led_id": 58,
+      "matrix_hardware_coords": {
+        "matrix_col": 7,
+        "matrix_row": 2,
+        "formula": "col * 8 + row = 7 * 8 + 2 = 58"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "I": {
+      "key_name": "I",
+      "display_label": "I",
+      "physical_row": 2,
+      "physical_col": 9,
+      "physical_x": 9.0,
+      "physical_y": 2.0,
+      "row_description": "第 2 排 (QWERTY 字母区)",
+      "category": "Alpha",
+      "led_id": 66,
+      "matrix_hardware_coords": {
+        "matrix_col": 8,
+        "matrix_row": 2,
+        "formula": "col * 8 + row = 8 * 8 + 2 = 66"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "O": {
+      "key_name": "O",
+      "display_label": "O",
+      "physical_row": 2,
+      "physical_col": 10,
+      "physical_x": 10.0,
+      "physical_y": 2.0,
+      "row_description": "第 2 排 (QWERTY 字母区)",
+      "category": "Alpha",
+      "led_id": 74,
+      "matrix_hardware_coords": {
+        "matrix_col": 9,
+        "matrix_row": 2,
+        "formula": "col * 8 + row = 9 * 8 + 2 = 74"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "P": {
+      "key_name": "P",
+      "display_label": "P",
+      "physical_row": 2,
+      "physical_col": 11,
+      "physical_x": 11.0,
+      "physical_y": 2.0,
+      "row_description": "第 2 排 (QWERTY 字母区)",
+      "category": "Alpha",
+      "led_id": 82,
+      "matrix_hardware_coords": {
+        "matrix_col": 10,
+        "matrix_row": 2,
+        "formula": "col * 8 + row = 10 * 8 + 2 = 82"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "[": {
+      "key_name": "[",
+      "display_label": "[",
+      "physical_row": 2,
+      "physical_col": 12,
+      "physical_x": 12.0,
+      "physical_y": 2.0,
+      "row_description": "第 2 排 (QWERTY 字母区)",
+      "category": "Symbol",
+      "led_id": 90,
+      "matrix_hardware_coords": {
+        "matrix_col": 11,
+        "matrix_row": 2,
+        "formula": "col * 8 + row = 11 * 8 + 2 = 90"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "]": {
+      "key_name": "]",
+      "display_label": "]",
+      "physical_row": 2,
+      "physical_col": 13,
+      "physical_x": 13.0,
+      "physical_y": 2.0,
+      "row_description": "第 2 排 (QWERTY 字母区)",
+      "category": "Symbol",
+      "led_id": 98,
+      "matrix_hardware_coords": {
+        "matrix_col": 12,
+        "matrix_row": 2,
+        "formula": "col * 8 + row = 12 * 8 + 2 = 98"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "\\": {
+      "key_name": "\\",
+      "display_label": "\\",
+      "physical_row": 2,
+      "physical_col": 14,
+      "physical_x": 14.25,
+      "physical_y": 2.0,
+      "row_description": "第 2 排 (QWERTY 字母区)",
+      "category": "Symbol",
+      "led_id": 106,
+      "matrix_hardware_coords": {
+        "matrix_col": 13,
+        "matrix_row": 2,
+        "formula": "col * 8 + row = 13 * 8 + 2 = 106"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "DEL": {
+      "key_name": "DEL",
+      "display_label": "Del",
+      "physical_row": 2,
+      "physical_col": 15,
+      "physical_x": 15.5,
+      "physical_y": 2.0,
+      "row_description": "第 2 排 (QWERTY 字母区)",
+      "category": "Navigation",
+      "led_id": 114,
+      "matrix_hardware_coords": {
+        "matrix_col": 14,
+        "matrix_row": 2,
+        "formula": "col * 8 + row = 14 * 8 + 2 = 114"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "CAPS": {
+      "key_name": "CAPS",
+      "display_label": "Caps",
+      "physical_row": 3,
+      "physical_col": 1,
+      "physical_x": 0.875,
+      "physical_y": 3.0,
+      "row_description": "第 3 排 (ASDF 字母主键区)",
+      "category": "Function",
+      "led_id": 3,
+      "matrix_hardware_coords": {
+        "matrix_col": 0,
+        "matrix_row": 3,
+        "formula": "col * 8 + row = 0 * 8 + 3 = 3"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "A": {
+      "key_name": "A",
+      "display_label": "A",
+      "physical_row": 3,
+      "physical_col": 2,
+      "physical_x": 2.25,
+      "physical_y": 3.0,
+      "row_description": "第 3 排 (ASDF 字母主键区)",
+      "category": "Alpha",
+      "led_id": 11,
+      "matrix_hardware_coords": {
+        "matrix_col": 1,
+        "matrix_row": 3,
+        "formula": "col * 8 + row = 1 * 8 + 3 = 11"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "S": {
+      "key_name": "S",
+      "display_label": "S",
+      "physical_row": 3,
+      "physical_col": 3,
+      "physical_x": 3.25,
+      "physical_y": 3.0,
+      "row_description": "第 3 排 (ASDF 字母主键区)",
+      "category": "Alpha",
+      "led_id": 19,
+      "matrix_hardware_coords": {
+        "matrix_col": 2,
+        "matrix_row": 3,
+        "formula": "col * 8 + row = 2 * 8 + 3 = 19"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "D": {
+      "key_name": "D",
+      "display_label": "D",
+      "physical_row": 3,
+      "physical_col": 4,
+      "physical_x": 4.25,
+      "physical_y": 3.0,
+      "row_description": "第 3 排 (ASDF 字母主键区)",
+      "category": "Alpha",
+      "led_id": 27,
+      "matrix_hardware_coords": {
+        "matrix_col": 3,
+        "matrix_row": 3,
+        "formula": "col * 8 + row = 3 * 8 + 3 = 27"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "F": {
+      "key_name": "F",
+      "display_label": "F",
+      "physical_row": 3,
+      "physical_col": 5,
+      "physical_x": 5.25,
+      "physical_y": 3.0,
+      "row_description": "第 3 排 (ASDF 字母主键区)",
+      "category": "Alpha",
+      "led_id": 35,
+      "matrix_hardware_coords": {
+        "matrix_col": 4,
+        "matrix_row": 3,
+        "formula": "col * 8 + row = 4 * 8 + 3 = 35"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "G": {
+      "key_name": "G",
+      "display_label": "G",
+      "physical_row": 3,
+      "physical_col": 6,
+      "physical_x": 6.25,
+      "physical_y": 3.0,
+      "row_description": "第 3 排 (ASDF 字母主键区)",
+      "category": "Alpha",
+      "led_id": 43,
+      "matrix_hardware_coords": {
+        "matrix_col": 5,
+        "matrix_row": 3,
+        "formula": "col * 8 + row = 5 * 8 + 3 = 43"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "H": {
+      "key_name": "H",
+      "display_label": "H",
+      "physical_row": 3,
+      "physical_col": 7,
+      "physical_x": 7.25,
+      "physical_y": 3.0,
+      "row_description": "第 3 排 (ASDF 字母主键区)",
+      "category": "Alpha",
+      "led_id": 51,
+      "matrix_hardware_coords": {
+        "matrix_col": 6,
+        "matrix_row": 3,
+        "formula": "col * 8 + row = 6 * 8 + 3 = 51"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "J": {
+      "key_name": "J",
+      "display_label": "J",
+      "physical_row": 3,
+      "physical_col": 8,
+      "physical_x": 8.25,
+      "physical_y": 3.0,
+      "row_description": "第 3 排 (ASDF 字母主键区)",
+      "category": "Alpha",
+      "led_id": 59,
+      "matrix_hardware_coords": {
+        "matrix_col": 7,
+        "matrix_row": 3,
+        "formula": "col * 8 + row = 7 * 8 + 3 = 59"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "K": {
+      "key_name": "K",
+      "display_label": "K",
+      "physical_row": 3,
+      "physical_col": 9,
+      "physical_x": 9.25,
+      "physical_y": 3.0,
+      "row_description": "第 3 排 (ASDF 字母主键区)",
+      "category": "Alpha",
+      "led_id": 67,
+      "matrix_hardware_coords": {
+        "matrix_col": 8,
+        "matrix_row": 3,
+        "formula": "col * 8 + row = 8 * 8 + 3 = 67"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "L": {
+      "key_name": "L",
+      "display_label": "L",
+      "physical_row": 3,
+      "physical_col": 10,
+      "physical_x": 10.25,
+      "physical_y": 3.0,
+      "row_description": "第 3 排 (ASDF 字母主键区)",
+      "category": "Alpha",
+      "led_id": 75,
+      "matrix_hardware_coords": {
+        "matrix_col": 9,
+        "matrix_row": 3,
+        "formula": "col * 8 + row = 9 * 8 + 3 = 75"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    ";": {
+      "key_name": ";",
+      "display_label": ";",
+      "physical_row": 3,
+      "physical_col": 11,
+      "physical_x": 11.25,
+      "physical_y": 3.0,
+      "row_description": "第 3 排 (ASDF 字母主键区)",
+      "category": "Symbol",
+      "led_id": 83,
+      "matrix_hardware_coords": {
+        "matrix_col": 10,
+        "matrix_row": 3,
+        "formula": "col * 8 + row = 10 * 8 + 3 = 83"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "'": {
+      "key_name": "'",
+      "display_label": "'",
+      "physical_row": 3,
+      "physical_col": 12,
+      "physical_x": 12.25,
+      "physical_y": 3.0,
+      "row_description": "第 3 排 (ASDF 字母主键区)",
+      "category": "Symbol",
+      "led_id": 91,
+      "matrix_hardware_coords": {
+        "matrix_col": 11,
+        "matrix_row": 3,
+        "formula": "col * 8 + row = 11 * 8 + 3 = 91"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "ENTER": {
+      "key_name": "ENTER",
+      "display_label": "Enter",
+      "physical_row": 3,
+      "physical_col": 13,
+      "physical_x": 13.875,
+      "physical_y": 3.0,
+      "row_description": "第 3 排 (ASDF 字母主键区)",
+      "category": "Function",
+      "led_id": 107,
+      "matrix_hardware_coords": {
+        "matrix_col": 13,
+        "matrix_row": 3,
+        "formula": "col * 8 + row = 13 * 8 + 3 = 107"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "PGUP": {
+      "key_name": "PGUP",
+      "display_label": "PgUp",
+      "physical_row": 3,
+      "physical_col": 14,
+      "physical_x": 15.5,
+      "physical_y": 3.0,
+      "row_description": "第 3 排 (ASDF 字母主键区)",
+      "category": "Navigation",
+      "led_id": 115,
+      "matrix_hardware_coords": {
+        "matrix_col": 14,
+        "matrix_row": 3,
+        "formula": "col * 8 + row = 14 * 8 + 3 = 115"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "L_SHIFT": {
+      "key_name": "L_SHIFT",
+      "display_label": "Shift",
+      "physical_row": 4,
+      "physical_col": 1,
+      "physical_x": 1.125,
+      "physical_y": 4.0,
+      "row_description": "第 4 排 (ZXCV 底部字母区)",
+      "category": "Modifier",
+      "led_id": 4,
+      "matrix_hardware_coords": {
+        "matrix_col": 0,
+        "matrix_row": 4,
+        "formula": "col * 8 + row = 0 * 8 + 4 = 4"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "Z": {
+      "key_name": "Z",
+      "display_label": "Z",
+      "physical_row": 4,
+      "physical_col": 2,
+      "physical_x": 2.75,
+      "physical_y": 4.0,
+      "row_description": "第 4 排 (ZXCV 底部字母区)",
+      "category": "Alpha",
+      "led_id": 20,
+      "matrix_hardware_coords": {
+        "matrix_col": 2,
+        "matrix_row": 4,
+        "formula": "col * 8 + row = 2 * 8 + 4 = 20"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "X": {
+      "key_name": "X",
+      "display_label": "X",
+      "physical_row": 4,
+      "physical_col": 3,
+      "physical_x": 3.75,
+      "physical_y": 4.0,
+      "row_description": "第 4 排 (ZXCV 底部字母区)",
+      "category": "Alpha",
+      "led_id": 28,
+      "matrix_hardware_coords": {
+        "matrix_col": 3,
+        "matrix_row": 4,
+        "formula": "col * 8 + row = 3 * 8 + 4 = 28"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "C": {
+      "key_name": "C",
+      "display_label": "C",
+      "physical_row": 4,
+      "physical_col": 4,
+      "physical_x": 4.75,
+      "physical_y": 4.0,
+      "row_description": "第 4 排 (ZXCV 底部字母区)",
+      "category": "Alpha",
+      "led_id": 36,
+      "matrix_hardware_coords": {
+        "matrix_col": 4,
+        "matrix_row": 4,
+        "formula": "col * 8 + row = 4 * 8 + 4 = 36"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "V": {
+      "key_name": "V",
+      "display_label": "V",
+      "physical_row": 4,
+      "physical_col": 5,
+      "physical_x": 5.75,
+      "physical_y": 4.0,
+      "row_description": "第 4 排 (ZXCV 底部字母区)",
+      "category": "Alpha",
+      "led_id": 44,
+      "matrix_hardware_coords": {
+        "matrix_col": 5,
+        "matrix_row": 4,
+        "formula": "col * 8 + row = 5 * 8 + 4 = 44"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "B": {
+      "key_name": "B",
+      "display_label": "B",
+      "physical_row": 4,
+      "physical_col": 6,
+      "physical_x": 6.75,
+      "physical_y": 4.0,
+      "row_description": "第 4 排 (ZXCV 底部字母区)",
+      "category": "Alpha",
+      "led_id": 52,
+      "matrix_hardware_coords": {
+        "matrix_col": 6,
+        "matrix_row": 4,
+        "formula": "col * 8 + row = 6 * 8 + 4 = 52"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "N": {
+      "key_name": "N",
+      "display_label": "N",
+      "physical_row": 4,
+      "physical_col": 7,
+      "physical_x": 7.75,
+      "physical_y": 4.0,
+      "row_description": "第 4 排 (ZXCV 底部字母区)",
+      "category": "Alpha",
+      "led_id": 60,
+      "matrix_hardware_coords": {
+        "matrix_col": 7,
+        "matrix_row": 4,
+        "formula": "col * 8 + row = 7 * 8 + 4 = 60"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "M": {
+      "key_name": "M",
+      "display_label": "M",
+      "physical_row": 4,
+      "physical_col": 8,
+      "physical_x": 8.75,
+      "physical_y": 4.0,
+      "row_description": "第 4 排 (ZXCV 底部字母区)",
+      "category": "Alpha",
+      "led_id": 68,
+      "matrix_hardware_coords": {
+        "matrix_col": 8,
+        "matrix_row": 4,
+        "formula": "col * 8 + row = 8 * 8 + 4 = 68"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    ",": {
+      "key_name": ",",
+      "display_label": ",",
+      "physical_row": 4,
+      "physical_col": 9,
+      "physical_x": 9.75,
+      "physical_y": 4.0,
+      "row_description": "第 4 排 (ZXCV 底部字母区)",
+      "category": "Symbol",
+      "led_id": 76,
+      "matrix_hardware_coords": {
+        "matrix_col": 9,
+        "matrix_row": 4,
+        "formula": "col * 8 + row = 9 * 8 + 4 = 76"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    ".": {
+      "key_name": ".",
+      "display_label": ".",
+      "physical_row": 4,
+      "physical_col": 10,
+      "physical_x": 10.75,
+      "physical_y": 4.0,
+      "row_description": "第 4 排 (ZXCV 底部字母区)",
+      "category": "Symbol",
+      "led_id": 84,
+      "matrix_hardware_coords": {
+        "matrix_col": 10,
+        "matrix_row": 4,
+        "formula": "col * 8 + row = 10 * 8 + 4 = 84"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "/": {
+      "key_name": "/",
+      "display_label": "/",
+      "physical_row": 4,
+      "physical_col": 11,
+      "physical_x": 11.75,
+      "physical_y": 4.0,
+      "row_description": "第 4 排 (ZXCV 底部字母区)",
+      "category": "Symbol",
+      "led_id": 92,
+      "matrix_hardware_coords": {
+        "matrix_col": 11,
+        "matrix_row": 4,
+        "formula": "col * 8 + row = 11 * 8 + 4 = 92"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "R_SHIFT": {
+      "key_name": "R_SHIFT",
+      "display_label": "Shift",
+      "physical_row": 4,
+      "physical_col": 12,
+      "physical_x": 13.125,
+      "physical_y": 4.0,
+      "row_description": "第 4 排 (ZXCV 底部字母区)",
+      "category": "Modifier",
+      "led_id": 100,
+      "matrix_hardware_coords": {
+        "matrix_col": 12,
+        "matrix_row": 4,
+        "formula": "col * 8 + row = 12 * 8 + 4 = 100"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "UP": {
+      "key_name": "UP",
+      "display_label": "↑",
+      "physical_row": 4,
+      "physical_col": 13,
+      "physical_x": 14.5,
+      "physical_y": 4.0,
+      "row_description": "第 4 排 (ZXCV 底部字母区)",
+      "category": "Arrow",
+      "led_id": 108,
+      "matrix_hardware_coords": {
+        "matrix_col": 13,
+        "matrix_row": 4,
+        "formula": "col * 8 + row = 13 * 8 + 4 = 108"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "PGDN": {
+      "key_name": "PGDN",
+      "display_label": "PgDn",
+      "physical_row": 4,
+      "physical_col": 14,
+      "physical_x": 15.5,
+      "physical_y": 4.0,
+      "row_description": "第 4 排 (ZXCV 底部字母区)",
+      "category": "Navigation",
+      "led_id": 116,
+      "matrix_hardware_coords": {
+        "matrix_col": 14,
+        "matrix_row": 4,
+        "formula": "col * 8 + row = 14 * 8 + 4 = 116"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "L_CTRL": {
+      "key_name": "L_CTRL",
+      "display_label": "Ctrl",
+      "physical_row": 5,
+      "physical_col": 1,
+      "physical_x": 0.625,
+      "physical_y": 5.0,
+      "row_description": "第 5 排 (空格、修饰与方向键)",
+      "category": "Modifier",
+      "led_id": 5,
+      "matrix_hardware_coords": {
+        "matrix_col": 0,
+        "matrix_row": 5,
+        "formula": "col * 8 + row = 0 * 8 + 5 = 5"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "L_WIN": {
+      "key_name": "L_WIN",
+      "display_label": "Win",
+      "physical_row": 5,
+      "physical_col": 2,
+      "physical_x": 1.875,
+      "physical_y": 5.0,
+      "row_description": "第 5 排 (空格、修饰与方向键)",
+      "category": "Modifier",
+      "led_id": 13,
+      "matrix_hardware_coords": {
+        "matrix_col": 1,
+        "matrix_row": 5,
+        "formula": "col * 8 + row = 1 * 8 + 5 = 13"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "L_ALT": {
+      "key_name": "L_ALT",
+      "display_label": "Alt",
+      "physical_row": 5,
+      "physical_col": 3,
+      "physical_x": 3.125,
+      "physical_y": 5.0,
+      "row_description": "第 5 排 (空格、修饰与方向键)",
+      "category": "Modifier",
+      "led_id": 21,
+      "matrix_hardware_coords": {
+        "matrix_col": 2,
+        "matrix_row": 5,
+        "formula": "col * 8 + row = 2 * 8 + 5 = 21"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "SPACE": {
+      "key_name": "SPACE",
+      "display_label": "Space",
+      "physical_row": 5,
+      "physical_col": 4,
+      "physical_x": 6.875,
+      "physical_y": 5.0,
+      "row_description": "第 5 排 (空格、修饰与方向键)",
+      "category": "Space",
+      "led_id": 53,
+      "matrix_hardware_coords": {
+        "matrix_col": 6,
+        "matrix_row": 5,
+        "formula": "col * 8 + row = 6 * 8 + 5 = 53"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "R_ALT": {
+      "key_name": "R_ALT",
+      "display_label": "Alt",
+      "physical_row": 5,
+      "physical_col": 5,
+      "physical_x": 10.5,
+      "physical_y": 5.0,
+      "row_description": "第 5 排 (空格、修饰与方向键)",
+      "category": "Modifier",
+      "led_id": 77,
+      "matrix_hardware_coords": {
+        "matrix_col": 9,
+        "matrix_row": 5,
+        "formula": "col * 8 + row = 9 * 8 + 5 = 77"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "FN": {
+      "key_name": "FN",
+      "display_label": "Fn",
+      "physical_row": 5,
+      "physical_col": 6,
+      "physical_x": 11.5,
+      "physical_y": 5.0,
+      "row_description": "第 5 排 (空格、修饰与方向键)",
+      "category": "Modifier",
+      "led_id": 85,
+      "matrix_hardware_coords": {
+        "matrix_col": 10,
+        "matrix_row": 5,
+        "formula": "col * 8 + row = 10 * 8 + 5 = 85"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "COPILOT": {
+      "key_name": "COPILOT",
+      "display_label": "Copilot",
+      "physical_row": 5,
+      "physical_col": 7,
+      "physical_x": 12.5,
+      "physical_y": 5.0,
+      "row_description": "第 5 排 (空格、修饰与方向键)",
+      "category": "Modifier",
+      "led_id": 93,
+      "matrix_hardware_coords": {
+        "matrix_col": 11,
+        "matrix_row": 5,
+        "formula": "col * 8 + row = 11 * 8 + 5 = 93"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "LEFT": {
+      "key_name": "LEFT",
+      "display_label": "←",
+      "physical_row": 5,
+      "physical_col": 8,
+      "physical_x": 13.5,
+      "physical_y": 5.0,
+      "row_description": "第 5 排 (空格、修饰与方向键)",
+      "category": "Arrow",
+      "led_id": 101,
+      "matrix_hardware_coords": {
+        "matrix_col": 12,
+        "matrix_row": 5,
+        "formula": "col * 8 + row = 12 * 8 + 5 = 101"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "DOWN": {
+      "key_name": "DOWN",
+      "display_label": "↓",
+      "physical_row": 5,
+      "physical_col": 9,
+      "physical_x": 14.5,
+      "physical_y": 5.0,
+      "row_description": "第 5 排 (空格、修饰与方向键)",
+      "category": "Arrow",
+      "led_id": 109,
+      "matrix_hardware_coords": {
+        "matrix_col": 13,
+        "matrix_row": 5,
+        "formula": "col * 8 + row = 13 * 8 + 5 = 109"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    },
+    "RIGHT": {
+      "key_name": "RIGHT",
+      "display_label": "→",
+      "physical_row": 5,
+      "physical_col": 10,
+      "physical_x": 15.5,
+      "physical_y": 5.0,
+      "row_description": "第 5 排 (空格、修饰与方向键)",
+      "category": "Arrow",
+      "led_id": 117,
+      "matrix_hardware_coords": {
+        "matrix_col": 14,
+        "matrix_row": 5,
+        "formula": "col * 8 + row = 14 * 8 + 5 = 117"
+      },
+      "status": "VERIFIED",
+      "calibrated_time": "2026-09-16 21:41:55"
+    }
+  },
+  "lookup_table": {
+    "ESC": 1,
+    "1": 9,
+    "2": 17,
+    "3": 25,
+    "4": 33,
+    "5": 41,
+    "6": 49,
+    "7": 57,
+    "8": 65,
+    "9": 73,
+    "0": 81,
+    "-": 89,
+    "=": 97,
+    "BACKSPACE": 105,
+    "INS": 113,
+    "TAB": 2,
+    "Q": 10,
+    "W": 18,
+    "E": 26,
+    "R": 34,
+    "T": 42,
+    "Y": 50,
+    "U": 58,
+    "I": 66,
+    "O": 74,
+    "P": 82,
+    "[": 90,
+    "]": 98,
+    "\\": 106,
+    "DEL": 114,
+    "CAPS": 3,
+    "A": 11,
+    "S": 19,
+    "D": 27,
+    "F": 35,
+    "G": 43,
+    "H": 51,
+    "J": 59,
+    "K": 67,
+    "L": 75,
+    ";": 83,
+    "'": 91,
+    "ENTER": 107,
+    "PGUP": 115,
+    "L_SHIFT": 4,
+    "Z": 20,
+    "X": 28,
+    "C": 36,
+    "V": 44,
+    "B": 52,
+    "N": 60,
+    "M": 68,
+    ",": 76,
+    ".": 84,
+    "/": 92,
+    "R_SHIFT": 100,
+    "UP": 108,
+    "PGDN": 116,
+    "L_CTRL": 5,
+    "L_WIN": 13,
+    "L_ALT": 21,
+    "SPACE": 53,
+    "R_ALT": 77,
+    "FN": 85,
+    "COPILOT": 93,
+    "LEFT": 101,
+    "DOWN": 109,
+    "RIGHT": 117
+  },
+  "reverse_id_table": {
+    "1": "ESC",
+    "9": "1",
+    "17": "2",
+    "25": "3",
+    "33": "4",
+    "41": "5",
+    "49": "6",
+    "57": "7",
+    "65": "8",
+    "73": "9",
+    "81": "0",
+    "89": "-",
+    "97": "=",
+    "105": "BACKSPACE",
+    "113": "INS",
+    "2": "TAB",
+    "10": "Q",
+    "18": "W",
+    "26": "E",
+    "34": "R",
+    "42": "T",
+    "50": "Y",
+    "58": "U",
+    "66": "I",
+    "74": "O",
+    "82": "P",
+    "90": "[",
+    "98": "]",
+    "106": "\\",
+    "114": "DEL",
+    "3": "CAPS",
+    "11": "A",
+    "19": "S",
+    "27": "D",
+    "35": "F",
+    "43": "G",
+    "51": "H",
+    "59": "J",
+    "67": "K",
+    "75": "L",
+    "83": ";",
+    "91": "'",
+    "107": "ENTER",
+    "115": "PGUP",
+    "4": "L_SHIFT",
+    "20": "Z",
+    "28": "X",
+    "36": "C",
+    "44": "V",
+    "52": "B",
+    "60": "N",
+    "68": "M",
+    "76": ",",
+    "84": ".",
+    "92": "/",
+    "100": "R_SHIFT",
+    "108": "UP",
+    "116": "PGDN",
+    "5": "L_CTRL",
+    "13": "L_WIN",
+    "21": "L_ALT",
+    "53": "SPACE",
+    "77": "R_ALT",
+    "85": "FN",
+    "93": "COPILOT",
+    "101": "LEFT",
+    "109": "DOWN",
+    "117": "RIGHT"
+  }
+}

@@ -1,0 +1,801 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index b6cb9c0..b54cbf5 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -373,6 +373,14 @@ add_executable(test_automation_authoring tests/test_automation_authoring.cpp ${A
+ target_link_libraries(test_automation_authoring PRIVATE ${AUTOMATION_RULE_TEST_LIBRARIES})
+ add_test(NAME automation_authoring COMMAND test_automation_authoring)
+ set_tests_properties(automation_authoring PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" TIMEOUT 30)
++add_library(retrigger_old SHARED tests/fixtures/retrigger_fixture.cpp)
++add_library(retrigger_new SHARED tests/fixtures/retrigger_fixture.cpp)
++target_compile_definitions(retrigger_new PRIVATE RETRIGGER_MARKER=93)
++add_executable(test_automation_retrigger tests/test_automation_retrigger.cpp ${AUTOMATION_RULE_TEST_SOURCES})
++target_link_libraries(test_automation_retrigger PRIVATE ${AUTOMATION_RULE_TEST_LIBRARIES})
++add_dependencies(test_automation_retrigger retrigger_old retrigger_new)
++add_test(NAME automation_retrigger COMMAND test_automation_retrigger $<TARGET_FILE_DIR:retrigger_old>)
++set_tests_properties(automation_retrigger PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" TIMEOUT 30)
+ 
+ # Synthetic lifecycle DLLs are test-only targets, never deployment inputs.
+ add_library(automation_lifecycle_old SHARED tests/fixtures/automation_lifecycle_fixture.cpp)
+diff --git a/automation_v2_stage6_report.md b/automation_v2_stage6_report.md
+new file mode 100644
+index 0000000..7d3a592
+--- /dev/null
++++ b/automation_v2_stage6_report.md
+@@ -0,0 +1,100 @@
++# Automation v2 Stage 6 acceptance report
++
++Status: implemented and verified; stopped after Stage 6. The reviewed Stage 5A checkpoint was committed separately as `ddde10f` (`Checkpoint accepted Automation v2 Stage 5A authoring and migration`). Stage 4 and earlier commits were not amended. This patch is relative to that Stage 5A checkpoint.
++
++## Scope and code changes
++
++Added `stack` and `queue` only for rising/event `trigger_effect` / `one_shot`. The shared daemon parser remains authoritative for authoring validation and runtime loading. State/profile actions, `while_true`, unknown policies and configurable advanced-policy limits are rejected. No latch, new trigger semantics, ABI change, composition mode, authoring UI redesign or audit remediation was implemented.
++
++* `include/config/automation_limits.h`: shared fixed resource limits used by runtime and capabilities.
++* `include/engine/automation_effect_runtime.h`, `src/engine/automation_effect_runtime.cpp`: prepared source, pending tokens, bounded admission/draining/reconciliation, counters; extracted the existing layer initialization into `MakeLayer` without changing envelope/watchdog/render behavior.
++* `include/engine/plugin_manager.h`, `src/engine/plugin_manager.cpp`: generation preparation without creating an Effect, and construction from an owned exact generation.
++* `src/config/rule_engine.cpp`, `src/main.cpp`: immutable recipe/plugin source preparation wired into the existing decision consumer.
++* `src/config/automation_evaluation.cpp`, `src/config/automation_authoring.cpp`: authoritative policy validation and capability expansion.
++* `tests/test_automation_retrigger.cpp`, `tests/fixtures/retrigger_fixture.cpp`, `tests/test_automation_retrigger_daemon.py`, `CMakeLists.txt`: deterministic production-runtime/DLL tests and real daemon burst/reload scenario. Existing authoring/conformance tests replace the explicitly obsolete unsupported-policy assertions.
++
++## Stack lifecycle
++
++Each accepted stack decision constructs a fresh layer immediately, with its own Effect, generation, lifecycle callbacks, start timestamp, watchdog, opacity and instance sequence. Four active layers per stack rule and 32 active V2 layers globally are hard bounds. Persistent V2 layers count toward the same global bound. A full bound consumes and drops the newest admission; existing layers are not evicted and nothing is replayed.
++
++Transient composition remains ascending `(priority, rule_order, instance_sequence)`. A later admission for the same rule therefore renders later. Retiring one layer leaves its siblings intact. Persistent/legacy/transient class ordering and rendering math are unchanged.
++
++## Queue token and admission model
++
++The host-owned token contains rule ID, semantic identity, a copied action, rule order, original monotonic admission time and `PreparedEffectSource`. It contains no Effect, framebuffer, telemetry state or condition evaluator.
++
++The source is either the immutable canonical profile recipe string or a private `shared_ptr<const PluginEntry>` pin. Builtin/profile recipes reuse the existing profile constructor at actual start. Plugin-backed profile recipes are prepared as plugin sources, not deferred plugin-name lookups. Missing profile recipes or unavailable plugin generations consume the admission without enqueuing or retrying later.
++
++`PluginManager::PrepareEffectGeneration` reuses the accepted registered generation by alias/canonical path. For a cold source it shadow-loads and validates exports/ABI without calling the factory or publishing a registry entry. The resulting unpublished generation is owned only by prepared sources/instances; there is no new permanent generation cache. `CreateFromGeneration` invokes the existing generation-bound instantiation path only when starting the token. Raw unowned callback pointers are not part of the prepared-source interface.
++
++A queue rule has at most one active layer and four pending tokens. All rules together have at most 64 pending tokens. If there is no active layer, no older token, and active capacity is available, an admission starts immediately. Otherwise it appends FIFO. Capacity overflow drops the newest admission, never an older token. A pending token pins the identity accepted at admission, even across subsequent recipe or DLL publication.
++
++## Timing, draining and failures
++
++TTL is fixed at 2000 ms measured from Automation admission: age 2000 is eligible, 2001 expires. Cosmetic reload does not reset that time. All expired/cancelled tokens are removed before draining and new admission. Global active pressure retains a valid FIFO head while its TTL continues to run. Different rules can make progress independently; a rule cannot bypass its own head.
++
++After an active layer retires, its successor can start on the next `Consume` frame. Pending work is bounded to four construction attempts globally and one per rule per frame. A failed construction consumes that token permanently; later tokens remain pending. Actual instance start establishes lifecycle/envelope/watchdog elapsed zero; waiting time does not advance any of them. Failure never installs a Replace layer or changes the lower frame.
++
++Diagnostics reuse the existing set bounded to 64 messages until reset. Fixed-size saturating counters record capacity drops, expired tokens, unavailable sources, factory failures and cancelled tokens through `GetCounters`; these are host runtime diagnostics, not a new HTTP telemetry contract. A thrown immediate preparation/construction error is reported as unavailable; a failed pending construction is reported as a factory failure.
++
++## Reconciliation and ownership
++
++The runtime consumes Stage 4 `RuleStatus` only. It does not evaluate any ConditionNode. Deleted/disabled/semantically changed rules and False/Unknown continuing scope cancel every associated active stack/queue layer and pending token. Required-GSI freshness uses the existing authoritative continuation status. Unchanged/cosmetic reload preserves layers, FIFO and admission times, while updating rule order. Unscoped foreground changes and an event-time WHEN becoming false do not cancel accepted work.
++
++Recipe/plugin publication leaves already accepted transient work and pending sources intact. Future admissions prepare the new recipe/generation. Existing restart, ignore-while-active and persistent replacement paths retain their accepted Stage 3/4 behavior; restart/ignore are not implemented through the queue.
++
++Ownership is token -> prepared source -> PluginEntry -> PluginHandle/HMODULE. At start, the constructed TriggeredEffectInstance and its existing shared Effect deleter retain that same generation before the token is released. Lifecycle callbacks come from that instance's generation. The existing deleter contains DestroyEffect exceptions and retains the generation through destruction; it was not modified here. Expiry, cancellation, failed start and shutdown release token pins. There is no retained historical generation list. Cold generations may be independently prepared, but their ownership remains bounded by active/pending capacities.
++
++Tests observe factory counters to prove pending preparation creates no Effect, use differing DLL markers/callback state to prove old/new generation separation, and verify weak-generation expiry, shadow deletion and absence of the old module handle after the final old owner retires. Separate tests cover pending expiry, scope cancellation and runtime clear releasing pins. Synthetic fixture DLLs are test targets only; release packaging inputs were not changed to include them.
++
++## Authoring contract
++
++The existing capabilities endpoint now returns:
++
++```json
++{
++  "retrigger": ["restart", "ignore_while_active", "stack", "queue"],
++  "stack": {"max_active_per_rule": 4},
++  "queue": {"max_pending_per_rule": 4, "max_pending_global": 64, "pending_ttl_ms": 2000},
++  "global": {"max_active_v2": 32}
++}
++```
++
++The Stage 5A JSON authoring client remains sufficient. API tests validate/create/delete both policies, reject them for while_true, reject attempted TTL configuration and reject an actually unknown policy. Revision checks, migration, provenance, shadowing and Phase 4 CRUD contracts are unchanged.
++
++## Executed validation
++
++All results below are from Release binaries on Windows, without physical hardware.
++
++| Check | Result |
++|---|---|
++| Full Release CMake build; final changed test target rebuild | Passed |
++| Full `ctest --test-dir build/automation-v2-stage2 -C Release --output-on-failure` | **14/14**, 2.36 s |
++| Stage 1 ABI/factory/lifetime suite, included above | **212 assertions** |
++| Stage 2 conformance, included above | **255 assertions** |
++| Stage 3 runtime/composition, included above | **115 assertions** |
++| Stage 4 reconciliation/publication, included above | **83 assertions** |
++| Stage 5A authoring, included above | **89 assertions** |
++| New Stage 6 retrigger production-runtime suite, included above | **68 assertions** |
++| Daemon/web entrypoints and Stage 2/3/4/5A/6 real-daemon suites | **32/32**, 19.311 s |
++| Frontend `npm test` | **36 passed, 3 existing platform/toolchain skips, 0 failed** |
++| Frontend `npm run build` | Passed, 6.59 s |
++| `dotnet test tests/Aura.Tests/Aura.Tests.csproj --configuration Release` | **36/36**, 0 skipped |
++
++The 14 CTest entries also include existing plugin runtime, frozen Stage 0 evidence, runtime status, Phase 4 profile/rule, native HID and legacy regressions. The Stage 2 assertion count changed only because the obsolete stack/queue rejection cases were replaced by an unknown-policy rejection; positive/invalid-context assertions now live in the authoritative authoring tests. No historical behavior assertions were weakened.
++
++The Python command used `AURA_BIN_DIR=G:\Aura\build\automation-v2-stage2\Release`, `PYTHONPATH=tests`, and:
++
++```text
++python -m unittest test_runtime_entrypoints.TestDaemonEntrypoint test_runtime_entrypoints.TestWebUiEntrypoint test_automation_v2_daemon test_automation_effect_daemon test_automation_reload_daemon test_automation_authoring_daemon test_automation_retrigger_daemon -v
++```
++
++The new real daemon scenario records two independent kill packets creating two instances before the next render callback, successfully reloads the fixture DLL, observes old/new generations rendering concurrently, then verifies semantic config editing stops all of those instances. It runs with the real detector, decision loop, plugin manager and HTTP reload/config path in dry-run mode. Deterministic C++ tests separately cover queue bursts, FIFO, both TTL boundaries, global pressure, bounded failed starts, immutable profile recipes, exact DLL ownership and stale reconciliation without another packet.
++
++Logs: `build/stage6-build.log`, `build/stage6-final-build.log`, `build/stage6-ctest.log`, `build/automation-v2-stage2/Testing/Temporary/LastTest.log`, `build/stage6-entrypoints.log`, `build/stage6-frontend-tests.log`, `build/stage6-frontend-build.log`, `build/stage6-dotnet.log`.
++
++## Deviations and remaining scope
++
++No concrete blocking defect in accepted Stages 0-5A was discovered. Pinning without construction required the explicitly authorized small prepared-source extension; existing ABI/publication behavior was not redesigned. The chosen four-attempt/one-per-rule pending drain budget makes the required bounded failure work explicit. No deviation from the Stage 6 contract is intended.
++
++Native plugin hangs/process faults remain outside the accepted in-process ABI guarantees, as before. No physical-device behavior is claimed. Latch, arbitrary action queues, configurable queue limits, dedicated UI polish and post-audit work remain unimplemented. Stage 6 is ready for review; no later stage has begun.
+diff --git a/include/config/automation_limits.h b/include/config/automation_limits.h
+new file mode 100644
+index 0000000..27914ac
+--- /dev/null
++++ b/include/config/automation_limits.h
+@@ -0,0 +1,11 @@
++#pragma once
++#include <cstddef>
++#include <cstdint>
++namespace aura {
++struct AutomationRetriggerLimits {
++    static constexpr size_t stack_active = 4, active_global = 32;
++    static constexpr size_t pending_per_rule = 4, pending_global = 64;
++    static constexpr uint64_t pending_ttl_ms = 2000;
++    static constexpr size_t pending_attempts_per_frame = 4;
++};
++}
+diff --git a/include/engine/automation_effect_runtime.h b/include/engine/automation_effect_runtime.h
+index 388ec40..7b03dff 100644
+--- a/include/engine/automation_effect_runtime.h
++++ b/include/engine/automation_effect_runtime.h
+@@ -1,10 +1,12 @@
+ #pragma once
+ #include "config/rule_engine.h"
++#include "config/automation_limits.h"
+ #include "engine/plugin_manager.h"
+ #include <functional>
+ #include <mutex>
+ #include <set>
+ #include <tuple>
++#include <deque>
+ 
+ namespace aura {
+ // Resolution reuses the existing profile constructor and PluginManager registry.
+@@ -12,19 +14,39 @@ TriggeredEffectInstance ResolveAutomationEffect(const nlohmann::json& reference,
+ TriggeredEffectInstance CreateProfileEffectInstance(const Profile& profile);
+ std::string ProfileEffectIdentity(const Profile& profile);
+ std::string ProfilePluginName(const Profile& profile);
++// Host-owned immutable source: never contains an Effect or live telemetry.
++class PreparedEffectSource {
++public:
++    explicit operator bool() const { return bool(generation_) || !recipe_.empty(); }
++    TriggeredEffectInstance Create() const;
++    static PreparedEffectSource Plugin(std::shared_ptr<const PluginEntry> generation) {
++        PreparedEffectSource result; result.generation_=std::move(generation); return result;
++    }
++    static PreparedEffectSource Recipe(std::string recipe) {
++        PreparedEffectSource result; result.recipe_=std::move(recipe); return result;
++    }
++private:
++    std::shared_ptr<const PluginEntry> generation_;
++    std::string recipe_;
++};
++PreparedEffectSource PrepareAutomationEffect(const nlohmann::json& reference, const RuleEngine& rules);
+ 
+ // Executes already-made decisions only. No GsiState or condition evaluator here.
+ class AutomationEffectRuntime {
+ public:
+     using Resolver = std::function<TriggeredEffectInstance(const nlohmann::json&)>;
++    using Preparer = std::function<PreparedEffectSource(const nlohmann::json&)>;
+     using LayerOrder = std::tuple<int, size_t, uint64_t>;
+     uint64_t Revision() const;
+     void Clear(); // explicit shutdown/reset; production reload uses reconciliation
+     void Consume(const AutomationEvaluation& evaluation, const Resolver& resolve, uint64_t now,
+-                 uint64_t expected_revision);
++                 uint64_t expected_revision, const Preparer& prepare = {});
+     void Apply(bool persistent, uint64_t now, FrameBuffer& lower, const Keymap& keymap, const IGsiReader* gsi = nullptr);
+     size_t ActiveCount() const;
+     size_t DiagnosticCount() const;
++    size_t PendingCount() const;
++    struct Counters { uint64_t capacity_drops{0}, expired{0}, unavailable{0}, factory_failures{0}, cancelled{0}; };
++    Counters GetCounters() const;
+ private:
+     struct Layer {
+         std::string id;
+@@ -34,6 +56,17 @@ private:
+         LayerOrder order;
+         std::string semantic_identity, recipe_identity, attempted_identity;
+     };
++    struct Token {
++        std::string id, semantic_identity;
++        nlohmann::json action;
++        size_t rule_order{0};
++        uint64_t admitted{0};
++        PreparedEffectSource source;
++    };
++    Layer MakeLayer(const std::string& id, const nlohmann::json& action, size_t order,
++                    TriggeredEffectInstance instance, uint64_t now);
++    std::deque<Token> pending_;
++    Counters counters_;
+     void Diagnose(const std::string& id, const char* reason);
+     bool Render(Layer& layer, uint64_t now, FrameBuffer& lower, const Keymap& keymap, const IGsiReader* gsi);
+     mutable std::mutex mutex_;
+diff --git a/include/engine/plugin_manager.h b/include/engine/plugin_manager.h
+index 5d33b14..8f50bf8 100644
+--- a/include/engine/plugin_manager.h
++++ b/include/engine/plugin_manager.h
+@@ -41,7 +41,7 @@ struct EffectLifecycleExports {
+  * @brief Manages the lifecycle of a loaded DLL module and its temporary shadow file.
+  * 
+  * Safe teardown: FreeLibrary is only invoked when this handle's reference count drops to 0,
+- * which happens only after all std::shared_ptr<Effect> instances referencing it have been destroyed.
++ * after all Effect instances and prepared sources referencing it have been released.
+  */
+ class PluginHandle {
+ public:
+@@ -148,6 +148,12 @@ public:
+     // Destruction exception containment/diagnostics remain owned by the deleter.
+     TriggeredEffectInstance LoadPluginInstance(const std::string& name_or_path, bool quiet = false);
+     TriggeredEffectInstance CreateEffectInstance(const std::string& effect_name, bool quiet = false);
++    // Pin/load validated exports without invoking CreateEffect. Unpublished cold
++    // generations are owned by the returned source, never an unbounded cache.
++    std::shared_ptr<const PluginEntry> PrepareEffectGeneration(const std::string& name);
++    static TriggeredEffectInstance CreateFromGeneration(std::shared_ptr<const PluginEntry> generation) {
++        return Instantiate(std::move(generation), {}, true);
++    }
+ 
+     // Checks if a plugin with the given effect name is loaded
+     bool HasPlugin(const std::string& effect_name) const;
+diff --git a/src/config/automation_authoring.cpp b/src/config/automation_authoring.cpp
+index ee17f24..0cb5f08 100644
+--- a/src/config/automation_authoring.cpp
++++ b/src/config/automation_authoring.cpp
+@@ -1,5 +1,6 @@
+ #include "config/automation_service.h"
+ #include "config/rule_engine.h"
++#include "config/automation_limits.h"
+ #include <set>
+ 
+ namespace aura {
+@@ -122,7 +123,10 @@ nlohmann::json AutomationControlService::AuthoringCapabilities() {
+     return {{"api_version",2},{"model","automation_v2"},{"stable_identity","id"},{"revision_field","expected_revision"},
+         {"pairings",Json::array({{{"mode","state"},{"action","activate_profile"}},{{"mode","state"},{"action","trigger_effect"},{"lifetime","while_true"}},
+             {{"mode","rising"},{"action","trigger_effect"},{"lifetime","one_shot"}},{{"mode","event"},{"action","trigger_effect"},{"lifetime","one_shot"}}})},
+-        {"retrigger",{"restart","ignore_while_active"}},{"effect_kinds",{"profile_effect","plugin"}},{"events",AutomationEventNames()},
++        {"retrigger",{"restart","ignore_while_active","stack","queue"}},{"effect_kinds",{"profile_effect","plugin"}},{"events",AutomationEventNames()},
++        {"stack",{{"max_active_per_rule",AutomationRetriggerLimits::stack_active}}},
++        {"queue",{{"max_pending_per_rule",AutomationRetriggerLimits::pending_per_rule},{"max_pending_global",AutomationRetriggerLimits::pending_global},{"pending_ttl_ms",AutomationRetriggerLimits::pending_ttl_ms}}},
++        {"global",{{"max_active_v2",AutomationRetriggerLimits::active_global}}},
+         {"composition",{"overlay","replace"}},{"blend",{"alpha","additive"}},
+         {"ast",{{"max_depth",32},{"max_nodes_per_rule",256},{"logic",{"and","or","not"}},{"comparison_operators",{"==","!=","<","<=",">",">=","contains"}},
+             {"process_operators",{"==","!="}},{"process_fields",{"process","process.name","process_name"}},
+diff --git a/src/config/automation_evaluation.cpp b/src/config/automation_evaluation.cpp
+index d1d93d0..61d11f6 100644
+--- a/src/config/automation_evaluation.cpp
++++ b/src/config/automation_evaluation.cpp
+@@ -175,7 +175,11 @@ AutomationRule RuleEngine::ParseAutomationRule(const nlohmann::json& item) {
+         const auto lifetime = action.at("lifetime").get<std::string>();
+         Require(lifetime == (r.mode == "state" ? "while_true" : "one_shot"), "unsupported mode/lifetime pairing");
+         const auto retrigger = action.value("retrigger", "restart");
+-        Require(retrigger == "restart" || retrigger == "ignore_while_active", "stack/queue are deferred");
++        Require(retrigger == "restart" || retrigger == "ignore_while_active" || retrigger == "stack" || retrigger == "queue", "unknown retrigger policy");
++        if (retrigger=="stack" || retrigger=="queue") {
++            for (const auto* setting:{"stack","queue","limits","pending_ttl_ms","max_pending_per_rule","max_pending_global","max_active_per_rule","max_active_v2"})
++                Require(!action.contains(setting),"advanced retrigger limits are fixed, not configurable");
++        }
+         Require(r.mode != "state" || !action.contains("retrigger"), "while_true has no retrigger policy");
+         const auto& effect = action.at("effect");
+         const auto kind = effect.at("kind").get<std::string>();
+diff --git a/src/config/rule_engine.cpp b/src/config/rule_engine.cpp
+index 77db86c..3b5c14e 100644
+--- a/src/config/rule_engine.cpp
++++ b/src/config/rule_engine.cpp
+@@ -382,6 +382,21 @@ TriggeredEffectInstance ResolveAutomationEffect(const nlohmann::json& reference,
+     const auto profile = rules.GetProfile(name);
+     return profile ? CreateProfileEffectInstance(*profile) : TriggeredEffectInstance{};
+ }
++TriggeredEffectInstance PreparedEffectSource::Create() const {
++    if (generation_) return PluginManager::CreateFromGeneration(generation_);
++    if (recipe_.empty()) return {};
++    return TriggeredEffectInstance::FromHostEffect(CreateEffectFromProfile("queued",nlohmann::json::parse(recipe_)));
++}
++PreparedEffectSource PrepareAutomationEffect(const nlohmann::json& reference, const RuleEngine& rules) {
++    const auto name=reference.at("name").get<std::string>();
++    if (reference.at("kind")=="plugin") return PreparedEffectSource::Plugin(PluginManager::Instance().PrepareEffectGeneration(name));
++    const auto profile=rules.GetProfile(name);
++    if (!profile || profile->effect_recipe.empty()) return {};
++    const auto plugin=ProfilePluginName(*profile);
++    if (nlohmann::json::parse(profile->effect_recipe).value("type","static")=="plugin")
++        return plugin.empty()?PreparedEffectSource{}:PreparedEffectSource::Plugin(PluginManager::Instance().PrepareEffectGeneration(plugin));
++    return PreparedEffectSource::Recipe(ProfileEffectIdentity(*profile));
++}
+ 
+ std::string RuleEngine::ToLower(const std::string& s) {
+     std::string res = s;
+diff --git a/src/engine/automation_effect_runtime.cpp b/src/engine/automation_effect_runtime.cpp
+index cb75e29..f3aaae8 100644
+--- a/src/engine/automation_effect_runtime.cpp
++++ b/src/engine/automation_effect_runtime.cpp
+@@ -5,12 +5,16 @@
+ #include <cmath>
+ 
+ namespace aura {
++namespace { void Count(uint64_t& counter) { if (counter!=UINT64_MAX) ++counter; } }
++size_t AutomationEffectRuntime::PendingCount() const { std::lock_guard<std::mutex> lock(mutex_); return pending_.size(); }
++AutomationEffectRuntime::Counters AutomationEffectRuntime::GetCounters() const { std::lock_guard<std::mutex> lock(mutex_); return counters_; }
++
+ uint64_t AutomationEffectRuntime::Revision() const { std::lock_guard<std::mutex> lock(mutex_); return revision_; }
+ size_t AutomationEffectRuntime::ActiveCount() const { std::lock_guard<std::mutex> lock(mutex_); return layers_.size(); }
+ size_t AutomationEffectRuntime::DiagnosticCount() const { std::lock_guard<std::mutex> lock(mutex_); return diagnostics_.size(); }
+ void AutomationEffectRuntime::Clear() {
+     std::lock_guard<std::mutex> lock(mutex_);
+-    ++revision_; layers_.clear(); true_intervals_.clear(); interval_semantics_.clear(); interval_recipes_.clear(); diagnostics_.clear();
++    ++revision_; layers_.clear(); true_intervals_.clear(); interval_semantics_.clear(); interval_recipes_.clear(); diagnostics_.clear(); pending_.clear();
+ }
+ void AutomationEffectRuntime::Diagnose(const std::string& id, const char* reason) {
+     if (diagnostics_.size() >= 64) return;
+@@ -18,12 +22,12 @@ void AutomationEffectRuntime::Diagnose(const std::string& id, const char* reason
+         LOG_WARN("[Automation effect] " << id << ": " << reason);
+ }
+ void AutomationEffectRuntime::Consume(const AutomationEvaluation& evaluation, const Resolver& resolve,
+-                                      uint64_t now, uint64_t expected_revision) {
++                                      uint64_t now, uint64_t expected_revision, const Preparer& prepare) {
+     std::lock_guard<std::mutex> lock(mutex_);
+     // A rebuild completed after the caller began evaluating: consume no old work.
+     if (expected_revision != revision_ || evaluation.config_generation < config_generation_) return;
+     if (evaluation.config_generation != config_generation_ && !evaluation.reconciliation_complete) {
+-        layers_.clear(); true_intervals_.clear(); interval_semantics_.clear(); interval_recipes_.clear(); diagnostics_.clear();
++        layers_.clear(); true_intervals_.clear(); interval_semantics_.clear(); interval_recipes_.clear(); diagnostics_.clear(); pending_.clear();
+     }
+     config_generation_ = evaluation.config_generation;
+     auto status_for = [&](const std::string& id) -> const AutomationEvaluation::RuleStatus* {
+@@ -44,6 +48,29 @@ void AutomationEffectRuntime::Consume(const AutomationEvaluation& evaluation, co
+             } else ++it;
+         }
+     }
++    // Reconcile/expire all tokens before admitting or constructing more work.
++    for (auto it=pending_.begin();it!=pending_.end();) {
++        const auto* status=status_for(it->id);
++        if (evaluation.reconciliation_complete && (!status || !status->enabled ||
++            status->semantic_identity!=it->semantic_identity || status->continuation!=ConditionTruth::True)) {
++            Count(counters_.cancelled); it=pending_.erase(it);
++        } else if (now>=it->admitted && now-it->admitted>AutomationRetriggerLimits::pending_ttl_ms) {
++            Count(counters_.expired); Diagnose(it->id,"pending token expired"); it=pending_.erase(it);
++        } else { if(status) it->rule_order=status->rule_order; ++it; }
++    }
++    // At most four pending factory attempts, at most one per rule, per frame.
++    // Blocked rule heads do not prevent another rule using available capacity.
++    size_t attempts=0; std::set<std::string> visited;
++    for (auto it=pending_.begin();it!=pending_.end() && attempts<AutomationRetriggerLimits::pending_attempts_per_frame && layers_.size()<AutomationRetriggerLimits::active_global;) {
++        if (!visited.insert(it->id).second || std::any_of(layers_.begin(),layers_.end(),[&](const Layer& layer){return layer.id==it->id;})) { ++it; continue; }
++        auto token=std::move(*it); it=pending_.erase(it); ++attempts;
++        try {
++            auto instance=token.source.Create();
++            if (!instance) { Count(counters_.factory_failures); Diagnose(token.id,"queued factory failed; token consumed"); continue; }
++            auto layer=MakeLayer(token.id,token.action,token.rule_order,std::move(instance),now);
++            layer.semantic_identity=token.semantic_identity; layers_.push_back(std::move(layer));
++        } catch (...) { Count(counters_.factory_failures); Diagnose(token.id,"queued factory threw; token consumed"); }
++    }
+     for (const auto& decision : evaluation.decisions) {
+         const auto& action = decision.action;
+         if (action.at("type") != "trigger_effect") continue;
+@@ -78,7 +105,32 @@ void AutomationEffectRuntime::Consume(const AutomationEvaluation& evaluation, co
+             if (!decision.admitted) continue;
+             if (existing != layers_.end() && action.value("retrigger", "restart") == "ignore_while_active") continue;
+         }
+-        if (existing == layers_.end() && layers_.size() >= 32) {
++        const auto policy=action.value("retrigger","restart");
++        if (!persistent && policy=="queue") {
++            const auto waiting=std::count_if(pending_.begin(),pending_.end(),[&](const Token& token){return token.id==decision.rule_id;});
++            const bool immediate=existing==layers_.end() && waiting==0 && layers_.size()<AutomationRetriggerLimits::active_global;
++            if (!immediate && (waiting>=AutomationRetriggerLimits::pending_per_rule || pending_.size()>=AutomationRetriggerLimits::pending_global)) {
++                Count(counters_.capacity_drops); Diagnose(decision.rule_id,"pending limit reached; newest admission dropped"); continue;
++            }
++            try {
++                auto source=prepare?prepare(action.at("effect")):PreparedEffectSource{};
++                if (!source) { Count(counters_.unavailable); Diagnose(decision.rule_id,"source unavailable at admission; consumed"); continue; }
++                if (immediate) {
++                    auto instance=source.Create();
++                    if (!instance) { Count(counters_.factory_failures); Diagnose(decision.rule_id,"queue initial factory failed; admission consumed"); continue; }
++                    auto layer=MakeLayer(decision.rule_id,action,decision.rule_order,std::move(instance),now);
++                    if(status) layer.semantic_identity=status->semantic_identity;
++                    layers_.push_back(std::move(layer));
++                } else pending_.push_back({decision.rule_id,status?status->semantic_identity:"",action,decision.rule_order,now,std::move(source)});
++            } catch (...) { Count(counters_.unavailable); Diagnose(decision.rule_id,"queue source preparation/construction failed; admission consumed"); }
++            continue;
++        }
++        if (!persistent && policy=="stack") {
++            const auto active=std::count_if(layers_.begin(),layers_.end(),[&](const Layer& layer){return layer.id==decision.rule_id;});
++            if(active>=AutomationRetriggerLimits::stack_active || layers_.size()>=AutomationRetriggerLimits::active_global) { Count(counters_.capacity_drops); Diagnose(decision.rule_id,"stack limit reached; newest admission dropped"); continue; }
++            existing=layers_.end(); // each admission owns a fresh independent layer
++        }
++        if (existing == layers_.end() && layers_.size() >= AutomationRetriggerLimits::active_global) {
+             Diagnose(decision.rule_id, "instance limit reached; admission consumed"); continue;
+         }
+         try {
+@@ -86,29 +138,34 @@ void AutomationEffectRuntime::Consume(const AutomationEvaluation& evaluation, co
+             if (persistent && existing != layers_.end()) existing->attempted_identity = target_identity;
+             auto instance = resolve(action.at("effect"));
+             if (!instance) { Diagnose(decision.rule_id, "effect unavailable; admission consumed"); continue; }
+-            Layer layer;
+-            layer.id = decision.rule_id; layer.instance = std::move(instance);
+-            if (status) { layer.semantic_identity = status->semantic_identity; layer.recipe_identity = status->recipe_identity; layer.attempted_identity = target_identity; }
+-            layer.persistent = persistent; layer.started = now;
+-            layer.replace = action.value("composition", "overlay") == "replace";
+-            layer.additive = action.value("blend", "alpha") == "additive";
+-            layer.order = {action.value("priority", 10), decision.rule_order, ++sequence_};
+-            const auto& generation = layer.instance.GetGeneration();
+-            if (persistent && status) interval_recipes_[decision.rule_id] = status->recipe_identity + ":generation=" + std::to_string(generation ? generation->generation_id : 0);
+-            layer.capable = generation && generation->lifecycle.version == 1 && generation->lifecycle.is_finished;
+-            const auto envelope = action.value("compatibility", nlohmann::json::object());
+-            layer.duration = envelope.value("duration_ms", uint64_t{1200});
+-            layer.fade = envelope.value("fade_out_ms", uint64_t{400});
+-            layer.attack = envelope.value("attack_ms", uint64_t{0});
+-            // Capability effects own their curve; compatibility values never multiply it.
+-            // A legacy envelope must not be shortened by the implicit 5-second cap.
+-            if (!persistent) layer.watchdog = action.value("watchdog_ms", layer.capable ? uint64_t{5000} : std::max(uint64_t{5000}, layer.duration));
++            Layer layer=MakeLayer(decision.rule_id,action,decision.rule_order,std::move(instance),now);
++            if (status) { layer.semantic_identity=status->semantic_identity; layer.recipe_identity=status->recipe_identity; layer.attempted_identity=target_identity; }
++            const auto& generation=layer.instance.GetGeneration();
++            if (persistent && status) interval_recipes_[decision.rule_id]=status->recipe_identity+":generation="+std::to_string(generation?generation->generation_id:0);
+             if (existing == layers_.end()) layers_.push_back(std::move(layer));
+             else *existing = std::move(layer); // construct successfully before retiring old object
+         } catch (...) { Diagnose(decision.rule_id, "effect construction threw; previous instance retained"); }
+     }
+     std::sort(layers_.begin(), layers_.end(), [](const Layer& a, const Layer& b) { return a.order < b.order; });
+ }
++AutomationEffectRuntime::Layer AutomationEffectRuntime::MakeLayer(const std::string& id, const nlohmann::json& action,
++    size_t order, TriggeredEffectInstance instance, uint64_t now) {
++    Layer layer; layer.id=id; layer.instance=std::move(instance);
++    layer.persistent = action.at("lifetime") == "while_true"; layer.started = now;
++    layer.replace = action.value("composition", "overlay") == "replace";
++    layer.additive = action.value("blend", "alpha") == "additive";
++    layer.order = {action.value("priority", 10), order, ++sequence_};
++    const auto& generation = layer.instance.GetGeneration();
++    layer.capable = generation && generation->lifecycle.version == 1 && generation->lifecycle.is_finished;
++    const auto envelope = action.value("compatibility", nlohmann::json::object());
++    layer.duration = envelope.value("duration_ms", uint64_t{1200});
++    layer.fade = envelope.value("fade_out_ms", uint64_t{400});
++    layer.attack = envelope.value("attack_ms", uint64_t{0});
++    // Capability effects own their curve; compatibility values never multiply it.
++    // A legacy envelope must not be shortened by the implicit 5-second cap.
++    if (!layer.persistent) layer.watchdog = action.value("watchdog_ms", layer.capable ? uint64_t{5000} : std::max(uint64_t{5000}, layer.duration));
++    return layer;
++}
+ bool AutomationEffectRuntime::Render(Layer& layer, uint64_t now, FrameBuffer& lower,
+                                      const Keymap& keymap, const IGsiReader* gsi) {
+     const uint64_t elapsed = now >= layer.started ? now - layer.started : 0;
+diff --git a/src/engine/plugin_manager.cpp b/src/engine/plugin_manager.cpp
+index 8a5a40a..9f9a4a8 100644
+--- a/src/engine/plugin_manager.cpp
++++ b/src/engine/plugin_manager.cpp
+@@ -371,6 +371,14 @@ TriggeredEffectInstance PluginManager::CreateEffectInstance(const std::string& e
+ std::shared_ptr<Effect> PluginManager::CreateEffect(const std::string& effect_name) {
+     return CreateEffectInstance(effect_name).GetEffect();
+ }
++std::shared_ptr<const PluginEntry> PluginManager::PrepareEffectGeneration(const std::string& name) {
++    if (auto current=GetGeneration(name)) return current;
++    try {
++        const auto path=PluginSourcePath(ResolvePluginPath(name,plugins_dir_));
++        if (auto current=FindByPath(path)) return current;
++        return LoadPluginInternal(path,true);
++    } catch (...) { return {}; }
++}
+ 
+ bool PluginManager::HasPlugin(const std::string& effect_name) const {
+     std::lock_guard<std::mutex> lock(mutex_);
+diff --git a/src/main.cpp b/src/main.cpp
+index 1ed6793..eeda927 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -781,7 +781,8 @@ int main(int argc, char* argv[]) {
+             [&monitor]() { return monitor.GetCurrentProcessName(); });
+         effect_engine.GetAutomationEffects().Consume(automation,
+             [&rule_engine](const nlohmann::json& reference) { return aura::ResolveAutomationEffect(reference, rule_engine); },
+-            effect_engine.GetElapsedMs(), effect_revision);
++            effect_engine.GetElapsedMs(), effect_revision,
++            [&rule_engine](const nlohmann::json& reference) { return aura::PrepareAutomationEffect(reference, rule_engine); });
+         const std::string& cur_proc = automation.foreground_process;
+         gsi_adapter.GetState().SetForegroundProcess(cur_proc);
+         std::shared_ptr<const aura::Profile> matched = automation.profile;
+diff --git a/tests/fixtures/retrigger_fixture.cpp b/tests/fixtures/retrigger_fixture.cpp
+new file mode 100644
+index 0000000..aaeefb3
+--- /dev/null
++++ b/tests/fixtures/retrigger_fixture.cpp
+@@ -0,0 +1,35 @@
++#include "engine/effect.h"
++#include <cstdio>
++#ifndef RETRIGGER_MARKER
++#define RETRIGGER_MARKER 17
++#endif
++namespace {
++unsigned attempts=0,created=0,destroyed=0,failures=0;
++uint64_t duration=1000,last[512]{};
++void Trace(const char* action,unsigned id,uint64_t elapsed=0) {
++    char path[MAX_PATH];if(!GetEnvironmentVariableA("AURA_RETRIGGER_TRACE",path,MAX_PATH))return;
++    HANDLE f=CreateFileA(path,FILE_APPEND_DATA,FILE_SHARE_READ|FILE_SHARE_WRITE,nullptr,OPEN_ALWAYS,0,nullptr);
++    if(f==INVALID_HANDLE_VALUE)return;char text[128];int n=snprintf(text,sizeof(text),"%s %d %u %llu\n",action,RETRIGGER_MARKER,id,static_cast<unsigned long long>(elapsed));
++    DWORD written;WriteFile(f,text,n,&written,nullptr);CloseHandle(f);
++}
++struct Fixture: aura::Effect {
++    unsigned id=++created;uint64_t end=duration;int marker=RETRIGGER_MARKER;
++    Fixture(){last[id%512]=UINT64_MAX;Trace("create",id);}
++    void Render(uint64_t elapsed,aura::FrameBuffer& frame,const aura::Keymap&) override {
++        last[id%512]=elapsed;frame.Fill(marker,0,0);Trace("render",id,elapsed);
++    }
++    ~Fixture(){++destroyed;Trace("destroy",id);}
++};
++}
++AURA_PLUGIN_EXPORT uint32_t AuraGetPluginApiVersion(){return 1;}
++AURA_PLUGIN_EXPORT const char* AuraGetEffectName(){return "retrigger_fixture";}
++AURA_PLUGIN_EXPORT aura::Effect* AuraCreateEffect(){++attempts;if(failures){--failures;return nullptr;}return new Fixture;}
++AURA_PLUGIN_EXPORT void AuraDestroyEffect(aura::Effect* effect){delete effect;}
++AURA_PLUGIN_EXPORT uint32_t AURA_PLUGIN_CALL AuraGetEffectLifecycleVersion(){return 1;}
++AURA_PLUGIN_EXPORT uint32_t AURA_PLUGIN_CALL AuraIsEffectFinished(const aura::Effect* effect,uint64_t elapsed){
++    const auto* f=static_cast<const Fixture*>(effect);if(f->marker!=RETRIGGER_MARKER || last[f->id%512]!=elapsed)return 2;return elapsed>=f->end;
++}
++AURA_PLUGIN_EXPORT float AURA_PLUGIN_CALL AuraGetEffectOpacity(const aura::Effect*,uint64_t){return 1.f;}
++AURA_PLUGIN_EXPORT void FixtureConfigure(unsigned fail,uint64_t end){failures=fail;duration=end;}
++AURA_PLUGIN_EXPORT unsigned FixtureCount(unsigned kind){return kind==0?attempts:kind==1?created:destroyed;}
++AURA_PLUGIN_EXPORT uint64_t FixtureElapsed(unsigned id){return last[id%512];}
+diff --git a/tests/test_automation_authoring.cpp b/tests/test_automation_authoring.cpp
+index af98fbf..451222f 100644
+--- a/tests/test_automation_authoring.cpp
++++ b/tests/test_automation_authoring.cpp
+@@ -53,8 +53,18 @@ void Crud(Harness& h) {
+     auto invalid=Rule("bad");invalid["when"]["condition"]={{"not",Json::object()}};
+     Check(h.Call("create",{{"rule",invalid}}).http_status==422,"invalid AST rejected");
+     auto shot=Rule("shot");shot["when"]={{"mode","event"},{"condition",{{"event","event.kill"}}}};
+-    shot["action"]={{"type","trigger_effect"},{"lifetime","one_shot"},{"effect",{{"kind","profile_effect"},{"name","base"}}},{"retrigger","queue"}};
++    shot["action"]={{"type","trigger_effect"},{"lifetime","one_shot"},{"effect",{{"kind","profile_effect"},{"name","base"}}},{"retrigger","unknown_policy"}};
+     Check(h.Call("create",{{"rule",shot}}).http_status==422,"unsupported retrigger rejected");
++    for(const auto* policy:{"stack","queue"}) {
++        shot["action"]["retrigger"]=policy;
++        Check(h.Call("validate",{{"rule",shot}}).http_status==200,"advanced one-shot policy accepted");
++        auto created=h.Call("create",{{"rule",shot}});Check(created.http_status==201 && created.body["rule"]["action"]["retrigger"]==policy,"advanced policy authoring round trip");
++        Check(h.Call("delete",{{"id","shot"}}).http_status==200,"advanced rule delete round trip");
++        auto sized=shot;sized["action"]["pending_ttl_ms"]=999;
++        Check(h.Call("validate",{{"rule",sized}}).http_status==422,"advanced limits cannot be configured");
++        auto persistent=shot;persistent["when"]={{"mode","state"},{"condition",{{"field","process"},{"value","other"}}}};persistent["action"]["lifetime"]="while_true";
++        Check(h.Call("validate",{{"rule",persistent}}).http_status==422,"advanced policy invalid for persistent");
++    }
+     shot["action"]["retrigger"]="restart";shot["action"]["effect"]["name"]="missing";
+     auto missing=h.Call("create",{{"rule",shot}});Check(missing.http_status==422 && missing.body["errors"][0]["path"]=="/rule/action/effect/name","reference diagnostic path");
+     Check(h.Call("delete",{{"id","v2"}}).http_status==200 && h.Read()["orchestration"]["rules"].size()==1,"delete stable id preserves legacy");
+diff --git a/tests/test_automation_authoring_daemon.py b/tests/test_automation_authoring_daemon.py
+index 4b68edc..33472f1 100644
+--- a/tests/test_automation_authoring_daemon.py
++++ b/tests/test_automation_authoring_daemon.py
+@@ -40,7 +40,7 @@ class TestAutomationAuthoringDaemon(unittest.TestCase):
+             revision = listing["revision"]
+             self.assertEqual(listing["records"][0]["provenance"], "application")
+             self.assertEqual(path.read_bytes(), initial)
+-            self.assertEqual(request(19897, "/api/automation/v2/capabilities")[1]["retrigger"], ["restart", "ignore_while_active"])
++            self.assertEqual(request(19897, "/api/automation/v2/capabilities")[1]["retrigger"], ["restart", "ignore_while_active", "stack", "queue"])
+             rule = {"id": "http-stable", "model": "automation_v2", "when": {"mode": "state", "condition": {"field": "process", "value": "NOTRUNNING"}},
+                     "action": {"type": "activate_profile", "profile": "other"}, "future": {"keep": 7}}
+             payload = {"rule": rule, "expected_revision": revision, "position": 0}
+diff --git a/tests/test_automation_retrigger.cpp b/tests/test_automation_retrigger.cpp
+new file mode 100644
+index 0000000..2cad9ce
+--- /dev/null
++++ b/tests/test_automation_retrigger.cpp
+@@ -0,0 +1,133 @@
++#include "engine/automation_effect_runtime.h"
++#include "gsi/gsi_adapter.h"
++#include <filesystem>
++#include <fstream>
++#include <iostream>
++using namespace aura;
++using Json=nlohmann::json;
++namespace fs=std::filesystem;
++int checks=0;
++void Check(bool ok,const char* message){++checks;if(!ok)throw std::runtime_error(message);}
++AutomationDecision Decision(std::string id="shot",std::string policy="queue") {
++    AutomationDecision d;d.rule_id=id;d.admitted=true;d.eligibility=ConditionTruth::True;
++    d.action={{"type","trigger_effect"},{"lifetime","one_shot"},{"effect",{{"kind","profile_effect"},{"name","paint"}}},{"retrigger",policy},
++        {"compatibility",{{"duration_ms",100},{"fade_out_ms",0}}}};return d;
++}
++PreparedEffectSource Recipe(int red){return PreparedEffectSource::Recipe(Json{{"type","static"},{"color",{red,0,0}}}.dump());}
++struct Harness {
++    AutomationEffectRuntime runtime;AutomationEvaluation evaluation;PreparedEffectSource source=Recipe(100);Keymap keymap;
++    AutomationEffectRuntime::Resolver resolver=[&](const Json&){return source.Create();};
++    AutomationEffectRuntime::Preparer prepare=[&](const Json&){return source;};
++    void Consume(std::vector<AutomationDecision> ds,uint64_t time){evaluation.decisions=std::move(ds);runtime.Consume(evaluation,resolver,time,runtime.Revision(),prepare);}
++    unsigned Render(uint64_t time){FrameBuffer frame;frame.Fill(5,0,0);runtime.Apply(false,time,frame,keymap);return frame.buffer[0];}
++    void Status(std::string id="shot",std::string semantic="same",ConditionTruth continuation=ConditionTruth::True){
++        evaluation.reconciliation_complete=true;AutomationEvaluation::RuleStatus s;s.id=id;s.enabled=true;s.semantic_identity=semantic;s.continuation=continuation;evaluation.rule_status={s};
++    }
++};
++void StackAndQueue() {
++    Harness h;auto s=Decision("shot","stack");h.Consume({s},0);Check(h.runtime.ActiveCount()==1,"one stack admission fresh");
++    h.source=Recipe(150);h.Consume({s,s,s,s},10);Check(h.runtime.ActiveCount()==4 && h.runtime.GetCounters().capacity_drops==1,"stack accepts four drops fifth newest");
++    Check(h.Render(10)==150,"newer instance_sequence renders later");h.Render(100);Check(h.runtime.ActiveCount()==3,"retiring first does not retire siblings");h.Render(110);Check(h.runtime.ActiveCount()==0,"independent starts retire later siblings");
++    auto q=Decision();h.Consume({q},200);h.source=Recipe(70);h.Consume({q},210);h.source=Recipe(80);h.Consume({q,q,q,q},220);
++    Check(h.runtime.ActiveCount()==1 && h.runtime.PendingCount()==4,"queue one active four pending");
++    Check(h.runtime.GetCounters().capacity_drops==2,"queue drops newest without evicting pending");
++    h.Render(300);h.Consume({},301);Check(h.Render(301)==70,"oldest FIFO recipe starts");h.Render(401);h.Consume({},402);Check(h.Render(402)==80,"later recipe remains FIFO");
++    h.runtime.Clear();h.source=Recipe(100);h.Consume({q},0);h.source=Recipe(200);h.Consume({q},1);h.source=Recipe(50);h.Consume({q},1000);
++    h.Render(2001);h.Consume({},2001);Check(h.Render(2001)==200,"age 2000 starts at elapsed zero despite long wait");
++    h.runtime.Clear();h.source=Recipe(100);h.Consume({q},0);h.source=Recipe(200);h.Consume({q},1);h.source=Recipe(50);h.Consume({q},1000);
++    h.Render(2002);h.Consume({},2002);Check(h.Render(2002)==50 && h.runtime.GetCounters().expired==1,"age 2001 expires head before later valid token");
++    h.runtime.Clear();h.source={};h.Consume({q},0);Check(h.runtime.PendingCount()==0 && h.runtime.GetCounters().unavailable==1,"unresolvable admission consumed");h.source=Recipe(80);h.Consume({},1);Check(h.runtime.ActiveCount()==0,"missing source never replayed");
++}
++void Bounds() {
++    Harness h;
++    for(unsigned i=0;i<8;++i){auto d=Decision("stack"+std::to_string(i),"stack");d.action["compatibility"]["duration_ms"]=10000;h.Consume({d,d,d,d},0);}
++    Check(h.runtime.ActiveCount()==32,"global active limit");h.Consume({Decision("extra","stack")},0);Check(h.runtime.ActiveCount()==32 && h.runtime.GetCounters().capacity_drops==1,"global stack drop newest");
++    for(unsigned i=0;i<16;++i){auto d=Decision("queue"+std::to_string(i));h.Consume({d,d,d,d},0);}
++    Check(h.runtime.PendingCount()==64 && h.runtime.ActiveCount()==32,"global pending 64 while active full");
++    h.Consume({Decision("overflow")},1);Check(h.runtime.PendingCount()==64 && h.runtime.GetCounters().capacity_drops==2,"global pending drop newest");
++    h.Consume({},2000);Check(h.runtime.PendingCount()==64,"capacity wait retains exact TTL boundary");h.Consume({},2001);Check(h.runtime.PendingCount()==0 && h.runtime.GetCounters().expired==64,"all over-age tokens expire under pressure");
++    h.runtime.Clear();for(unsigned i=0;i<8;++i){auto d=Decision("s"+std::to_string(i),"stack");h.Consume({d,d,d,d},0);}
++    h.source=Recipe(70);auto d=Decision();h.Consume({d},1);h.source=Recipe(90);h.Consume({d},2);h.Render(100);h.Consume({},101);
++    Check(h.Render(101)==70 && h.runtime.PendingCount()==1,"global capacity release starts FIFO head not newest");
++}
++void Reconciliation() {
++    for(const auto* policy:{"stack","queue"}) {
++        Harness h;h.Status();auto d=Decision("shot",policy);h.Consume({d,d,d},0);
++        const auto active=h.runtime.ActiveCount(),pending=h.runtime.PendingCount();++h.evaluation.config_generation;h.Consume({},10);
++        Check(h.runtime.ActiveCount()==active && h.runtime.PendingCount()==pending,"cosmetic/unchanged reload preserves all work");
++        h.evaluation.rule_status[0].continuation=ConditionTruth::False;h.Consume({},11);
++        Check(h.runtime.ActiveCount()==0 && h.runtime.PendingCount()==0,"scope false cancels entire rule");
++        h.Status();h.Consume({d,d,d},20);h.evaluation.rule_status[0].continuation=ConditionTruth::Unknown;h.Consume({},21);
++        Check(h.runtime.ActiveCount()==0 && h.runtime.PendingCount()==0,"scope unknown/stale cancels entire rule");
++        for(int change=0;change<3;++change){h.Status();h.Consume({d,d,d},30);if(change==0)h.evaluation.rule_status.clear();if(change==1)h.evaluation.rule_status[0].enabled=false;if(change==2)h.evaluation.rule_status[0].semantic_identity="edited";h.Consume({},31);Check(h.runtime.ActiveCount()==0 && h.runtime.PendingCount()==0,"delete disable semantic edit clears all work");}
++    }
++    Harness h;h.Status();auto d=Decision();h.Consume({d,d},0);++h.evaluation.config_generation;h.Consume({},1999);h.Render(2001);h.Consume({},2001);
++    Check(h.runtime.PendingCount()==0 && h.runtime.ActiveCount()==0,"cosmetic reload does not reset pending admission time");
++}
++struct Api {
++    using Configure=void(*)(unsigned,uint64_t);using Count=unsigned(*)(unsigned);using Elapsed=uint64_t(*)(unsigned);
++    Configure configure;Count count;Elapsed elapsed;
++    Api(const std::shared_ptr<const PluginEntry>& g):configure(reinterpret_cast<Configure>(GetProcAddress(g->handle->GetModule(),"FixtureConfigure"))),count(reinterpret_cast<Count>(GetProcAddress(g->handle->GetModule(),"FixtureCount"))),elapsed(reinterpret_cast<Elapsed>(GetProcAddress(g->handle->GetModule(),"FixtureElapsed"))){}
++};
++void Dlls(const fs::path& binaries,const fs::path& dir) {
++    PluginManager manager;auto path=dir/"live.dll";fs::copy_file(binaries/"retrigger_old.dll",path,fs::copy_options::overwrite_existing);
++    auto old=manager.PrepareEffectGeneration(path.string());Api old_api(old);Check(old_api.count(0)==0,"prepare cold DLL never invokes factory");old_api.configure(0,100);
++    auto shadow=old->handle->GetShadowPath();std::weak_ptr<const PluginEntry> weak=old;
++    Harness h;h.source=PreparedEffectSource::Plugin(old);auto q=Decision();h.Consume({q,q,q},0);Check(old_api.count(0)==1,"pending generation pins without Effect creation");
++    old_api.configure(1,100);h.Render(100);h.Consume({},101);Check(old_api.count(0)==2 && h.runtime.PendingCount()==1 && h.runtime.ActiveCount()==0,"failed queued factory consumed once per rule frame");
++    h.Consume({},102);Check(old_api.count(0)==3 && h.runtime.ActiveCount()==1,"later token progresses after failure");h.Render(102);Check(old_api.elapsed(2)==0,"queued effect first render elapsed zero");
++    h.Consume({q},103);fs::copy_file(binaries/"retrigger_new.dll",path,fs::copy_options::overwrite_existing);Check(manager.ReloadPlugin(path.string()),"publish new generation");
++    auto fresh=manager.GetGeneration(path.string());h.source=PreparedEffectSource::Plugin(fresh);h.Consume({q},104);old.reset();
++    h.Render(202);h.Consume({},203);Check(h.Render(203)==17,"old token starts with old generation callbacks after reload");
++    h.Render(303);Check(weak.expired() && !fs::exists(shadow) && !GetModuleHandleW(shadow.c_str()),"old DLL unloads after last old token/active owner");
++    h.Consume({},304);Check(h.Render(304)==93,"post-reload token uses new generation");
++    h.runtime.Clear();h.source=PreparedEffectSource::Plugin(fresh);Api api(fresh);api.configure(0,100);
++    auto s=Decision("shot","stack");unsigned before=api.count(1);h.Consume({s},0);api.configure(0,200);h.Consume({s},20);h.Render(50);
++    Check(api.elapsed(before+1)==50 && api.elapsed(before+2)==30,"stack independent lifecycle elapsed");h.Render(100);Check(h.runtime.ActiveCount()==1,"finished callback retires only one sibling");
++    s.action["watchdog_ms"]=50;h.Consume({s},110);h.Render(160);Check(h.runtime.ActiveCount()==1,"watchdog independent of older sibling");
++    // A token alone owns an unpublished generation under active-cap pressure.
++    h.runtime.Clear();h.source=Recipe(50);for(int i=0;i<8;++i){auto d=Decision(std::to_string(i),"stack");h.Consume({d,d,d,d},0);}
++    auto cold=manager.PrepareEffectGeneration((binaries/"retrigger_old.dll").string());auto cold_shadow=cold->handle->GetShadowPath();std::weak_ptr<const PluginEntry> cold_weak=cold;
++    h.source=PreparedEffectSource::Plugin(cold);h.Consume({q},0);cold.reset();h.source=Recipe(50);Check(!cold_weak.expired(),"pending alone owns generation");h.Consume({},2001);Check(cold_weak.expired() && !fs::exists(cold_shadow) && !GetModuleHandleW(cold_shadow.c_str()),"expiry releases pending DLL pin");
++    cold=manager.PrepareEffectGeneration((binaries/"retrigger_old.dll").string());cold_weak=cold;h.source=PreparedEffectSource::Plugin(cold);h.Consume({q},2002);cold.reset();h.source={};h.runtime.Clear();Check(cold_weak.expired(),"shutdown/reset releases token pins");
++    h.source=Recipe(50);for(int i=0;i<8;++i){auto d=Decision(std::to_string(i),"stack");h.Consume({d,d,d,d},0);}
++    cold=manager.PrepareEffectGeneration((binaries/"retrigger_old.dll").string());cold_weak=cold;h.source=PreparedEffectSource::Plugin(cold);h.Consume({q},1);cold.reset();h.source={};h.Status("shot","",ConditionTruth::False);h.Consume({},2);
++    Check(cold_weak.expired() && h.runtime.PendingCount()==0,"authoritative scope cancellation releases pending generation pin");h.evaluation={};
++    h.source=Recipe(50);for(int i=0;i<8;++i){auto d=Decision(std::to_string(i),"stack");h.Consume({d,d,d,d},0);}
++    h.source=PreparedEffectSource::Plugin(fresh);for(int i=0;i<8;++i){auto d=Decision("q"+std::to_string(i));h.Consume({d,d},0);}
++    h.Render(100);api.configure(20,100);unsigned attempted=api.count(0);h.Consume({},101);
++    Check(api.count(0)==attempted+4 && h.runtime.PendingCount()==12,"pending failures capped at four per frame globally");
++    h.Consume({},102);Check(api.count(0)==attempted+8,"failed tokens are dropped; later FIFO work remains bounded");
++}
++void StackGeneration(const fs::path& binaries,const fs::path& dir) {
++    PluginManager manager;auto path=dir/"stack.dll";fs::copy_file(binaries/"retrigger_old.dll",path,fs::copy_options::overwrite_existing);
++    Check(manager.ReloadPlugin(path.string()),"initial stack plugin publish");auto old=manager.GetGeneration(path.string());Api api(old);api.configure(0,100);
++    auto shadow=old->handle->GetShadowPath();std::weak_ptr<const PluginEntry> weak=old;Harness h;h.source=PreparedEffectSource::Plugin(old);
++    auto d=Decision("shot","stack");h.Consume({d},0);h.Consume({d},20);
++    fs::copy_file(binaries/"retrigger_new.dll",path,fs::copy_options::overwrite_existing);Check(manager.ReloadPlugin(path.string()),"stack generation reload");
++    h.source=PreparedEffectSource::Plugin(manager.GetGeneration(path.string()));old.reset();h.Consume({d},30);
++    Check(h.Render(100)==93 && !weak.expired() && h.runtime.ActiveCount()==2,"new stack renders with new generation while old sibling pins DLL");
++    h.Render(120);Check(weak.expired() && !fs::exists(shadow) && !GetModuleHandleW(shadow.c_str()) && h.runtime.ActiveCount()==1,"last old stack retirement unloads old DLL only");
++}
++void Detector(const fs::path& dir) {
++    for(const auto* policy:{"stack","queue"}) {
++        Json cfg={{"default_profile","base"},{"profiles",{{"base",{{"type","static"}}},{"paint",{{"type","static"},{"color",{17,0,0}}}}}},
++            {"orchestration",{{"rules",Json::array({{{"id","shot"},{"model","automation_v2"},{"when",{{"mode","event"},{"condition",{{"event","event.kill"}}}}},{"action",Decision("shot",policy).action}}})}}}};
++        auto path=dir/"config.json";std::ofstream(path)<<cfg.dump();RuleEngine rules;Check(rules.LoadConfig(path.string()),"load advanced rule");GsiState gsi;AutomationEffectRuntime runtime;
++        auto packet=[&](uint64_t t,int k){gsi.UpdateFromPayloadAt({{"player",{{"state",{{"health",100},{"round_kills",k}}}}}},t);};
++        std::string foreground="cs2.exe";
++        auto tick=[&](uint64_t t){auto out=rules.EvaluateAutomation(gsi,[&]{return foreground;},t);runtime.Consume(out,[&](const Json& r){return ResolveAutomationEffect(r,rules);},t,runtime.Revision(),[&](const Json&r){return PrepareAutomationEffect(r,rules);});};
++        packet(0,0);tick(0);packet(1,1);packet(2,2);packet(3,3);tick(4);
++        Check(runtime.ActiveCount()==(std::string(policy)=="stack"?3:1) && runtime.PendingCount()==(std::string(policy)=="queue"?2:0),"separate detector packets preserve burst admissions before render");
++        foreground="desktop.exe";tick(4);
++        Check(runtime.ActiveCount()==(std::string(policy)=="stack"?3:1) && runtime.PendingCount()==(std::string(policy)=="queue"?2:0),"unscoped foreground change and absent current occurrence do not cancel accepted work");
++        if(std::string(policy)=="queue") {
++            cfg["profiles"]["paint"]["color"]={93,0,0};std::ofstream(path)<<cfg.dump();Check(rules.LoadConfig(path.string()),"profile recipe publication while queued");packet(5,4);tick(5);
++            FrameBuffer frame;Keymap keys;auto render=[&](uint64_t t){frame.Fill(5,0,0);runtime.Apply(false,t,frame,keys);return frame.buffer[0];};
++            render(104);tick(105);Check(render(105)==17,"queued captured profile recipe survives real config reload");
++            render(205);tick(206);Check(render(206)==17,"second old recipe token FIFO");render(306);tick(307);Check(render(307)==93,"future token captures new profile recipe");
++        }
++        tick(3006);Check(runtime.ActiveCount()==0 && runtime.PendingCount()==0,"real RuleEngine staleness reconciles stack/queue without packet");
++    }
++}
++int main(int argc,char**argv){SetErrorMode(SEM_FAILCRITICALERRORS|SEM_NOOPENFILEERRORBOX);auto dir=fs::temp_directory_path()/("aura-retrigger-"+std::to_string(GetCurrentProcessId()));try{Check(argc==2,"fixtures path");fs::create_directories(dir);StackAndQueue();Bounds();Reconciliation();Dlls(argv[1],dir);StackGeneration(argv[1],dir);Detector(dir);fs::remove_all(dir);std::cout<<"PASS: "<<checks<<" Stage 6 retrigger assertions\n";return 0;}catch(const std::exception&e){std::cerr<<"FAIL after "<<checks<<": "<<e.what()<<"\n";return 1;}}
+diff --git a/tests/test_automation_retrigger_daemon.py b/tests/test_automation_retrigger_daemon.py
+new file mode 100644
+index 0000000..578bbdb
+--- /dev/null
++++ b/tests/test_automation_retrigger_daemon.py
+@@ -0,0 +1,69 @@
++"""Real daemon: packet burst before render, stack generation reload and cancellation."""
++import json
++import os
++from pathlib import Path
++import shutil
++import subprocess
++import tempfile
++import time
++import unittest
++from test_runtime_entrypoints import KEYMAP_FILE, check_daemon_prerequisites_or_skip, get_authoritative_binary, get_isolated_env, terminate_proc
++from test_automation_reload_daemon import request
++
++
++class TestAutomationRetriggerDaemon(unittest.TestCase):
++    def test_burst_generation_reload_and_semantic_cancellation(self):
++        check_daemon_prerequisites_or_skip(self)
++        binary = Path(get_authoritative_binary("aura_daemon.exe"))
++        with tempfile.TemporaryDirectory(prefix="aura_stage6_") as directory:
++            root = Path(directory); dll = root / "live.dll"; trace = root / "trace.txt"
++            shutil.copy2(binary.parent / "retrigger_old.dll", dll)
++            config = {"fps": 10, "default_profile": "base", "profiles": {"base": {"type": "static", "fps": 10}}, "rules": [],
++                "orchestration": {"rules": [{"id": "burst", "model": "automation_v2", "when": {"mode": "event", "condition": {"event": "event.kill"}},
++                    "action": {"type": "trigger_effect", "lifetime": "one_shot", "retrigger": "stack", "effect": {"kind": "plugin", "name": str(dll)}}}]}}
++            path = root / "config.json"; path.write_text(json.dumps(config), encoding="utf-8")
++            env = get_isolated_env(directory); env["AURA_RETRIGGER_TRACE"] = str(trace)
++            proc = subprocess.Popen([str(binary), "--dry-run", "--config", str(path), "--keymap", KEYMAP_FILE], cwd=root, env=env,
++                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
++            def lines():
++                return trace.read_text().splitlines() if trace.exists() else []
++            def wait(predicate):
++                deadline = time.monotonic() + 5
++                while not predicate():
++                    self.assertIsNone(proc.poll())
++                    if time.monotonic() > deadline:
++                        self.fail("daemon trace did not reach expected state")
++                    time.sleep(.002)
++            def packet(kills):
++                self.assertEqual(request(19897, "/gsi", {"player": {"state": {"health": 100, "round_kills": kills}}})[0], 200)
++            try:
++                def ready():
++                    try:
++                        return request(19897, "/api/runtime/status")[0] == 200
++                    except OSError:
++                        return False
++                wait(ready); packet(0); time.sleep(.15); packet(1)
++                wait(lambda: any(x.startswith("render 17") for x in lines()))
++                # Dispatch directly after a render boundary. Trace asserts the two
++                # independent instances were both created before the next render.
++                start = len(lines()); packet(2); packet(3)
++                wait(lambda: sum(x.startswith("create 17") for x in lines()[start:]) >= 2)
++                burst = lines()[start:]
++                first_render = next((i for i, x in enumerate(burst) if x.startswith("render")), len(burst))
++                self.assertEqual(sum(x.startswith("create 17") for x in burst[:first_render]), 2,
++                    "both separate packets must be admitted before one render; no merged event")
++                shutil.copy2(binary.parent / "retrigger_new.dll", dll)
++                self.assertEqual(request(19897, "/api/plugin/reload", {"name": str(dll)})[0], 200)
++                start = len(lines()); packet(4)
++                wait(lambda: any(x.startswith("render 93") for x in lines()[start:]))
++                self.assertTrue(any(x.startswith("render 17") for x in lines()[start:]), "old stack must still render on old DLL")
++                config["orchestration"]["rules"][0]["action"]["priority"] = 99
++                candidate = root / "next.json"; candidate.write_text(json.dumps(config), encoding="utf-8"); os.replace(candidate, path)
++                time.sleep(.25); start = len(lines()); time.sleep(.2)
++                self.assertFalse(any(x.startswith("render") for x in lines()[start:]), "semantic edit cancels every stacked instance")
++            finally:
++                terminate_proc(proc)
++
++
++if __name__ == "__main__":
++    unittest.main()
+diff --git a/tests/test_automation_v2.cpp b/tests/test_automation_v2.cpp
+index ee93db3..bb717e0 100644
+--- a/tests/test_automation_v2.cpp
++++ b/tests/test_automation_v2.cpp
+@@ -332,7 +332,7 @@ void ValidationAndPrecedence(const std::filesystem::path& dir) {
+     bad["when"]["mode"]="rising"; invalid.push_back(bad);
+     bad=EffectRule("bad","state",Low()); bad["action"]["lifetime"]="one_shot"; invalid.push_back(bad);
+     for(auto mode:{"rising","event"}) { bad=EffectRule("bad",mode,mode==std::string("event")?Event("event.kill"):Low()); bad["action"]["lifetime"]="while_true"; invalid.push_back(bad); }
+-    for(auto policy:{"stack","queue"}) { bad=EffectRule("bad","event",Event("event.kill")); bad["action"]["retrigger"]=policy; invalid.push_back(bad); }
++    for(auto policy:{"unknown_policy"}) { bad=EffectRule("bad","event",Event("event.kill")); bad["action"]["retrigger"]=policy; invalid.push_back(bad); }
+     bad=EffectRule("bad","event",Event("event.kill")); bad["action"]["lifetime"]="latch_until_scope_exit"; invalid.push_back(bad);
+     bad=ProfileRule("bad",Low()); bad["action"]["activation"]="latch_until_scope_exit"; invalid.push_back(bad);
+     bad=EffectRule("bad","state",Event("event.kill")); invalid.push_back(bad);

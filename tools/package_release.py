@@ -175,23 +175,8 @@ def ensure_binaries(clean=False):
     print(f"[OK] aura_daemon.exe ({os.path.getsize(daemon_exe):,} bytes)")
     print(f"[OK] aura_web_ui.exe ({os.path.getsize(web_ui_exe):,} bytes)")
 
-    # 同步复制最新产物至仓库根目录 (若被占用则告警但不中断打包流程)
-    try:
-        shutil.copy2(daemon_exe, os.path.join(REPO_ROOT, "aura_daemon.exe"))
-        shutil.copy2(web_ui_exe, os.path.join(REPO_ROOT, "aura_web_ui.exe"))
-        print(f"[OK] 已同步最新二进制至仓库根目录: aura_daemon.exe, aura_web_ui.exe")
-    except PermissionError as pe:
-        print(f"[WARN] 无法更新根目录二进制 (文件正被后台进程占用，发布产物已在 dist/ 正常生成): {pe}")
-
-    # 清理旧版运行时目录 (%LOCALAPPDATA%\Aura\runtime) 确保单文件运行取用最新释放资产
-    runtime_dir = os.path.expandvars(r"%LOCALAPPDATA%\Aura\runtime")
-    if os.path.exists(runtime_dir):
-        print(f"[*] 正在清理旧版运行时缓存目录: {runtime_dir}")
-        try:
-            shutil.rmtree(runtime_dir, ignore_errors=True)
-            print("[OK] 已清空旧版运行时缓存目录")
-        except Exception as e:
-            print(f"[WARN] 清理运行时缓存目录异常: {e}")
+    # Building a candidate is not deployment. Keep checkout executables and the
+    # user's runtime cache untouched; launcher extraction refreshes its own assets.
 
 
 def ensure_assets():
@@ -369,12 +354,6 @@ END
     run_cmd(compile_cmd, cwd=temp_dir)
 
     print(f"[SUCCESS] 独立单文件产物已就绪: {out_exe} ({os.path.getsize(out_exe):,} bytes)")
-    root_exe = os.path.join(REPO_ROOT, "Aura.exe")
-    try:
-        shutil.copy2(out_exe, root_exe)
-        print(f"[OK] 已同步单文件启动器至仓库根目录: Aura.exe ({os.path.getsize(root_exe):,} bytes)")
-    except PermissionError as pe:
-        print(f"[WARN] 无法更新根目录 Aura.exe (可能正处于运行状态): {pe}")
     return out_exe
 
 

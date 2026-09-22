@@ -20,3 +20,14 @@ Use current code as the source of truth. Start with [README](README.md) and the 
 - Keep Release assertions meaningful. Do not equate model replicas or static string checks with production execution.
 - Update links and the relevant current guide when moving files. Archive completed investigation reports; do not add chronological reports to the repository root.
 - Run the [test matrix](docs/testing/TESTING.md), report failures/skips separately, and distinguish automated checks from [physical acceptance](docs/testing/MANUAL_TESTS.md).
+
+## Local Windows toolchain and CI
+
+- Local Windows validation uses the installed/default supported CMake generator. Do not explicitly request VS2022 merely to mirror CI.
+- On a VS2026 machine, use VS2026 directly (for example, `-G "Visual Studio 18 2026"`).
+- GitHub Actions intentionally pins `windows-2022` / VS2022 as an independent compatibility gate; it does not dictate the local generator.
+
+## Candidate build versus local deployment
+
+- Build/test/package output must not implicitly overwrite checkout-root executables or clear the user's runtime cache.
+- Before deliberately replacing a local runtime, back up config/binaries and validate the actual config with the candidate daemon. Resolve migration-required records explicitly, then deploy compatible config and binaries together. Never leave a new binary paired with a known rejected config as a completed handoff.

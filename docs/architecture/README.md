@@ -8,7 +8,8 @@ WinUI Studio (WebView2) / browser ── HTTP 19898 ── aura_web_ui
                                                    │ proxy / preview / publish
                                                    └── HTTP 19897 ── aura_daemon
                                                                          │
-                                                rules + effects + plugins + overlays
+                                                V2 RuleEngine → AutomationEffectRuntime
+                                                        Base → persistent → transient
                                                                          │
                                                          Native HID first; gated HAL fallback in auto
 ```
@@ -18,6 +19,6 @@ WinUI Studio (WebView2) / browser ── HTTP 19898 ── aura_web_ui
 - [RuntimeLayout](../../winui/Services/RuntimeLayout.cs) resolves source-checkout, portable and canonical application-data layouts. [DaemonSupervisor](../../winui/Services/DaemonSupervisor.cs) manages startup and graceful lifecycle.
 - [StudioPage](../../winui/Pages/StudioPage.xaml.cs) uses the existing local Web runtime. [Vite](../../frontend/vite.config.js) builds `web/index.html`; do not retire frontend or the Web server while this dependency exists.
 - [AuraAdapter](../../src/aura/aura_adapter.cpp) selects Native HID or legacy HAL compatibility. The configured default is `auto`, which tries Native HID then gated legacy HAL. Explicit `native_hid` does not fall back.
-- Automation/game/settings native pages must be assessed independently; the presence of a page is not proof all planned functionality is implemented.
+- Automation authoring uses the Web Studio V2 Blockly editor. The daemon owns the read-only effect catalog projection and isolated GSI simulation source; no separate native Application Rules editor remains.
 
 [Studio semantics](../studio/STUDIO_WORKFLOW.md), [hardware evidence](../hardware/README.md), and [packaging limitations](../development/PACKAGING.md) are maintained separately.

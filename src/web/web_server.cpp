@@ -1,3 +1,4 @@
+#include "config/automation_contract.h"
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -898,7 +899,7 @@ void WebServer::SetupRoutes() {
         if (!reply) { res.status=503; res.set_content(R"({"error":"daemon_unavailable","message":"Automation authoring requires the daemon"})","application/json"); return; }
         res.status=reply->status; res.set_content(reply->body,"application/json; charset=utf-8");
     };
-    for (const auto* route : {R"(/api/automation/v2/(capabilities|records|rules|validate|promotions/(propose|commit)))", R"(/api/automation/rules(/[0-9]+)?)"}) {
+    for (const auto* route : {R"(/api/automation/v2/(capabilities|records|rules|validate|effects))", R"(/api/gsi/simulation)"}) {
         svr_.Get(route,automation_proxy); svr_.Post(route,automation_proxy);
         svr_.Patch(route,automation_proxy); svr_.Put(route,automation_proxy); svr_.Delete(route,automation_proxy);
     }
@@ -958,8 +959,8 @@ void WebServer::SetupRoutes() {
         try {
             // 5. 校验 JSON 格式合法性
             auto j = nlohmann::json::parse(req.body);
-            // A legacy whole-config writer may preserve V2 records, never author
-            // or reconstruct them. This also closes a shadow-ack bypass route.
+            aura::ValidateAutomationContainers(j);
+            // Automation edits use the daemon validator and revision-bound API.
             auto v2_records = [](const nlohmann::json& config) {
                 auto records=nlohmann::json::array();
                 if (config.contains("orchestration") && config["orchestration"].is_object() &&
@@ -972,12 +973,12 @@ void WebServer::SetupRoutes() {
             };
             if(v2_records(nlohmann::json::parse(current_content))!=v2_records(j)) {
                 res.status=409;
-                res.set_content(R"({"error":"v2_authoring_required","message":"Use revision-safe Automation v2 authoring to change V2 records; legacy whole-list save was blocked"})","application/json");
+                res.set_content(R"({"error":"v2_authoring_required","message":"Use revision-safe Automation v2 authoring to change V2 records"})","application/json");
                 return;
             }
-            if (!j.is_object() || !j.contains("profiles") || !j.contains("rules")) {
+            if (!j.is_object() || !j.contains("profiles")) {
                 res.status = 400;
-                res.set_content(R"json({"status":"error","message":"配置数据缺少 profiles 或 rules 核心字段"})json", "application/json; charset=utf-8");
+                res.set_content(R"json({"status":"error","message":"配置数据缺少 profiles 核心字段"})json", "application/json; charset=utf-8");
                 return;
             }
 

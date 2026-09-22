@@ -1,3 +1,9 @@
+## 0.1.0-alpha.3 candidate — breaking Automation cleanup (unreleased)
+
+Supersedes the prior alpha.3 candidate. Automation v2 is the only supported model; retired nonempty sections require explicit development migration. Direct V2 Blockly authoring uses typed effect selections. Daemon-backed GSI simulation isolates sources and exercises real event detection and composition. Plugin ABI v1, LegacyEnvelope and legacy_hal remain supported. All candidate packaging and hashes must be regenerated; no release or tag is created by this work.
+
+Earlier entries below are historical descriptions of their respective revisions.
+
 # Changelog
 
 所有值得关注的变更都记录在此。发行版本号以仓库根目录的 [`VERSION`](VERSION) 为单一事实源。

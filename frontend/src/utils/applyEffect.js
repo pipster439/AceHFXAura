@@ -210,15 +210,8 @@ export function renameEffectInConfig(config, oldName, newName) {
 
   const orch = JSON.parse(JSON.stringify(config?.orchestration || {}));
   if (orch.fallback_profile === oldName) orch.fallback_profile = clean;
-  if (Array.isArray(orch.rules)) {
-    orch.rules.forEach(r => {
-      if (r.target_profile === oldName) r.target_profile = clean;
-    });
-  }
-  if (Array.isArray(orch.event_overlays)) {
-    orch.event_overlays.forEach(ov => {
-      if (ov.effect === oldName) ov.effect = clean;
-    });
+  if (orch.rules?.some(r => r.action?.profile === oldName || r.action?.effect?.name === oldName)) {
+    throw new Error('请先在 Automation 中更换此引用，再重命名光效');
   }
 
   let defaultProfile = config?.default_profile;

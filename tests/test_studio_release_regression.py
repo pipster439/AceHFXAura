@@ -31,7 +31,7 @@ import urllib.request
 import urllib.error
 
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-WEB_UI_EXE = os.path.join(ROOT_DIR, "build", "Release", "aura_web_ui.exe")
+WEB_UI_EXE = os.path.join(os.environ.get("AURA_BIN_DIR", os.path.join(ROOT_DIR, "build", "Release")), "aura_web_ui.exe")
 AURA_EXE = os.path.join(ROOT_DIR, "dist", "Aura.exe")
 
 MINIMAL_PLUGIN_CPP = R"""#include "engine/effect.h"
@@ -622,7 +622,6 @@ class TestStudioReleaseRegression(unittest.TestCase):
             # 2. Verify draft saving / config saving remains FULLY OPERATIONAL without MSVC!
             draft_cfg = {
                 "profiles": {},
-                "rules": [],
                 "blockly_effects": {
                     "my_draft_effect": {
                         "name": "my_draft_effect",
@@ -635,6 +634,9 @@ class TestStudioReleaseRegression(unittest.TestCase):
             req_get = urllib.request.Request(f"http://127.0.0.1:{port}/api/config")
             with urllib.request.urlopen(req_get, timeout=5.0) as resp:
                 etag = resp.headers.get("ETag")
+                current_cfg = json.load(resp)
+            current_cfg["blockly_effects"] = draft_cfg["blockly_effects"]
+            draft_cfg = current_cfg
             status, save_res = fetch_json(f"http://127.0.0.1:{port}/api/config", method="POST", body=draft_cfg, headers={"If-Match": etag})
             self.assertEqual(status, 200)
             self.assertEqual(save_res.get("status"), "ok")

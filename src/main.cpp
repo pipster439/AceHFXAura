@@ -139,6 +139,12 @@ struct ComScope {
 } // namespace
 
 int main(int argc, char* argv[]) {
+    if (argc == 3 && std::string(argv[1]) == "--validate-config") {
+        aura::Logger::Instance().Init("");
+        aura::RuleEngine validator;
+        return validator.LoadConfig(argv[2]) ? 0 : 1;
+    }
+
     // 设置全局 SEH 未处理异常过滤器：遇到致命崩溃时确保清除运行标记，打破连续闪退死循环
     SetUnhandledExceptionFilter(GlobalUnhandledExceptionFilter);
 
@@ -589,42 +595,6 @@ int main(int argc, char* argv[]) {
     std::string current_active_profile_name = initial_profile ? initial_profile->name : "(None)";
     effect_engine.SetActiveProfile(initial_profile);
 
-    // 同步编排事件覆盖规则至 OverlayManager
-    auto sync_event_overlays = [&rule_engine, &effect_engine]() {
-        auto& om = effect_engine.GetOverlayManager();
-        om.ClearBindings();
-        for (const auto& r : rule_engine.GetEventOverlayRules()) {
-            aura::OverlayBinding b;
-            b.id = r.id;
-            b.trigger = r.trigger;
-            b.priority = r.priority;
-            b.condition = [condition = r.condition](const aura::GsiState* gsi, const std::string& proc) {
-                return condition.Evaluate(gsi, proc);
-            };
-            b.event_name = r.event;
-            b.effect_name = r.effect;
-            b.duration_ms = r.duration_ms;
-            b.fade_out_ms = r.fade_out_ms;
-            b.attack_ms = r.attack_ms;
-            b.blend_mode = r.blend_mode;
-
-            auto prof = rule_engine.GetProfile(r.effect);
-            if (prof && prof->base_effect) {
-                b.effect = prof->base_effect;
-            } else {
-                b.effect = aura::PluginManager::Instance().CreateEffect(r.effect);
-            }
-            b.make_effect = [name = (prof && !prof->plugin_name.empty()) ? prof->plugin_name : r.effect, fallback = b.effect]() {
-                auto instance = aura::PluginManager::Instance().CreateEffect(name);
-                return instance ? instance : fallback;
-            };
-            if (b.effect) {
-                om.RegisterBinding(b);
-            }
-        }
-    };
-    sync_event_overlays();
-
     // 注册守护进程插件热重载 IPC 处理回调
     aura::PluginPublicationQueue plugin_publications;
     gsi_adapter.SetPluginReloadHandler([&plugin_publications](const std::string& name, bool require_lifecycle) {
@@ -772,13 +742,12 @@ int main(int argc, char* argv[]) {
             config_reloaded = rule_engine.CheckAndReload();
         }
         const bool plugin_reloaded = plugin_publications.ApplyAtFrameBoundary(aura::PluginManager::Instance());
-        if (config_reloaded || plugin_reloaded) sync_event_overlays(); // legacy reload policy only
 
         // 主线程统一评估当前前台进程与 GSI 状态驱动的灯效方案
         // (严格遵循主线程独占 COM/HAL 纪律，绝不在网络线程执行硬件调用)
+        const auto automation = gsi_adapter.EvaluateAutomation(rule_engine, monitor.GetCurrentProcessName());
+        if (automation.source_changed) { effect_engine.GetAutomationEffects().Clear(); effect_engine.ClearPreview(); }
         const auto effect_revision = effect_engine.GetAutomationEffects().Revision();
-        const auto automation = rule_engine.EvaluateAutomation(gsi_adapter.GetState(),
-            [&monitor]() { return monitor.GetCurrentProcessName(); });
         effect_engine.GetAutomationEffects().Consume(automation,
             [&rule_engine](const nlohmann::json& reference) { return aura::ResolveAutomationEffect(reference, rule_engine); },
             effect_engine.GetElapsedMs(), effect_revision,
@@ -787,12 +756,7 @@ int main(int argc, char* argv[]) {
         gsi_adapter.GetState().SetForegroundProcess(cur_proc);
         std::shared_ptr<const aura::Profile> matched = automation.profile;
         std::string prof_name = matched ? matched->name : "(None)";
-        const bool v2_config = automation.has_v2_rules;
-        bool base_changed = false;
-        if (v2_config) base_changed = effect_engine.ReconcileProfile(matched);
-        else if (prof_name != current_active_profile_name || config_reloaded || plugin_reloaded) {
-            effect_engine.SetActiveProfile(matched); base_changed = true;
-        }
+        const bool base_changed = effect_engine.ReconcileProfile(matched);
         if (base_changed) {
             matched = effect_engine.GetActiveProfile();
             current_active_profile_name = matched ? matched->name : "(None)";
@@ -825,7 +789,6 @@ int main(int argc, char* argv[]) {
         web_supervisor.SetSuppressed(automation.suppress_web_ui);
 
         // 零分配计算当前帧 (包含 GSI 原子读取与瞬态事件叠加)
-        effect_engine.GetOverlayManager().UpdateBindingsFromGsi(&gsi_adapter.GetState(), effect_engine.GetElapsedMs(), aura::RuleEngine::ToLower(cur_proc));
         effect_engine.Tick(frame_buf, keymap, &gsi_adapter.GetState());
 
         // 推流至硬件

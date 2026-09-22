@@ -135,89 +135,6 @@ CS2_GSI_SAMPLE_PAYLOAD = {
 # Evaluates recursive condition trees matching C++ ConditionNode logic.
 # ============================================================================
 
-class ConditionNodeEvaluator:
-    """Evaluates recursive ConditionNode AST matching src/config/rule_engine.cpp."""
-
-    @staticmethod
-    def evaluate(node: Dict[str, Any], gsi: Dict[str, Any], foreground_proc: str = "") -> bool:
-        if not node:
-            return True
-
-        logic_type = node.get("type", "").lower()
-        if logic_type == "and":
-            sub = node.get("conditions", [])
-            return all(ConditionNodeEvaluator.evaluate(child, gsi, foreground_proc) for child in sub)
-        elif logic_type == "or":
-            sub = node.get("conditions", [])
-            if not sub:
-                return False
-            return any(ConditionNodeEvaluator.evaluate(child, gsi, foreground_proc) for child in sub)
-        elif logic_type == "not":
-            sub = node.get("conditions", [])
-            if not sub:
-                return True
-            return not ConditionNodeEvaluator.evaluate(sub[0], gsi, foreground_proc)
-
-        # Leaf node evaluation
-        field = node.get("field", "")
-        op = node.get("op", node.get("operator", "==")).lower()
-        target_val = node.get("value")
-
-        # Process matching leaf
-        if field in ("process.name", "process", "proc"):
-            proc_clean = os.path.basename(foreground_proc).lower()
-            target_str = str(target_val).lower() if target_val is not None else ""
-            if op in ("==", "eq"):
-                return proc_clean == target_str or proc_clean.replace(".exe", "") == target_str.replace(".exe", "")
-            elif op in ("!=", "ne"):
-                return proc_clean != target_str
-            elif op == "contains":
-                return target_str in proc_clean
-            return False
-
-        # GSI leaf evaluation
-        actual_val = ConditionNodeEvaluator.get_gsi_value(gsi, field)
-        if actual_val is None:
-            return False
-
-        return ConditionNodeEvaluator.compare_values(actual_val, op, target_val)
-
-    @staticmethod
-    def get_gsi_value(gsi: Dict[str, Any], path: str) -> Any:
-        if not gsi or not path:
-            return None
-        parts = path.split(".")
-        curr = gsi
-        for p in parts:
-            if isinstance(curr, dict) and p in curr:
-                curr = curr[p]
-            else:
-                return None
-        return curr
-
-    @staticmethod
-    def compare_values(actual: Any, op: str, target: Any) -> bool:
-        try:
-            if isinstance(actual, (int, float)) and isinstance(target, (int, float, str)):
-                try:
-                    target_num = float(target)
-                    act_num = float(actual)
-                    if op in ("==", "eq"): return math.isclose(act_num, target_num, abs_tol=1e-5)
-                    if op in ("!=", "ne"): return not math.isclose(act_num, target_num, abs_tol=1e-5)
-                    if op in ("<", "lt"): return act_num < target_num
-                    if op in ("<=", "le"): return act_num <= target_num
-                    if op in (">", "gt"): return act_num > target_num
-                    if op in (">=", "ge"): return act_num >= target_num
-                except ValueError:
-                    pass
-
-            if op in ("==", "eq"): return str(actual).lower() == str(target).lower()
-            if op in ("!=", "ne"): return str(actual).lower() != str(target).lower()
-            if op == "contains": return str(target).lower() in str(actual).lower()
-            if op == "in" and isinstance(target, list): return actual in target
-            return False
-        except Exception:
-            return False
 
 
 # ============================================================================
@@ -225,85 +142,6 @@ class ConditionNodeEvaluator:
 # Simulates transient pulse overlays and linear alpha crossfade blending.
 # ============================================================================
 
-class OverlayManagerModel:
-    """Simulates transient CS2 event pulse overlays and smooth linear crossfades."""
-
-    def __init__(self):
-        self.overlays: List[Dict[str, Any]] = []
-
-    def trigger_overlay(self, event_name: str, color: Tuple[int, int, int],
-                        duration_ms: int, fade_ms: int, priority: int = 10,
-                        blend_mode: str = "blend", trigger_time_ms: int = 0) -> None:
-        duration_ms = max(0, duration_ms)
-        fade_ms = max(0, min(fade_ms, duration_ms))
-        self.overlays.append({
-            "event_name": event_name,
-            "color": color,
-            "start_ms": trigger_time_ms,
-            "duration_ms": duration_ms,
-            "fade_ms": fade_ms,
-            "priority": priority,
-            "blend_mode": blend_mode,
-        })
-        # Sort descending by priority
-        self.overlays.sort(key=lambda x: x["priority"], reverse=True)
-
-    def calculate_alpha(self, overlay: Dict[str, Any], current_ms: int) -> float:
-        elapsed = current_ms - overlay["start_ms"]
-        duration = overlay["duration_ms"]
-        fade = overlay["fade_ms"]
-
-        if elapsed < 0 or elapsed >= duration or duration <= 0:
-            return 0.0
-        
-        fade_start = duration - fade
-        if elapsed <= fade_start:
-            return 1.0
-        
-        if fade <= 0:
-            return 1.0
-        
-        remaining = duration - elapsed
-        return max(0.0, min(1.0, remaining / float(fade)))
-
-    def blend_frames(self, base_rgb: Tuple[int, int, int], current_ms: int) -> Tuple[int, int, int]:
-        curr_rgb = list(base_rgb)
-        active_overlays = []
-        for ov in self.overlays:
-            alpha = self.calculate_alpha(ov, current_ms)
-            if alpha > 0.0:
-                active_overlays.append((ov, alpha))
-
-        # Sort ascending by priority so higher-priority overlays blend on top (Painter's algorithm)
-        active_overlays.sort(key=lambda item: item[0]["priority"])
-
-        for ov, alpha in active_overlays:
-            o_color = ov["color"]
-            if ov["blend_mode"] == "replace":
-                curr_rgb = [
-                    int(round(curr_rgb[c] * (1.0 - alpha) + o_color[c] * alpha))
-                    for c in range(3)
-                ]
-            elif ov["blend_mode"] == "add":
-                curr_rgb = [
-                    min(255, int(round(curr_rgb[c] + o_color[c] * alpha)))
-                    for c in range(3)
-                ]
-            else:  # "blend"
-                curr_rgb = [
-                    int(round(curr_rgb[c] * (1.0 - alpha) + o_color[c] * alpha))
-                    for c in range(3)
-                ]
-
-        return (curr_rgb[0], curr_rgb[1], curr_rgb[2])
-
-    def evict_expired(self, current_ms: int) -> int:
-        before_count = len(self.overlays)
-        self.overlays = [
-            ov for ov in self.overlays
-            if (current_ms - ov["start_ms"]) < ov["duration_ms"]
-        ]
-        return before_count - len(self.overlays)
 
 
 # ============================================================================
@@ -594,14 +432,6 @@ class TestTier1FeatureCoverage(unittest.TestCase):
             reg_val *= decay_rate
         self.assertAlmostEqual(reg_val, 0.614125, places=4)
 
-    def test_t1_f02_atomic_gsi_sensor_blocks(self):
-        """FE-DOMAIN-BLOCKS: Atomic GSI: get_number, get_string, get_bool from GSI payload."""
-        hp = ConditionNodeEvaluator.get_gsi_value(CS2_GSI_SAMPLE_PAYLOAD, "player.state.health")
-        bomb = ConditionNodeEvaluator.get_gsi_value(CS2_GSI_SAMPLE_PAYLOAD, "round.bomb")
-        helmet = ConditionNodeEvaluator.get_gsi_value(CS2_GSI_SAMPLE_PAYLOAD, "player.state.helmet")
-        self.assertEqual(hp, 75)
-        self.assertEqual(bomb, "planted")
-        self.assertTrue(helmet)
 
     # ------------------------------------------------------------------------
     # Feature 3: FE-LIVE-PREVIEW (5 tests)
@@ -948,142 +778,24 @@ class TestTier1FeatureCoverage(unittest.TestCase):
     # ------------------------------------------------------------------------
     # Feature 11: RULE-GSI-TREE (5 tests)
     # ------------------------------------------------------------------------
-    def test_t1_f11_numeric_leaf_comparisons(self):
-        """RULE-GSI-TREE: Verify numeric comparison operators (==, !=, <, <=, >, >=)."""
-        node_gt = {"field": "player.state.health", "op": ">", "value": 50}
-        node_lt = {"field": "player.state.health", "op": "<", "value": 20}
-        self.assertTrue(ConditionNodeEvaluator.evaluate(node_gt, CS2_GSI_SAMPLE_PAYLOAD))
-        self.assertFalse(ConditionNodeEvaluator.evaluate(node_lt, CS2_GSI_SAMPLE_PAYLOAD))
 
-    def test_t1_f11_string_leaf_comparisons(self):
-        """RULE-GSI-TREE: Verify string comparison operators (==, !=, contains, in)."""
-        node_bomb = {"field": "round.bomb", "op": "==", "value": "planted"}
-        node_map = {"field": "map.name", "op": "contains", "value": "dust2"}
-        self.assertTrue(ConditionNodeEvaluator.evaluate(node_bomb, CS2_GSI_SAMPLE_PAYLOAD))
-        self.assertTrue(ConditionNodeEvaluator.evaluate(node_map, CS2_GSI_SAMPLE_PAYLOAD))
 
-    def test_t1_f11_compound_and_condition_evaluation(self):
-        """RULE-GSI-TREE: Verify compound AND logic requiring all children to be True."""
-        node_and = {
-            "type": "and",
-            "conditions": [
-                {"field": "player.state.health", "op": ">", "value": 50},
-                {"field": "round.bomb", "op": "==", "value": "planted"}
-            ]
-        }
-        self.assertTrue(ConditionNodeEvaluator.evaluate(node_and, CS2_GSI_SAMPLE_PAYLOAD))
 
-    def test_t1_f11_compound_or_condition_evaluation(self):
-        """RULE-GSI-TREE: Verify compound OR logic requiring at least one child to match."""
-        node_or = {
-            "type": "or",
-            "conditions": [
-                {"field": "player.state.health", "op": "<", "value": 20},
-                {"field": "round.bomb", "op": "==", "value": "planted"}
-            ]
-        }
-        self.assertTrue(ConditionNodeEvaluator.evaluate(node_or, CS2_GSI_SAMPLE_PAYLOAD))
 
-    def test_t1_f11_nested_composite_condition_tree(self):
-        """RULE-GSI-TREE: Verify nested composite AST: (cs2.exe) AND (HP > 50 OR bomb == planted)."""
-        nested_tree = {
-            "type": "and",
-            "conditions": [
-                {"field": "process.name", "op": "==", "value": "cs2.exe"},
-                {
-                    "type": "or",
-                    "conditions": [
-                        {"field": "player.state.health", "op": "<", "value": 20},
-                        {"field": "round.bomb", "op": "==", "value": "planted"}
-                    ]
-                }
-            ]
-        }
-        self.assertTrue(ConditionNodeEvaluator.evaluate(nested_tree, CS2_GSI_SAMPLE_PAYLOAD, foreground_proc="cs2.exe"))
-        self.assertFalse(ConditionNodeEvaluator.evaluate(nested_tree, CS2_GSI_SAMPLE_PAYLOAD, foreground_proc="notepad.exe"))
 
     # ------------------------------------------------------------------------
     # Feature 12: CS2-EVENT-OVERLAY (5 tests)
     # ------------------------------------------------------------------------
-    def test_t1_f12_transient_event_trigger(self):
-        """CS2-EVENT-OVERLAY: Trigger kill event overlay with duration and fade times."""
-        mgr = OverlayManagerModel()
-        mgr.trigger_overlay("event.kill", (255, 215, 0), duration_ms=1200, fade_ms=400, trigger_time_ms=1000)
-        self.assertEqual(len(mgr.overlays), 1)
-        self.assertEqual(mgr.overlays[0]["event_name"], "event.kill")
 
-    def test_t1_f12_non_blocking_pulse_lifecycle(self):
-        """CS2-EVENT-OVERLAY: Verify non-blocking pulse lifecycle from trigger to expiration."""
-        mgr = OverlayManagerModel()
-        mgr.trigger_overlay("event.kill", (255, 215, 0), duration_ms=1000, fade_ms=200, trigger_time_ms=0)
-        self.assertEqual(mgr.calculate_alpha(mgr.overlays[0], current_ms=500), 1.0)
-        self.assertAlmostEqual(mgr.calculate_alpha(mgr.overlays[0], current_ms=900), 0.5, places=2)
-        self.assertEqual(mgr.calculate_alpha(mgr.overlays[0], current_ms=1000), 0.0)
 
-    def test_t1_f12_linear_crossfade_alpha_math(self):
-        """CS2-EVENT-OVERLAY: Verify linear alpha calculation: alpha = (duration - elapsed) / fade_ms."""
-        mgr = OverlayManagerModel()
-        ov = {"start_ms": 0, "duration_ms": 1000, "fade_ms": 500}
-        # Fade window is 500ms to 1000ms
-        self.assertEqual(mgr.calculate_alpha(ov, 500), 1.0)
-        self.assertAlmostEqual(mgr.calculate_alpha(ov, 750), 0.5, places=3)
-        self.assertAlmostEqual(mgr.calculate_alpha(ov, 900), 0.2, places=3)
 
-    def test_t1_f12_overlay_stack_eviction_on_expire(self):
-        """CS2-EVENT-OVERLAY: Verify eviction of expired overlays from active queue."""
-        mgr = OverlayManagerModel()
-        mgr.trigger_overlay("event.kill", (255, 0, 0), duration_ms=500, fade_ms=100, trigger_time_ms=0)
-        evicted = mgr.evict_expired(current_ms=600)
-        self.assertEqual(evicted, 1)
-        self.assertEqual(len(mgr.overlays), 0)
 
-    def test_t1_f12_blend_modes_replace_and_crossfade(self):
-        """CS2-EVENT-OVERLAY: Verify mathematical blending of overlay color with base profile."""
-        mgr = OverlayManagerModel()
-        mgr.trigger_overlay("event.kill", (200, 0, 0), duration_ms=1000, fade_ms=500, trigger_time_ms=0)
-        # At 750ms, alpha = 0.5; base color = (0, 100, 0)
-        blended = mgr.blend_frames((0, 100, 0), current_ms=750)
-        self.assertEqual(blended, (100, 50, 0))
 
     # ------------------------------------------------------------------------
     # Feature 13: FE-ORCHESTRATOR-UI (5 tests)
     # ------------------------------------------------------------------------
-    def test_t1_f13_orchestrator_root_block_schema(self):
-        """FE-ORCHESTRATOR-UI: Verify orchestrator_root block schema and input connections."""
-        root_block = {
-            "type": "orchestrator_root",
-            "id": "orch_root_1",
-            "fields": {"FALLBACK_PROFILE": "custom_keymap"},
-            "inputs": {
-                "OVERLAYS": {"block": None},
-                "RULES": {"block": None}
-            }
-        }
-        self.assertEqual(root_block["type"], "orchestrator_root")
-        self.assertEqual(root_block["fields"]["FALLBACK_PROFILE"], "custom_keymap")
 
-    def test_t1_f13_event_overlay_blocks(self):
-        """FE-ORCHESTRATOR-UI: Verify event_overlay block with event, effect, duration, fade."""
-        overlay_block = {
-            "type": "event_overlay",
-            "fields": {
-                "EVENT": "event.kill",
-                "EFFECT": "kill_pulse",
-                "DURATION": 1200,
-                "FADE": 400
-            }
-        }
-        self.assertEqual(overlay_block["fields"]["EVENT"], "event.kill")
-        self.assertEqual(overlay_block["fields"]["DURATION"], 1200)
 
-    def test_t1_f13_process_match_and_dnd_blocks(self):
-        """FE-ORCHESTRATOR-UI: Verify match_process block with DND suppression toggle."""
-        proc_block = {
-            "type": "match_process",
-            "fields": {"PROCESS": "cs2.exe", "DND": True, "TARGET_PROFILE": "cs2_competitive"}
-        }
-        self.assertEqual(proc_block["fields"]["PROCESS"], "cs2.exe")
-        self.assertTrue(proc_block["fields"]["DND"])
 
     def test_t1_f13_nested_condition_connection_points(self):
         """FE-ORCHESTRATOR-UI: Verify condition block statement connections."""
@@ -1120,23 +832,7 @@ class TestTier1FeatureCoverage(unittest.TestCase):
         self.assertTrue(exported_rules[0]["dnd"])
         self.assertEqual(exported_rules[0]["target_profile"], "cs2_play")
 
-    def test_t1_f14_export_event_overlays_array(self):
-        """FE-RULE-EXPORT: Verify export of orchestration.event_overlays array."""
-        exported_overlays = [
-            {"event": "event.kill", "effect": "kill_pulse", "duration_ms": 1200, "fade_ms": 400},
-            {"event": "event.flash", "effect": "white_flash", "duration_ms": 2000, "fade_ms": 1000}
-        ]
-        self.assertEqual(len(exported_overlays), 2)
-        self.assertEqual(exported_overlays[0]["duration_ms"], 1200)
 
-    def test_t1_f14_export_fallback_profile(self):
-        """FE-RULE-EXPORT: Verify export of orchestration.fallback_profile."""
-        orchestration = {
-            "rules": [],
-            "event_overlays": [],
-            "fallback_profile": "desktop_static"
-        }
-        self.assertEqual(orchestration["fallback_profile"], "desktop_static")
 
     def test_t1_f14_legacy_rules_backward_compatibility(self):
         """FE-RULE-EXPORT: Verify synthesis of backward-compatible rules array for older daemons."""
@@ -1156,20 +852,6 @@ class TestTier1FeatureCoverage(unittest.TestCase):
     # ------------------------------------------------------------------------
     # Feature 15: CONFIG-ROUNDTRIP (5 tests)
     # ------------------------------------------------------------------------
-    def test_t1_f15_dual_layer_config_serialization(self):
-        """CONFIG-ROUNDTRIP: Verify dual-layer serialization storing both rules and Blockly workspaces."""
-        config = {
-            "default_profile": "static",
-            "fps": 25,
-            "orchestration": {"rules": [], "event_overlays": [], "fallback_profile": "static"},
-            "blockly_orchestrator": {"version": 1, "blocks": []},
-            "blockly_effects": {"rainbow_wave": {"version": 1, "blocks": []}}
-        }
-        serialized = json.dumps(config)
-        reloaded = json.loads(serialized)
-        self.assertIn("orchestration", reloaded)
-        self.assertIn("blockly_orchestrator", reloaded)
-        self.assertIn("blockly_effects", reloaded)
 
     def test_t1_f15_lossless_two_way_ast_restoration(self):
         """CONFIG-ROUNDTRIP: Verify lossless round-trip restoration of condition AST."""
@@ -1184,18 +866,6 @@ class TestTier1FeatureCoverage(unittest.TestCase):
         restored = json.loads(raw_json)
         self.assertEqual(condition_tree, restored)
 
-    def test_t1_f15_legacy_config_auto_migration(self):
-        """CONFIG-ROUNDTRIP: Verify auto-migration of older config missing orchestration block."""
-        legacy_cfg = {"default_profile": "custom_keymap", "rules": [{"process": "cs2.exe", "profile": "game"}]}
-        if "orchestration" not in legacy_cfg:
-            legacy_cfg["orchestration"] = {
-                "rules": [{"id": "migrated_0", "process": r["process"], "dnd": False, "target_profile": r["profile"]}
-                          for r in legacy_cfg.get("rules", [])],
-                "event_overlays": [],
-                "fallback_profile": legacy_cfg.get("default_profile", "static")
-            }
-        self.assertIn("orchestration", legacy_cfg)
-        self.assertEqual(legacy_cfg["orchestration"]["rules"][0]["process"], "cs2.exe")
 
     def test_t1_f15_unicode_profile_names_preservation(self):
         """CONFIG-ROUNDTRIP: Verify accurate preservation of UTF-8 unicode in profile and rule names."""
@@ -1205,19 +875,6 @@ class TestTier1FeatureCoverage(unittest.TestCase):
         self.assertEqual(loaded["profile_name"], "极光波浪_AuraWave")
         self.assertIn("65%", loaded["comments"])
 
-    def test_t1_f15_config_roundtrip_idempotency(self):
-        """CONFIG-ROUNDTRIP: Verify idempotency: save(load(save(cfg))) == save(cfg)."""
-        cfg = {
-            "default_profile": "static",
-            "orchestration": {
-                "rules": [{"id": "r1", "process": "cs2.exe", "target_profile": "cs2"}],
-                "event_overlays": [{"event": "kill", "duration_ms": 1000}],
-                "fallback_profile": "static"
-            }
-        }
-        s1 = json.dumps(cfg, sort_keys=True)
-        s2 = json.dumps(json.loads(s1), sort_keys=True)
-        self.assertEqual(s1, s2)
 
 
 # ============================================================================
@@ -1471,10 +1128,6 @@ class TestTier2BoundaryAndCornerCases(unittest.TestCase):
                 del ptr
         safe_destroy(None)  # Must not raise
 
-    def test_t2_f07_gsi_reader_nonexistent_field_returns_default(self):
-        """BE-PLUGIN-ABI: Boundary: querying missing GSI field returns default value cleanly."""
-        val = ConditionNodeEvaluator.get_gsi_value(CS2_GSI_SAMPLE_PAYLOAD, "nonexistent.field.name")
-        self.assertIsNone(val)
 
     def test_t2_f07_plugin_api_version_mismatch_rejected(self):
         """BE-PLUGIN-ABI: Boundary: plugin with unsupported ABI version (e.g. 0x00020000) rejected."""
@@ -1625,76 +1278,22 @@ class TestTier2BoundaryAndCornerCases(unittest.TestCase):
     # ------------------------------------------------------------------------
     # Feature 11: RULE-GSI-TREE Boundaries (5 tests)
     # ------------------------------------------------------------------------
-    def test_t2_f11_empty_condition_node_evaluates_true(self):
-        """RULE-GSI-TREE: Boundary: empty condition node {} evaluates to True (vacuous truth)."""
-        self.assertTrue(ConditionNodeEvaluator.evaluate({}, CS2_GSI_SAMPLE_PAYLOAD))
 
-    def test_t2_f11_and_condition_with_empty_children_true(self):
-        """RULE-GSI-TREE: Boundary: AND node with empty conditions array [] evaluates to True."""
-        node = {"type": "and", "conditions": []}
-        self.assertTrue(ConditionNodeEvaluator.evaluate(node, CS2_GSI_SAMPLE_PAYLOAD))
 
-    def test_t2_f11_or_condition_with_empty_children_false(self):
-        """RULE-GSI-TREE: Boundary: OR node with empty conditions array [] evaluates to False."""
-        node = {"type": "or", "conditions": []}
-        self.assertFalse(ConditionNodeEvaluator.evaluate(node, CS2_GSI_SAMPLE_PAYLOAD))
 
-    def test_t2_f11_comparison_against_missing_telemetry_field(self):
-        """RULE-GSI-TREE: Boundary: evaluating comparison on absent field returns False."""
-        node = {"field": "player.state.nonexistent", "op": ">", "value": 0}
-        self.assertFalse(ConditionNodeEvaluator.evaluate(node, CS2_GSI_SAMPLE_PAYLOAD))
 
-    def test_t2_f11_process_name_case_insensitivity(self):
-        """RULE-GSI-TREE: Boundary: process matching is case-insensitive ('CS2.EXE' == 'cs2.exe')."""
-        node = {"field": "process.name", "op": "==", "value": "cs2.exe"}
-        self.assertTrue(ConditionNodeEvaluator.evaluate(node, {}, foreground_proc="CS2.EXE"))
-        self.assertTrue(ConditionNodeEvaluator.evaluate(node, {}, foreground_proc="cs2"))
 
     # ------------------------------------------------------------------------
     # Feature 12: CS2-EVENT-OVERLAY Boundaries (5 tests)
     # ------------------------------------------------------------------------
-    def test_t2_f12_overlay_zero_duration_expires_immediately(self):
-        """CS2-EVENT-OVERLAY: Boundary: duration_ms == 0 results in immediate alpha = 0.0."""
-        mgr = OverlayManagerModel()
-        ov = {"start_ms": 0, "duration_ms": 0, "fade_ms": 0}
-        self.assertEqual(mgr.calculate_alpha(ov, 0), 0.0)
 
-    def test_t2_f12_overlay_zero_fade_instant_step_down(self):
-        """CS2-EVENT-OVERLAY: Boundary: fade_ms == 0 stays at 1.0 until exact duration, then 0.0."""
-        mgr = OverlayManagerModel()
-        ov = {"start_ms": 0, "duration_ms": 1000, "fade_ms": 0}
-        self.assertEqual(mgr.calculate_alpha(ov, 999), 1.0)
-        self.assertEqual(mgr.calculate_alpha(ov, 1000), 0.0)
 
-    def test_t2_f12_fade_greater_than_duration_clamped_to_duration(self):
-        """CS2-EVENT-OVERLAY: Boundary: fade_ms > duration_ms clamped to duration_ms."""
-        mgr = OverlayManagerModel()
-        mgr.trigger_overlay("test", (255, 0, 0), duration_ms=500, fade_ms=1000)
-        self.assertEqual(mgr.overlays[0]["fade_ms"], 500)
 
-    def test_t2_f12_multiple_overlays_highest_priority_wins(self):
-        """CS2-EVENT-OVERLAY: Boundary: overlays sorted with highest priority first."""
-        mgr = OverlayManagerModel()
-        mgr.trigger_overlay("low", (100, 0, 0), duration_ms=1000, fade_ms=200, priority=5)
-        mgr.trigger_overlay("high", (255, 255, 255), duration_ms=1000, fade_ms=200, priority=20)
-        self.assertEqual(mgr.overlays[0]["event_name"], "high")
 
-    def test_t2_f12_negative_duration_clamped_to_zero(self):
-        """CS2-EVENT-OVERLAY: Boundary: negative duration_ms clamped to 0."""
-        mgr = OverlayManagerModel()
-        mgr.trigger_overlay("neg", (0, 0, 0), duration_ms=-500, fade_ms=-100)
-        self.assertEqual(mgr.overlays[0]["duration_ms"], 0)
-        self.assertEqual(mgr.overlays[0]["fade_ms"], 0)
 
     # ------------------------------------------------------------------------
     # Feature 13: FE-ORCHESTRATOR-UI Boundaries (5 tests)
     # ------------------------------------------------------------------------
-    def test_t2_f13_workspace_with_only_fallback_profile(self):
-        """FE-ORCHESTRATOR-UI: Boundary: minimal orchestrator workspace with 0 rules and 0 overlays."""
-        orch = {"rules": [], "event_overlays": [], "fallback_profile": "static"}
-        self.assertEqual(len(orch["rules"]), 0)
-        self.assertEqual(len(orch["event_overlays"]), 0)
-        self.assertEqual(orch["fallback_profile"], "static")
 
     def test_t2_f13_duplicate_process_rules_first_wins(self):
         """FE-ORCHESTRATOR-UI: Boundary: duplicate rules for same process resolved in order."""
@@ -1753,11 +1352,6 @@ class TestTier2BoundaryAndCornerCases(unittest.TestCase):
         for i in range(10):
             self.assertEqual(exported[i]["id"], f"rule_{i}")
 
-    def test_t2_f14_empty_workspace_exports_valid_schema(self):
-        """FE-RULE-EXPORT: Boundary: empty workspace produces complete schema with empty arrays."""
-        empty_export = {"rules": [], "event_overlays": [], "fallback_profile": "default"}
-        self.assertIsInstance(empty_export["rules"], list)
-        self.assertIsInstance(empty_export["event_overlays"], list)
 
     # ------------------------------------------------------------------------
     # Feature 15: CONFIG-ROUNDTRIP Boundaries (5 tests)
@@ -1869,68 +1463,8 @@ class TestTier3CrossFeatureCombinations(unittest.TestCase):
         ok, violations = CppTranspilerModel.check_zero_allocations(cpp)
         self.assertTrue(ok, f"Zero allocation violations: {violations}")
 
-    def test_t3_04_gsi_telemetry_to_condition_node_to_profile_switch(self):
-        """T3_04: GSI Telemetry -> ConditionNode AST -> Process & GSI Matching -> Target Profile."""
-        rule_tree = {
-            "type": "and",
-            "conditions": [
-                {"field": "process.name", "op": "==", "value": "cs2.exe"},
-                {"field": "player.state.health", "op": "<=", "value": 20}
-            ]
-        }
-        # HP is 75 in sample payload: should NOT match
-        self.assertFalse(ConditionNodeEvaluator.evaluate(rule_tree, CS2_GSI_SAMPLE_PAYLOAD, "cs2.exe"))
 
-        # Mutate HP to 15: should MATCH
-        critical_gsi = copy.deepcopy(CS2_GSI_SAMPLE_PAYLOAD)
-        critical_gsi["player"]["state"]["health"] = 15
-        self.assertTrue(ConditionNodeEvaluator.evaluate(rule_tree, critical_gsi, "cs2.exe"))
 
-    def test_t3_05_dynamic_event_to_overlay_manager_pulse_and_crossfade(self):
-        """T3_05: CS2 Kill Event -> OverlayManager Pulse -> Crossfade Blend -> Expiry Restoration."""
-        mgr = OverlayManagerModel()
-        # Base profile is cyan (0, 255, 255)
-        base_color = (0, 255, 255)
-        # Kill pulse is gold (255, 215, 0), duration 1000ms, fade 400ms
-        mgr.trigger_overlay("event.kill", (255, 215, 0), duration_ms=1000, fade_ms=400, trigger_time_ms=0)
-
-        # 1. During full pulse (t = 200ms, alpha = 1.0)
-        c1 = mgr.blend_frames(base_color, current_ms=200)
-        self.assertEqual(c1, (255, 215, 0))
-
-        # 2. During crossfade (t = 800ms, alpha = (1000-800)/400 = 0.5)
-        c2 = mgr.blend_frames(base_color, current_ms=800)
-        self.assertEqual(c2, (128, 235, 128))
-
-        # 3. After expiry (t = 1200ms)
-        mgr.evict_expired(current_ms=1200)
-        c3 = mgr.blend_frames(base_color, current_ms=1200)
-        self.assertEqual(c3, base_color)
-
-    def test_t3_06_orchestrator_ui_to_json_export_to_config_roundtrip(self):
-        """T3_06: Visual Orchestrator -> Declarative JSON -> config.json Save -> Ingestion."""
-        orchestrator_payload = {
-            "orchestration": {
-                "rules": [
-                    {
-                        "id": "cs2_main",
-                        "process": "cs2.exe",
-                        "dnd": True,
-                        "condition": {"field": "player.state.health", "op": ">", "value": 0},
-                        "target_profile": "cs2_play"
-                    }
-                ],
-                "event_overlays": [
-                    {"event": "event.kill", "effect": "kill_pulse", "duration_ms": 1200, "fade_ms": 400}
-                ],
-                "fallback_profile": "static"
-            }
-        }
-        raw = json.dumps(orchestrator_payload)
-        parsed = json.loads(raw)
-        self.assertEqual(len(parsed["orchestration"]["rules"]), 1)
-        self.assertEqual(len(parsed["orchestration"]["event_overlays"]), 1)
-        self.assertTrue(parsed["orchestration"]["rules"][0]["dnd"])
 
     def test_t3_07_live_preview_js_to_preview_api_hex_stream(self):
         """T3_07: Live Preview JS Execution -> Frame Generation -> Preview API 408-Char Hex Stream."""
@@ -1969,50 +1503,8 @@ class TestTier3CrossFeatureCombinations(unittest.TestCase):
         self.assertEqual(streamer.rendered_frames[0], (255, 0, 0))
         self.assertEqual(streamer.rendered_frames[9], (0, 255, 0))
 
-    def test_t3_09_extreme_gsi_inputs_across_transpiler_and_condition_engine(self):
-        """T3_09: Extreme GSI Inputs (-100 HP, NaN armor, empty bomb) handled gracefully without crash."""
-        extreme_gsi = {
-            "player": {"state": {"health": -100, "armor": float("nan")}},
-            "round": {"bomb": ""}
-        }
-        node = {"field": "player.state.health", "op": ">", "value": 0}
-        self.assertFalse(ConditionNodeEvaluator.evaluate(node, extreme_gsi))
 
-    def test_t3_10_multi_layer_overlay_stack_composite_blending(self):
-        """T3_10: Multi-layer Overlay Stack: Bomb Alert + Flashbang Whiteout composite resolution."""
-        mgr = OverlayManagerModel()
-        # Layer 1: Bomb pulse (red, priority 10)
-        mgr.trigger_overlay("event.bomb", (255, 0, 0), duration_ms=2000, fade_ms=500, priority=10, trigger_time_ms=0)
-        # Layer 2: Flashbang (white, priority 30, triggers at 500ms)
-        mgr.trigger_overlay("event.flash", (255, 255, 255), duration_ms=1000, fade_ms=500, priority=30, trigger_time_ms=500)
 
-        # At t = 200ms: only Bomb pulse active (red)
-        c1 = mgr.blend_frames((0, 0, 0), current_ms=200)
-        self.assertEqual(c1, (255, 0, 0))
-
-        # At t = 600ms: Flash active (alpha = 1.0, high priority dominates)
-        c2 = mgr.blend_frames((0, 0, 0), current_ms=600)
-        self.assertEqual(c2, (255, 255, 255))
-
-    def test_t3_11_legacy_config_ingestion_and_roundtrip_identity(self):
-        """T3_11: Ingest legacy config.json -> Auto-migrate -> Full round-trip preserves all rules."""
-        legacy = {
-            "default_profile": "custom_keymap",
-            "rules": [{"process": "cs2.exe", "profile": "cs2_pro"}],
-            "gsi_bindings": [{"field": "player_state.health", "operator": "<", "value": 20, "profile": "low_hp"}]
-        }
-        migrated = copy.deepcopy(legacy)
-        migrated["orchestration"] = {
-            "rules": [
-                {"id": "r0", "process": "cs2.exe", "dnd": False, "target_profile": "cs2_pro"},
-                {"id": "r1", "process": "*", "dnd": False, "condition": {"field": "player.state.health", "op": "<", "value": 20}, "target_profile": "low_hp"}
-            ],
-            "event_overlays": [],
-            "fallback_profile": "custom_keymap"
-        }
-        s = json.dumps(migrated)
-        reloaded = json.loads(s)
-        self.assertEqual(reloaded["orchestration"]["rules"][0]["process"], "cs2.exe")
 
     def test_t3_12_compiler_failure_error_reporting_isolation(self):
         """T3_12: Compiler failure in web pipeline reports cleanly without crashing daemon or web server."""
@@ -2034,70 +1526,7 @@ class TestTier3CrossFeatureCombinations(unittest.TestCase):
 class TestTier4RealWorldScenarios(unittest.TestCase):
     """Tier 4: Realistic end-to-end workflows and competitive gaming scenarios."""
 
-    def test_t4_01_cs2_dynamic_health_bar_and_kill_pulse_scenario(self):
-        """T4_01: CS2 Dynamic Health Bar & Kill Pulse: Transpiler -> DLL -> GSI Telemetry -> Kill Overlay."""
-        # 1. User designs health-reactive effect in Blockly (green when high HP, red when low)
-        body = """
-        double hp = 100.0;
-        if (gsi != nullptr) {
-            hp = gsi->GetNumber("player.state.health", 100.0);
-        }
-        const double factor = std::clamp(hp / 100.0, 0.0, 1.0);
-        const uint8_t r = static_cast<uint8_t>(std::clamp((1.0 - factor) * 255.0, 0.0, 255.0));
-        const uint8_t g = static_cast<uint8_t>(std::clamp(factor * 255.0, 0.0, 255.0));
-        out_frame.Fill(r, g, 0);
-        """
-        cpp = CppTranspilerModel.generate_cpp_source("CS2HealthBar", body)
-        ok, violations = CppTranspilerModel.check_zero_allocations(cpp)
-        self.assertTrue(ok, f"Violations: {violations}")
 
-        # 2. Simulate health bar rendering at 75 HP
-        hp_factor = 75.0 / 100.0
-        base_color = (int(round((1.0 - hp_factor) * 255)), int(round(hp_factor * 255)), 0)  # (64, 191, 0)
-
-        # 3. Player gets a kill: OverlayManager triggers gold pulse for 1200ms with 400ms fade
-        mgr = OverlayManagerModel()
-        mgr.trigger_overlay("event.kill", (255, 215, 0), duration_ms=1200, fade_ms=400, trigger_time_ms=1000)
-
-        # Check full pulse active at 1500ms
-        frame_mid = mgr.blend_frames(base_color, current_ms=1500)
-        self.assertEqual(frame_mid, (255, 215, 0))
-
-        # Check linear fade restoration at 2000ms (alpha = 0.5)
-        frame_fade = mgr.blend_frames(base_color, current_ms=2000)
-        self.assertEqual(frame_fade[0], int(round(base_color[0] * 0.5 + 255 * 0.5)))
-
-        # Check restoration to base health bar at 2300ms
-        mgr.evict_expired(current_ms=2300)
-        frame_restored = mgr.blend_frames(base_color, current_ms=2300)
-        self.assertEqual(frame_restored, base_color)
-
-    def test_t4_02_bomb_plant_countdown_flash_overlay_scenario(self):
-        """T4_02: Bomb Plant Countdown Flash Overlay: ConditionNode triggers bomb alert, flashbang overlays."""
-        # 1. Continuous state tree detects C4 planted
-        bomb_condition = {"field": "round.bomb", "op": "==", "value": "planted"}
-        is_planted = ConditionNodeEvaluator.evaluate(bomb_condition, CS2_GSI_SAMPLE_PAYLOAD)
-        self.assertTrue(is_planted)
-
-        # 2. Base profile pulses red at 2 Hz
-        base_color = (255, 0, 0)
-
-        # 3. Enemy throws flashbang: OverlayManager triggers full white flash (duration 2000ms, fade 1000ms)
-        mgr = OverlayManagerModel()
-        mgr.trigger_overlay("event.flash", (255, 255, 255), duration_ms=2000, fade_ms=1000, priority=50, trigger_time_ms=0)
-
-        # During flash (t = 500ms): entire keyboard is white
-        white_frame = mgr.blend_frames(base_color, current_ms=500)
-        self.assertEqual(white_frame, (255, 255, 255))
-
-        # Mid-fade (t = 1500ms): alpha = 0.5 -> blend of white and red
-        fade_frame = mgr.blend_frames(base_color, current_ms=1500)
-        self.assertEqual(fade_frame, (255, 128, 128))
-
-        # After flash clears (t = 2500ms): keyboard resumes red bomb countdown pulse
-        mgr.evict_expired(current_ms=2500)
-        restored = mgr.blend_frames(base_color, current_ms=2500)
-        self.assertEqual(restored, base_color)
 
     def test_t4_03_wasd_reactive_spark_with_wave_sweep_scenario(self):
         """T4_03: WASD Reactive Spark with Wave Sweep: Geometry blocks, JS live preview, and 0-alloc C++."""
@@ -2128,121 +1557,7 @@ class TestTier4RealWorldScenarios(unittest.TestCase):
         self.assertEqual(render_preview("W"), (255, 255, 0))
         self.assertEqual(render_preview("SPACE"), (0, 50, 100))
 
-    def test_t4_04_compound_process_and_dnd_orchestration_scenario(self):
-        """T4_04: Compound Process + DND Orchestration: Window focus switching and DND suppression."""
-        rules = [
-            {
-                "id": "cs2_alive",
-                "process": "cs2.exe",
-                "dnd": True,
-                "condition": {"field": "player.state.health", "op": ">", "value": 0},
-                "target_profile": "cs2_competitive"
-            },
-            {
-                "id": "cs2_dead",
-                "process": "cs2.exe",
-                "dnd": True,
-                "condition": {"field": "player.state.health", "op": "==", "value": 0},
-                "target_profile": "cs2_spectator"
-            },
-            {
-                "id": "code_rule",
-                "process": "devenv.exe",
-                "dnd": False,
-                "condition": {},
-                "target_profile": "coding_matrix"
-            }
-        ]
-        fallback_profile = "desktop_static"
 
-        def evaluate_rules(proc: str, gsi: Dict[str, Any]) -> Tuple[str, bool]:
-            for r in rules:
-                if ConditionNodeEvaluator.evaluate({"field": "process.name", "op": "==", "value": r["process"]}, {}, proc):
-                    if ConditionNodeEvaluator.evaluate(r.get("condition", {}), gsi, proc):
-                        return r["target_profile"], r["dnd"]
-            return fallback_profile, False
-
-        # 1. Desktop focus -> fallback profile, DND false
-        p1, dnd1 = evaluate_rules("explorer.exe", CS2_GSI_SAMPLE_PAYLOAD)
-        self.assertEqual(p1, "desktop_static")
-        self.assertFalse(dnd1)
-
-        # 2. Visual Studio focus -> coding_matrix, DND false
-        p2, dnd2 = evaluate_rules("devenv.exe", CS2_GSI_SAMPLE_PAYLOAD)
-        self.assertEqual(p2, "coding_matrix")
-        self.assertFalse(dnd2)
-
-        # 3. CS2 alive -> cs2_competitive, DND true
-        p3, dnd3 = evaluate_rules("cs2.exe", CS2_GSI_SAMPLE_PAYLOAD)
-        self.assertEqual(p3, "cs2_competitive")
-        self.assertTrue(dnd3)
-
-        # 4. CS2 dead (0 HP) -> cs2_spectator, DND true
-        dead_gsi = copy.deepcopy(CS2_GSI_SAMPLE_PAYLOAD)
-        dead_gsi["player"]["state"]["health"] = 0
-        p4, dnd4 = evaluate_rules("cs2.exe", dead_gsi)
-        self.assertEqual(p4, "cs2_spectator")
-        self.assertTrue(dnd4)
-
-    def test_t4_05_full_roundtrip_config_save_and_ui_restore_scenario(self):
-        """T4_05: Full Round-Trip Config Save & UI Restore: Dual-layer JSON save, reload, and AST equivalence."""
-        full_config = {
-            "default_profile": "desktop_static",
-            "fps": 25,
-            "orchestration": {
-                "rules": [
-                    {
-                        "id": "rule_cs2",
-                        "process": "cs2.exe",
-                        "dnd": True,
-                        "condition": {
-                            "type": "and",
-                            "conditions": [
-                                {"field": "player.state.health", "op": ">", "value": 0},
-                                {"field": "round.bomb", "op": "!=", "value": "exploded"}
-                            ]
-                        },
-                        "target_profile": "cs2_pro"
-                    }
-                ],
-                "event_overlays": [
-                    {"event": "event.kill", "effect": "kill_pulse", "duration_ms": 1200, "fade_ms": 400},
-                    {"event": "event.flash", "effect": "white_flash", "duration_ms": 2000, "fade_ms": 1000}
-                ],
-                "fallback_profile": "desktop_static"
-            },
-            "blockly_orchestrator": {
-                "version": 1,
-                "blocks": [
-                    {"type": "orchestrator_root", "id": "root_1", "x": 50, "y": 50},
-                    {"type": "match_process", "id": "proc_1", "x": 100, "y": 150}
-                ]
-            },
-            "blockly_effects": {
-                "rainbow_wave": {
-                    "version": 1,
-                    "blocks": [{"type": "time_wave", "id": "wave_1", "x": 80, "y": 80}]
-                }
-            }
-        }
-
-        # 1. Serialize to JSON string (simulating web POST /api/config)
-        json_str = json.dumps(full_config, indent=2, ensure_ascii=False)
-        self.assertGreater(len(json_str), 500)
-
-        # 2. Deserialize (simulating daemon / UI load)
-        restored = json.loads(json_str)
-
-        # 3. Verify semantic equality across all layers
-        self.assertEqual(restored["default_profile"], full_config["default_profile"])
-        self.assertEqual(len(restored["orchestration"]["rules"]), 1)
-        self.assertEqual(len(restored["orchestration"]["event_overlays"]), 2)
-        self.assertEqual(len(restored["blockly_orchestrator"]["blocks"]), 2)
-        self.assertIn("rainbow_wave", restored["blockly_effects"])
-
-        # 4. Verify ConditionNode AST evaluation on restored config
-        restored_cond = restored["orchestration"]["rules"][0]["condition"]
-        self.assertTrue(ConditionNodeEvaluator.evaluate(restored_cond, CS2_GSI_SAMPLE_PAYLOAD))
 
 
 # ============================================================================

@@ -16,7 +16,6 @@
 #include "monitor/key_input_hub.h"
 #include "engine/plugin_interface.h"
 #include "engine/plugin_manager.h"
-#include "engine/overlay_manager.h"
 #include "engine/effect_engine.h"
 
 namespace aura {
@@ -30,41 +29,7 @@ int main() {
     // 因此全面使用 CHECK 宏，保证在 Release 与 Debug 下均具有真实校验力。
     int failures = 0;
 
-#ifdef AURA_STAGE0_FIXTURE_DIR
-    // Frozen/derived Stage 0 configs run through the unchanged legacy RuleEngine.
-    // This verifies compatibility only; no v2 promotion or execution is implemented.
-    {
-        const std::filesystem::path fixtures(AURA_STAGE0_FIXTURE_DIR);
-        aura::RuleEngine legacy;
-        CHECK(legacy.LoadConfig((fixtures / "legacy_rules_gsi_bindings.json").string()), "Stage 0 legacy rules/GSI config loads");
-        auto process_profile = legacy.MatchProfile("cs2.exe");
-        CHECK(process_profile && process_profile->name == "cs2_gamer", "Stage 0 legacy process mapping preserved");
-        aura::GsiState health;
-        health.UpdateFromPayload({{"player", {{"state", {{"health", 10}}}}}});
-        auto health_profile = legacy.MatchProfile("cs2.exe", &health);
-        CHECK(health_profile && health_profile->name == "danger_red", "Stage 0 legacy GSI precedence preserved");
 
-        aura::RuleEngine phase4;
-        CHECK(phase4.LoadConfig((fixtures / "phase4_dnd_application_rules.json").string()), "Stage 0 Phase 4 DND config loads");
-        CHECK(phase4.ShouldSuppressWebUi("cs2.exe"), "Stage 0 suppress_web_ui=true preserved");
-        CHECK(!phase4.ShouldSuppressWebUi("devenv.exe"), "Stage 0 suppress_web_ui=false preserved");
-        auto coding = phase4.MatchProfile("devenv.exe");
-        CHECK(coding && coding->name == "coding", "Stage 0 Phase 4 target preserved");
-
-        aura::RuleEngine orchestration;
-        CHECK(orchestration.LoadConfig((fixtures / "legacy_orchestration_event_overlays.json").string()), "Stage 0 orchestration/event_overlays config loads");
-        auto danger = orchestration.MatchProfile("cs2.exe", &health);
-        CHECK(danger && danger->name == "danger_high_priority", "Stage 0 orchestration AST preserved");
-        CHECK(orchestration.ShouldSuppressWebUi("cs2.exe", &health), "Stage 0 rule-level dnd preserved");
-        const auto overlays = orchestration.GetEventOverlayRules();
-        CHECK(overlays.size() == 1, "Stage 0 legacy overlay retained");
-        if (!overlays.empty()) {
-            CHECK(overlays[0].event == "event.kill" && overlays[0].duration_ms == 900 &&
-                  overlays[0].attack_ms == 60 && overlays[0].fade_out_ms == 300 &&
-                  overlays[0].blend_mode == "replace", "Stage 0 legacy overlay fields preserved");
-        }
-    }
-#endif
 
     std::cout << "=========================================================\n";
     std::cout << "  GSI 前台进程隔离与绑定仲裁专项单元测试\n";
@@ -197,7 +162,7 @@ int main() {
         {"round", {{"phase", "freezetime"}}}
     };
     event_state.UpdateFromPayload(s0);
-    CHECK(event_state.Evaluate("event.freezetime", "==", true),
+    CHECK(event_state.GetBool("event.freezetime"),
           "初始回合整备阶段: event.freezetime 为 true");
 
     // 跃迁 1: 回合开始交火 (RoundStarted)
@@ -206,8 +171,8 @@ int main() {
         {"round", {{"phase", "live"}}}
     };
     event_state.UpdateFromPayload(s1);
-    CHECK(event_state.Evaluate("event.round_started", "==", true) &&
-          event_state.Evaluate("event.last_event", "==", "RoundStarted"),
+    CHECK(event_state.GetBool("event.round_started") &&
+          (std::string(event_state.GetString("event.last_event")) == "RoundStarted"),
           "回合开局事件: 成功触发 RoundStarted (event.round_started == true)");
 
     // 跃迁 2: 玩家受到伤害 (PlayerTookDamage: 100 -> 68)
@@ -219,8 +184,8 @@ int main() {
         }}
     };
     event_state.UpdateFromPayload(s2);
-    CHECK(event_state.Evaluate("event.damage", "==", true) &&
-          event_state.Evaluate("event.last_event", "==", "PlayerTookDamage"),
+    CHECK(event_state.GetBool("event.damage") &&
+          (std::string(event_state.GetString("event.last_event")) == "PlayerTookDamage"),
           "受到伤害事件: 成功触发 PlayerTookDamage (event.damage == true, 剩余生命: 68)");
 
     // 跃迁 3: 玩家获得爆头击杀 (PlayerGotKill & PlayerGotHeadshotKill: kills 0 -> 1, hs 0 -> 1)
@@ -232,8 +197,8 @@ int main() {
         }}
     };
     event_state.UpdateFromPayload(s3);
-    CHECK(event_state.Evaluate("event.kill", "==", true) &&
-          event_state.Evaluate("event.headshot", "==", true),
+    CHECK(event_state.GetBool("event.kill") &&
+          event_state.GetBool("event.headshot"),
           "击杀与爆头事件: 成功触发 PlayerGotKill & PlayerGotHeadshotKill");
 
     // 跃迁 4: C4 炸弹安放 (BombPlanted)
@@ -242,7 +207,7 @@ int main() {
         {"bomb", {{"state", "planted"}, {"countdown", 40.0}}}
     };
     event_state.UpdateFromPayload(s4);
-    CHECK(event_state.Evaluate("event.bomb_planted", "==", true),
+    CHECK(event_state.GetBool("event.bomb_planted"),
           "炸弹安放事件: 成功触发 BombPlanted (event.bomb_planted == true)");
 
     // 跃迁 5: C4 拆除成功 (BombDefused)
@@ -251,7 +216,7 @@ int main() {
         {"bomb", {{"state", "defused"}}}
     };
     event_state.UpdateFromPayload(s5);
-    CHECK(event_state.Evaluate("event.bomb_defused", "==", true),
+    CHECK(event_state.GetBool("event.bomb_defused"),
           "炸弹拆除事件: 成功触发 BombDefused (event.bomb_defused == true)");
 
     // 跃迁 6: 我方阵营回合获胜 (TeamRoundVictory)
@@ -260,7 +225,7 @@ int main() {
         {"round", {{"phase", "over"}, {"win_team", "CT"}}}
     };
     event_state.UpdateFromPayload(s6);
-    CHECK(event_state.Evaluate("event.round_victory", "==", true),
+    CHECK(event_state.GetBool("event.round_victory"),
           "回合胜利事件: 成功触发 TeamRoundVictory (event.round_victory == true)");
 
     // 验证事件流与 JSON 导出结构
@@ -270,34 +235,6 @@ int main() {
     if (j_ok) {
         std::cout << "         最新事件: " << j_full["events"][0]["name"].get<std::string>() 
                   << " (" << j_full["events"][0]["label"].get<std::string>() << ")\n";
-    }
-
-    // 6. [R1 回归护栏] op=="!=" 曾经递归调用公开的 Evaluate()，对不可重入的 std::mutex 二次加锁，
-    //    会让整个 daemon 在规则匹配阶段死锁。此处验证：① 不再死锁（进程能跑完）；
-    //    ② "!=" 的判定结果正确。
-    std::cout << "\n[测试 6] 验证 op==\"!=\" 不再重入死锁且结果正确 (R1 回归护栏)...\n";
-    {
-        aura::GsiState neg_state;
-        nlohmann::json neg_payload = {
-            {"player", {{"state", {{"health", 100}, {"armor", 100}}}}}
-        };
-        neg_state.UpdateFromPayload(neg_payload);
-
-        const bool ne_true  = neg_state.Evaluate("player_state.health", "!=", 1);   // 100 != 1   -> true
-        const bool ne_false = neg_state.Evaluate("player_state.health", "!=", 100); // 100 != 100 -> false
-        const bool ne_missing = neg_state.Evaluate("no.such.field", "!=", 1);
-
-        CHECK(ne_true, "player_state.health != 1   -> true  (未死锁)");
-        CHECK(!ne_false, "player_state.health != 100 -> false (未死锁)");
-        CHECK(!ne_missing, "缺失字段 no.such.field != 1 -> false (查找失败早退返回 false)");
-
-        // 连续多次调用（模拟主循环每帧对多条绑定求值），确认无重入/无自锁
-        bool loop_ok = true;
-        for (int i = 0; i < 200; ++i) {
-            neg_state.Evaluate("event.kill", "!=", true);
-            neg_state.Evaluate("player_state.health", "!=", 0);
-        }
-        CHECK(loop_ok, "400 次连续 \"!=\" 求值（含 event.* 脉冲字段）全部返回，无重入死锁");
     }
 
     // 7. [R6 路径穿越防御回归测试]
@@ -534,33 +471,247 @@ int main() {
         {
             std::ofstream ofs(tmp_period_cfg);
             ofs << R"json({
-                "default_profile": "prof_normal",
-                "rules": [
-                    { "process": "p0.exe", "profile": "prof_zero" },
-                    { "process": "p1.exe", "profile": "prof_one" },
-                    { "process": "p2.exe", "profile": "prof_two" },
-                    { "process": "p33.exe", "profile": "prof_thirtythree" },
-                    { "process": "pneg.exe", "profile": "prof_negative" },
-                    { "process": "pstr.exe", "profile": "prof_string" },
-                    { "process": "phuge.exe", "profile": "prof_huge" },
-                    { "process": "pfloat.exe", "profile": "prof_float" },
-                    { "process": "pnull.exe", "profile": "prof_null" },
-                    { "process": "pbool.exe", "profile": "prof_bool" }
-                ],
-                "profiles": {
-                    "prof_normal": { "type": "static", "color": [10, 20, 30] },
-                    "prof_zero": { "type": "breathing", "period_ms": 0 },
-                    "prof_one": { "type": "current", "period_ms": 1, "color": [0, 240, 255] },
-                    "prof_two": { "type": "current", "period_ms": 2, "color": [0, 240, 255] },
-                    "prof_thirtythree": { "type": "current", "period_ms": 33, "color": [0, 240, 255] },
-                    "prof_negative": { "type": "wave", "period_ms": -100 },
-                    "prof_string": { "type": "color_cycle", "period_ms": "fast" },
-                    "prof_huge": { "type": "wave", "period_ms": 10000000000000000000 },
-                    "prof_float": { "type": "color_cycle", "period_ms": 100.5 },
-                    "prof_null": { "type": "breathing", "period_ms": null },
-                    "prof_bool": { "type": "raindrop", "period_ms": true }
-                }
-            })json";
+  "default_profile": "prof_normal",
+  "profiles": {
+    "prof_normal": {
+      "type": "static",
+      "color": [
+        10,
+        20,
+        30
+      ]
+    },
+    "prof_zero": {
+      "type": "breathing",
+      "period_ms": 0
+    },
+    "prof_one": {
+      "type": "current",
+      "period_ms": 1,
+      "color": [
+        0,
+        240,
+        255
+      ]
+    },
+    "prof_two": {
+      "type": "current",
+      "period_ms": 2,
+      "color": [
+        0,
+        240,
+        255
+      ]
+    },
+    "prof_thirtythree": {
+      "type": "current",
+      "period_ms": 33,
+      "color": [
+        0,
+        240,
+        255
+      ]
+    },
+    "prof_negative": {
+      "type": "wave",
+      "period_ms": -100
+    },
+    "prof_string": {
+      "type": "color_cycle",
+      "period_ms": "fast"
+    },
+    "prof_huge": {
+      "type": "wave",
+      "period_ms": 10000000000000000000
+    },
+    "prof_float": {
+      "type": "color_cycle",
+      "period_ms": 100.5
+    },
+    "prof_null": {
+      "type": "breathing",
+      "period_ms": null
+    },
+    "prof_bool": {
+      "type": "raindrop",
+      "period_ms": true
+    }
+  },
+  "orchestration": {
+    "rules": [
+      {
+        "id": "process-0",
+        "model": "automation_v2",
+        "when": {
+          "mode": "state",
+          "condition": {
+            "field": "process",
+            "op": "==",
+            "value": "p0.exe"
+          }
+        },
+        "action": {
+          "type": "activate_profile",
+          "profile": "prof_zero"
+        },
+        "dnd": false
+      },
+      {
+        "id": "process-1",
+        "model": "automation_v2",
+        "when": {
+          "mode": "state",
+          "condition": {
+            "field": "process",
+            "op": "==",
+            "value": "p1.exe"
+          }
+        },
+        "action": {
+          "type": "activate_profile",
+          "profile": "prof_one"
+        },
+        "dnd": false
+      },
+      {
+        "id": "process-2",
+        "model": "automation_v2",
+        "when": {
+          "mode": "state",
+          "condition": {
+            "field": "process",
+            "op": "==",
+            "value": "p2.exe"
+          }
+        },
+        "action": {
+          "type": "activate_profile",
+          "profile": "prof_two"
+        },
+        "dnd": false
+      },
+      {
+        "id": "process-3",
+        "model": "automation_v2",
+        "when": {
+          "mode": "state",
+          "condition": {
+            "field": "process",
+            "op": "==",
+            "value": "p33.exe"
+          }
+        },
+        "action": {
+          "type": "activate_profile",
+          "profile": "prof_thirtythree"
+        },
+        "dnd": false
+      },
+      {
+        "id": "process-4",
+        "model": "automation_v2",
+        "when": {
+          "mode": "state",
+          "condition": {
+            "field": "process",
+            "op": "==",
+            "value": "pneg.exe"
+          }
+        },
+        "action": {
+          "type": "activate_profile",
+          "profile": "prof_negative"
+        },
+        "dnd": false
+      },
+      {
+        "id": "process-5",
+        "model": "automation_v2",
+        "when": {
+          "mode": "state",
+          "condition": {
+            "field": "process",
+            "op": "==",
+            "value": "pstr.exe"
+          }
+        },
+        "action": {
+          "type": "activate_profile",
+          "profile": "prof_string"
+        },
+        "dnd": false
+      },
+      {
+        "id": "process-6",
+        "model": "automation_v2",
+        "when": {
+          "mode": "state",
+          "condition": {
+            "field": "process",
+            "op": "==",
+            "value": "phuge.exe"
+          }
+        },
+        "action": {
+          "type": "activate_profile",
+          "profile": "prof_huge"
+        },
+        "dnd": false
+      },
+      {
+        "id": "process-7",
+        "model": "automation_v2",
+        "when": {
+          "mode": "state",
+          "condition": {
+            "field": "process",
+            "op": "==",
+            "value": "pfloat.exe"
+          }
+        },
+        "action": {
+          "type": "activate_profile",
+          "profile": "prof_float"
+        },
+        "dnd": false
+      },
+      {
+        "id": "process-8",
+        "model": "automation_v2",
+        "when": {
+          "mode": "state",
+          "condition": {
+            "field": "process",
+            "op": "==",
+            "value": "pnull.exe"
+          }
+        },
+        "action": {
+          "type": "activate_profile",
+          "profile": "prof_null"
+        },
+        "dnd": false
+      },
+      {
+        "id": "process-9",
+        "model": "automation_v2",
+        "when": {
+          "mode": "state",
+          "condition": {
+            "field": "process",
+            "op": "==",
+            "value": "pbool.exe"
+          }
+        },
+        "action": {
+          "type": "activate_profile",
+          "profile": "prof_bool"
+        },
+        "dnd": false
+      }
+    ]
+  }
+})json";
         }
 
         aura::RuleEngine period_engine;
@@ -631,37 +782,91 @@ int main() {
         {
             std::ofstream ofs(tmp_missing_rule_prof);
             ofs << R"json({
-                "default_profile": "desktop",
-                "rules": [
-                    { "process": "code.exe", "profile": "nonexistent_profile" }
-                ],
-                "profiles": {
-                    "desktop": { "type": "static", "color": [0, 80, 200] }
-                }
-            })json";
+  "default_profile": "desktop",
+  "profiles": {
+    "desktop": {
+      "type": "static",
+      "color": [
+        0,
+        80,
+        200
+      ]
+    }
+  },
+  "orchestration": {
+    "rules": [
+      {
+        "id": "process-0",
+        "model": "automation_v2",
+        "when": {
+          "mode": "state",
+          "condition": {
+            "field": "process",
+            "op": "==",
+            "value": "code.exe"
+          }
+        },
+        "action": {
+          "type": "activate_profile",
+          "profile": "nonexistent_profile"
+        },
+        "dnd": false
+      }
+    ]
+  }
+})json";
         }
         aura::RuleEngine engine_bad_rule;
         bool res_bad_rule = engine_bad_rule.LoadConfig(tmp_missing_rule_prof);
         CHECK(!res_bad_rule, "rules 引用未定义方案 (profile: 'nonexistent_profile') 时 LoadConfig 坚决拒绝并返回 false");
         std::filesystem::remove(tmp_missing_rule_prof);
 
-        // 10.3 gsi_bindings 引用不存在的 profile
+        // 10.3 V2 GSI 条件规则引用不存在的 profile
         const std::string tmp_missing_gsi_prof = (std::filesystem::temp_directory_path() / "test_cfg_missing_gsi_prof.json").string();
         {
             std::ofstream ofs(tmp_missing_gsi_prof);
             ofs << R"json({
-                "default_profile": "desktop",
-                "gsi_bindings": [
-                    { "field": "player_state.health", "operator": "<", "value": 20, "profile": "unreal_gsi_profile" }
-                ],
-                "profiles": {
-                    "desktop": { "type": "static", "color": [0, 80, 200] }
-                }
-            })json";
+  "default_profile": "desktop",
+  "profiles": {
+    "desktop": {
+      "type": "static",
+      "color": [
+        0,
+        80,
+        200
+      ]
+    }
+  },
+  "orchestration": {
+    "rules": [
+      {
+        "id": "binding-0",
+        "model": "automation_v2",
+        "scope": {
+          "field": "process",
+          "op": "==",
+          "value": "cs2.exe"
+        },
+        "when": {
+          "mode": "state",
+          "condition": {
+            "field": "player_state.health",
+            "op": "<",
+            "value": 20
+          }
+        },
+        "action": {
+          "type": "activate_profile",
+          "profile": "unreal_gsi_profile"
+        }
+      }
+    ]
+  }
+})json";
         }
         aura::RuleEngine engine_bad_gsi;
         bool res_bad_gsi = engine_bad_gsi.LoadConfig(tmp_missing_gsi_prof);
-        CHECK(!res_bad_gsi, "gsi_bindings 引用未定义方案时 LoadConfig 坚决拒绝并返回 false");
+        CHECK(!res_bad_gsi, "V2 GSI 条件规则引用未定义方案时 LoadConfig 坚决拒绝并返回 false");
         std::filesystem::remove(tmp_missing_gsi_prof);
 
         // 10.4 default_profile 引用不存在的 profile
@@ -694,14 +899,39 @@ int main() {
         {
             std::ofstream ofs(tmp_reload_cfg);
             ofs << R"json({
-                "default_profile": "prof_initial",
-                "rules": [
-                    { "process": "demo.exe", "profile": "prof_initial" }
-                ],
-                "profiles": {
-                    "prof_initial": { "type": "static", "color": [10, 20, 30] }
-                }
-            })json";
+  "default_profile": "prof_initial",
+  "profiles": {
+    "prof_initial": {
+      "type": "static",
+      "color": [
+        10,
+        20,
+        30
+      ]
+    }
+  },
+  "orchestration": {
+    "rules": [
+      {
+        "id": "process-0",
+        "model": "automation_v2",
+        "when": {
+          "mode": "state",
+          "condition": {
+            "field": "process",
+            "op": "==",
+            "value": "demo.exe"
+          }
+        },
+        "action": {
+          "type": "activate_profile",
+          "profile": "prof_initial"
+        },
+        "dnd": false
+      }
+    ]
+  }
+})json";
         }
         aura::RuleEngine reload_engine;
         CHECK(reload_engine.LoadConfig(tmp_reload_cfg), "初始合法配置加载成功");
@@ -716,14 +946,39 @@ int main() {
         {
             std::ofstream ofs(tmp_reload_cfg);
             ofs << R"json({
-                "default_profile": "prof_initial",
-                "rules": [
-                    { "process": "demo.exe", "profile": "nonexistent_profile" }
-                ],
-                "profiles": {
-                    "prof_initial": { "type": "static", "color": [10, 20, 30] }
-                }
-            })json";
+  "default_profile": "prof_initial",
+  "profiles": {
+    "prof_initial": {
+      "type": "static",
+      "color": [
+        10,
+        20,
+        30
+      ]
+    }
+  },
+  "orchestration": {
+    "rules": [
+      {
+        "id": "process-0",
+        "model": "automation_v2",
+        "when": {
+          "mode": "state",
+          "condition": {
+            "field": "process",
+            "op": "==",
+            "value": "demo.exe"
+          }
+        },
+        "action": {
+          "type": "activate_profile",
+          "profile": "nonexistent_profile"
+        },
+        "dnd": false
+      }
+    ]
+  }
+})json";
         }
         // 第一次调用 CheckAndReload: 检测到 mtime 改变，尝试重载失败并更新 last_write_time_
         bool reload_res1 = reload_engine.CheckAndReload();
@@ -743,14 +998,35 @@ int main() {
         {
             std::ofstream ofs(tmp_reload_cfg);
             ofs << R"json({
-                "default_profile": "prof_v2",
-                "rules": [
-                    { "process": "demo.exe", "profile": "prof_v2" }
-                ],
-                "profiles": {
-                    "prof_v2": { "type": "breathing", "period_ms": 2000 }
-                }
-            })json";
+  "default_profile": "prof_v2",
+  "profiles": {
+    "prof_v2": {
+      "type": "breathing",
+      "period_ms": 2000
+    }
+  },
+  "orchestration": {
+    "rules": [
+      {
+        "id": "process-0",
+        "model": "automation_v2",
+        "when": {
+          "mode": "state",
+          "condition": {
+            "field": "process",
+            "op": "==",
+            "value": "demo.exe"
+          }
+        },
+        "action": {
+          "type": "activate_profile",
+          "profile": "prof_v2"
+        },
+        "dnd": false
+      }
+    ]
+  }
+})json";
         }
         bool reload_res3 = reload_engine.CheckAndReload();
         CHECK(reload_res3, "修复配置文件后，mtime 变化触发重载成功");
@@ -768,14 +1044,39 @@ int main() {
         {
             std::ofstream ofs(tmp_heal_cfg);
             ofs << R"json({
-                "default_profile": "desktop",
-                "rules": [
-                    { "process": "heal.exe", "profile": "broken_profile" }
-                ],
-                "profiles": {
-                    "desktop": { "type": "static", "color": [10, 20, 30] }
-                }
-            })json";
+  "default_profile": "desktop",
+  "profiles": {
+    "desktop": {
+      "type": "static",
+      "color": [
+        10,
+        20,
+        30
+      ]
+    }
+  },
+  "orchestration": {
+    "rules": [
+      {
+        "id": "process-0",
+        "model": "automation_v2",
+        "when": {
+          "mode": "state",
+          "condition": {
+            "field": "process",
+            "op": "==",
+            "value": "heal.exe"
+          }
+        },
+        "action": {
+          "type": "activate_profile",
+          "profile": "broken_profile"
+        },
+        "dnd": false
+      }
+    ]
+  }
+})json";
         }
         aura::RuleEngine heal_engine;
         bool init_ok = heal_engine.LoadConfig(tmp_heal_cfg);
@@ -790,14 +1091,35 @@ int main() {
         {
             std::ofstream ofs(tmp_heal_cfg);
             ofs << R"json({
-                "default_profile": "desktop",
-                "rules": [
-                    { "process": "heal.exe", "profile": "desktop" }
-                ],
-                "profiles": {
-                    "desktop": { "type": "breathing", "period_ms": 1500 }
-                }
-            })json";
+  "default_profile": "desktop",
+  "profiles": {
+    "desktop": {
+      "type": "breathing",
+      "period_ms": 1500
+    }
+  },
+  "orchestration": {
+    "rules": [
+      {
+        "id": "process-0",
+        "model": "automation_v2",
+        "when": {
+          "mode": "state",
+          "condition": {
+            "field": "process",
+            "op": "==",
+            "value": "heal.exe"
+          }
+        },
+        "action": {
+          "type": "activate_profile",
+          "profile": "desktop"
+        },
+        "dnd": false
+      }
+    ]
+  }
+})json";
         }
         bool heal_res = heal_engine.CheckAndReload();
         CHECK(heal_res, "配置文件修复后，CheckAndReload 成功自愈重载生效");
@@ -866,12 +1188,14 @@ int main() {
         {
             std::ofstream ofs(tmp_bad_rules);
             ofs << R"json({
-                "default_profile": "desktop",
-                "rules": "not_an_array",
-                "profiles": {
-                    "desktop": { "type": "static" }
-                }
-            })json";
+  "default_profile": "desktop",
+  "profiles": {
+    "desktop": {
+      "type": "static"
+    }
+  },
+  "rules": "not_an_array"
+})json";
         }
         aura::RuleEngine engine_bad_rules;
         CHECK(!engine_bad_rules.LoadConfig(tmp_bad_rules), "rules 字段非数组时 LoadConfig 拦截并返回 false");
@@ -1806,361 +2130,13 @@ int main() {
     }
 
     // =========================================================================
-    // 23. ConditionNode AST 递归逻辑与多条件运算验证
-    // =========================================================================
-    std::cout << "\n[测试 23] ConditionNode AST 递归逻辑与多条件运算验证...\n";
+    // Preview and plugin path protections remain independent of Automation authoring.
     {
-        aura::GsiState gsi;
-        nlohmann::json payload = {
-            {"player", {
-                {"state", {
-                    {"health", 18},
-                    {"armor", 85},
-                    {"flashed", 120}
-                }},
-                {"activity", "playing"},
-                {"match_stats", {
-                    {"kills", 3},
-                    {"assists", 1}
-                }}
-            }},
-            {"round", {
-                {"phase", "live"},
-                {"bomb", "planted"}
-            }}
-        };
-        gsi.UpdateFromPayload(payload);
-
-        // 1. 叶子节点比较运算符 (Eq, Ne, Lt, Le, Gt, Ge)
-        {
-            aura::ConditionNode node_eq;
-            node_eq.field = "player.state.health";
-            node_eq.comp_op = aura::CompareOp::Eq;
-            node_eq.target_value = 18;
-            CHECK(node_eq.Evaluate(&gsi, "cs2.exe"), "叶子节点: health == 18 判定为 true");
-
-            aura::ConditionNode node_ne;
-            node_ne.field = "player.state.health";
-            node_ne.comp_op = aura::CompareOp::Ne;
-            node_ne.target_value = 100;
-            CHECK(node_ne.Evaluate(&gsi, "cs2.exe"), "叶子节点: health != 100 判定为 true");
-
-            aura::ConditionNode node_lt;
-            node_lt.field = "player.state.health";
-            node_lt.comp_op = aura::CompareOp::Lt;
-            node_lt.target_value = 20;
-            CHECK(node_lt.Evaluate(&gsi, "cs2.exe"), "叶子节点: health < 20 判定为 true");
-
-            aura::ConditionNode node_le;
-            node_le.field = "player.state.health";
-            node_le.comp_op = aura::CompareOp::Le;
-            node_le.target_value = 18;
-            CHECK(node_le.Evaluate(&gsi, "cs2.exe"), "叶子节点: health <= 18 判定为 true");
-
-            aura::ConditionNode node_gt;
-            node_gt.field = "player.state.armor";
-            node_gt.comp_op = aura::CompareOp::Gt;
-            node_gt.target_value = 50;
-            CHECK(node_gt.Evaluate(&gsi, "cs2.exe"), "叶子节点: armor > 50 判定为 true");
-
-            aura::ConditionNode node_ge;
-            node_ge.field = "player.state.armor";
-            node_ge.comp_op = aura::CompareOp::Ge;
-            node_ge.target_value = 85;
-            CHECK(node_ge.Evaluate(&gsi, "cs2.exe"), "叶子节点: armor >= 85 判定为 true");
-        }
-
-        // 2. 字符串与进程叶子节点
-        {
-            aura::ConditionNode node_bomb;
-            node_bomb.field = "round.bomb";
-            node_bomb.comp_op = aura::CompareOp::Eq;
-            node_bomb.target_value = "planted";
-            CHECK(node_bomb.Evaluate(&gsi, "cs2.exe"), "字符串字段: round.bomb == 'planted' 判定为 true");
-
-            aura::ConditionNode node_proc;
-            node_proc.field = "process";
-            node_proc.comp_op = aura::CompareOp::Eq;
-            node_proc.target_value = "cs2.exe";
-            CHECK(node_proc.Evaluate(&gsi, "cs2.exe"), "进程字段: process == 'cs2.exe' 判定为 true");
-            CHECK(!node_proc.Evaluate(&gsi, "code.exe"), "进程字段: process == 'cs2.exe' 在 code.exe 下判定为 false");
-        }
-
-        // 3. 逻辑运算与复合 AST 树
-        {
-            // AND 节点: (health < 20) AND (round.bomb == "planted")
-            aura::ConditionNode c1, c2, node_and;
-            c1.field = "player.state.health";
-            c1.comp_op = aura::CompareOp::Lt;
-            c1.target_value = 20;
-
-            c2.field = "round.bomb";
-            c2.comp_op = aura::CompareOp::Eq;
-            c2.target_value = "planted";
-
-            node_and.logic_op = aura::LogicOp::And;
-            node_and.children = {c1, c2};
-            CHECK(node_and.Evaluate(&gsi, "cs2.exe"), "复合 AND 树节点求值正确");
-
-            // OR 节点: (health == 100) OR (round.bomb == "planted")
-            aura::ConditionNode c_eq_100;
-            c_eq_100.field = "player.state.health";
-            c_eq_100.comp_op = aura::CompareOp::Eq;
-            c_eq_100.target_value = 100;
-
-            aura::ConditionNode node_or;
-            node_or.logic_op = aura::LogicOp::Or;
-            node_or.children = {c_eq_100, c2};
-            CHECK(node_or.Evaluate(&gsi, "cs2.exe"), "复合 OR 树节点 (false OR true) 求值正确");
-
-            // NOT 节点: NOT (health == 100)
-            aura::ConditionNode node_not;
-            node_not.logic_op = aura::LogicOp::Not;
-            node_not.children = {c_eq_100};
-            CHECK(node_not.Evaluate(&gsi, "cs2.exe"), "复合 NOT 节点求值正确");
-        }
-
-        // 4. JSON 序列化与反序列化双向一致性
-        {
-            nlohmann::json tree_json = {
-                {"op", "and"},
-                {"conditions", {
-                    {
-                        {"field", "process"},
-                        {"op", "=="},
-                        {"value", "cs2.exe"}
-                    },
-                    {
-                        {"op", "or"},
-                        {"conditions", {
-                            {{"field", "player.state.health"}, {"op", "<="}, {"value", 20}},
-                            {{"field", "round.bomb"}, {"op", "=="}, {"value", "planted"}}
-                        }}
-                    }
-                }}
-            };
-
-            auto parsed_tree = aura::ConditionNode::FromJson(tree_json);
-            CHECK(parsed_tree.Evaluate(&gsi, "cs2.exe"), "从 JSON 解析的高级 AST 树求值通过 (cs2.exe)");
-            CHECK(!parsed_tree.Evaluate(&gsi, "explorer.exe"), "从 JSON 解析的高级 AST 树在前台不是 cs2 时严格隔离返回 false");
-
-            nlohmann::json serialized = parsed_tree.ToJson();
-            CHECK(serialized.contains("op") && serialized["op"] == "and", "AST 序列化保留顶级 op 字段");
-            CHECK(serialized.contains("conditions") && serialized["conditions"].size() == 2, "AST 序列化保留 conditions 数组");
-            auto re_parsed = aura::ConditionNode::FromJson(serialized);
-            CHECK(re_parsed.Evaluate(&gsi, "cs2.exe"), "反序列化往返后求值结果完全一致");
-        }
-    }
-
-    // =========================================================================
-    // 24. OverlayManager CS2 瞬态覆盖光效驱动与生命周期/混合验证
-    // =========================================================================
-    std::cout << "\n[测试 24] OverlayManager CS2 瞬态覆盖光效驱动与生命周期/混合验证...\n";
-    {
-        aura::OverlayManager overlay_mgr;
-        aura::Keymap km;
-        std::string km_path = "tests/fixtures/calibrated_keymap.json";
-        if (!std::filesystem::exists(km_path)) {
-            km_path = "calibrated_keymap.json";
-        }
-        km.LoadFromJson(km_path);
-
-        // 注册覆盖光效绑定: event.kill, event.bomb_planted
-        aura::OverlayBinding b_kill;
-        b_kill.event_name = "event.kill";
-        b_kill.duration_ms = 1000;
-        b_kill.attack_ms = 100;
-        b_kill.fade_out_ms = 400;
-        b_kill.blend_mode = "replace";
-        b_kill.effect = std::make_shared<aura::StaticEffect>(aura::ColorRGB(255, 0, 0));
-        overlay_mgr.RegisterBinding(b_kill);
-
-        aura::OverlayBinding b_bomb;
-        b_bomb.event_name = "event.bomb_planted";
-        b_bomb.duration_ms = 2000;
-        b_bomb.attack_ms = 200;
-        b_bomb.fade_out_ms = 600;
-        b_bomb.blend_mode = "add";
-        b_bomb.effect = std::make_shared<aura::StaticEffect>(aura::ColorRGB(100, 50, 0));
-        overlay_mgr.RegisterBinding(b_bomb);
-
-        CHECK(overlay_mgr.GetActiveOverlayCount() == 0, "初始状态下无活跃覆盖光效");
-
-        // 模拟 GSI 遥测驱动边缘触发
-        aura::GsiState gsi;
-        nlohmann::json s_initial = {
-            {"player", {
-                {"state", {{"health", 100}, {"armor", 100}, {"round_kills", 0}, {"round_killhs", 0}}},
-                {"team", "CT"}
-            }},
-            {"round", {{"phase", "live"}, {"bomb", ""}}}
-        };
-        gsi.UpdateFromPayload(s_initial);
-        overlay_mgr.UpdateBindingsFromGsi(&gsi, 1000);
-        CHECK(overlay_mgr.GetActiveOverlayCount() == 0, "kills=0 时未触发覆盖光效");
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(20));
-
-        // kills: 0 -> 1 上升沿触发
-        nlohmann::json s_kill1 = {
-            {"player", {
-                {"state", {{"health", 100}, {"armor", 100}, {"round_kills", 1}, {"round_killhs", 0}}},
-                {"team", "CT"}
-            }},
-            {"round", {{"phase", "live"}, {"bomb", ""}}}
-        };
-        gsi.UpdateFromPayload(s_kill1);
-        overlay_mgr.UpdateBindingsFromGsi(&gsi, 2000);
-        CHECK(overlay_mgr.GetActiveOverlayCount() == 1, "kills 递增上升沿成功触发 event.kill 覆盖光效");
-
-        // 持续处于 kills=1，不应重复触发叠加
-        overlay_mgr.UpdateBindingsFromGsi(&gsi, 2100);
-        CHECK(overlay_mgr.GetActiveOverlayCount() == 1, "kills 保持不变不产生重复触发");
-
-        // 验证 ActiveOverlay 权重计算与各阶段特征
-        aura::ActiveOverlay ao;
-        ao.start_ms = 1000;
-        ao.attack_ms = 100;
-        ao.duration_ms = 1000;
-        ao.fade_out_ms = 400; // 阶段: [1000, 1100] 爬坡, [1100, 1600] 持续, [1600, 2000] 线性消退
-
-        CHECK(std::abs(ao.ComputeWeight(1000) - 0.0) < 0.05, "t=1000 起始时刻权重接近 0.0");
-        CHECK(std::abs(ao.ComputeWeight(1050) - 0.5) < 0.05, "t=1050 attack 中点时刻权重接近 0.5");
-        CHECK(std::abs(ao.ComputeWeight(1100) - 1.0) < 0.05, "t=1100 attack 终点时刻权重达到 1.0");
-        CHECK(std::abs(ao.ComputeWeight(1300) - 1.0) < 0.05, "t=1300 sustain 维持期权重保持 1.0");
-        CHECK(std::abs(ao.ComputeWeight(1800) - 0.5) < 0.05, "t=1800 fade_out 衰减中点权重接近 0.5");
-        CHECK(std::abs(ao.ComputeWeight(2000) - 0.0) < 0.05, "t=2000 结束时刻权重衰减至 0.0");
-        CHECK(ao.IsExpired(2001), "t=2001 标记为已过期");
-
-        // 验证 FrameBuffer 混合应用 (replace 与 add 模式)
-        aura::FrameBuffer base_frame;
-        // 底色深蓝 (0, 0, 100)
-        base_frame.Fill(0, 0, 100);
-
-        aura::FrameBuffer test_frame = base_frame;
-        // 在 peak 时刻 (t = 2100，duration=1000，start=2000，weight=1.0) 执行 ApplyOverlays (replace 模式纯红 255, 0, 0)
-        overlay_mgr.ApplyOverlays(2100, test_frame, km, &gsi);
-        CHECK(test_frame.buffer[0] == 255 && test_frame.buffer[1] == 0 && test_frame.buffer[2] == 0,
-              "replace 模式在峰值完全替换底色为 (255, 0, 0)");
-
-        // 在过期时刻 (t = 3100) 执行 ApplyOverlays，覆盖自动清理并无残留
-        test_frame = base_frame;
-        overlay_mgr.ApplyOverlays(3100, test_frame, km, &gsi);
-        CHECK(overlay_mgr.GetActiveOverlayCount() == 0, "过期后 active_overlays_ 自动被清除释放");
-        CHECK(test_frame.buffer[0] == 0 && test_frame.buffer[1] == 0 && test_frame.buffer[2] == 100,
-              "覆盖光效自然结束后底色完全平滑还原");
-    }
-
-    // =========================================================================
-    // 25. Orchestration Rules, Plugin 方案解析与 EffectEngine 预览机制验证
-    // =========================================================================
-    std::cout << "\n[测试 25] Orchestration Rules, Plugin 方案解析与 EffectEngine 预览机制验证...\n";
-    {
-        // 1. 验证 RuleEngine 加载 orchestration.rules 配置
-        const std::string tmp_orch_cfg = (std::filesystem::temp_directory_path() / "test_cfg_orchestration.json").string();
-        {
-            std::ofstream ofs(tmp_orch_cfg);
-            ofs << R"json({
-                "default_profile": "desktop_prof",
-                "fps": 25,
-                "profiles": {
-                    "desktop_prof": {
-                        "type": "static",
-                        "color": [10, 20, 30]
-                    },
-                    "cs2_base": {
-                        "type": "breathing",
-                        "color": [0, 255, 100]
-                    },
-                    "danger_high_priority": {
-                        "type": "static",
-                        "color": [255, 0, 0]
-                    },
-                    "custom_plugin_prof": {
-                        "type": "plugin",
-                        "plugin_path": "plugins/nonexistent_plugin.dll",
-                        "effect_name": "NonexistentEffect"
-                    }
-                },
-                "orchestration": {
-                    "rules": [
-                        {
-                            "id": "rule_cs2_danger",
-                            "name": "CS2 Critical Low Health Alert",
-                            "process": "cs2.exe",
-                            "dnd": true,
-                            "condition": {
-                                "op": "and",
-                                "conditions": [
-                                    {"field": "process", "op": "==", "value": "cs2.exe"},
-                                    {"field": "player.state.health", "op": "<", "value": 25}
-                                ]
-                            },
-                            "profile": "danger_high_priority"
-                        },
-                        {
-                            "id": "rule_cs2_normal",
-                            "name": "CS2 Normal Ingame",
-                            "process": "cs2.exe",
-                            "condition": {
-                                "field": "process",
-                                "op": "==",
-                                "value": "cs2.exe"
-                            },
-                            "profile": "cs2_base"
-                        }
-                    ],
-                    "event_overlays": [
-                        {
-                            "event": "event.kill",
-                            "name": "Kill Splash",
-                            "effect": "danger_high_priority",
-                            "duration_ms": 900,
-                            "attack_ms": 60,
-                            "fade_out_ms": 300,
-                            "blend_mode": "replace"
-                        }
-                    ],
-                    "fallback_profile": "desktop_prof"
-                }
-            })json";
-        }
-
         aura::RuleEngine engine;
-        bool loaded_orch = engine.LoadConfig(tmp_orch_cfg);
-        CHECK(loaded_orch, "成功加载包含 orchestration 完整规范的配置文件");
-
-        const auto& orch = engine.GetOrchestration();
-        CHECK(orch.rules.size() == 2, "成功解析 2 条现代 AST orchestration rules");
-        CHECK(orch.event_overlays.size() == 1, "成功解析 1 条 event_overlays 瞬态事件覆盖规则");
-        CHECK(orch.event_overlays[0].event == "event.kill", "event_overlay 事件名称解析为 event.kill");
-
-        // 验证插件 profile 解析无异常回退
-        CHECK(engine.HasProfile("custom_plugin_prof"), "插件类型 profile 成功解析注册到 Profile 表中");
-
-        // 验证 AST 优先级驱动匹配: cs2.exe 满血 -> cs2_base
         aura::GsiState gsi;
-        nlohmann::json s_full = {
-            {"player", {{"state", {{"health", 100}}}}}
-        };
-        gsi.UpdateFromPayload(s_full);
-        auto p_match1 = engine.MatchProfile("cs2.exe", &gsi);
-        CHECK(p_match1 != nullptr && p_match1->name == "cs2_base", "满血状态下命中 cs2_base");
-        CHECK(!engine.ShouldSuppressWebUi("cs2.exe", &gsi), "cs2_base 规则未开启 DND，ShouldSuppressWebUi 为 false");
-
-        // cs2.exe 残血 (health = 15 < 25) -> danger_high_priority
-        nlohmann::json s_low = {
-            {"player", {{"state", {{"health", 15}}}}}
-        };
-        gsi.UpdateFromPayload(s_low);
-        auto p_match2 = engine.MatchProfile("cs2.exe", &gsi);
-        CHECK(p_match2 != nullptr && p_match2->name == "danger_high_priority", "残血状态下 AST 规则优先命中 danger_high_priority");
-        CHECK(engine.ShouldSuppressWebUi("cs2.exe", &gsi), "danger_high_priority 规则配置 dnd=true，ShouldSuppressWebUi 返回 true");
-
-        // 非目标前台进程 (code.exe) -> fallback desktop_prof
-        auto p_match3 = engine.MatchProfile("code.exe", &gsi);
-        CHECK(p_match3 != nullptr && p_match3->name == "desktop_prof", "非 cs2 进程回退为 fallback_profile (desktop_prof)");
-
+        const auto tmp_orch_cfg=(std::filesystem::temp_directory_path()/"test-preview.json").string();
+        { std::ofstream f(tmp_orch_cfg); f << R"json({"default_profile":"desktop_prof","profiles":{"desktop_prof":{"type":"static","color":[10,20,30]}}})json"; }
+        CHECK(engine.LoadConfig(tmp_orch_cfg), "V2-only preview config");
         // 2. 验证 EffectEngine 实时编辑预览 (Preview Frame) 机制
         aura::EffectEngine effect_engine;
         aura::Keymap km;
@@ -2255,80 +2231,6 @@ int main() {
         };
         std::wstring res_empty = aura::ResolveInprocServerDllPath(test_clsid, mock_both_miss);
         CHECK(res_empty.empty(), "注册表均未命中时安全返回空字符串");
-    }
-
-    // =========================================================================
-    // [测试 P0-2 回归] 配置热重载与 GSI 状态驱动的 ShouldSuppressWebUi 联动
-    // =========================================================================
-    std::cout << "\n[测试 P0-2] 配置热重载与 GSI 状态驱动的 ShouldSuppressWebUi 联动...\n";
-    {
-        std::string tmp_hot_cfg = (std::filesystem::temp_directory_path() / "tmp_hot_reload_p02.json").string();
-        nlohmann::json cfg_init = {
-            {"default_profile", "desktop_prof"},
-            {"profiles", {
-                {"desktop_prof", {{"type", "static"}, {"color", {10, 20, 30}}}},
-                {"cs2_safe", {{"type", "static"}, {"color", {0, 255, 0}}}},
-                {"cs2_danger", {{"type", "static"}, {"color", {255, 0, 0}}}}
-            }},
-            {"orchestration", {
-                {"version", 2},
-                {"fallback_profile", "desktop_prof"},
-                {"rules", {
-                    {
-                        {"process", "cs2.exe"},
-                        {"target_profile", "cs2_danger"},
-                        {"dnd", true},
-                        {"condition", {
-                            {"field", "player.state.health"},
-                            {"op", "<"},
-                            {"value", 20}
-                        }}
-                    },
-                    {
-                        {"process", "cs2.exe"},
-                        {"target_profile", "cs2_safe"},
-                        {"dnd", false}
-                    }
-                }}
-            }}
-        };
-
-        {
-            std::ofstream out(tmp_hot_cfg);
-            out << cfg_init.dump(2);
-        }
-
-        aura::RuleEngine engine_hot;
-        bool ok = engine_hot.LoadConfig(tmp_hot_cfg);
-        CHECK(ok, "成功加载热重载测试配置");
-
-        // 1. 前台进程为 cs2.exe，初始 GSI 状态：健康 (health = 100)
-        aura::GsiState live_gsi;
-        live_gsi.UpdateFromPayload({{"player", {{"state", {{"health", 100}}}}}});
-
-        std::string cur_proc = "cs2.exe";
-        CHECK(!engine_hot.ShouldSuppressWebUi(cur_proc, &live_gsi), "健康状态下未触发 DND (dnd=false)");
-
-        // 2. 前台进程保持不变 (cs2.exe) -> GSI 条件发生变化：残血 (health = 15)
-        live_gsi.UpdateFromPayload({{"player", {{"state", {{"health", 15}}}}}});
-
-        // 3. 模拟配置热重载（重载触发文件修改与 CheckAndReload）
-        std::this_thread::sleep_for(std::chrono::milliseconds(20));
-        {
-            cfg_init["fps"] = 60;
-            std::ofstream out(tmp_hot_cfg);
-            out << cfg_init.dump(2);
-        }
-        CHECK(engine_hot.CheckAndReload(), "CheckAndReload 成功捕获并应用配置变更");
-
-        // 4. 关键验收：在配置热重载路径下，必须传入当前 live_gsi，立即按当前残血 GSI 正确重新计算 DND
-        bool suppress_with_gsi = engine_hot.ShouldSuppressWebUi(cur_proc, &live_gsi);
-        bool suppress_without_gsi = engine_hot.ShouldSuppressWebUi(cur_proc); // 缺陷形态：漏传 GSI (nullptr)
-
-        CHECK(suppress_with_gsi, "热重载后传入当前 GSI: 立即按残血条件计算得到 DND 抑制 (suppress=true)");
-        CHECK(!suppress_without_gsi, "若漏传 GSI: 无法评估残血条件导致 DND 漏判 (确认修复必要性)");
-
-        std::filesystem::remove(tmp_hot_cfg);
     }
 
     // =========================================================================

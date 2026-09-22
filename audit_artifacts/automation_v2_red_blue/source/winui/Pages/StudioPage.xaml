@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="Aura_WinUI.Pages.StudioPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    Background="Transparent"
+    mc:Ignorable="d">
+
+    <Grid>
+        <!-- WebView2 宿主容器 -->
+        <WebView2 x:Name="StudioWebView"
+                  HorizontalAlignment="Stretch"
+                  VerticalAlignment="Stretch"
+                  Visibility="Collapsed" />
+
+        <!-- 加载与状态等待面板 -->
+        <StackPanel x:Name="LoadingPanel"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Spacing="16">
+            <ProgressRing x:Name="LoadingRing"
+                          IsActive="True"
+                          Width="48"
+                          Height="48" />
+            <TextBlock x:Name="LoadingStatusText"
+                       Text="正在连接 Aura Blockly Studio (127.0.0.1:19898)..."
+                       Style="{ThemeResource BodyTextBlockStyle}"
+                       HorizontalAlignment="Center" />
+            <Button x:Name="RetryBtn"
+                    Content="重新加载"
+                    Click="RetryBtn_Click"
+                    HorizontalAlignment="Center"
+                    Visibility="Collapsed" />
+        </StackPanel>
+
+        <!-- 错误与状态提示 -->
+        <InfoBar x:Name="StudioInfoBar"
+                 VerticalAlignment="Top"
+                 Margin="24,12,24,0"
+                 IsOpen="False"
+                 IsClosable="True" />
+    </Grid>
+</Page>

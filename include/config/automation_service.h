@@ -21,16 +21,7 @@
 
 namespace aura {
 
-// ========================================================
-// 进程名规范化工具函数
-// 规则：Trim -> 获取文件名 -> 小写 -> 若无后缀补齐 .exe
-// ========================================================
-std::string CanonicalizeProcessName(const std::string& input);
-
-// ========================================================
-// AutomationControlService
-// 运行于 127.0.0.1:19897，负责 Automation API v1 (应用规则 CRUD)
-// ========================================================
+// Revision-bound Automation v2 authoring on the daemon loopback server.
 class AutomationControlService {
 public:
     explicit AutomationControlService(std::filesystem::path config_path);
@@ -45,41 +36,6 @@ public:
     // 注册 HTTP 路由至 GsiAdapter 服务器 (必须在 Start 前调用)
     void RegisterRoutes(httplib::Server& svr);
 
-    // 核心数据模型 (Phase 4 仅限 Application Rule: Foreground Process -> Activate Profile)
-    struct AutomationRule {
-        std::string process;
-        std::string profile;
-        int index{-1};
-    };
-
-    struct OpResult {
-        int http_status{200};
-        std::string error_code;
-        std::string message;
-        std::string current_revision;
-    };
-
-    // 业务方法
-    OpResult GetRules(std::vector<AutomationRule>& out_rules, std::string& out_revision);
-
-    OpResult AddRule(const std::string& expected_revision,
-                     const AutomationRule& new_rule,
-                     AutomationRule& out_canonical_rule,
-                     int& out_index,
-                     std::string& out_new_revision);
-
-    OpResult UpdateRule(int index,
-                        const std::string& expected_revision,
-                        const std::optional<std::string>& new_process,
-                        const std::optional<std::string>& new_profile,
-                        AutomationRule& out_canonical_rule,
-                        std::string& out_new_revision);
-
-    OpResult DeleteRule(int index,
-                        const std::string& expected_revision,
-                        std::string& out_new_revision);
-
-    // Stage 5A contract. All mutating calls require expected_revision.
     struct AuthoringResult { int http_status; nlohmann::json body; };
     AuthoringResult Author(const std::string& operation, const nlohmann::json& request = nlohmann::json::object());
     static nlohmann::json AuthoringCapabilities();

@@ -1,5 +1,5 @@
+import GsiSettings from './components/GsiSettings';
 import { ensureStudioRuntime } from './utils/applyEffect.js';
-import { processRows, gsiRows, replaceSimpleRows, hasAutomationV2 } from './utils/orchestration.js';
 import AutomationAuthoring from './components/AutomationAuthoring';
 import { ConfigSaveCoordinator } from './utils/configSaveCoordinator.js';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -8,13 +8,10 @@ import Sidebar from './components/Sidebar';
 import KeyboardVisualizer from './components/KeyboardVisualizer';
 import LightingSettings from './components/LightingSettings';
 import PerKeyStudio from './components/PerKeyStudio';
-import RulesSettings from './components/RulesSettings';
-import GsiSettings from './components/GsiSettings';
 import ProfileManager from './components/ProfileManager';
 import Toast from './components/Toast';
 import GameModeModal from './components/GameModeModal';
 import EffectStudio from './components/EffectStudio';
-import OrchestratorStudio from './components/OrchestratorStudio';
 import Studio from './components/Studio';
 import { GRADIENT_PRESETS } from './constants/keyboardLayout';
 import { DEFAULT_KEYBOARD_BG, TACTICAL_PALETTE } from './tokens/keyboardPresets.tokens';
@@ -451,38 +448,6 @@ export default function App() {
     showToast(`已清除 ${selectedKeyNames.size} 个按键的独立覆写 (已实时生效)`);
   };
 
-  // 规则设置操作 (实时同步)
-  const handleAddRule = (newRule = { process: '', profile: currentProfileName, suppress_web_ui: false }) => {
-    const updated = {
-      ...configRef.current,
-      ...replaceSimpleRows(configRef.current, 'process', [...processRows(configRef.current), newRule])
-    };
-    setConfig(updated);
-    saveConfigDirectly(updated);
-  };
-
-  const handleDeleteRule = (idx) => {
-    const updatedRules = processRows(configRef.current).filter((_, i) => i !== idx);
-    const updated = replaceSimpleRows(configRef.current, 'process', updatedRules);
-    setConfig(updated);
-    saveConfigDirectly(updated);
-  };
-
-  const handleUpdateRule = (idx, patch) => {
-    const updatedRules = processRows(configRef.current).map((r, i) => (i === idx ? { ...r, ...patch } : r));
-    const updated = replaceSimpleRows(configRef.current, 'process', updatedRules);
-    setConfig(updated);
-    saveConfigDirectly(updated);
-  };
-
-  // GSI 规则操作 (过滤空字段并实时同步)
-  const handleUpdateGsiBindings = (updatedBindings) => {
-    const cleaned = updatedBindings.filter(b => b && b.field && b.field.trim() !== '');
-    const updated = replaceSimpleRows(configRef.current, 'gsi', cleaned);
-    setConfig(updated);
-    saveConfigDirectly(updated);
-  };
-
   // 方案管理操作 (设为默认立即同步至硬件)
   const handleSetDefaultProfile = (name) => {
     const nextConfig = { ...configRef.current, default_profile: name, orchestration: configRef.current.orchestration ? { ...configRef.current.orchestration, fallback_profile: name } : undefined, blockly_orchestrator: undefined };
@@ -653,7 +618,7 @@ export default function App() {
               )}
 
               {['studio', 'blockly_effect', 'blockly_orchestrator'].includes(activeTab) && (
-                <Studio
+                <Studio onConfigChanged={async()=>{coordinatorRef.current?.bumpGeneration();await fetchConfig();}}
                   config={config}
                   onSaveConfig={saveConfigDirectly}
                   currentProfileName={currentProfileName}
@@ -673,34 +638,11 @@ export default function App() {
                   onToggleKeySelection={handleToggleKeySelection}
                   bgColor={bgColor}
                   fpsVal={fpsVal}
-                  onSwitchToLegacyRules={() => setActiveTab('rules')}
-                  onSwitchToLegacyGsi={() => setActiveTab('gsi')}
                 />
               )}
 
               {activeTab === 'automation' && <AutomationAuthoring onConfigChanged={async()=>{coordinatorRef.current?.bumpGeneration();await fetchConfig();}}/>}
-              {['rules','gsi'].includes(activeTab) && hasAutomationV2(config) && <p>此配置含 Automation v2，旧整表编辑器为只读。请使用 Automation；Application Rules 仍通过原 API 编辑。</p>}
-              {activeTab === 'rules' && !hasAutomationV2(config) && (
-                <RulesSettings
-                  rules={processRows(config || {})}
-                  onAddRule={handleAddRule}
-                  onDeleteRule={handleDeleteRule}
-                  onUpdateRule={handleUpdateRule}
-                  profiles={config?.profiles}
-                  currentProfileName={currentProfileName}
-                />
-              )}
-
-              {activeTab === 'gsi' && !hasAutomationV2(config) && (
-                <GsiSettings
-                  config={{ ...config, gsi_bindings: gsiRows(config || {}) }}
-                  onUpdateGsiBindings={handleUpdateGsiBindings}
-                  profiles={config?.profiles}
-                  currentProfileName={currentProfileName}
-                  showToast={showToast}
-                />
-              )}
-
+              {activeTab === 'gsi' && <GsiSettings config={config} showToast={showToast}/>}
               {activeTab === 'profiles' && (
                 <ProfileManager
                   profiles={config?.profiles || {}}

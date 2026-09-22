@@ -1,3 +1,5 @@
+> HISTORICAL: pre-retirement implementation evidence. Current Automation supports V2 only; see docs/architecture/AUTOMATION_V2.md.
+
 # Automation v2 Stage 4 — publication, reload and reconciliation
 
 Status: implemented for Owner review; stop before Stage 5. Accepted Stage 3 was committed separately as `3f6524f` before Stage 4 edits. Stage 0/1 (`23a5961`) and Stage 2 (`3c32e06`) were not amended. The accompanying staged patch is against the Stage 3 checkpoint. Historical patch artifacts are not patch inputs.

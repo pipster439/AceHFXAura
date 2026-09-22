@@ -1,3 +1,5 @@
+> HISTORICAL: pre-retirement implementation evidence. Current Automation supports V2 only; see docs/architecture/AUTOMATION_V2.md.
+
 # Automation v2 Stage 2 acceptance report
 
 Status: implemented and staged for Owner review; stopped before Stage 3. Date: 2026-09-21.

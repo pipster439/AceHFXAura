@@ -1,3 +1,5 @@
+> HISTORICAL: pre-retirement implementation evidence. Current Automation supports V2 only; see docs/architecture/AUTOMATION_V2.md.
+
 # Repository cleanup audit — 2026-09-20
 
 Base: `origin/feat/winui-lighting` at `7ed61c7`; fetched main at `987c47b` does not contain it. Phase 3.6 parameter schema is present in LightingPage and LightingControlService. Inventory covers every tracked file before edits; ignored build/user files are outside cleanup.

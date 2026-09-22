@@ -207,11 +207,10 @@ void Composition() {
     EffectEngine engine; Keymap keymap; auto profile=std::make_shared<Profile>(); profile->base_effect=std::make_shared<Paint>(ColorRGB(10,0,0));
     engine.SetActiveProfile(profile); auto p=Decision("p",true),t=Decision("t"); p.action["priority"]=100; t.action["priority"]=-100;
     Consume(engine.GetAutomationEffects(),{p},solid(ColorRGB(50,0,0)));
-    engine.GetOverlayManager().TriggerOverlay("legacy",std::make_shared<Paint>(ColorRGB(100,0,0)),1200,0);
-    engine.TickAt(0,f,keymap); Check(f.buffer[0]==100,"legacy renders after higher-priority persistent");
+    engine.TickAt(0,f,keymap); Check(f.buffer[0]==50,"persistent renders after base");
     Consume(engine.GetAutomationEffects(),{t},solid(ColorRGB(200,0,0)));
-    engine.TickAt(0,f,keymap); Check(f.buffer[0]==200,"lower-priority transient class renders after legacy");
-    engine.GetOverlayManager().ClearActiveOverlays(); engine.GetAutomationEffects().Clear();
+    engine.TickAt(0,f,keymap); Check(f.buffer[0]==200,"lower-priority transient class renders after persistent");
+    engine.GetAutomationEffects().Clear();
     profile=std::make_shared<Profile>(); profile->base_effect=std::make_shared<HealthGradient>(); engine.SetActiveProfile(profile);
     GsiState gsi; gsi.UpdateFromPayloadAt({{"player",{{"state",{{"health",100}}}}}},0);
     Consume(engine.GetAutomationEffects(),{Decision()},solid(ColorRGB(255,255,255)));

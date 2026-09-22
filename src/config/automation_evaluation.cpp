@@ -65,6 +65,13 @@ ConditionNode ParseCondition(const nlohmann::json& j, bool events, unsigned dept
     if (ProcessField(n.field)) Require(n.target_value.is_string() && (op == "==" || op == "!="), "invalid process predicate");
     return n;
 }
+// NOT discards occurrence witnesses at evaluation time, including nested NOTs.
+bool CanSupplyPositiveOccurrence(const ConditionNode& node) {
+    if (node.logic_op == LogicOp::Not) return false;
+    if (node.logic_op == LogicOp::And || node.logic_op == LogicOp::Or)
+        return std::any_of(node.children.begin(), node.children.end(), CanSupplyPositiveOccurrence);
+    return !node.event.empty();
+}
 struct ScopedCondition {
     bool in_scope;
     ConditionResult value;
@@ -161,6 +168,8 @@ AutomationRule RuleEngine::ParseAutomationRule(const nlohmann::json& item) {
     Require(r.mode == "state" || r.mode == "rising" || r.mode == "event", "unsupported WHEN mode");
     size_t nodes = 0;
     r.condition = ParseCondition(when.at("condition"), r.mode == "event", 1, nodes);
+    Require(r.mode != "event" || CanSupplyPositiveOccurrence(r.condition),
+            "event WHEN condition requires a positive occurrence leaf outside NOT");
     if (item.contains("scope")) r.scope = ParseCondition(item["scope"], false, 1, nodes);
     const auto type = action.at("type").get<std::string>();
     Require(!item.contains("latch") && !action.contains("latch") && !action.contains("activation") &&
@@ -171,6 +180,8 @@ AutomationRule RuleEngine::ParseAutomationRule(const nlohmann::json& item) {
         Require(!action.contains("lifetime") && !action.contains("retrigger"), "profile action has no lifecycle/retrigger");
     } else {
         Require(type == "trigger_effect", "unsupported action type");
+        Require(!action.contains("event") && !action.contains("condition") && !action.contains("process"),
+                "Trigger predicates belong in WHEN, not Play Effect");
         Require(!item.contains("dnd"), "dnd is supported only for state activate_profile rules");
         const auto lifetime = action.at("lifetime").get<std::string>();
         Require(lifetime == (r.mode == "state" ? "while_true" : "one_shot"), "unsupported mode/lifetime pairing");
@@ -234,67 +245,32 @@ void RuleEngine::ValidateAutomationReferences(const AutomationRule& rule,
 uint64_t RuleEngine::GetAutomationFreshnessMs() const {
     std::lock_guard<std::mutex> lock(mutex_); return automation_freshness_ms_;
 }
-std::vector<EventOverlayRule> RuleEngine::GetEventOverlayRules() const {
-    std::lock_guard<std::mutex> lock(mutex_);
-    std::vector<EventOverlayRule> out;
-    for (const auto& p : plan_) if (p.compatibility == CompatibilityPolicy::LegacyOverlayExecutor) out.push_back(p.overlay);
-    return out;
-}
-
-AutomationEvaluation RuleEngine::EvaluateProfilesLocked(const std::string& process, const GsiState* legacy,
-                                                        const AutomationInputSnapshot& input) const {
+AutomationEvaluation RuleEngine::EvaluateProfilesLocked(const AutomationInputSnapshot& input) const {
     AutomationEvaluation out;
     out.config_generation = config_generation_;
-    const auto proc = ToLower(process);
-    const bool cs2 = proc == "cs2" || proc == "cs2.exe" || proc == "csgo" || proc == "csgo.exe";
-    bool application_dnd_seen = false;
-    bool orchestration_dnd = false;
     for (const auto& p : plan_) {
-        if (p.compatibility == CompatibilityPolicy::LegacyOverlayExecutor) continue; // sole executor: OverlayManager
-        bool matches = false;
-        std::string profile;
-        if (p.provenance == RuleProvenance::AutomationV2) {
-            const auto& r = p.automation;
-            if (r.action.at("type") != "activate_profile") continue;
-            ++out.profile_plan_entries_evaluated;
-            profile = r.action.at("profile").get<std::string>();
-            const auto truth = EvaluateRule(r, input).value.truth;
-            matches = truth == ConditionTruth::True;
-            if (matches && r.dnd) orchestration_dnd = true;
-            out.decisions.push_back({r.id, r.action, truth, false, input.source_epoch, input.packet_sequence});
-        } else if (p.provenance == RuleProvenance::Orchestration) {
-            ++out.profile_plan_entries_evaluated;
-            const auto& r = p.orchestration;
-            matches = (r.process.empty() || ProcessMatches(proc, r.process)) && r.condition.Evaluate(legacy, proc);
-            profile = r.target_profile;
-            if (matches && r.dnd) orchestration_dnd = true;
-        } else if (p.provenance == RuleProvenance::GsiBinding) {
-            if (out.profile) continue;
-            ++out.profile_plan_entries_evaluated;
-            const auto& b = p.binding;
-            matches = cs2 && legacy && legacy->IsActive() && legacy->Evaluate(b.field, b.op, b.target_value);
-            profile = b.profile_name;
-        } else if (p.provenance == RuleProvenance::Application) {
-            if (out.profile && application_dnd_seen) continue;
-            ++out.profile_plan_entries_evaluated;
-            const auto& r = p.application;
-            matches = !proc.empty() && ProcessMatches(proc, r.process_name, false);
-            profile = r.profile_name;
-            if (matches && !application_dnd_seen) { application_dnd_seen = true; out.suppress_web_ui = r.suppress_web_ui; }
-        }
+        const auto& r = p.automation;
+        if (r.action.at("type") != "activate_profile") continue;
+        ++out.profile_plan_entries_evaluated;
+        const auto truth = EvaluateRule(r, input).value.truth;
+        const bool matches = truth == ConditionTruth::True;
+        if (matches && r.dnd) out.suppress_web_ui = true;
+        out.decisions.push_back({r.id, r.action, truth, false, input.source_epoch, input.packet_sequence, p.config_order});
         if (matches && !out.profile) {
-            const auto it = profiles_.find(profile);
+            const auto it = profiles_.find(r.action.at("profile").get<std::string>());
             if (it != profiles_.end()) out.profile = it->second;
         }
     }
-    out.suppress_web_ui = out.suppress_web_ui || orchestration_dnd;
     if (!out.profile) {
-        auto it = profiles_.find(orchestration_.fallback_profile);
+        auto it = profiles_.find(fallback_profile_);
         if (it == profiles_.end()) it = profiles_.find(default_profile_name_);
         if (it != profiles_.end()) out.profile = it->second;
-        else if (!profiles_.empty()) out.profile = profiles_.begin()->second;
     }
     return out;
+}
+
+void RuleEngine::RebaseAutomationSource() {
+    std::lock_guard<std::mutex> lock(mutex_); edge_memory_.clear();
 }
 
 AutomationEvaluation RuleEngine::EvaluateAutomation(GsiState& gsi,
@@ -313,12 +289,16 @@ AutomationEvaluation RuleEngine::EvaluateAutomation(GsiState& gsi,
     for (const auto& b : input.batches)
         batches.push_back(capture(b->telemetry, b->occurrences));
     const auto current = capture(input.latest);
-    auto out = EvaluateProfilesLocked(current.foreground_process, &gsi, current);
+    auto out = EvaluateProfilesLocked(current);
     out.foreground_process = current.foreground_process;
+    out.automation_fresh = current.automation_fresh;
+    if (current.telemetry) out.telemetry_age_ms = current.telemetry_age_ms;
+    out.freshness_threshold_ms = automation_freshness_ms_;
+    out.evaluated_at_ms = current.admitted_at_ms;
     out.reconciliation_complete = true;
-    out.has_v2_rules = std::any_of(plan_.begin(), plan_.end(), [](const auto& entry) { return entry.provenance == RuleProvenance::AutomationV2; });
+    out.has_v2_rules = !plan_.empty();
     for (const auto& entry : plan_) {
-        if (entry.provenance != RuleProvenance::AutomationV2 || entry.automation.action.at("type") != "trigger_effect") continue;
+        if (entry.automation.action.at("type") != "trigger_effect") continue;
         const auto& rule = entry.automation;
         AutomationEvaluation::RuleStatus status;
         status.id = rule.id; status.semantic_identity = rule.fingerprint;
@@ -349,7 +329,6 @@ AutomationEvaluation RuleEngine::EvaluateAutomation(GsiState& gsi,
     out.dropped_input_batches = input.dropped_batches; out.rebased = input.overflowed;
     if (input.overflowed) LOG_WARN("[Automation] Input overflow; dropped=" << input.dropped_batches << "; rebasing at latest snapshot");
     for (const auto& p : plan_) {
-        if (p.provenance != RuleProvenance::AutomationV2) continue;
         const auto& r = p.automation;
         if (r.action.at("type") == "activate_profile") continue; // already evaluated once in arbitration
         if (r.mode == "state") {

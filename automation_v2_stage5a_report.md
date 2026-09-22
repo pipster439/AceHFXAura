@@ -1,3 +1,5 @@
+> HISTORICAL: pre-retirement implementation evidence. Current Automation supports V2 only; see docs/architecture/AUTOMATION_V2.md.
+
 # Automation v2 Stage 5A — authoring and migration contract
 
 Status: implemented for Owner review; stopped after Stage 5A. The accepted Stage 4 checkpoint was committed separately as `a604b09` before these edits. Stage 3 and earlier checkpoints were not amended. This report and the staged binary patch are against that checkpoint.

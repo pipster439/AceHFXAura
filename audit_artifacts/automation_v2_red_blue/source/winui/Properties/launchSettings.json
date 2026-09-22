@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "Aura.WinUI (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "Aura.WinUI (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}

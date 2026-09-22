@@ -1,3 +1,4 @@
+#include "config/automation_contract.h"
 #include "config/config_writer_util.h"
 #include <fstream>
 #include <cstdio>
@@ -72,6 +73,7 @@ bool ReadRawConfigFile(const std::filesystem::path& config_path,
 bool AtomicWriteConfigFile(const std::filesystem::path& config_path,
                            const std::string& content,
                            FileReplacerFunc replacer) {
+    ValidateAutomationContainers(nlohmann::json::parse(content));
     std::filesystem::path tmp_path = config_path.wstring() + L".tmp";
     {
         std::ofstream f(tmp_path, std::ios::binary | std::ios::trunc);

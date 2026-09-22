@@ -1,5 +1,4 @@
 import { normalizePublication } from '../blockly/publication.js';
-import { canonicalConfig } from '../utils/orchestration.js';
 import { stageEffect, effectConfig, getEffectLifecycleStatus, fetchPublishReadiness } from '../utils/applyEffect.js';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Blockly, { loadSafeWorkspaceJson } from '../blockly/index.js';
@@ -415,7 +414,7 @@ export default function EffectStudio({
       <div className="flex flex-wrap items-center justify-between gap-4 px-4 py-2 bg-md-surface-container-lowest border border-md-outline-variant rounded-md-md text-xs">
         <div className="flex items-center gap-2 text-md-on-surface-variant font-medium">
           <Sliders className="w-4 h-4 text-md-secondary" />
-          <span>GSI 传感器模拟面板:</span>
+          <span>Effect Preview：本地输入（不测试 Automation）</span>
         </div>
 
         <div className="flex items-center gap-3">

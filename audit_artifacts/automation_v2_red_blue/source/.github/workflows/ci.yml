@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: Windows build and runtime tests
+    runs-on: windows-2022
+    timeout-minutes: 20
+    env:
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Verify clean checkout
+        shell: pwsh
+        run: |
+          if (Test-Path config.json) { throw 'Local config must not be tracked' }
+          $generated = git ls-files 'plugins/src/effect_studio_*.cpp' 'plugins/src/effect_test_*.cpp' 'plugins/src/effect_adv_*.cpp'
+          if ($generated) { throw 'Generated plugin sources must not be tracked' }
+      - name: Configure
+        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+      - name: Build
+        run: cmake --build build --config Release --target aura_daemon aura_web_ui test_gsi_rules test_plugin_runtime test_native_hid test_runtime_status test_lighting_service --parallel 2
+      - name: CTest
+        run: ctest --test-dir build -C Release --output-on-failure
+      # Physical hardware acceptance remains local; CI only runs non-hardware tests.
+      - name: WebUI and dry-run daemon entrypoints
+        working-directory: tests
+        env:
+          AURA_BIN_DIR: ${{ github.workspace }}/build/Release
+        run: python -B -m unittest -v test_runtime_entrypoints.TestWebUiEntrypoint test_runtime_entrypoints.TestDaemonEntrypoint
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Run .NET Client Tests
+        run: dotnet test tests/Aura.Tests/Aura.Tests.csproj -c Release
+      - name: Build WinUI Desktop Client (Release)
+        run: dotnet build winui/Aura.WinUI.csproj -c Release -p:Platform=x64
+
+  frontend:
+    name: Frontend tests and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run build

@@ -1,3 +1,5 @@
+> HISTORICAL / PRE-RETIREMENT: this document records an earlier design. Current product behavior is documented in docs/architecture/AUTOMATION_V2.md. Legacy Automation execution and coexistence are no longer supported.
+
 # Automation v2 technical design spike
 
 > Historical design/Stage 1 scope record. Stages 2–6 and the snapshot/retirement remediation are now accepted; current behavior is documented in [Automation v2](AUTOMATION_V2.md). Initial stack/queue deferrals below describe the earlier scope, not alpha.3 limitations.

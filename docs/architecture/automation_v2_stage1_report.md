@@ -1,3 +1,5 @@
+> HISTORICAL: Stage 1 evidence before Automation retirement. Frozen ABI evidence remains protected; legacy Automation config execution assertions have been retired.
+
 # Automation v2 Stage 0 / Stage 1 acceptance report
 
 Date: 2026-09-21. Approved baseline: `7b2e1c7887cf9c6f7e5a9601530b19b00282ed24`. Stage 0 and Stage 1 work is complete; stopped for Owner review before Stage 2. Changes are uncommitted in the working tree. No branch changes, commits or pushes were made.

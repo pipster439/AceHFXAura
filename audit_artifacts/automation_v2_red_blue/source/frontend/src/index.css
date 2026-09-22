@@ -1,0 +1,96 @@
+@import "./tokens/md3e-tokens.css";
+@import "./tokens/md3e-motion.css";
+@import "tailwindcss";
+
+@theme {
+  /* MD3E Color Roles */
+  --color-md-primary: var(--md-sys-color-primary);
+  --color-md-on-primary: var(--md-sys-color-on-primary);
+  --color-md-primary-container: var(--md-sys-color-primary-container);
+  --color-md-on-primary-container: var(--md-sys-color-on-primary-container);
+
+  --color-md-secondary: var(--md-sys-color-secondary);
+  --color-md-on-secondary: var(--md-sys-color-on-secondary);
+  --color-md-secondary-container: var(--md-sys-color-secondary-container);
+  --color-md-on-secondary-container: var(--md-sys-color-on-secondary-container);
+
+  --color-md-tertiary: var(--md-sys-color-tertiary);
+  --color-md-on-tertiary: var(--md-sys-color-on-tertiary);
+  --color-md-tertiary-container: var(--md-sys-color-tertiary-container);
+  --color-md-on-tertiary-container: var(--md-sys-color-on-tertiary-container);
+
+  --color-md-error: var(--md-sys-color-error);
+  --color-md-on-error: var(--md-sys-color-on-error);
+  --color-md-error-container: var(--md-sys-color-error-container);
+  --color-md-on-error-container: var(--md-sys-color-on-error-container);
+
+  --color-md-surface: var(--md-sys-color-surface);
+  --color-md-on-surface: var(--md-sys-color-on-surface);
+  --color-md-surface-variant: var(--md-sys-color-surface-variant);
+  --color-md-on-surface-variant: var(--md-sys-color-on-surface-variant);
+  --color-md-surface-container-lowest: var(--md-sys-color-surface-container-lowest);
+  --color-md-surface-container-low: var(--md-sys-color-surface-container-low);
+  --color-md-surface-container: var(--md-sys-color-surface-container);
+  --color-md-surface-container-high: var(--md-sys-color-surface-container-high);
+  --color-md-surface-container-highest: var(--md-sys-color-surface-container-highest);
+
+  --color-md-outline: var(--md-sys-color-outline);
+  --color-md-outline-variant: var(--md-sys-color-outline-variant);
+
+  /* MD3E Ten-Step Shape Scale */
+  --radius-md-none: var(--md-sys-shape-corner-none);
+  --radius-md-xs: var(--md-sys-shape-corner-extra-small);
+  --radius-md-sm: var(--md-sys-shape-corner-small);
+  --radius-md-md: var(--md-sys-shape-corner-medium);
+  --radius-md-lg: var(--md-sys-shape-corner-large);
+  --radius-md-lg-inc: var(--md-sys-shape-corner-large-increased);
+  --radius-md-xl: var(--md-sys-shape-corner-extra-large);
+  --radius-md-xl-inc: var(--md-sys-shape-corner-extra-large-increased);
+  --radius-md-2xl: var(--md-sys-shape-corner-extra-extra-large);
+  --radius-md-full: var(--md-sys-shape-corner-full);
+
+  /* MD3E Elevation */
+  --shadow-md-level1: var(--md-sys-elevation-level1);
+  --shadow-md-level2: var(--md-sys-elevation-level2);
+  --shadow-md-level3: var(--md-sys-elevation-level3);
+  --shadow-md-level4: var(--md-sys-elevation-level4);
+  --shadow-md-level5: var(--md-sys-elevation-level5);
+}
+
+/* Base Accessibility & Focus */
+:focus-visible {
+  outline: 2px solid var(--md-sys-color-secondary);
+  outline-offset: 2px;
+}
+
+* {
+  scrollbar-color: var(--md-sys-color-outline-variant) var(--md-sys-color-surface-container);
+  scrollbar-width: thin;
+  box-sizing: border-box;
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--md-sys-color-outline-variant);
+  border-radius: var(--md-sys-shape-corner-extra-small);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--md-sys-color-outline);
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--md-sys-color-surface-container);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}

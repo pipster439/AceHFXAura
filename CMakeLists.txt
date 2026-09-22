@@ -54,7 +54,6 @@ set(DAEMON_SOURCES
     src/engine/automation_effect_runtime.cpp
     src/engine/builtin_effects.cpp
     src/engine/plugin_manager.cpp
-    src/engine/overlay_manager.cpp
     src/supervisor/web_supervisor.cpp
     src/gsi/gsi_adapter.cpp
     src/config/lighting_service.cpp
@@ -79,7 +78,6 @@ set(DAEMON_HEADERS
     include/engine/effect_engine.h
     include/engine/plugin_interface.h
     include/engine/plugin_manager.h
-    include/engine/overlay_manager.h
     include/supervisor/web_supervisor.h
     include/gsi/gsi_adapter.h
     include/utils/logger.h
@@ -107,12 +105,7 @@ target_link_libraries(aura_daemon PRIVATE
     version
 )
 
-add_custom_command(TARGET aura_daemon POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        $<TARGET_FILE:aura_daemon>
-        "${CMAKE_CURRENT_SOURCE_DIR}/aura_daemon.exe"
-    COMMENT "Copying aura_daemon.exe to workspace root"
-)
+
 
 add_executable(test_com tests/test_com.cpp)
 target_link_libraries(test_com PRIVATE ole32 oleaut32)
@@ -139,12 +132,7 @@ target_link_libraries(aura_web_ui PRIVATE
     user32
 )
 
-add_custom_command(TARGET aura_web_ui POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        $<TARGET_FILE:aura_web_ui>
-        "${CMAKE_CURRENT_SOURCE_DIR}/aura_web_ui.exe"
-    COMMENT "Copying aura_web_ui.exe to workspace root"
-)
+
 
 # 3. 单元测试: test_gsi_rules
 add_executable(test_gsi_rules
@@ -155,7 +143,6 @@ add_executable(test_gsi_rules
     src/engine/effect_engine.cpp
     src/engine/automation_effect_runtime.cpp
     src/engine/plugin_manager.cpp
-    src/engine/overlay_manager.cpp
     src/gsi/gsi_adapter.cpp
     src/aura/keymap.cpp
     src/aura/aura_adapter.cpp
@@ -237,7 +224,6 @@ add_executable(test_lighting_service
     src/engine/effect_engine.cpp
     src/engine/automation_effect_runtime.cpp
     src/engine/plugin_manager.cpp
-    src/engine/overlay_manager.cpp
     src/gsi/gsi_adapter.cpp
     src/aura/keymap.cpp
     src/aura/aura_adapter.cpp
@@ -246,40 +232,6 @@ add_executable(test_lighting_service
     src/web/web_server.cpp
 )
 target_link_libraries(test_lighting_service PRIVATE
-    setupapi
-    hid
-    ole32
-    oleaut32
-    user32
-    shell32
-    psapi
-    version
-    ws2_32
-    crypt32
-)
-
-# 5.7 单元测试: test_automation_service
-add_executable(test_automation_service
-    tests/test_automation_service.cpp
-    src/config/automation_service.cpp
-    src/config/automation_authoring.cpp
-    src/config/config_writer_util.cpp
-    src/config/lighting_service.cpp
-    src/config/rule_engine.cpp
-    src/config/automation_evaluation.cpp
-    src/engine/builtin_effects.cpp
-    src/engine/effect_engine.cpp
-    src/engine/automation_effect_runtime.cpp
-    src/engine/plugin_manager.cpp
-    src/engine/overlay_manager.cpp
-    src/gsi/gsi_adapter.cpp
-    src/aura/keymap.cpp
-    src/aura/aura_adapter.cpp
-    src/aura/native_hid_backend.cpp
-    src/aura/hal_compat.cpp
-    src/web/web_server.cpp
-)
-target_link_libraries(test_automation_service PRIVATE
     setupapi
     hid
     ole32
@@ -336,14 +288,10 @@ add_dependencies(test_plugin_abi
 add_test(NAME plugin_abi COMMAND test_plugin_abi $<TARGET_FILE_DIR:abi_full_old>
     "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/automation_v2_stage0")
 set_tests_properties(plugin_abi PROPERTIES TIMEOUT 30)
-target_compile_definitions(test_gsi_rules PRIVATE
-    AURA_STAGE0_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/automation_v2_stage0/configs")
 add_test(NAME runtime_status COMMAND test_runtime_status)
 set_tests_properties(runtime_status PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" TIMEOUT 30)
 add_test(NAME lighting_service COMMAND test_lighting_service)
 set_tests_properties(lighting_service PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
-add_test(NAME automation_service COMMAND test_automation_service)
-set_tests_properties(automation_service PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
 add_test(NAME gsi_rules COMMAND test_gsi_rules)
 set_tests_properties(gsi_rules PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures")
 add_test(NAME native_hid COMMAND test_native_hid)
@@ -421,4 +369,13 @@ add_test(NAME automation_reconciliation COMMAND test_automation_reconciliation $
 set_tests_properties(automation_reconciliation PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" TIMEOUT 30)
 else()
     message(STATUS "Studio publication fixture tests unavailable: install Node and frontend dependencies to enable")
+endif()
+
+add_executable(test_gsi_simulation tests/test_gsi_simulation.cpp ${AUTOMATION_RULE_TEST_SOURCES})
+target_link_libraries(test_gsi_simulation PRIVATE ${AUTOMATION_RULE_TEST_LIBRARIES})
+add_test(NAME gsi_simulation COMMAND test_gsi_simulation)
+set_tests_properties(gsi_simulation PROPERTIES TIMEOUT 30)
+if(Python3_Interpreter_FOUND)
+    add_test(NAME packaging_local_state COMMAND ${Python3_EXECUTABLE} -X utf8 "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_packaging_local_state.py")
+    add_test(NAME automation_migration COMMAND ${Python3_EXECUTABLE} -X utf8 "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_automation_migration.py" "$<TARGET_FILE:aura_daemon>")
 endif()

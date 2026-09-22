@@ -9,9 +9,13 @@ This cleanup retains the pipeline because launcher/runtime tests and existing re
 Known follow-up work before shipping WinUI:
 
 - Define WinUI distribution, runtime dependencies and daemon/Web/SDK asset layout; validate source, portable and installed startup.
-- Separate build output from user runtime-cache maintenance. The existing packaging script deletes `%LOCALAPPDATA%/Aura/runtime`; `--clean` clears the build directory, while a mismatched generator is refused; do not run it against an active user runtime merely to validate documentation.
+- Build/packaging is not deployment: CMake writes to its build directory; packaging writes to `dist/`. Neither copies executables to the checkout root nor clears `%LOCALAPPDATA%/Aura/runtime`. `--clean` only clears the build directory; a mismatched generator is refused.
 - Validate packaged Studio publishing, upgrade/migration and graceful exit on actual Windows hardware.
 
 Use the [release checklist](RELEASE_CHECKLIST.md). Automated CI does not publish packages or prove keyboard behavior.
 
-For isolated candidate validation, set `LOCALAPPDATA` to an empty validation directory before invoking the canonical script, so packaging cannot clear a user runtime. Inspect ZIP entries and extracted embedded resources; run the launcher with `--dry-run` outside the checkout. Portable configuration lives beside Aura.exe; standalone configuration lives in `%LOCALAPPDATA%/Aura/config.json`.
+For isolated candidate validation, set `LOCALAPPDATA` to an empty validation directory before invoking the canonical script, to isolate launcher execution from the user runtime. Inspect ZIP entries and extracted embedded resources; run the launcher with `--dry-run` outside the checkout. Portable configuration lives beside Aura.exe; standalone configuration lives in `%LOCALAPPDATA%/Aura/config.json`.
+
+## Adopting a breaking candidate locally
+
+Keep a backup of the current config and executables. Run the new daemon with `--validate-config <actual-config-path>` before replacing any local runtime. If it reports `migration_required`, use the development migration tool and review any refused mapping; do not delete records or enable a hidden fallback to make startup succeed. Validate the new config, then run the candidate with `--dry-run --config <new-config>` before explicitly deploying the matching config and binaries together. A successful package build alone does not authorize upgrading the local checkout runtime.

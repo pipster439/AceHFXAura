@@ -1,0 +1,19 @@
+# Documentation index
+
+Current code is the implementation authority. Guides below have distinct roles; archived reports do not override them.
+
+| Guide | Purpose |
+|---|---|
+| [Project README](../README.md) | Features, prerequisites, build and quick start |
+| [Contributor rules](../AGENT.md) | Current engineering constraints |
+| [Architecture](architecture/README.md) | Native client, daemon, WebView2 and runtime boundaries |
+| [Hardware](hardware/README.md) | Native HID, calibrated keymap, Light Bar and HAL research |
+| [Testing](testing/TESTING.md) / [CI](testing/CI.md) | Automated tests, manual tools and evidence limits |
+| [Manual acceptance](testing/MANUAL_TESTS.md) | Physical keyboard and CS2 checks |
+| [Studio workflow](studio/STUDIO_WORKFLOW.md) | Blockly editing, preview, publishing and orchestration |
+| [Packaging](development/PACKAGING.md) / [Release checklist](development/RELEASE_CHECKLIST.md) | Legacy launcher packaging and release gates |
+| [Cleanup audit](development/REPOSITORY_CLEANUP.md) | Complete pre-cleanup tracked-file inventory and decisions |
+| [History](archive/README.md) | Superseded decisions, reports and patch snapshots |
+| [Changelog](../CHANGELOG.md) | Version history |
+
+Runtime configuration is local and ignored. The checked-in [example](../config.example.json) is a template, not a second user configuration. [VERSION](../VERSION) is the release version source.

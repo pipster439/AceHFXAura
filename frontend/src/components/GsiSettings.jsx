@@ -19,10 +19,6 @@ import {
 import { GSI_FIELD_DEFINITIONS } from '../constants/gsiDefinitions';
 
 export default function GsiSettings({
-  config,
-  onUpdateGsiBindings,
-  profiles,
-  currentProfileName,
   showToast
 }) {
   const [gsiCurrent, setGsiCurrent] = useState(null);
@@ -32,8 +28,6 @@ export default function GsiSettings({
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('全部');
 
-  const profileList = Object.keys(profiles || {});
-  const bindings = config?.gsi_bindings || [];
 
   // 获取实时 GSI 遥测
   const fetchGsiCurrent = async () => {
@@ -94,36 +88,7 @@ export default function GsiSettings({
     }
   };
 
-  // 规则操作
-  const handleAddBinding = (newBinding = { field: 'player_state.health', operator: '<', value: 20, profile: currentProfileName }) => {
-    if (!newBinding.field || newBinding.field.trim() === '') return;
-    const exists = bindings.some(b => b.field === newBinding.field && b.operator === newBinding.operator && b.value === newBinding.value);
-    if (exists) {
-      showToast('该规则已存在', 'info');
-      return;
-    }
-    const updated = [...bindings, newBinding];
-    onUpdateGsiBindings(updated);
-    showToast('已添加 GSI 规则，已实时生效');
-  };
 
-  const handleDeleteBinding = (index) => {
-    const updated = bindings.filter((_, i) => i !== index);
-    onUpdateGsiBindings(updated);
-  };
-
-  const handleUpdateBinding = (index, patch) => {
-    const updated = bindings.map((b, i) => (i === index ? { ...b, ...patch } : b));
-    onUpdateGsiBindings(updated);
-  };
-
-  // 快捷预设
-  const quickPresets = [
-    { label: '残血红光 (HP < 20)', field: 'player_state.health', operator: '<', value: 20, profile: 'danger_red' },
-    { label: 'C4 炸弹脉冲 (安放中)', field: 'round.bomb', operator: '==', value: 'planted', profile: 'bomb_pulse' },
-    { label: '击杀光效 (Kill)', field: 'event.kill', operator: '==', value: true, profile: 'rainbow_wave' },
-    { label: '致盲全白 (Flashed)', field: 'event.flashed', operator: '==', value: true, profile: 'desktop' }
-  ];
 
   const isConnected = gsiCurrent?.connected === true;
   const isCs2Foreground = gsiCurrent?.is_cs2_foreground === true;
@@ -190,7 +155,7 @@ export default function GsiSettings({
           <span>前台聚焦判定:</span>
           {isCs2Foreground ? (
             <span className="bg-md-primary text-md-on-primary px-2.5 py-1 rounded-md-full font-mono text-xs">
-              cs2.exe (前台已聚焦，GSI 绑定激活中)
+              cs2.exe（真实前台）
             </span>
           ) : (
             <span className="bg-md-surface-container-highest text-md-on-surface-variant border border-md-outline-variant px-2.5 py-1 rounded-md-full font-mono text-xs">
@@ -200,7 +165,7 @@ export default function GsiSettings({
         </div>
         <span className="text-xs opacity-90 font-medium">
           {isCs2Foreground
-            ? '满足前台条件，下方的 GSI 规则正在实时生效至键盘'
+            ? '当前遥测可供 Automation v2 使用；规则在 Automation 页面编辑'
             : '保护非游戏体验：切回 CS2 窗口时自动瞬间恢复光效'}
         </span>
       </div>
@@ -327,149 +292,6 @@ export default function GsiSettings({
         </div>
       </div>
 
-      {/* GSI 绑定规则表 */}
-      <div className="flex flex-col gap-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-md-outline-variant">
-          <div>
-            <h4 className="font-bold text-md-on-surface text-sm">简单 GSI 条件（与工作室共用规则）</h4>
-            <p className="text-xs text-md-on-surface-variant mt-0.5">
-              当 CS2 处于前台时，按从上到下的优先级匹配下列条件，由守护进程自动切换为对应 Profile。
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => handleAddBinding()}
-            className="min-h-[48px] px-4 flex items-center justify-center gap-2 rounded-md-full bg-md-primary text-md-on-primary hover:bg-md-primary/90 active:scale-95 transition-transform shadow-md-level1 cursor-pointer text-xs font-bold"
-            title="添加 GSI 规则"
-            aria-label="添加 GSI 规则"
-          >
-            <Plus className="w-4 h-4" />
-            <span>添加 GSI 规则</span>
-          </button>
-        </div>
-
-        {/* 快捷推荐 */}
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs font-semibold text-md-on-surface">快速推荐:</span>
-          {quickPresets.map((preset) => (
-            <button
-              key={preset.label}
-              type="button"
-              onClick={() => {
-                handleAddBinding({
-                  field: preset.field,
-                  operator: preset.operator,
-                  value: preset.value,
-                  profile: profileList.includes(preset.profile) ? preset.profile : currentProfileName
-                });
-              }}
-              className="min-h-[40px] px-3.5 flex items-center gap-2 rounded-md-full border border-md-outline-variant bg-md-surface-container text-md-on-surface hover:bg-md-surface-container-high active:scale-95 transition-all text-xs font-medium cursor-pointer"
-              aria-label={`添加推荐 GSI 规则: ${preset.label}`}
-            >
-              <Zap className="w-3.5 h-3.5 text-md-primary" />
-              <span>{preset.label}</span>
-            </button>
-          ))}
-        </div>
-
-        {/* 绑定表格 */}
-        <div className="overflow-x-auto border border-md-outline-variant rounded-md-lg bg-md-surface-container-low shadow-md-level1">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="bg-md-surface-container-high border-b border-md-outline-variant text-md-on-surface font-bold">
-                <th className="py-3 px-4">遥测字段 (Field)</th>
-                <th className="py-3 px-4">比较条件</th>
-                <th className="py-3 px-4">触发阈值 (Value)</th>
-                <th className="py-3 px-4">激活灯效方案</th>
-                <th className="py-3 px-4 text-right">操作</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-md-outline-variant/60">
-              {bindings.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="py-8 text-center text-md-on-surface-variant font-medium">
-                    尚未配置任何 GSI 规则，点击右上角按钮或快速推荐添加
-                  </td>
-                </tr>
-              ) : (
-                bindings.map((binding, idx) => (
-                  <tr key={idx} className="hover:bg-md-surface-container/60 transition-colors">
-                    <td className="py-3 px-4">
-                      <input
-                        type="text"
-                        value={binding.field || ''}
-                        onChange={(e) => handleUpdateBinding(idx, { field: e.target.value.trim() })}
-                        placeholder="例如: player_state.health"
-                        className="w-56 min-h-[40px] px-3 bg-md-surface-container border border-md-outline rounded-md-sm text-md-on-surface text-xs font-mono outline-none focus:border-md-primary focus:ring-1 focus:ring-md-primary"
-                        aria-label="遥测字段"
-                      />
-                    </td>
-                    <td className="py-3 px-4">
-                      <select
-                        value={binding.operator || '=='}
-                        onChange={(e) => handleUpdateBinding(idx, { operator: e.target.value })}
-                        className="min-h-[40px] px-3 bg-md-surface-container border border-md-outline rounded-md-sm text-md-on-surface text-xs font-semibold outline-none focus:border-md-primary focus:ring-1 focus:ring-md-primary cursor-pointer"
-                        aria-label="比较条件"
-                      >
-                        <option value="==">== (等于)</option>
-                        <option value="<">&lt; (小于)</option>
-                        <option value="<=">&lt;= (小于等于)</option>
-                        <option value=">">&gt; (大于)</option>
-                        <option value=">=">&gt;= (大于等于)</option>
-                        <option value="!=">!= (不等于)</option>
-                      </select>
-                    </td>
-                    <td className="py-3 px-4">
-                      <input
-                        type="text"
-                        value={String(binding.value !== undefined ? binding.value : '')}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          let parsed = val;
-                          if (val === 'true') parsed = true;
-                          else if (val === 'false') parsed = false;
-                          else if (!isNaN(Number(val)) && val.trim() !== '') parsed = Number(val);
-                          handleUpdateBinding(idx, { value: parsed });
-                        }}
-                        placeholder="例如: 20 或 planted"
-                        className="w-36 min-h-[40px] px-3 bg-md-surface-container border border-md-outline rounded-md-sm text-md-on-surface text-xs font-mono outline-none focus:border-md-primary focus:ring-1 focus:ring-md-primary"
-                        aria-label="触发阈值"
-                      />
-                    </td>
-                    <td className="py-3 px-4">
-                      <select
-                        value={binding.profile}
-                        onChange={(e) => handleUpdateBinding(idx, { profile: e.target.value })}
-                        className="min-h-[40px] px-3 bg-md-surface-container border border-md-outline rounded-md-sm text-md-on-surface text-xs font-semibold outline-none focus:border-md-primary focus:ring-1 focus:ring-md-primary cursor-pointer"
-                        aria-label="激活灯效方案"
-                      >
-                        {profileList.map((p) => (
-                          <option key={p} value={p} className="bg-md-surface text-md-on-surface">
-                            {p}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className="py-3 px-4 text-right">
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteBinding(idx)}
-                        className="w-10 h-10 min-w-[40px] min-h-[40px] inline-flex items-center justify-center text-md-on-surface-variant hover:text-md-error hover:bg-md-error-container/30 rounded-md-full transition-colors cursor-pointer"
-                        title="删除绑定"
-                        aria-label="删除绑定"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
       {/* 全量遥测字典与实时探查表 */}
       <div className="flex flex-col gap-3 pt-3 border-t border-md-outline-variant">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -585,22 +407,7 @@ export default function GsiSettings({
                         )}
                       </td>
                       <td className="py-3 px-4 text-right">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            handleAddBinding({
-                              field: item.field,
-                              operator: typeof liveVal === 'boolean' ? '==' : typeof liveVal === 'number' ? '<' : '==',
-                              value: hasLiveVal ? liveVal : (item.range.includes('true') ? true : 20),
-                              profile: currentProfileName
-                            });
-                          }}
-                          className="min-h-[36px] px-3 bg-md-surface-container hover:bg-md-surface-container-high text-md-on-surface border border-md-outline-variant text-xs font-semibold rounded-md-full active:scale-95 transition-all cursor-pointer"
-                          title="将此字段加入 GSI 联动规则"
-                          aria-label={`绑定规则 ${item.field}`}
-                        >
-                          + 绑定规则
-                        </button>
+
                       </td>
                     </tr>
                   );

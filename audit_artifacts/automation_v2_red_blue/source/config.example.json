@@ -1,0 +1,191 @@
+{
+  "default_profile": "desktop",
+  "fps": 25,
+  "hardware_backend": "auto",
+  "rules": [
+    {
+      "process": "cs2.exe",
+      "profile": "cs2_gamer",
+      "suppress_web_ui": false
+    },
+    {
+      "process": "code.exe",
+      "profile": "coding"
+    },
+    {
+      "process": "devenv.exe",
+      "profile": "coding"
+    },
+    {
+      "process": "notepad.exe",
+      "profile": "office"
+    },
+    {
+      "process": "chrome.exe",
+      "profile": "cyberpunk"
+    }
+  ],
+  "gsi_bindings": [
+    {
+      "field": "player_state.health",
+      "operator": "<",
+      "value": 20,
+      "profile": "danger_red"
+    },
+    {
+      "field": "round.bomb",
+      "operator": "==",
+      "value": "planted",
+      "profile": "bomb_pulse"
+    }
+  ],
+  "profiles": {
+    "desktop": {
+      "type": "breathing",
+      "color1": [0, 80, 200],
+      "color2": [0, 10, 40],
+      "period_ms": 3500,
+      "brightness": 1.0
+    },
+    "static": {
+      "type": "static",
+      "color": [0, 80, 200],
+      "analog": true,
+      "brightness": 1.0
+    },
+    "breathing": {
+      "type": "breathing",
+      "color1": [0, 100, 255],
+      "color2": [0, 10, 50],
+      "period_ms": 3000,
+      "brightness": 1.0
+    },
+    "color_cycle": {
+      "type": "color_cycle",
+      "period_ms": 3500,
+      "brightness": 1.0
+    },
+    "wave": {
+      "type": "wave",
+      "direction": "diag_dl",
+      "period_ms": 3500,
+      "thickness": 1.0,
+      "brightness": 1.0
+    },
+    "rainbow_wave": {
+      "type": "wave",
+      "direction": "diag_dl",
+      "period_ms": 3500,
+      "thickness": 1.0,
+      "brightness": 1.0
+    },
+    "reactive": {
+      "type": "reactive",
+      "bg": [0, 5, 15],
+      "color": [255, 25, 41],
+      "period_ms": 2500,
+      "brightness": 1.0
+    },
+    "ripple": {
+      "type": "ripple",
+      "bg": [0, 0, 0],
+      "color": [0, 240, 255],
+      "period_ms": 2500,
+      "thickness": 1.0,
+      "brightness": 1.0
+    },
+    "starry_night": {
+      "type": "starry_night",
+      "color": [0, 240, 255],
+      "random_colors": true,
+      "period_ms": 2500,
+      "brightness": 1.0
+    },
+    "quicksand": {
+      "type": "quicksand",
+      "color1": [255, 25, 41],
+      "color2": [20, 138, 196],
+      "direction": "diag_dl",
+      "period_ms": 3500,
+      "thickness": 1.0,
+      "brightness": 1.0
+    },
+    "current": {
+      "type": "current",
+      "color": [0, 240, 255],
+      "period_ms": 2000,
+      "thickness": 1.0,
+      "brightness": 1.0
+    },
+    "raindrop": {
+      "type": "raindrop",
+      "color": [0, 240, 255],
+      "period_ms": 2500,
+      "brightness": 1.0
+    },
+    "custom_keymap": {
+      "type": "custom_keymap",
+      "bg": [0, 0, 0],
+      "brightness": 1.0,
+      "keys": {
+        "WASD": [0, 255, 0],
+        "SPACE": [0, 200, 255],
+        "ESC": [255, 0, 0]
+      }
+    },
+    "coding": {
+      "type": "static",
+      "color": [10, 30, 50],
+      "brightness": 1.0,
+      "keys": {
+        "ESC": [255, 120, 0],
+        "ENTER": [0, 255, 120],
+        "TAB": [0, 200, 255]
+      }
+    },
+    "office": {
+      "type": "static",
+      "color": [40, 40, 40],
+      "brightness": 1.0,
+      "keys": {
+        "ENTER": [0, 180, 255]
+      }
+    },
+    "cs2_gamer": {
+      "type": "custom_keymap",
+      "bg": [0, 0, 0],
+      "brightness": 1.0,
+      "keys": {
+        "WASD": [0, 255, 0],
+        "ESC": [255, 0, 0],
+        "SPACE": [0, 200, 255],
+        "ARROWS": [255, 255, 0]
+      }
+    },
+    "cyberpunk": {
+      "type": "custom_keymap",
+      "bg": [10, 0, 20],
+      "brightness": 1.0,
+      "keys": {
+        "WASD": [0, 255, 255],
+        "ARROWS": [255, 0, 128],
+        "SPACE": [255, 255, 0],
+        "ESC": [0, 255, 255]
+      }
+    },
+    "danger_red": {
+      "type": "breathing",
+      "color1": [255, 0, 0],
+      "color2": [60, 0, 0],
+      "period_ms": 600,
+      "brightness": 1.0
+    },
+    "bomb_pulse": {
+      "type": "breathing",
+      "color1": [255, 80, 0],
+      "color2": [20, 0, 0],
+      "period_ms": 500,
+      "brightness": 1.0
+    }
+  }
+}

@@ -204,7 +204,6 @@ public sealed partial class MainWindow : Window
         {
             "home" => typeof(HomePage),
             "lighting" => typeof(LightingPage),
-            "automation" => typeof(AutomationPage),
             "gsi" => typeof(GameIntegrationPage),
             "studio" => typeof(StudioPage),
             _ => null

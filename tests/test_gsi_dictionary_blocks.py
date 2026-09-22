@@ -6,7 +6,7 @@ Validates:
 1. GSI Dictionary metadata completeness (discrete enums, numeric metrics, boolean equipment & events)
 2. Node.js evaluation of getStateOptions, getDefaultThreshold, and ALL_GSI_ENUM_VALUES
 3. Blockly custom block definitions (gsi_state_match, gsi_numeric_compare, gsi_enum_constant)
-4. Transpilers & Serializers support (jsTranspiler, cppTranspiler, orchestratorSerializer)
+4. Transpilers & Serializers support (jsTranspiler, cppTranspiler)
 5. Zero heap allocation guarantee in generated C++ code
 6. C++ RuleEngine ConditionNode schema compatibility
 """
@@ -113,15 +113,6 @@ class TestGsiDictionaryAndBlocks(unittest.TestCase):
         self.assertIn("{ kind: 'block', type: 'gsi_numeric_compare' }", content)
         self.assertIn("{ kind: 'block', type: 'gsi_enum_constant' }", content)
 
-    def test_orchestrator_serializer_ast_generation(self):
-        orch_path = os.path.join(FRONTEND_DIR, "src", "blockly", "orchestratorSerializer.js")
-        with open(orch_path, "r", encoding="utf-8") as f:
-            content = f.read()
-
-        self.assertIn("block.type === 'gsi_state_match'", content)
-        self.assertIn("block.type === 'gsi_numeric_compare'", content)
-        self.assertIn("block.type === 'gsi_enum_constant'", content)
-
     def test_transpilers_and_zero_heap_allocation(self):
         cpp_path = os.path.join(FRONTEND_DIR, "src", "blockly", "cppTranspiler.js")
         with open(cpp_path, "r", encoding="utf-8") as f:
@@ -163,14 +154,15 @@ class TestGsiDictionaryAndBlocks(unittest.TestCase):
         import('./src/blockly/index.js').then(async m => {
           const Blockly = m.default;
           const { registerCustomBlocks } = await import('./src/blockly/customBlocks.js');
-          const { ORCHESTRATOR_STUDIO_TOOLBOX, EFFECT_STUDIO_TOOLBOX } = await import('./src/blockly/toolboxes.js');
+          const { EFFECT_STUDIO_TOOLBOX } = await import('./src/blockly/toolboxes.js');
           registerCustomBlocks();
+          const {registerAutomationBlocks, automationToolbox} = await import('./src/blockly/automationV2.js');
+          registerAutomationBlocks(Blockly, [], [], ['event.kill']);
           
           const ws = new Blockly.Workspace();
-          for (const tb of [ORCHESTRATOR_STUDIO_TOOLBOX, EFFECT_STUDIO_TOOLBOX]) {
+          for (const tb of [automationToolbox, EFFECT_STUDIO_TOOLBOX]) {
             for (const cat of tb.contents) {
-              if (!cat.contents) continue;
-              for (const item of cat.contents) {
+              for (const item of (cat.contents || [cat])) {
                 if (item.kind === 'block') {
                   Blockly.serialization.blocks.append(item, ws);
                 }

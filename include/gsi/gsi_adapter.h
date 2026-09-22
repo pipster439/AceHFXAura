@@ -28,6 +28,8 @@
 
 namespace aura {
 
+class RuleEngine;
+struct AutomationEvaluation;
 class LightingControlService;
 class AutomationControlService;
 
@@ -76,9 +78,6 @@ public:
     AutomationInputDrain DrainAutomationInputs();
     std::shared_ptr<const AutomationTelemetry> GetAutomationTelemetry() const;
 
-    // 评估某条绑定条件是否满足 (支持常规字段与 event.* 动态脉冲事件)
-    bool Evaluate(const std::string& field, const std::string& op, const nlohmann::json& target_val) const;
-
     // 导出当前所有扁平化字段为 JSON (含活跃事件及最近事件队列)
     nlohmann::json ToJson() const;
 
@@ -103,25 +102,19 @@ public:
 
     // 重置/清除当前状态
     void Clear();
+    void SeedFromPayload(const nlohmann::json& payload, uint64_t received_at_ms);
 
     // 更新与获取当前系统前台进程名
     void SetForegroundProcess(const std::string& proc);
     std::string GetForegroundProcess() const;
 
 private:
-    void UpdateFromPayloadImpl(const nlohmann::json& payload, std::optional<uint64_t> receipt_override);
+    void UpdateFromPayloadImpl(const nlohmann::json& payload, std::optional<uint64_t> receipt_override, bool seed = false);
     static void FlattenJsonRecursive(const std::string& prefix,
                                      const nlohmann::json& node, 
                                      std::unordered_map<std::string, GsiValue>& out_map);
 
     void DetectGameEvents(const nlohmann::json& payload, uint64_t now_ms);
-
-    // 前置条件：调用方必须已持有 mutex_。
-    // 公开入口 Evaluate() 负责加锁后转调此处，使 op=="!=" 可以安全地递归调用自身，
-    // 而不会对【非重入】的 std::mutex 二次加锁（原实现正是因此会死锁）。
-    bool EvaluateLocked(const std::string& field, 
-                        const std::string& op, 
-                        const nlohmann::json& target_val) const;
 
     // 已改为 const：内部只写入 mutable 的 flat_state_ / last_event_sync_ms_，
     // 因此 Evaluate() 与 ToJson() 不再需要 const_cast。
@@ -140,6 +133,7 @@ private:
     std::deque<std::shared_ptr<const AutomationObservation>> automation_batches_;
     std::vector<std::string> packet_occurrences_;
     bool collecting_occurrences_{false};
+    bool seeding_{false};
     std::string foreground_process_;
 
     // 完整游戏事件历史与脉冲时钟
@@ -185,6 +179,13 @@ public:
     const GsiState& GetState() const { return state_; }
     GsiState& GetState() { return state_; }
 
+    // Input authority is serialized with owner-thread admission, never hardware work.
+    void AcceptLivePayload(const nlohmann::json& payload);
+    nlohmann::json QueueSimulation(const nlohmann::json& request);
+    nlohmann::json SimulationStatus() const;
+    AutomationEvaluation EvaluateAutomation(RuleEngine& engine, const std::string& real_process,
+        std::optional<uint64_t> now = std::nullopt);
+
     bool IsRunning() const { return is_running_.load(std::memory_order_acquire); }
     int GetPort() const { return port_; }
 
@@ -218,6 +219,14 @@ private:
     std::thread worker_thread_;
     std::atomic<bool> is_running_{false};
     GsiState state_;
+    mutable std::mutex source_mutex_;
+    bool simulation_{false}, heartbeat_{true}, live_baseline_{false};
+    std::string simulated_process_{"cs2.exe"};
+    nlohmann::json simulated_payload_;
+    nlohmann::json automation_freshness_;
+    std::deque<std::pair<uint64_t, nlohmann::json>> simulation_commands_;
+    uint64_t submitted_{0}, applied_{0}, last_heartbeat_{0}, heartbeat_ms_{1000};
+
 };
 
 } // namespace aura

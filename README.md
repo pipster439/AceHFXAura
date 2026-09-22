@@ -99,7 +99,7 @@ dotnet build winui/Aura.WinUI.csproj -c Release -p:Platform=x64
 5. 需要 CS2 自动化时，打开“CS2 遥测诊断”，确认检测到的 CS2 `cfg` 目录并安装 GSI 配置。启动 CS2 后，页面应显示 GSI 在线。
 6. 回到“工作室 → 自动化”，可以载入“CS2 完整示例”，检查规则后点击“保存并应用”。
 
-如果根目录没有 `config.json`，daemon 会自动从 `config.example.json` 创建它。这个文件只是首次启动模板。Automation v2 规则通过 `model: automation_v2` 标识；`orchestration.version = 2` 本身不代表所有规则都是 Automation v2。打开编辑器不会自动转换旧规则；Application Rule 的 Promote/Convert 是需要确认的显式事务。
+如果根目录没有 `config.json`，daemon 会自动从 `config.example.json` 创建它。这个文件只是首次启动模板。Automation 仅支持 `orchestration.rules` 中的 `model: automation_v2` 记录。非空旧 Automation 配置会报 migration-required；开发者可使用[一次性迁移工具](docs/development/AUTOMATION_MIGRATION.md)。
 
 第二次启动同一程序时，单实例保护会保留正在运行的 daemon，并打开现有 Web UI。
 
@@ -143,11 +143,11 @@ dotnet build winui/Aura.WinUI.csproj -c Release -p:Platform=x64
 
 - **Automation v2** 使用统一的 state / rising / event 模型：state 可以 Activate Profile 或持续 Trigger Effect；rising/event 可以触发一次性 Trigger Effect。
 - **基础方案**仍按执行计划选择首个匹配项；这不限制其他规则的效果层评估。效果层支持 `restart`、`ignore_while_active`、`stack` 和 `queue`，后两者有固定容量与过期限制。
-- **Legacy 兼容**保留原有规则来源、顺序与叠加执行器。同类事件在一帧内合并为最新一次属于 legacy 行为，不是 v2 的事件批次与重触发语义。
-- **合成顺序**为基础帧 → v2 持续层 → legacy 叠加 → v2 瞬态层；支持 Alpha/Additive 混合和 Replace/Overlay 合成。
+- **V2-only**：旧 Automation 执行器与作者接口已移除。Plugin ABI v1、无生命周期插件的 LegacyEnvelope 和硬件 `legacy_hal` 保持支持。
+- **合成顺序**为基础帧 → v2 持续层 → v2 瞬态层；支持 Alpha/Additive 混合和 Replace/Overlay 合成。
 - 作用域失效或 GSI 过期会取消相关运行与排队工作；恢复时重新建立事件游标，避免补播旧事件。
 
-Automation v2 编辑器通过 capabilities 和 CRUD API 保存规则，展示 legacy 来源/共存与遮蔽风险；Application Rule 的 Promote/Convert 需要显式确认。旧联动积木编辑器不能覆盖含 v2 规则的配置。Studio 发布显式选择 continuous 或 one-shot；保存草稿与运行版本分离。
+Automation v2 Blockly 直接表达 state/rising/event 与独立动作，通过后端目录选择 typed effect，使用共享验证和 revision 原子事务保存。Studio 发布显式选择 continuous 或 one-shot；保存草稿与运行版本分离。
 
 更详细的积木执行与联动语义见 [Studio workflow](docs/studio/STUDIO_WORKFLOW.md) 和 [Automation v2](docs/architecture/AUTOMATION_V2.md)。
 
@@ -181,7 +181,7 @@ aura_daemon.exe (127.0.0.1:19897)
         ├─ ForegroundMonitor：前台进程事件
         ├─ GsiAdapter：CS2 状态与派生事件
         ├─ RuleEngine：统一规则、兜底方案、配置热重载
-        ├─ EffectEngine + OverlayManager：基础方案与多层叠加
+        ├─ EffectEngine + AutomationEffectRuntime：Base → V2 persistent → V2 transient
         ├─ PluginManager：插件发现、影子加载与热重载
         └─ AuraAdapter：将 128 通道帧推送到 Native HID (auto 优先) 或 ASUS 键盘 HAL (回退/显式选择)
 ```
@@ -271,3 +271,9 @@ See [LICENSE](LICENSE) for details.
 - ASUS, ROG, Armoury Crate, and related marks/assets belong to their respective owners.
 - The default auto policy tries native Win32 HID first; explicit native_hid never loads AacKbHal_x64.dll.
 - The legacy fallback interacts with local `AacKbHal_x64.dll` when explicitly requested or selected by auto fallback, and verified via SHA-256 gate. Public releases never bundle or redistribute proprietary ASUS components.
+
+### Daemon-backed Automation simulation
+
+Automation 页面明确显示 REAL GSI / SIMULATION。开启后由 daemon 提供模拟前台（默认 cs2.exe）、health/armor、bomb、round phase 和 round kills；“+1 kill”改变计数并经过真实事件检测、V2 规则、合成与输出。默认自动心跳 1000 ms，按 freshness 缩短，可暂停以测试过期。模拟期间真实 CS2 POST 正常返回 2xx，但不参与权威状态；退出后下一份真实数据建立基线，不回放事件。Effect Preview 的本地 JS 输入只预览单个效果。
+
+本次 breaking cleanup 取代此前 alpha.3 候选；目标版本仍为 0.1.0-alpha.3。新候选须重新构建、验证、打包和计算哈希，不沿用旧候选证据。

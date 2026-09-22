@@ -231,91 +231,8 @@ class RuleEngineModel:
         if def_name not in parsed_profiles:
             errors.append(f"default_profile '{def_name}' is not defined in profiles")
 
-        rules = cfg.get("rules", [])
-        if not isinstance(rules, list):
-            errors.append("'rules' must be an array")
-        else:
-            for idx, r in enumerate(rules):
-                if not isinstance(r, dict):
-                    errors.append(f"Rule at index {idx} must be an object")
-                    continue
-                proc = r.get("process", "").strip()
-                prof = r.get("profile", "").strip()
-                if not proc:
-                    errors.append(f"Rule {idx} missing process name")
-                if not prof:
-                    errors.append(f"Rule {idx} missing profile name")
-                elif prof not in parsed_profiles:
-                    errors.append(f"Rule {idx} references undefined profile '{prof}'")
-
-        gsi_bindings = cfg.get("gsi_bindings", [])
-        if not isinstance(gsi_bindings, list):
-            errors.append("'gsi_bindings' must be an array")
-        else:
-            for idx, b in enumerate(gsi_bindings):
-                if not isinstance(b, dict):
-                    errors.append(f"GSI binding at index {idx} must be an object")
-                    continue
-                field = b.get("field", "").strip()
-                prof = b.get("profile", "").strip()
-                if not field:
-                    errors.append(f"GSI binding {idx} missing field")
-                if not prof:
-                    errors.append(f"GSI binding {idx} missing profile name")
-                elif prof not in parsed_profiles:
-                    errors.append(f"GSI binding {idx} references undefined profile '{prof}'")
-
         return len(errors) == 0, errors
 
-    @classmethod
-    def evaluate_arbitration(
-        cls,
-        cfg: Dict[str, Any],
-        foreground_proc: str,
-        gsi_state: Dict[str, Any]
-    ) -> Tuple[str, bool]:
-        """Simulates full arbitration: GSI -> Process Rules -> Default Profile."""
-        # 1. GSI bindings
-        for b in cfg.get("gsi_bindings", []):
-            field = b.get("field", "")
-            target_val = b.get("value")
-            op = b.get("operator", "==")
-            prof = b.get("profile", "")
-
-            curr_val = gsi_state.get(field)
-            if curr_val is not None:
-                matched = False
-                try:
-                    if op == "==":
-                        matched = (curr_val == target_val)
-                    elif op == "!=":
-                        matched = (curr_val != target_val)
-                    elif op == "<":
-                        matched = (float(curr_val) < float(target_val))
-                    elif op == "<=":
-                        matched = (float(curr_val) <= float(target_val))
-                    elif op == ">":
-                        matched = (float(curr_val) > float(target_val))
-                    elif op == ">=":
-                        matched = (float(curr_val) >= float(target_val))
-                except Exception:
-                    matched = False
-
-                if matched and prof in cfg.get("profiles", {}):
-                    return prof, False
-
-        # 2. Process rules
-        proc_lower = foreground_proc.strip().lower()
-        for r in cfg.get("rules", []):
-            r_proc = r.get("process", "").strip().lower()
-            if r_proc == proc_lower:
-                prof = r.get("profile", "")
-                suppress = bool(r.get("suppress_web_ui", False))
-                if prof in cfg.get("profiles", {}):
-                    return prof, suppress
-
-        # 3. Default profile
-        return cfg.get("default_profile", "desktop"), False
 
 
 # ============================================================================
@@ -912,89 +829,16 @@ class TestTier2BoundaryAndCornerCases(unittest.TestCase):
 # ============================================================================
 
 class TestTier3CrossFeatureCombinations(unittest.TestCase):
-    """Tier 3: Interactions between effect profiles, rules, and GSI bindings."""
+    """Tier 3: Effect profile composition properties."""
 
-    def setUp(self):
-        self.base_config = {
-            "default_profile": "desktop",
-            "fps": 25,
-            "profiles": {
-                "desktop": {"type": "breathing", "color1": [0, 80, 200], "color2": [0, 10, 40], "period_ms": 3500},
-                "coding": {"type": "static", "color": [10, 30, 50]},
-                "cs2_gamer": {"type": "custom_keymap", "bg": [0, 0, 0], "keys": {"WASD": [0, 255, 0]}},
-                "danger_red": {"type": "breathing", "color1": [255, 0, 0], "color2": [60, 0, 0], "period_ms": 600},
-                "bomb_pulse": {"type": "breathing", "color1": [255, 80, 0], "color2": [20, 0, 0], "period_ms": 500},
-                "cyberpunk": {"type": "quicksand", "color1": [255, 25, 41], "color2": [20, 138, 196], "thickness": 0.6}
-            },
-            "rules": [
-                {"process": "cs2.exe", "profile": "cs2_gamer", "suppress_web_ui": True},
-                {"process": "code.exe", "profile": "coding"},
-                {"process": "devenv.exe", "profile": "coding"},
-                {"process": "chrome.exe", "profile": "cyberpunk"}
-            ],
-            "gsi_bindings": [
-                {"field": "round.bomb", "operator": "==", "value": "planted", "profile": "bomb_pulse"},
-                {"field": "player_state.health", "operator": "<", "value": 20, "profile": "danger_red"}
-            ]
-        }
 
-    def test_t3_01_process_rule_precedence_over_default(self):
-        prof, suppress = RuleEngineModel.evaluate_arbitration(self.base_config, "code.exe", {})
-        self.assertEqual(prof, "coding")
-        self.assertFalse(suppress)
 
-    def test_t3_02_gsi_priority_over_process_rule(self):
-        # Even if cs2.exe is foreground, low health GSI trigger must override it
-        prof, _ = RuleEngineModel.evaluate_arbitration(
-            self.base_config,
-            "cs2.exe",
-            {"player_state.health": 15}
-        )
-        self.assertEqual(prof, "danger_red")
 
-    def test_t3_03_gsi_multi_condition_ordering(self):
-        # Bomb planted is ordered before health < 20
-        prof, _ = RuleEngineModel.evaluate_arbitration(
-            self.base_config,
-            "cs2.exe",
-            {"round.bomb": "planted", "player_state.health": 10}
-        )
-        self.assertEqual(prof, "bomb_pulse")
 
-    def test_t3_04_fallback_chain_on_process_exit(self):
-        prof, _ = RuleEngineModel.evaluate_arbitration(self.base_config, "explorer.exe", {})
-        self.assertEqual(prof, "desktop")
 
-    def test_t3_05_process_rule_suppress_web_ui_flag(self):
-        prof, suppress = RuleEngineModel.evaluate_arbitration(self.base_config, "cs2.exe", {})
-        self.assertEqual(prof, "cs2_gamer")
-        self.assertTrue(suppress)
 
-    def test_t3_06_multiple_processes_sharing_single_profile(self):
-        prof1, _ = RuleEngineModel.evaluate_arbitration(self.base_config, "code.exe", {})
-        prof2, _ = RuleEngineModel.evaluate_arbitration(self.base_config, "devenv.exe", {})
-        self.assertEqual(prof1, "coding")
-        self.assertEqual(prof2, "coding")
 
-    def test_t3_07_gsi_numeric_comparison_operators(self):
-        cfg = copy.deepcopy(self.base_config)
-        cfg["gsi_bindings"] = [
-            {"field": "hp", "operator": "<=", "value": 50, "profile": "danger_red"}
-        ]
-        prof_match, _ = RuleEngineModel.evaluate_arbitration(cfg, "", {"hp": 50})
-        prof_nomatch, _ = RuleEngineModel.evaluate_arbitration(cfg, "", {"hp": 51})
-        self.assertEqual(prof_match, "danger_red")
-        self.assertEqual(prof_nomatch, "desktop")
 
-    def test_t3_08_gsi_string_comparison_operators(self):
-        cfg = copy.deepcopy(self.base_config)
-        cfg["gsi_bindings"] = [
-            {"field": "phase", "operator": "!=", "value": "live", "profile": "coding"}
-        ]
-        prof_match, _ = RuleEngineModel.evaluate_arbitration(cfg, "", {"phase": "warmup"})
-        prof_nomatch, _ = RuleEngineModel.evaluate_arbitration(cfg, "", {"phase": "live"})
-        self.assertEqual(prof_match, "coding")
-        self.assertEqual(prof_nomatch, "desktop")
 
     def test_t3_09_profile_key_overrides_layering(self):
         # Base wave effect with ESC key override
@@ -1020,17 +864,6 @@ class TestTier3CrossFeatureCombinations(unittest.TestCase):
         self.assertEqual(p_dim["brightness"], 51)
         self.assertEqual(p_bright["brightness"], 255)
 
-    def test_t3_12_config_roundtrip_preserves_rules_and_bindings(self):
-        # Simulate updating a profile in config and serializing back
-        cfg = copy.deepcopy(self.base_config)
-        cfg["profiles"]["desktop"]["thickness"] = 1.8
-        cfg["profiles"]["desktop"]["random_colors"] = True
-        serialized = json.dumps(cfg, indent=2)
-        deserialized = json.loads(serialized)
-        ok, errs = RuleEngineModel.validate_config(deserialized)
-        self.assertTrue(ok, f"Roundtrip errors: {errs}")
-        self.assertEqual(len(deserialized["rules"]), 4)
-        self.assertEqual(len(deserialized["gsi_bindings"]), 2)
 
 
 # ============================================================================
@@ -1040,42 +873,6 @@ class TestTier3CrossFeatureCombinations(unittest.TestCase):
 class TestTier4RealWorldScenarios(unittest.TestCase):
     """Tier 4: Realistic setups covering gaming, office, creative, and ambience scenarios."""
 
-    def test_t4_01_cs2_gaming_competitive_scenario(self):
-        """CS2 Competitive Scenario: Custom WASD/Arrows map, Web UI suppressed, GSI triggers."""
-        setup = {
-            "default_profile": "desktop",
-            "profiles": {
-                "desktop": {"type": "static", "color": [0, 80, 200]},
-                "cs2_gamer": {
-                    "type": "custom_keymap",
-                    "bg": [0, 0, 0],
-                    "keys": {
-                        "WASD": [0, 255, 0],
-                        "ESC": [255, 0, 0],
-                        "SPACE": [0, 200, 255],
-                        "ARROWS": [255, 255, 0]
-                    }
-                },
-                "bomb_alert": {"type": "breathing", "color1": [255, 100, 0], "color2": [30, 0, 0], "period_ms": 400}
-            },
-            "rules": [
-                {"process": "cs2.exe", "profile": "cs2_gamer", "suppress_web_ui": True}
-            ],
-            "gsi_bindings": [
-                {"field": "round.bomb", "operator": "==", "value": "planted", "profile": "bomb_alert"}
-            ]
-        }
-        ok, errs = RuleEngineModel.validate_config(setup)
-        self.assertTrue(ok, f"CS2 setup invalid: {errs}")
-
-        # Normal gaming
-        prof, suppress = RuleEngineModel.evaluate_arbitration(setup, "cs2.exe", {})
-        self.assertEqual(prof, "cs2_gamer")
-        self.assertTrue(suppress)
-
-        # Bomb planted
-        prof_bomb, _ = RuleEngineModel.evaluate_arbitration(setup, "cs2.exe", {"round.bomb": "planted"})
-        self.assertEqual(prof_bomb, "bomb_alert")
 
     def test_t4_02_office_productivity_static_scenario(self):
         """Office Productivity Scenario: Low glare static grey background, cyan Enter key."""

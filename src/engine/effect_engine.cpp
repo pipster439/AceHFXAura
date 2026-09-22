@@ -108,9 +108,8 @@ void EffectEngine::TickAt(uint64_t elapsed_ms, FrameBuffer& out_frame, const Key
         }
     }
 
-    // Fixed class placement; legacy group keeps its own unchanged executor/order.
+    // Fixed V2 class placement: Base -> persistent -> transient.
     automation_effects_.Apply(true, elapsed_ms, out_frame, keymap, gsi);
-    overlay_manager_.ApplyOverlays(elapsed_ms, out_frame, keymap, gsi);
     automation_effects_.Apply(false, elapsed_ms, out_frame, keymap, gsi);
 }
 
