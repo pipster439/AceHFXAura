@@ -4,7 +4,7 @@ Aura 是面向 **ROG Falchion Ace HFX** 的高性能独立 Windows 灯光控制�
 
 当前 alpha 版本号以仓库根目录的 [`VERSION`](VERSION) 为单一事实源；核心能力与已知限制见 [`CHANGELOG.md`](CHANGELOG.md)。
 
-当前开发线包含 Phase 3.6 Lighting：基于后端参数 schema 生成原生控件，并通过 Lighting Control API 读取、应用基础灯效。自动化测试与真机验收是不同证据；本次文档整理不宣称重新完成硬件验收。详见 [文档索引](docs/README.md) 和 [当前架构](docs/architecture/README.md)。
+当前开发线包含原生 Lighting 与 Automation v2：支持 state / rising / event 规则和有界 stack / queue 重触发。自动化测试与真机验收是不同证据；alpha.3 的键盘与 CS2 验收仍由 Owner 执行。详见 [文档索引](docs/README.md) 和 [当前架构](docs/architecture/README.md)。
 
 ## 硬件后端架构 (Hardware Backends)
 
@@ -99,7 +99,7 @@ dotnet build winui/Aura.WinUI.csproj -c Release -p:Platform=x64
 5. 需要 CS2 自动化时，打开“CS2 遥测诊断”，确认检测到的 CS2 `cfg` 目录并安装 GSI 配置。启动 CS2 后，页面应显示 GSI 在线。
 6. 回到“工作室 → 自动化”，可以载入“CS2 完整示例”，检查规则后点击“保存并应用”。
 
-如果根目录没有 `config.json`，daemon 会自动从 `config.example.json` 创建它。这个文件只是首次启动模板；进入 Studio 并保存自动化后，前端会把旧的 `rules` / `gsi_bindings` 迁移到当前的 `orchestration.version = 2` 统一规则列表，所以不建议照旧 README 手工拼接配置片段。
+如果根目录没有 `config.json`，daemon 会自动从 `config.example.json` 创建它。这个文件只是首次启动模板。Automation v2 规则通过 `model: automation_v2` 标识；`orchestration.version = 2` 本身不代表所有规则都是 Automation v2。打开编辑器不会自动转换旧规则；Application Rule 的 Promote/Convert 是需要确认的显式事务。
 
 第二次启动同一程序时，单实例保护会保留正在运行的 daemon，并打开现有 Web UI。
 
@@ -117,7 +117,7 @@ dotnet build winui/Aura.WinUI.csproj -c Release -p:Platform=x64
 - 已用时间、阶段、按键按下状态；
 - 玩家血量、C4 状态及其他 GSI 数值或枚举字段。
 
-“等待”是可跨帧继续的控制流。它会保留当前颜色、变量、循环位置和下一条指令，不会阻塞 daemon 的硬件推流线程。脚本到末尾后会在下一帧重新从头执行；变量会一直保留到该光效重新启动。单帧最多执行 4096 条指令，重复次数上限为 10000，单次等待上限为 60000 ms。
+“等待”是可跨帧继续的控制流。它会保留当前颜色、变量、循环位置和下一条指令，不会阻塞 daemon 的硬件推流线程。旧脚本与 continuous 发布在末尾后下一帧从头执行；显式 one-shot 发布会结束并通过生命周期接口报告 finished/opacity。变量会一直保留到该光效重新启动。单帧最多执行 4096 条指令，重复次数上限为 10000，单次等待上限为 60000 ms。
 
 ### 草稿与发布
 
@@ -141,21 +141,21 @@ dotnet build winui/Aura.WinUI.csproj -c Release -p:Platform=x64
 
 “自动化”负责决定何时使用一个光效：
 
-- **基础方案**按规则从上到下评估，第一个匹配项生效；没有规则命中时使用兜底方案。
-- **事件叠加**在事件发生时播放一次，例如击杀扩散。相同事件再次发生会重新开始自己的叠加；一个渲染周期内的多次同类事件合并为最新一次。
-- **状态叠加**在条件成立期间持续运行，例如生命值低于 20 时的红色呼吸；条件失效后立即移除。
-- 多个叠加可以共存，优先级数值越大越晚合成。事件和状态外层的组合条件会完整保留。
-- 离开 CS2 前台或 GSI 离线后，游戏叠加会被清理并恢复匹配的桌面/程序方案；离开期间的事件不会在返回游戏时补播。
+- **Automation v2** 使用统一的 state / rising / event 模型：state 可以 Activate Profile 或持续 Trigger Effect；rising/event 可以触发一次性 Trigger Effect。
+- **基础方案**仍按执行计划选择首个匹配项；这不限制其他规则的效果层评估。效果层支持 `restart`、`ignore_while_active`、`stack` 和 `queue`，后两者有固定容量与过期限制。
+- **Legacy 兼容**保留原有规则来源、顺序与叠加执行器。同类事件在一帧内合并为最新一次属于 legacy 行为，不是 v2 的事件批次与重触发语义。
+- **合成顺序**为基础帧 → v2 持续层 → legacy 叠加 → v2 瞬态层；支持 Alpha/Additive 混合和 Replace/Overlay 合成。
+- 作用域失效或 GSI 过期会取消相关运行与排队工作；恢复时重新建立事件游标，避免补播旧事件。
 
-点击“保存并应用”时，Studio 会先发布自动化所引用的 Blockly 草稿，再提交统一规则。画布在切换页面时还会暂存到当前浏览器标签页的 `sessionStorage`；它不是持久发布，关闭标签页前仍应保存。
+Automation v2 编辑器通过 capabilities 和 CRUD API 保存规则，展示 legacy 来源/共存与遮蔽风险；Application Rule 的 Promote/Convert 需要显式确认。旧联动积木编辑器不能覆盖含 v2 规则的配置。Studio 发布显式选择 continuous 或 one-shot；保存草稿与运行版本分离。
 
-更详细的积木执行与联动语义见 [Studio workflow](docs/studio/STUDIO_WORKFLOW.md)。
+更详细的积木执行与联动语义见 [Studio workflow](docs/studio/STUDIO_WORKFLOW.md) 和 [Automation v2](docs/architecture/AUTOMATION_V2.md)。
 
 ## GSI 自动化
 
 daemon 在 `127.0.0.1:19897` 接收 Valve GSI POST，并把嵌套数据转换为可供规则与光效读取的字段。Web UI 通过 `127.0.0.1:19898` 代理状态、配置安装、预览、编译和插件重载请求；两个服务都只绑定本机回环地址。
 
-GSI 自动化只在 CS2/CS:GO 进程位于前台且最近 10 秒内收到数据时启用。适配器还会根据连续状态推导击杀、爆头、受伤、死亡、复活、炸弹、回合和比赛阶段等 `event.*` 字段。新 payload 会清理对应节点的旧瞬态值，避免把上一回合状态错误带入下一回合。
+Legacy GSI 绑定/游戏叠加使用原有 CS2 前台与约 10 秒活跃判定。Automation v2 按规则作用域判断，新 GSI 决策默认使用 `automation_freshness_ms = 3000`；连接状态约 10 秒的在线指示与这项决策期限不同。过期即使没有下一包也会取消相关工作，恢复时重建 rising/event 基线。适配器还会根据连续状态推导击杀、爆头、受伤、死亡、复活、炸弹、回合和比赛阶段等 `event.*` 字段。新 payload 会清理对应节点的旧瞬态值，避免把上一回合状态错误带入下一回合。
 
 Studio 的条件可以组合进程、GSI 字段、`and`、`or` 和 `not`。常用比较运算包括 `==`、`!=`、`<`、`<=`、`>`、`>=` 与 `contains`。第一人称对局中可用字段仍受 CS2 实际发送的数据限制；观战/GOTV 字段不会凭空补全。
 
@@ -165,7 +165,7 @@ Studio 的条件可以组合进程、GSI 字段、`and`、`or` 和 `not`。常�
 
 插件管理器会先把 DLL 复制到 `plugins/.cache` 再加载，因此 Windows 不会锁住原文件，Studio 可以继续生成新版本。每次发布使用不可变的唯一插件名；正在运行的实例通过共享所有权保持有效，加载失败不会破坏旧实例。
 
-Profile 只保存逻辑方案名与当前 `plugin_name` 引用。自动化引用 Profile，而不是直接引用某个临时 DLL 文件名，因此发布新版本后无需重写所有规则。
+Profile 只保存逻辑方案名与当前 `plugin_name` 引用。Activate Profile 引用逻辑方案；Automation v2 Trigger Effect 使用效果描述并在接纳时绑定插件 generation。热重载后兼容的活动/排队工作保留原 generation，新接纳工作使用新 generation。
 
 ## 当前运行结构
 

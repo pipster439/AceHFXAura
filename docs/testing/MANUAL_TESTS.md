@@ -80,6 +80,8 @@
 
 ## 验收签字记录
 
+alpha.3 还需逐项执行 [Owner candidate smoke](../development/RELEASE_CHECKLIST.md#alpha3-owner-candidate-smoke--pending)：daemon 重启/USB 重连恢复、Automation v2 低血量持续层与 one-shot/restart/stack 或 queue 突发、退出前台清除工作及返回/重连不补播旧事件。所有项目当前均待 Owner 执行；dry-run 与编译通过不能替代。
+
 | 验证项 | 验证人 | 硬件序列号 / 固件版本 | 验证日期 | 结论 (PASS / FAIL) | 备注 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | 1. 基础启动与硬件直通 | | | | | |

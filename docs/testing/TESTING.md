@@ -4,7 +4,7 @@ Report each suite separately. A CTest entry can contain many checks; a Python me
 
 ## Implementation-backed regression checks
 
-- `test_plugin_runtime` links the production `src/engine/plugin_manager.cpp`. CMake builds two real fixture DLLs. The test calls the ABI export (the current contract is integer **1**, not `0x00010000`), loads through `PluginManager`, checks rendered bytes, overwrites the original DLL while an old instance lives, reloads v2, verifies that the old instance still renders v1, rejects a corrupt replacement while retaining v2, and checks shadow-file cleanup. Checks remain enabled in Release builds.
+- `test_plugin_runtime` links the production `src/engine/plugin_manager.cpp`. CMake builds two real fixture DLLs. The test calls the ABI export (this fixture exports legacy integer **1**; the ABI suite also covers packed `0x00010000` and lifecycle exports), loads through `PluginManager`, checks rendered bytes, overwrites the original DLL while an old instance lives, reloads v2, verifies that the old instance still renders v1, rejects a corrupt replacement while retaining v2, and checks shadow-file cleanup. Checks remain enabled in Release builds.
 - `test_gsi_rules` links production rule/effect/GSI/WebServer code. CTest runs it with controlled fixtures.
 - `test_runtime_entrypoints.py` starts actual EXEs with isolated runtime directories. Daemon lifecycle cases use dry-run. Existing instances/port conflicts may cause skips, which must be reported separately.
 - `frontend/tests` exercises production JavaScript and includes native harnesses when a compiler is available. Report skips, not a blanket pass count.
@@ -35,6 +35,7 @@ The production implementation passed `plugin_runtime`. In an isolated copy under
 Run from the repository root unless specified:
 
 ```powershell
+npm --prefix frontend ci
 cmake -S . -B build -A x64
 cmake --build build --config Release
 ctest --test-dir build -C Release --output-on-failure
@@ -47,9 +48,9 @@ npm test
 npm run build
 ```
 
-Python discovery includes release/launcher checks that require a freshly packaged legacy `dist/Aura.exe`; absent or stale artifacts are not cleanup regressions and must be reported. Do not run packaging merely to satisfy these checks without accounting for its runtime-cache side effects. The CI-safe subset is `test_aura_hal`, `test_lightbar_probe`, `test_gsi_dictionary_blocks`, plus isolated Web/daemon entrypoint classes. Tests may skip daemon lifecycle cases when a real instance occupies the shared mutex or ports.
+Python discovery includes release/launcher checks that require a freshly packaged legacy `dist/Aura.exe`; absent or stale artifacts are not cleanup regressions and must be reported. Do not run packaging merely to satisfy these checks without accounting for its runtime-cache side effects. CI runs isolated Web/daemon entrypoint classes and `test_automation_{v2,authoring,effect,reload,retrigger}_daemon` against `AURA_BIN_DIR`; the reload suite requires MSVC and generated Studio fixtures. `test_aura_hal`, `test_lightbar_probe` and `test_gsi_dictionary_blocks` are additional local helper suites. Tests may skip daemon lifecycle cases when a real instance occupies the shared mutex or ports.
 
-CTest registers `plugin_runtime`, `runtime_status`, `lighting_service`, `gsi_rules`, `native_hid`, and (when Python is found) `aura_hal_py`. Lighting tests exercise production service validation and parameter schemas; .NET tests exercise the production client. Report their results separately.
+CTest registers plugin runtime/ABI, runtime status, lighting/automation services, GSI rules, native HID, Automation v2 evaluation/authoring/effect/retrigger, and (with Node/frontend dependencies installed before configure) reconciliation. Python adds frozen Stage 0 integrity and HAL helper checks. Lighting tests exercise production service validation and parameter schemas; .NET tests exercise the production client. Report their results separately.
 
 `test_com.cpp` and `test_diag_hook.cpp` remain CMake-built manual diagnostics, not CTest tests. The latter is interactive. `test_cs2_gsi.py` sends to live ports 19897/19898 and is an opt-in integration tool, not isolated CI. Do not run live probes or hardware calibration against a user's session as an automated check.
 

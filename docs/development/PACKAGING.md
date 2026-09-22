@@ -9,7 +9,9 @@ This cleanup retains the pipeline because launcher/runtime tests and existing re
 Known follow-up work before shipping WinUI:
 
 - Define WinUI distribution, runtime dependencies and daemon/Web/SDK asset layout; validate source, portable and installed startup.
-- Separate build output from user runtime-cache maintenance. The existing packaging script deletes `%LOCALAPPDATA%/Aura/runtime` and can clear a mismatched build directory; do not run it against an active user runtime merely to validate documentation.
+- Separate build output from user runtime-cache maintenance. The existing packaging script deletes `%LOCALAPPDATA%/Aura/runtime`; `--clean` clears the build directory, while a mismatched generator is refused; do not run it against an active user runtime merely to validate documentation.
 - Validate packaged Studio publishing, upgrade/migration and graceful exit on actual Windows hardware.
 
 Use the [release checklist](RELEASE_CHECKLIST.md). Automated CI does not publish packages or prove keyboard behavior.
+
+For isolated candidate validation, set `LOCALAPPDATA` to an empty validation directory before invoking the canonical script, so packaging cannot clear a user runtime. Inspect ZIP entries and extracted embedded resources; run the launcher with `--dry-run` outside the checkout. Portable configuration lives beside Aura.exe; standalone configuration lives in `%LOCALAPPDATA%/Aura/config.json`.

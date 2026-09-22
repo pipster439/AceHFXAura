@@ -2,7 +2,7 @@
 
 GitHub Actions runs on pushes, pull requests, and manual dispatches.
 
-- **Windows:** checks that local configuration and generated plugin sources are absent from Git, builds Release daemon/WebUI and native tests, runs CTest (including real plugin DLL loading/reloading), and WebUI/dry-run daemon entrypoint tests. It also runs .NET client tests and builds WinUI x64 Release. The explicit native build list includes `test_lighting_service`, which is registered with CTest.
+- **Windows:** checks that local configuration and generated plugin sources are absent from Git, builds Release daemon/WebUI and native tests, runs CTest (including real plugin DLL loading/reloading), and WebUI/dry-run daemon entrypoint tests. It also runs .NET client tests and builds WinUI x64 Release. Windows installs Node/frontend dependencies before CMake so Studio publication/reconciliation fixtures are registered, then builds the default Release target including all test executables and fixture DLLs. It also runs the five Automation v2 daemon integration modules (evaluation, authoring, effect, reload/publication, retrigger).
 - **Frontend:** installs the lockfile dependencies with `npm ci`, runs the Node test suite, and builds the single-page UI.
 
 The Windows job builds its own binaries and passes that exact directory through `AURA_BIN_DIR`. Runtime tests use temporary configuration and application-data directories; daemon lifecycle tests use `--dry-run`.

@@ -400,8 +400,15 @@ set(STUDIO_FIXTURE_DIR "${CMAKE_CURRENT_BINARY_DIR}/studio_stage4")
 add_custom_command(OUTPUT "${STUDIO_FIXTURE_DIR}/studio_old.cpp" "${STUDIO_FIXTURE_DIR}/studio_continuous.cpp" "${STUDIO_FIXTURE_DIR}/studio_one_shot.cpp"
     COMMAND "${AURA_NODE_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/frontend/tests/generate-publication-fixtures.mjs" "${STUDIO_FIXTURE_DIR}"
     DEPENDS frontend/tests/generate-publication-fixtures.mjs frontend/src/blockly/cppTranspiler.js frontend/src/blockly/sequenceCompiler.js frontend/src/blockly/publication.js)
+# One owner for the shared generator: independent VS projects otherwise execute
+# the same multi-output rule concurrently during ALL_BUILD and race on the files.
+add_custom_target(studio_publication_sources DEPENDS
+    "${STUDIO_FIXTURE_DIR}/studio_old.cpp"
+    "${STUDIO_FIXTURE_DIR}/studio_continuous.cpp"
+    "${STUDIO_FIXTURE_DIR}/studio_one_shot.cpp")
 foreach(studio_fixture studio_old studio_continuous studio_one_shot)
     add_library(${studio_fixture} SHARED "${STUDIO_FIXTURE_DIR}/${studio_fixture}.cpp")
+    add_dependencies(${studio_fixture} studio_publication_sources)
 endforeach()
 add_library(automation_reload_old SHARED tests/fixtures/automation_lifecycle_fixture.cpp)
 target_compile_definitions(automation_reload_old PRIVATE LIFECYCLE_FINISH=10000)

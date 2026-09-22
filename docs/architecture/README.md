@@ -1,6 +1,6 @@
 # Current architecture
 
-The Phase 3.6 development line contains native Lighting controls driven by backend effect parameter schemas. This describes source behavior, not a claim of physical acceptance.
+The current development line contains native Lighting controls and accepted Automation v2 through Stage 6. See [Automation v2](AUTOMATION_V2.md) for authoring, lifecycle, retrigger and reconciliation semantics. This describes source behavior, not a claim of physical acceptance.
 
 ```text
 WinUI Home / Lighting ── HTTP 19897 ── aura_daemon

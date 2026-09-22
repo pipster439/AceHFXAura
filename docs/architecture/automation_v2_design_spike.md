@@ -1,5 +1,7 @@
 # Automation v2 technical design spike
 
+> Historical design/Stage 1 scope record. Stages 2–6 and the snapshot/retirement remediation are now accepted; current behavior is documented in [Automation v2](AUTOMATION_V2.md). Initial stack/queue deferrals below describe the earlier scope, not alpha.3 limitations.
+
 Status: **approved for implementation** by Owner. Phase 4 v1 is accepted and merged into main; approved starting baseline is `7b2e1c7887cf9c6f7e5a9601530b19b00282ed24`. Source audit: 2026-09-21 against that checkout. The current implementation authorization covers Stage 0 and Stage 1 (ABI/factory substrate) only; stop after Stage 1 for review. Source descriptions below record the pre-Stage-1 audit, not claims that the implementation still lacks subsequently completed substrate work.
 
 Authoritative product boundary: [automation_architecture_review.md](automation_architecture_review.md). Studio defines **HOW TO RENDER**; Automation defines **WHEN TO RUN / WHAT TO DO**; Game Integration supplies telemetry. Business predicates belong only in Automation. An Effect may continuously map health, team, weapon, or other GSI input to pixels. Animation waits, interpolation, and completion belong inside the Effect.

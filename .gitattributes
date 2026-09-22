@@ -1,0 +1,4 @@
+# Frozen Stage 0 evidence is hashed byte-for-byte. Never convert line endings
+# on checkout (including Windows core.autocrlf=true) or on add.
+tests/fixtures/automation_v2_stage0/configs/** -text
+tests/fixtures/automation_v2_stage0/binaries/** -text

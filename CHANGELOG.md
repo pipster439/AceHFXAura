@@ -2,6 +2,36 @@
 
 所有值得关注的变更都记录在此。发行版本号以仓库根目录的 [`VERSION`](VERSION) 为单一事实源。
 
+## [0.1.0-alpha.3]
+
+### Automation v2
+
+- 统一 state / rising / event 作者模型：state → Activate Profile 或持续 Trigger Effect；rising/event → 一次性 Trigger Effect。
+- 明确 restart / ignore_while_active / stack / queue 重触发策略；堆叠和队列受容量、过期与每帧启动预算限制。
+- capabilities / CRUD、legacy 来源与共存展示、遮蔽确认，以及显式 Application Rule → V2 Promote/Convert 事务。
+
+### Effect runtime 与 Studio
+
+- 插件实例绑定 generation，支持 finished/opacity 生命周期导出；Alpha/Additive 混合与 Replace/Overlay 合成，固定持续层/瞬态层顺序。
+- Studio 显式 continuous / one-shot 发布，generation-safe 热重载及事务式发布/配置更新；旧运行 generation 安全保留，失败不覆盖原发布。
+- 区分语义与外观配置重载，兼容时保留活动/排队效果；作用域失效或 GSI 过期取消关联工作，恢复不重播旧事件。v2 GSI 决策默认 3 秒新鲜度，与连接在线状态分开。
+
+### 可靠性与发布验证
+
+- 修复 Automation 接纳时的快照一致性：条件、事件与前台作用域来自同一不可变快照。
+- 插件 generation 回收移出 Automation runtime mutex，避免销毁回调造成锁重入/死锁。
+- 扩展生产实现回归覆盖；Windows CI 构建完整 CTest 目标及 Studio fixture，运行 dry-run daemon 集成。冻结 Stage 0 证据禁用 checkout 换行转换；共享 Studio fixture 生成步骤避免并发写入冲突。
+
+### 已知限制
+
+- 实验性 alpha，目标 Windows 11 x64 + ROG Falchion Ace HFX；本次自动化验证不代表 Owner 已完成真键盘或 live CS2 验收。Windows 10 未正式验证。
+- 默认 auto 优先 native_hid；ASUS 专有 HAL DLL 不随包分发，仅 legacy/auto 回退使用用户本机已安装且通过 Gate 的组件。
+- 独立 Light Bar 控制未实现。
+- Studio 原生发布仍要求 MSVC Build Tools / Visual Studio C++ Desktop workload、x64 工具集与 Windows SDK。
+- 历史插件 DLL 不自动清理；原生插件不提供崩溃/挂起隔离。
+- CS2 实际字段取决于游戏模式与状态。
+- 发行包是 legacy C++ launcher + daemon + Web Studio，不包含 WinUI；WinUI 仅完成源码构建验证，分发打包仍待单独完成。
+
 ## [0.1.0-alpha.2]
 
 ### 新增

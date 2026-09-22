@@ -388,17 +388,23 @@ def build_portable_zip(version):
 ## 使用方法：
 1. **单文件直接启动**：双击运行 `Aura.exe` 即可自动激活键盘灯效并开启后台监护。
 2. **Web 配置界面**：启动后打开浏览器访问 `http://127.0.0.1:19898` 即可实时配置灯效方案与规则。
-3. **原生 HID 控灯**：Aura 默认优先采用原生 Win32 HID (MI_01) 协议直接控灯，运行时不加载 AacKbHal_x64.dll，即插即用。
+3. **原生 HID 控灯**：默认 auto 优先采用原生 Win32 HID (MI_01)，成功时不加载 ASUS HAL；Native 不可用时可尝试经过 Gate 的 legacy HAL。显式 --backend native_hid 禁止回退。
  
 ## 文件说明：
 - `Aura.exe`: 整合单文件主程序 (已内嵌守护进程、网页配置服务与 Plugin SDK，不内嵌任何 ASUS 专有 DLL)。
-- `config.example.json`: 配置文件模板 (若当前目录下无 config.json，启动时会自动生成)。
+- `config.example.json`: 配置模板；便携模式在 Aura.exe 同目录创建 config.json，单文件模式使用 %LOCALAPPDATA%/Aura/config.json。
 - `calibrated_keymap.json`: 68 键物理键位与硬件通道映射表。
 - `include/`: Aura C++ Plugin SDK 运行时头文件 (供光效工作室原生发布编译，依赖本机 MSVC / C++ Build Tools)。
  
 ## 后端驱动说明：
-- **默认 (Native Win32 HID)**: 即插即用，直接向键盘 MI_01 接口推送 65 字节 HID Report，运行时不加载 AacKbHal_x64.dll。
+- **优先路径 (Native Win32 HID)**: 直接向键盘 MI_01 接口推送 65 字节 HID Report；显式 native_hid 不加载 AacKbHal_x64.dll。
 - **备用/回退 (Legacy ASUS HAL)**: 保留 ASUS HAL 兼容路径（auto 模式下当 Native 端点不可用时作为 fallback，或通过 `--backend legacy_hal` 显式启用），仅在已安装 ASUS 官方驱动包且通过 SHA-256 白名单验证时可用。
+
+## Alpha 限制：
+- 面向 Windows 11 x64 / ROG Falchion Ace HFX；独立 Light Bar 控制未实现。
+- 此包包含 legacy launcher / Web Studio，不包含 WinUI。
+- Studio 原生发布需要 MSVC Build Tools / Visual Studio C++ Desktop workload、x64 工具集与 Windows SDK。
+- 历史插件 DLL 不自动清理；不提供原生插件崩溃/挂起隔离；CS2 字段取决于游戏模式与状态。
 """
     readme_path = os.path.join(DIST_DIR, "README_RELEASE.md")
     with open(readme_path, "w", encoding="utf-8") as f:
