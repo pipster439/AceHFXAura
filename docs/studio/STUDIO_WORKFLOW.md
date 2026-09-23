@@ -14,7 +14,7 @@ Studio 由本地 Web 服务提供，也通过 WinUI WebView2 使用。硬件默�
 
 state 播放光效是 while_true；rising/event 是 one_shot。Activate Profile 为独立 state 动作，DND 为规则元数据。目录来自后端 profile recipes 和已发布插件；草稿须先发布。无法解析的引用显示不可用并阻止保存。保存直接提交 V2 记录，服务端统一验证全部记录并以一个 revision 事务原子写入；冲突需重新加载并审阅。
 
-初始 config.example 展示 cs2.exe Activate Profile、低血量持续层和击杀一次性层。基础方案在命中规则中取配置顺序最前者；合成为 Base → persistent → transient，每类内部按 priority、rule_order、instance_sequence 排序。one-shot 保留 restart/ignore_while_active/stack/queue。
+新安装从空 `orchestration.rules` 开始，不会自动启用 CS2 或演示规则。基础方案在命中规则中取配置顺序最前者；合成为 Base → persistent → transient，每类内部按 priority、rule_order、instance_sequence 排序。one-shot 保留 restart/ignore_while_active/stack/queue。
 
 ## 全 Automation 模拟
 

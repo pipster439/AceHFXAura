@@ -2,11 +2,15 @@
 
 This release productizes the existing WinUI client. Native HID, Automation v2 evaluation/event/retrigger behavior, EffectEngine, PluginManager and Plugin ABI v1 remain the alpha.3 baseline. See [packaging](PACKAGING.md) for deployment and ownership; see [release checklist](RELEASE_CHECKLIST.md) for release gates.
 
+## Configuration contract
+
+The canonical fields, profile values, defaults, first-run behavior, Studio ownership, revision rules and invalid-file policy are specified in [Configuration](CONFIGURATION.md). The daemon and its typed services own runtime semantics. WinUI keeps theme and tray preferences in client settings; Studio owns `blockly_effects` authoring data. A fresh data root gets a `desktop` default, one wave sample and empty Automation rules. Existing invalid config is retained and daemon startup fails with a diagnostic; clients must surface the unavailable core rather than overwrite the file. alpha.4 is frozen to WinUI productization, configuration/release hygiene and correctness/stability fixes; hardware feature expansion begins in alpha.5.
+
 ## Authoritative routes
 
 | Owner | Route | Client use / contract |
 |---|---|---|
-| daemon :19897 | GET `/api/runtime/status` | Existing Control API v1; additive `identity` (service, PID, instance ID, product version, config path), `studio_web.suppressed`, `gsi.source` |
+| daemon :19897 | GET `/api/runtime/status` | Existing Control API v1; additive `identity` (service, PID, instance ID, product version, config path), `config.healthy`/`config.last_error`, `studio_web.suppressed`, `gsi.source` |
 | daemon :19897 | GET `/api/lighting/presets`, GET/PATCH `/api/lighting/base` | Existing schema, sparse patch and expected revision semantics; no new config mutable surface |
 | daemon :19897 | GET/PATCH `/api/lighting/global` | API v1; effective global `fps` (default 25, range 10–100) and revision; PATCH accepts only integer `fps` and required `expected_revision`, preserves profile overrides and other fields, uses shared config lock/atomic writer; 400 invalid, 409 stale |
 | daemon :19897 | GET `/api/gsi/current` | Existing fields plus `gsi_api_version: 1`, instance/source/source_epoch and owner-evaluated freshness; source and fields captured under the same source lock |

@@ -46,6 +46,26 @@ class TestGsiConfigurationContract(unittest.TestCase):
 
 
 class TestPackagedRuntime(unittest.TestCase):
+    def test_fresh_package_uses_small_canonical_config(self):
+        package = os.environ.get("AURA_PACKAGE_DIR")
+        if not package: self.skipTest("Set AURA_PACKAGE_DIR to the final extracted WinUI package")
+        check_daemon_prerequisites_or_skip(self)
+        payload = Path(package).resolve() / "runtime-payload"
+        with tempfile.TemporaryDirectory(prefix="aura-fresh-package-") as temp:
+            root = Path(temp)
+            proc = subprocess.Popen([str(payload/"aura_daemon.exe"), "--dry-run",
+                "--keymap", str(payload/"calibrated_keymap.json"), "--runtime-root", str(payload)],
+                cwd=root, env=get_isolated_env(temp), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            try:
+                self.assertTrue(wait_for_http_ready(19897, path="/api/runtime/status"))
+                config = json.loads((root/"config.json").read_text(encoding="utf-8"))
+                self.assertEqual(config["default_profile"], "desktop")
+                self.assertEqual(config["fps"], 25)
+                self.assertEqual(config["hardware_backend"], "auto")
+                self.assertEqual(config["orchestration"]["rules"], [])
+                self.assertEqual(set(config["profiles"]), {"desktop", "ambient_wave"})
+            finally: terminate_proc(proc)
+
     def test_package_without_checkout_assets(self):
         package = os.environ.get("AURA_PACKAGE_DIR")
         if not package: self.skipTest("Set AURA_PACKAGE_DIR to the final extracted WinUI package")

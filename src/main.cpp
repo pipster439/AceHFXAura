@@ -731,6 +731,7 @@ int main(int argc, char* argv[]) {
         snap.process_id = GetCurrentProcessId();
         snap.product_version = AURA_PRODUCT_VERSION;
         snap.config_path = std::filesystem::absolute(config_path).u8string();
+        snap.config_error = rule_engine.GetLastConfigError();
         snap.web_suppressed = web_supervisor.IsSuppressed();
         snap.hardware_connected = (!dry_run) && adapter.IsConnected();
         snap.adapter_state = aura::AdapterStateToString(adapter.GetState());

@@ -13,9 +13,10 @@ Current code is the implementation authority. Guides below have distinct roles; 
 | [Studio workflow](studio/STUDIO_WORKFLOW.md) | Blockly editing, preview, publishing and orchestration |
 | [Packaging](development/PACKAGING.md) / [Release checklist](development/RELEASE_CHECKLIST.md) | WinUI ZIP layout, runtime ownership and release gates |
 | [alpha.4 client contract](development/ALPHA4_CLIENT_CONTRACT.md) | Native GSI routes, client lifecycle and validation |
+| [Configuration](development/CONFIGURATION.md) | Canonical config, defaults, Studio ownership and write contract |
 | [Cleanup audit](development/REPOSITORY_CLEANUP.md) | Complete pre-cleanup tracked-file inventory and decisions |
 | [Repository hygiene](development/REPOSITORY_HYGIENE.md) | Tracking boundaries, audit artifact policy and Git rules |
 | [History](archive/README.md) | Superseded decisions, reports and patch snapshots |
 | [Changelog](../CHANGELOG.md) | Version history |
 
-Runtime configuration is local and ignored. The checked-in [example](../config.example.json) is a template, not a second user configuration. [VERSION](../VERSION) is the release version source.
+Runtime configuration is local and ignored. The checked-in [example](../config.example.json) is the small canonical first-run template, not a second user configuration. [VERSION](../VERSION) is the release version source.

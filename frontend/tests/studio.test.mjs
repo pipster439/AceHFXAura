@@ -164,6 +164,7 @@ test('effect lifecycle: draft, unpublished changes, and published states', () =>
   const pubBuild = { pluginName: 'fx1_dll', revision: 'abc' };
   const publishedCfg = effectConfig(savedDraft, 'fx1', { blocks: [] }, pubBuild);
   assert.ok(publishedCfg.blockly_effects.fx1.published_at > 0);
+  assert.equal(Object.hasOwn(publishedCfg.profiles.fx1, 'fps'), false, 'publication keeps global FPS inheritance');
   assert.equal(getEffectLifecycleStatus(publishedCfg.blockly_effects.fx1).status, 'published');
 
   // Modify draft on top of published

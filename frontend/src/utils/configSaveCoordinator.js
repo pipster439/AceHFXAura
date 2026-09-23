@@ -62,6 +62,7 @@ export class ConfigSaveCoordinator {
 
     // Capture current generation at enqueue time
     const capturedGen = this.generation;
+    const capturedRevision = this.revision;
     const seq = ++this.saveSeq;
 
     const previous = this.saveChain;
@@ -73,6 +74,19 @@ export class ConfigSaveCoordinator {
     try {
       // Abort without sending if generation is no longer current
       if (capturedGen !== this.generation) {
+        return false;
+      }
+
+      // A prior queued save may have succeeded. A full-document snapshot made
+      // against its old revision must never inherit that save's new revision.
+      if (capturedRevision !== this.revision) {
+        this.bumpGeneration();
+        try {
+          this.onConflict?.({ message: '配置已由先前保存更新，请刷新后重试' });
+          await this.fetchConfigFn?.();
+        } finally {
+          this.bumpGeneration();
+        }
         return false;
       }
 

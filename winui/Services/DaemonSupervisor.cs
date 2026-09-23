@@ -12,6 +12,10 @@ public sealed class DaemonSupervisor : IDaemonSupervisor
     private readonly SemaphoreSlim _lifecycle = new(1, 1);
     private readonly CancellationTokenSource _shutdown = new();
     private IOwnedDaemonProcess? _child;
+    private string? _ownedConfigPath;
+    private string? _startupLogPath;
+    private long _startupLogOffset;
+    private string? _startupFailureDescription;
     private static readonly Lazy<DaemonSupervisor> Singleton = new(() => new());
     public static DaemonSupervisor Instance => Singleton.Value;
 
@@ -47,14 +51,17 @@ public sealed class DaemonSupervisor : IDaemonSupervisor
         Identity = status.Data?.Identity;
         IsDaemonRunning = status.IsOnline;
         CoreReady = status.IsOnline && Identity is { Service: "aura_daemon", ProcessId: > 0 } && !string.IsNullOrEmpty(Identity.InstanceId);
+        if (CoreReady) _startupFailureDescription = null;
         WebSuppressed = status.Data?.StudioWeb.Suppressed == true;
         if (!CoreReady || WebSuppressed || previousInstance != Identity?.InstanceId) IsWebServerReady = false;
         if (_child is { HasExited: false } && CoreReady && Identity!.InstanceId == _child.InstanceId && Identity.ProcessId == _child.Id)
             Ownership = DaemonOwnership.SpawnedByWinUI;
         else if (status.IsOnline) Ownership = DaemonOwnership.AttachedPreExisting;
         else if (_child is null || _child.HasExited) Ownership = DaemonOwnership.None;
-        UpdateStatus(CoreReady ? $"核心已就绪 · {Ownership} · {Identity!.ProductVersion}" :
-            status.IsOnline ? "外部核心版本不兼容，仅可查看；请在外部升级后重新连接" : status.ErrorMessage);
+        UpdateStatus(CoreReady ? status.Data!.Config.Healthy
+                ? $"核心已就绪 · {Ownership} · {Identity!.ProductVersion}"
+                : $"配置热重载失败，仍使用先前有效配置：{status.Data.Config.LastError}" :
+            status.IsOnline ? "外部核心版本不兼容，仅可查看；请在外部升级后重新连接" : _startupFailureDescription ?? status.ErrorMessage);
     }
 
     public async Task<bool> ProbeWebServerAsync()
@@ -80,9 +87,15 @@ public sealed class DaemonSupervisor : IDaemonSupervisor
                 { UpdateStatus("检测到外部核心，但 Control API 尚未就绪；不会启动或停止它"); return; }
                 if (_child == null)
                 {
+                    _startupFailureDescription = null;
                     UpdateStatus("正在准备并启动后台核心...");
                     var layout = await Task.Run(_prepare, _shutdown.Token);
                     _shutdown.Token.ThrowIfCancellationRequested();
+                    _ownedConfigPath = layout.ConfigPath;
+                    _startupLogPath = Path.Combine(layout.WorkingDirectory, "aura_daemon.log");
+                    try { _startupLogOffset = File.Exists(_startupLogPath) ? new FileInfo(_startupLogPath).Length : 0; }
+                    catch (IOException) { _startupLogOffset = 0; }
+                    catch (UnauthorizedAccessException) { _startupLogOffset = 0; }
                     _child = _start(layout);
                     OwnedRuntimeDirectory = layout.RuntimeDirectory;
                 }
@@ -92,7 +105,7 @@ public sealed class DaemonSupervisor : IDaemonSupervisor
                 {
                     await RefreshAsync(deadline.Token);
                     if (CoreReady) return;
-                    if (_child.HasExited) { UpdateStatus("后台核心已退出，请查看数据目录中的 aura_daemon.log"); return; }
+                    if (_child.HasExited) { _startupFailureDescription = DescribeStartupExit(); UpdateStatus(_startupFailureDescription); return; }
                     await Task.Delay(200, deadline.Token);
                 }
             }
@@ -123,6 +136,28 @@ public sealed class DaemonSupervisor : IDaemonSupervisor
         finally { _lifecycle.Release(); }
     }
     private void UpdateStatus(string status) { StatusDescription = status; StatusChanged?.Invoke(status); }
+
+    private string DescribeStartupExit()
+    {
+        var fallback = $"后台核心已退出；配置文件：{_ownedConfigPath}；请查看数据目录中的 aura_daemon.log";
+        try
+        {
+            if (_startupLogPath is null || !File.Exists(_startupLogPath)) return fallback;
+            using var log = new FileStream(_startupLogPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            if (log.Length < _startupLogOffset || log.Length - _startupLogOffset > 65536) return fallback;
+            log.Position = _startupLogOffset;
+            using var reader = new StreamReader(log);
+            var appended = reader.ReadToEnd();
+            if (!appended.Contains("FATAL: 配置文件加载或校验失败", StringComparison.Ordinal)) return fallback;
+            var reason = appended.Split('\n').Select(line => line.Trim())
+                .LastOrDefault(line => line.Contains("ERROR", StringComparison.Ordinal) &&
+                    !line.Contains("FATAL:", StringComparison.Ordinal));
+            if (reason is null) return fallback;
+            return $"配置加载失败：{reason[..Math.Min(reason.Length, 300)]}；配置文件：{_ownedConfigPath}";
+        }
+        catch (IOException) { return fallback; }
+        catch (UnauthorizedAccessException) { return fallback; }
+    }
     public static bool CheckMutexExists()
     {
         var handle = OpenMutex(0x00100000, false, @"Local\RogFalchionAceHfxDaemonMutex");

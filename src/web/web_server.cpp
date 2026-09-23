@@ -1,4 +1,5 @@
 #include "config/automation_contract.h"
+#include "config/config_contract.h"
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -980,7 +981,7 @@ void WebServer::SetupRoutes() {
         try {
             // 5. 校验 JSON 格式合法性
             auto j = nlohmann::json::parse(req.body);
-            aura::ValidateAutomationContainers(j);
+            aura::ValidateConfigDocument(j);
             // Automation edits use the daemon validator and revision-bound API.
             auto v2_records = [](const nlohmann::json& config) {
                 auto records=nlohmann::json::array();
@@ -1017,7 +1018,7 @@ void WebServer::SetupRoutes() {
             res.status = 400;
             nlohmann::json err = {
                 {"status", "error"},
-                {"message", std::string("JSON 解析失败: ") + e.what()}
+                {"message", std::string("配置解析或校验失败: ") + e.what()}
             };
             res.set_content(err.dump(), "application/json; charset=utf-8");
         }

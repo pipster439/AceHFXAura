@@ -106,7 +106,7 @@ public:
     uint64_t GetAutomationFreshnessMs() const;
 
 
-    // Checks file modification time and reloads if changed
+    // Checks file modification time and identity and reloads if changed.
     bool CheckAndReload();
 
     // Read-only V2 profile selection; does not consume event observations.
@@ -131,6 +131,10 @@ public:
         std::lock_guard<std::mutex> lock(mutex_);
         return hardware_backend_;
     }
+    std::string GetLastConfigError() const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return last_config_error_;
+    }
     bool HasProfile(const std::string& name) const;
     std::shared_ptr<const Profile> GetProfile(const std::string& name) const;
 
@@ -143,10 +147,13 @@ public:
 
 private:
     static FILETIME GetConfigFileTime(const std::string& path);
+    static uint64_t GetConfigFileId(const std::string& path);
     FILETIME GetConfigFileTime() const;
 
     std::string config_path_;
     FILETIME last_write_time_{0, 0};
+    uint64_t last_file_id_{0};
+    std::string last_config_error_;
 
     std::string default_profile_name_;
     std::string fallback_profile_;

@@ -144,7 +144,7 @@ export function effectConfig(config, name, blocklyJson, build, options) {
     effect.applied_publication = normalizePublication(build.publication);
     effect.applied_blockly_json = blocklyJson;
     effect.applied_plugin_name = build.pluginName;
-    profiles[name] = { ...(profiles[name] || {}), type: 'plugin', plugin_name: build.pluginName, title: name, fps: profiles[name]?.fps || 25 };
+    profiles[name] = { ...(profiles[name] || {}), type: 'plugin', plugin_name: build.pluginName, title: name };
   }
   return { ...config, profiles, blockly_effects: { ...config.blockly_effects, [name]: effect } };
 }

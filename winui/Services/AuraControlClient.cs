@@ -53,6 +53,8 @@ public sealed class GsiStatusDto
 
 public sealed class RuntimeStatusResponseDto
 {
+    [JsonPropertyName("config")]
+    public ConfigStatusDto Config { get; set; } = new();
     [JsonPropertyName("identity")]
     public RuntimeIdentityDto? Identity { get; set; }
     [JsonPropertyName("studio_web")]
@@ -71,6 +73,14 @@ public sealed class RuntimeStatusResponseDto
 
     [JsonPropertyName("gsi")]
     public GsiStatusDto Gsi { get; set; } = new();
+}
+
+public sealed class ConfigStatusDto
+{
+    [JsonPropertyName("healthy")]
+    public bool Healthy { get; set; } = true;
+    [JsonPropertyName("last_error")]
+    public string LastError { get; set; } = "";
 }
 
 public sealed class RuntimeStatus

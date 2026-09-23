@@ -110,7 +110,7 @@ public sealed partial class SettingsPage : Page
     private void UpdateDaemonDetail()
     {
         var supervisor = DaemonSupervisor.Instance;
-        DaemonStatusDetailText.Text = supervisor.CoreReady ? "核心已连接" : supervisor.StatusDescription;
+        DaemonStatusDetailText.Text = supervisor.StatusDescription;
         StudioStatusText.Text = supervisor.WebSuppressed ? "Studio：免打扰规则已暂停网页服务" : supervisor.StudioWebReady ? "Studio：可用" : "Studio：暂不可用";
         var id = supervisor.Identity;
         RuntimeDetailsText.Text = id == null ? "尚未取得核心信息" :

@@ -585,7 +585,28 @@ class TestDaemonEntrypoint(unittest.TestCase):
                         "aura_daemon must initialize config.json in CWD when template is available")
         with open(created_config, "r", encoding="utf-8") as f:
             data = json.load(f)
-        self.assertIn("profiles", data)
+        self.assertEqual(list(data["profiles"]), ["desktop", "ambient_wave"])
+        self.assertEqual(data["fps"], 25)
+        self.assertEqual(data["hardware_backend"], "auto")
+        self.assertEqual(data["orchestration"]["rules"], [])
+
+    def test_existing_invalid_config_fails_closed_without_replacement(self):
+        check_daemon_prerequisites_or_skip(self)
+        config_path = os.path.join(self.tmp_dir, "config.json")
+        shutil.copyfile(KEYMAP_FILE, os.path.join(self.tmp_dir, "calibrated_keymap.json"))
+        cases = (b'{"profiles":', b'[]',
+                 b'{"fps":"25","profiles":{"desktop":{"type":"static"}}}',
+                 b'{"fps":101,"profiles":{"desktop":{"type":"static"}}}')
+        for original in cases:
+            with self.subTest(config=original):
+                with open(config_path, "wb") as f:
+                    f.write(original)
+                result = run_proc([self.daemon_exe, "--dry-run", "--config", config_path], self.tmp_dir, env=self.env)
+                self.assertEqual(result.returncode, 1)
+                with open(config_path, "rb") as f:
+                    self.assertEqual(f.read(), original)
+        with open(os.path.join(self.tmp_dir, "aura_daemon.log"), "r", encoding="utf-8", errors="replace") as f:
+            self.assertIn("配置文件加载或校验失败", f.read())
 
     def test_daemon_default_config_skip_existing_preserves_custom_file(self):
         check_daemon_prerequisites_or_skip(self)
@@ -677,7 +698,7 @@ class TestDaemonEntrypoint(unittest.TestCase):
             self.assertEqual(profiles_data.get("api_version"), 1)
             self.assertTrue(len(profiles_data.get("revision", "")) > 0)
             profiles = profiles_data.get("profiles", [])
-            self.assertTrue(len(profiles) >= 2)
+            self.assertEqual(len(profiles), 2)
             names = [p.get("name") for p in profiles]
             self.assertIn("desktop", names)
 
@@ -687,9 +708,8 @@ class TestDaemonEntrypoint(unittest.TestCase):
             self.assertEqual(detail_data.get("api_version"), 1)
             prof = detail_data.get("profile", {})
             self.assertEqual(prof.get("name"), "desktop")
-            self.assertEqual(prof.get("type"), "breathing")
-            self.assertTrue(prof.get("supports_period"))
-            self.assertEqual(prof.get("period_ms"), 3500)
+            self.assertEqual(prof.get("type"), "static")
+            self.assertFalse(prof.get("supports_period"))
             self.assertEqual(prof.get("brightness"), 1.0)
             self.assertEqual(prof.get("fps"), 25)
         finally:

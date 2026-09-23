@@ -1,4 +1,5 @@
 #include "config/lighting_service.h"
+#include "config/config_contract.h"
 #include "utils/logger.h"
 
 #include <fstream>
@@ -492,13 +493,12 @@ LightingControlService::OpResult LightingControlService::GetProfileDetail(
         d.type = pval.value("type", "static");
         d.brightness = NormalizeBrightnessToRatio(pval);
 
-        int root_fps = 25;
-        if (root.contains("fps") && root["fps"].is_number()) {
-            root_fps = std::clamp(root["fps"].get<int>(), 10, 100);
-        }
+        if (root.contains("fps") && !IsValidConfigFps(root["fps"]))
+            return {500, "Config Error", "Configuration fps must be an integer in [10,100]", rev};
+        int root_fps = root.value("fps", kDefaultConfigFps);
 
         if (pval.contains("fps") && pval["fps"].is_number()) {
-            d.fps = std::clamp(pval["fps"].get<int>(), 10, 100);
+            d.fps = std::clamp(pval["fps"].get<int>(), kMinConfigFps, kMaxConfigFps);
             d.fps_inherited = false;
         } else {
             d.fps = root_fps;
@@ -569,7 +569,7 @@ LightingControlService::OpResult LightingControlService::UpdateProfile(
         }
 
         if (patch.has_fps) {
-            if (patch.fps < 10 || patch.fps > 100) {
+            if (patch.fps < kMinConfigFps || patch.fps > kMaxConfigFps) {
                 return {400, "Validation Error", "Field 'fps' must be an integer between 10 and 100", current_rev};
             }
             prof["fps"] = patch.fps;
@@ -937,13 +937,15 @@ LightingControlService::OpResult LightingControlService::GetGlobalFps(int& fps, 
     try {
         auto root = nlohmann::ordered_json::parse(content);
         if (!root.is_object()) return {500, "Read Error", "Configuration must be an object", revision};
-        fps = root.contains("fps") && root["fps"].is_number() ? std::clamp(root["fps"].get<int>(), 10, 100) : 25;
+        if (root.contains("fps") && !IsValidConfigFps(root["fps"]))
+            return {500, "Config Error", "Configuration fps must be an integer in [10,100]", revision};
+        fps = root.value("fps", kDefaultConfigFps);
         return {200, "", "", revision};
     } catch (const std::exception&) { return {500, "Read Error", "Invalid configuration", revision}; }
 }
 
 LightingControlService::OpResult LightingControlService::UpdateGlobalFps(int fps, const std::string& expected, std::string& revision) {
-    if (expected.empty() || fps < 10 || fps > 100) return {400, "Validation Error", "Expected revision and integer FPS in [10,100] are required", ""};
+    if (expected.empty() || fps < kMinConfigFps || fps > kMaxConfigFps) return {400, "Validation Error", "Expected revision and integer FPS in [10,100] are required", ""};
     NamedConfigLock lock(kConfigWriteMutexName, 5000);
     if (!lock.IsAcquired()) return {500, "Write Error", "Cannot acquire configuration lock", ""};
     std::string content;
@@ -973,7 +975,7 @@ void LightingControlService::RegisterRoutes(httplib::Server& svr) {
         if (!ValidatePatchRequestSecurity(req, res)) return;
         auto body = nlohmann::json::parse(req.body, nullptr, false);
         if (!body.is_object() || body.size() != 2 || !body.contains("expected_revision") || !body["expected_revision"].is_string() ||
-            !body.contains("fps") || !body["fps"].is_number_integer() || body["fps"] < 10 || body["fps"] > 100) {
+            !body.contains("fps") || !IsValidConfigFps(body["fps"])) {
             res.status = 400; res.set_content(R"({"status":"error","message":"Only expected_revision and integer fps in [10,100] are accepted"})", "application/json"); return;
         }
         std::string revision;
@@ -1108,7 +1110,7 @@ void LightingControlService::RegisterRoutes(httplib::Server& svr) {
             }
 
             if (j.contains("fps")) {
-                if (!j["fps"].is_number_integer()) {
+                if (!IsValidConfigFps(j["fps"])) {
                     res.status = 400;
                     res.set_content(R"json({"status":"error","error":"Validation Error","message":"'fps' must be an integer between 10 and 100"})json", "application/json; charset=utf-8");
                     return;

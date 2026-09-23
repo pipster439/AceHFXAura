@@ -1,4 +1,5 @@
 #include "config/automation_contract.h"
+#include "config/config_contract.h"
 #include "config/rule_engine.h"
 #include "config/lighting_service.h"
 #include "engine/builtin_effects.h"
@@ -337,6 +338,19 @@ FILETIME RuleEngine::GetConfigFileTime(const std::string& path) {
     return ft;
 }
 
+uint64_t RuleEngine::GetConfigFileId(const std::string& path) {
+    const std::filesystem::path fs_path(path);
+    HANDLE file = CreateFileW(fs_path.c_str(), FILE_READ_ATTRIBUTES,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
+        FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE) return 0;
+    BY_HANDLE_FILE_INFORMATION info{};
+    const bool ok = GetFileInformationByHandle(file, &info) != 0;
+    CloseHandle(file);
+    if (!ok) return 0;
+    return (static_cast<uint64_t>(info.nFileIndexHigh) << 32) | info.nFileIndexLow;
+}
+
 FILETIME RuleEngine::GetConfigFileTime() const {
     std::string path;
     {
@@ -353,18 +367,21 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
     std::ifstream file(fs_path);
 
     FILETIME file_ft = GetConfigFileTime(config_path);
+    const uint64_t file_id = GetConfigFileId(config_path);
 
-    auto record_failure_ft = [&]() {
+    auto record_failure_ft = [&](const std::string& reason) {
         std::lock_guard<std::mutex> lock(mutex_);
         if (config_path_.empty() || config_path_ == config_path) {
             config_path_ = config_path;
             last_write_time_ = file_ft;
+            last_file_id_ = file_id;
+            last_config_error_ = reason;
         }
     };
 
     if (!file.is_open()) {
         LOG_ERROR("无法打开配置文件: " << config_path);
-        record_failure_ft();
+        record_failure_ft("Cannot open configuration file");
         return false;
     }
 
@@ -374,16 +391,23 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
 
         if (!j.is_object()) {
             LOG_ERROR("配置文件格式错误：根节点必须为 JSON 对象: " << config_path);
-            record_failure_ft();
+            record_failure_ft("Configuration root must be an object");
             return false;
         }
 
         std::string def_name = "desktop";
         bool valid = true;
+        std::string validation_error;
 
-        int new_fps = 25;
-        if (j.contains("fps") && j["fps"].is_number()) {
-            new_fps = std::clamp(j["fps"].get<int>(), 10, 100);
+        int new_fps = kDefaultConfigFps;
+        if (j.contains("fps")) {
+            if (!IsValidConfigFps(j["fps"])) {
+                LOG_ERROR("配置文件中 'fps' 必须为 [10,100] 的整数: " << config_path);
+                valid = false;
+                validation_error = "/fps must be an integer in [10,100]";
+            } else {
+                new_fps = j["fps"].get<int>();
+            }
         }
 
         HardwareBackend new_backend = HardwareBackend::Auto;
@@ -391,12 +415,14 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
             if (!j["hardware_backend"].is_string()) {
                 LOG_ERROR("配置文件中 'hardware_backend' 字段必须为字符串: " << config_path);
                 valid = false;
+                if (validation_error.empty()) validation_error = "/hardware_backend must be a string";
             } else {
                 std::string backend_str = j["hardware_backend"].get<std::string>();
                 if (!TryParseHardwareBackend(backend_str, new_backend)) {
                     LOG_ERROR("配置文件中 'hardware_backend' 包含未知或不支持的值: '" << backend_str
                               << "' (支持的有效值: auto, native_hid, native, hid, legacy_hal, legacy, hal): " << config_path);
                     valid = false;
+                    if (validation_error.empty()) validation_error = "/hardware_backend has an unsupported value";
                 }
             }
         }
@@ -407,6 +433,7 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
             } else {
                 LOG_ERROR("默认方案字段 'default_profile' 必须为字符串: " << config_path);
                 valid = false;
+                if (validation_error.empty()) validation_error = "/default_profile must be a string";
             }
         }
 
@@ -436,11 +463,13 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
         if (!j.contains("profiles") || !j["profiles"].is_object() || j["profiles"].empty()) {
             LOG_ERROR("配置文件缺少有效的 'profiles' 节点或 profiles 为空: " << config_path);
             valid = false;
+            if (validation_error.empty()) validation_error = "/profiles must be a nonempty object";
         } else {
             for (auto& [pname, pval] : j["profiles"].items()) {
                 if (!pval.is_object()) {
                     LOG_ERROR("方案 '" << pname << "' 必须为 JSON 对象");
                     valid = false;
+                    if (validation_error.empty()) validation_error = "/profiles/" + pname + " must be an object";
                     continue;
                 }
                 auto prof = std::make_shared<Profile>();
@@ -457,6 +486,7 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
                 auto effect = CreateEffectFromProfile(pname, pval);
                 if (!effect) {
                     valid = false;
+                    if (validation_error.empty()) validation_error = "/profiles/" + pname + " has an invalid effect";
                 }
                 prof->base_effect = effect;
 
@@ -487,6 +517,7 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
             } catch (const std::exception& error) {
                 LOG_ERROR("[Automation] Rule '" << rule.id << "': " << error.what());
                 valid = false;
+                if (validation_error.empty()) validation_error = "/orchestration/rules: " + std::string(error.what());
             }
         }
 
@@ -495,6 +526,7 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
             LOG_ERROR("默认方案 default_profile '" << def_name
                       << "' 未在 profiles 中定义，请检查拼写或在 profiles 中添加该方案定义");
             valid = false;
+            if (validation_error.empty()) validation_error = "/default_profile references a missing profile";
         }
 
         // 6. 编排兜底方案 (orchestration.fallback_profile) 校验
@@ -503,11 +535,12 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
                 LOG_ERROR("编排兜底方案 fallback_profile '" << new_fallback
                           << "' 未在 profiles 中定义");
                 valid = false;
+                if (validation_error.empty()) validation_error = "/orchestration/fallback_profile references a missing profile";
             }
         }
 
         if (!valid) {
-            record_failure_ft();
+            record_failure_ft(validation_error.empty() ? "Configuration validation failed; see daemon log" : validation_error);
             return false;
         }
 
@@ -536,6 +569,8 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
             ++config_generation_;
             automation_freshness_ms_ = new_freshness;
             last_write_time_ = file_ft;
+            last_file_id_ = file_id;
+            last_config_error_.clear();
         }
 
         LOG_INFO("成功加载配置文件: " << config_path << " (默认方案: " << def_name
@@ -544,7 +579,7 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
         return true;
     } catch (const std::exception& e) {
         LOG_ERROR("解析配置文件异常: " << e.what());
-        record_failure_ft();
+        record_failure_ft(e.what());
         return false;
     }
 }
@@ -552,25 +587,29 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
 bool RuleEngine::CheckAndReload() {
     std::string path;
     FILETIME last_ft{0, 0};
+    uint64_t last_id = 0;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         path = config_path_;
         last_ft = last_write_time_;
+        last_id = last_file_id_;
     }
     if (path.empty()) return false;
 
     FILETIME current_ft = GetConfigFileTime(path);
+    const uint64_t current_id = GetConfigFileId(path);
     if (current_ft.dwLowDateTime == 0 && current_ft.dwHighDateTime == 0) {
         return false;
     }
 
-    if (CompareFileTime(&current_ft, &last_ft) != 0) {
+    if (CompareFileTime(&current_ft, &last_ft) != 0 || (current_id && last_id && current_id != last_id)) {
         LOG_INFO("检测到配置文件已修改，正在执行热重载: " << path);
         if (LoadConfig(path)) {
             return true;
         } else {
             std::lock_guard<std::mutex> lock(mutex_);
             last_write_time_ = current_ft;
+            last_file_id_ = current_id;
             LOG_WARN("配置文件热重载失败，保留既有有效配置；文件再次修改前将暂停重试");
             return false;
         }

@@ -67,6 +67,29 @@ test('queued stale save cannot inherit revision obtained after earlier request r
   assert.equal(postCalls[1].body.payload, 'C_from_R2');
 });
 
+test('queued full-document snapshot cannot inherit revision after an earlier successful save', async () => {
+  const posts = [];
+  let conflicts = 0;
+  let reloads = 0;
+  const coordinator = new ConfigSaveCoordinator({
+    onConflict: () => { conflicts += 1; },
+    fetchConfigFn: async () => { reloads += 1; }
+  });
+  coordinator.setRevision('R1');
+  const fetchImpl = async (_url, options) => {
+    posts.push({ revision: options.headers['If-Match'], body: JSON.parse(options.body) });
+    return { status: 200, ok: true, headers: { get: () => '"R2"' } };
+  };
+  const first = coordinator.saveConfig({ profiles: { desktop: { brightness: 0.5 } } }, fetchImpl);
+  const stale = coordinator.saveConfig({ profiles: { desktop: { brightness: 1.0 } } }, fetchImpl);
+  assert.equal(await first, true);
+  assert.equal(await stale, false);
+  assert.equal(posts.length, 1);
+  assert.equal(posts[0].revision, '"R1"');
+  assert.equal(conflicts, 1);
+  assert.equal(reloads, 1);
+});
+
 test('multiple queued stale saves are all invalidated upon 409 conflict', async () => {
   const postCalls = [];
   let currentServerRevision = 'rev_initial';

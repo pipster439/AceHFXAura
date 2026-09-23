@@ -10,6 +10,7 @@ struct RuntimeStatusSnapshot {
     std::string instance_id;
     std::string product_version;
     std::string config_path;
+    std::string config_error;
     uint32_t process_id = 0;
     bool web_suppressed = false;
     bool hardware_connected = false;
@@ -34,6 +35,7 @@ struct RuntimeStatusSnapshot {
         j["identity"] = {{"service", "aura_daemon"}, {"process_id", process_id},
             {"instance_id", instance_id}, {"product_version", product_version}, {"config_path", config_path}};
         j["studio_web"] = {{"suppressed", web_suppressed}};
+        j["config"] = {{"healthy", config_error.empty()}, {"last_error", config_error}};
 
         j["hardware"] = {
             {"connected", hardware_connected},

@@ -14,6 +14,16 @@ Version source: [`VERSION`](../../VERSION). A generated ZIP is a candidate, not 
 - [ ] `AURA_PACKAGE_DIR` points to the final extracted candidate; `test_winui_productization.TestPackagedRuntime` passes outside checkout assets.
 - [ ] VERSION, GUI About/assembly, native product versions, runtime manifest, archive name and notes agree. CI Windows/frontend jobs are green for the exact release commit.
 
+## Configuration acceptance (record against the exact candidate)
+
+- [ ] Fresh isolated data root creates the small canonical config once; restart preserves Lighting, profiles, Automation and Studio edits.
+- [ ] Existing malformed/invalid config is not overwritten; the failure and path are visible to the user.
+- [ ] Global FPS 25 default, 10/100 bounds and profile override/inheritance match runtime behavior after reload.
+- [ ] Automation and Studio publication saves preserve unrelated profiles, Lighting and opaque root fields; failed publication retains the old reference.
+- [ ] Stale revisions surface a conflict; failed temp/replace keeps the previous config bytes.
+- [ ] Rapid consecutive valid saves reload the latest config; test a data-root path with Unicode and spaces.
+- [ ] Candidate ZIP contains no user/private config; upgrade preserves config, plugins and client preferences.
+
 ## Manual desktop and lifecycle gates (Windows 11 x64)
 
 - [ ] Start complete extracted ZIP from a clean-machine-like location without source checkout, Node, CMake or .NET SDK; core starts automatically and no GUI recursion occurs.

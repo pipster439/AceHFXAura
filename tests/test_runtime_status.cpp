@@ -132,6 +132,11 @@ int main() {
         auto j = snap.ToJson();
         CHECK(j.contains("status") && j["status"] == "ok", "JSON status 存在且为 ok");
         CHECK(j.contains("api_version") && j["api_version"] == 1, "JSON api_version 存在且为 1");
+        CHECK(j["config"]["healthy"] == true && j["config"]["last_error"] == "", "config defaults to healthy");
+        snap.config_error = "/fps must be an integer in [10,100]";
+        auto failed = snap.ToJson();
+        CHECK(failed["config"]["healthy"] == false && failed["config"]["last_error"] == snap.config_error,
+              "config reload failure is visible without changing runtime status");
 
         CHECK(j.contains("hardware") && j["hardware"].is_object(), "JSON 包含 hardware 对象");
         CHECK(j["hardware"].value("connected", false) == true, "hardware.connected 字段正确");

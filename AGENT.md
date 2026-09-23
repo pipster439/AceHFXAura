@@ -10,6 +10,7 @@ Use current code as the source of truth. Start with [README](README.md) and the 
 - The configured default is `auto`: try Native HID first, then gated legacy HAL if needed. `native_hid` explicitly disables HAL fallback; `legacy_hal` explicitly selects diagnostic compatibility. Verify selection in `src/main.cpp`, `src/aura/aura_adapter.cpp` and the example config before changing documentation.
 - Root `calibrated_keymap.json` is runtime data. WinUI development layout requires explicit `AURA_DEV_ROOT`. Do not relocate it or plugin SDK headers for cosmetic cleanup. Hardware reports live in [docs/hardware](docs/hardware/README.md).
 - Studio orchestration uses version 2. Preserve draft/publish separation, immutable plugin versions, ABI compatibility and failure rollback. See [Studio workflow](docs/studio/STUDIO_WORKFLOW.md).
+- Treat [Configuration](docs/development/CONFIGURATION.md) as the alpha.4 persisted contract. New writers must use canonical fields and retain revision, lock, validation and atomic replacement; never reset an existing invalid user config.
 - `tools/package_release.py` and both root wrappers default to a self-contained WinUI x64 ZIP. The C++ launcher requires explicit `--legacy` and is not the alpha.4 entry. See [packaging](docs/development/PACKAGING.md).
 
 ## Working rules

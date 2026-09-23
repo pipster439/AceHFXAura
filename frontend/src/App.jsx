@@ -39,6 +39,10 @@ export default function App() {
   const [isStarryRandom, setIsStarryRandom] = useState(false);
   const [bgColor, setBgColor] = useState(DEFAULT_KEYBOARD_BG);
   const [fpsVal, setFpsVal] = useState(25);
+  const fpsEditedRef = useRef(false);
+  const speedEditedRef = useRef(false);
+  const changeProfileFps = (value) => { fpsEditedRef.current = true; setFpsVal(value); };
+  const changeSpeed = (value) => { speedEditedRef.current = true; setSpeedIndex(value); };
 
   // MD3E 主题模式 (默认暗黑)
   const [theme, setTheme] = useState(host.theme);
@@ -102,7 +106,9 @@ export default function App() {
   };
 
   // 方案数据加载到 UI 控件
-  const loadProfileToState = useCallback((profileData) => {
+  const loadProfileToState = useCallback((profileData, globalFps = 25) => {
+    fpsEditedRef.current = false;
+    speedEditedRef.current = false;
     if (!profileData) return;
 
     setCurrentEffect(profileData.type || 'static');
@@ -137,13 +143,13 @@ export default function App() {
       setBrightnessVal(1.0);
     }
 
-    if (typeof profileData.speed_index === 'number' && Number.isFinite(profileData.speed_index)) {
-      const idx = Math.round(profileData.speed_index);
-      setSpeedIndex(Math.max(0, Math.min(2, idx)));
-    } else if (profileData.period_ms && Number.isFinite(profileData.period_ms)) {
+    if (profileData.period_ms && Number.isFinite(profileData.period_ms)) {
       if (profileData.period_ms > 4500) setSpeedIndex(0);
       else if (profileData.period_ms > 2400) setSpeedIndex(1);
       else setSpeedIndex(2);
+    } else if (typeof profileData.speed_index === 'number' && Number.isFinite(profileData.speed_index)) {
+      const idx = Math.round(profileData.speed_index);
+      setSpeedIndex(Math.max(0, Math.min(2, idx)));
     } else {
       setSpeedIndex(1);
     }
@@ -162,7 +168,7 @@ export default function App() {
     if (typeof profileData.fps === 'number' && Number.isFinite(profileData.fps)) {
       setFpsVal(Math.max(10, Math.min(100, Math.round(profileData.fps))));
     } else {
-      setFpsVal(25);
+      setFpsVal(globalFps);
     }
   }, []);
 
@@ -178,13 +184,9 @@ export default function App() {
       const data = await res.json();
       setConfig(data);
 
-      if (typeof data.fps === 'number' && Number.isFinite(data.fps)) {
-        setFpsVal(Math.max(10, Math.min(100, Math.round(data.fps))));
-      }
-
       const defaultProf = data.default_profile || Object.keys(data.profiles || {})[0] || 'desktop';
       setCurrentProfileName(defaultProf);
-      loadProfileToState(data.profiles?.[defaultProf]);
+      loadProfileToState(data.profiles?.[defaultProf], data.fps ?? 25);
 
       setTimeout(() => {
         isInitializedRef.current = true;
@@ -262,13 +264,12 @@ export default function App() {
     if (!configRef.current?.profiles?.[pname]) return;
     isSwitchingProfileRef.current = true;
     setCurrentProfileName(pname);
-    loadProfileToState(configRef.current.profiles[pname]);
+    loadProfileToState(configRef.current.profiles[pname], configRef.current.fps ?? 25);
     setSelectedKeyNames(new Set());
 
     const nextConfig = {
       ...configRef.current,
       orchestration: configRef.current.orchestration ? { ...configRef.current.orchestration, fallback_profile: pname } : undefined,
-      blockly_orchestrator: undefined,
       default_profile: pname
     };
     setConfig(nextConfig);
@@ -299,18 +300,20 @@ export default function App() {
         prof.brightness = isMasterLightOn ? brightnessVal : 0;
       } else {
         prof.type = currentEffect;
-        prof.analog = currentEffect === 'static' ? isAnalogEnabled : false;
+        if (currentEffect === 'static') prof.analog = isAnalogEnabled;
         prof.brightness = isMasterLightOn ? brightnessVal : 0;
-        prof.speed_index = speedIndex;
-        prof.direction = currentDirection;
-        prof.thickness = thicknessVal;
-        prof.period_ms = speedIndex === 0 ? 5500 : speedIndex === 1 ? 3200 : 1600;
+        if (['wave', 'quicksand'].includes(currentEffect)) prof.direction = currentDirection;
+        if (['wave', 'ripple', 'quicksand', 'current'].includes(currentEffect)) prof.thickness = thicknessVal;
+        if (speedEditedRef.current && ['breathing', 'color_cycle', 'wave', 'reactive', 'ripple', 'starry_night', 'quicksand', 'current', 'raindrop'].includes(currentEffect)) {
+          prof.period_ms = speedIndex === 0 ? 5500 : speedIndex === 1 ? 3200 : 1600;
+          delete prof.speed_index;
+        }
 
         if (gradientStops && gradientStops.length > 0) {
-          prof.color = hexToRgb(gradientStops[0].color);
-          prof.color1 = hexToRgb(gradientStops[0].color);
+          if (['breathing', 'quicksand'].includes(currentEffect)) prof.color1 = hexToRgb(gradientStops[0].color);
+          else if (['static', 'reactive', 'ripple', 'starry_night', 'current', 'raindrop'].includes(currentEffect)) prof.color = hexToRgb(gradientStops[0].color);
         }
-        if (gradientStops && gradientStops.length > 1) {
+        if (['breathing', 'quicksand'].includes(currentEffect) && gradientStops && gradientStops.length > 1) {
           prof.color2 = hexToRgb(gradientStops[1].color);
         }
 
@@ -320,15 +323,14 @@ export default function App() {
           delete prof.random_colors;
         }
 
-        if (['reactive', 'ripple', 'custom_keymap', 'static'].includes(currentEffect)) {
+        if (['reactive', 'ripple', 'custom_keymap'].includes(currentEffect)) {
           prof.bg = hexToRgb(bgColor);
         } else {
           delete prof.bg;
         }
-        prof.fps = fpsVal;
+        if (fpsEditedRef.current) prof.fps = fpsVal;
       }
 
-      cloned.fps = fpsVal;
       cloned.default_profile = pName;
 
       setConfig(cloned);
@@ -455,7 +457,7 @@ export default function App() {
 
   // 方案管理操作 (设为默认立即同步至硬件)
   const handleSetDefaultProfile = (name) => {
-    const nextConfig = { ...configRef.current, default_profile: name, orchestration: configRef.current.orchestration ? { ...configRef.current.orchestration, fallback_profile: name } : undefined, blockly_orchestrator: undefined };
+    const nextConfig = { ...configRef.current, default_profile: name, orchestration: configRef.current.orchestration ? { ...configRef.current.orchestration, fallback_profile: name } : undefined };
     setConfig(nextConfig);
     saveConfigDirectly(nextConfig);
     showToast(`已将 [${name}] 设为默认方案并实时生效！`);
@@ -474,7 +476,7 @@ export default function App() {
     setConfig(nextConfig);
     saveConfigDirectly(nextConfig);
     setCurrentProfileName(newName);
-    loadProfileToState(clonedProf);
+    loadProfileToState(clonedProf, configRef.current.fps ?? 25);
     showToast(`已克隆方案: ${newName}`);
   };
 
@@ -483,8 +485,6 @@ export default function App() {
       type: 'static',
       color: [15, 23, 42],
       brightness: 1.0,
-      speed_index: 1,
-      period_ms: 3200,
       keys: {}
     };
     const nextConfig = {
@@ -497,7 +497,7 @@ export default function App() {
     setConfig(nextConfig);
     saveConfigDirectly(nextConfig);
     setCurrentProfileName(newName);
-    loadProfileToState(fresh);
+    loadProfileToState(fresh, configRef.current.fps ?? 25);
     showToast(`已新建方案: ${newName}`);
   };
 
@@ -523,7 +523,7 @@ export default function App() {
     setConfig(nextConfig);
     saveConfigDirectly(nextConfig);
     setCurrentProfileName(nextCurrent);
-    loadProfileToState(nextProfiles[nextCurrent]);
+    loadProfileToState(nextProfiles[nextCurrent], configRef.current.fps ?? 25);
     showToast(`已删除方案: ${name}`);
   };
 
@@ -621,7 +621,7 @@ export default function App() {
                   brightnessVal={brightnessVal}
                   setBrightnessVal={setBrightnessVal}
                   speedIndex={speedIndex}
-                  setSpeedIndex={setSpeedIndex}
+                  setSpeedIndex={changeSpeed}
                   currentDirection={currentDirection}
                   setCurrentDirection={setCurrentDirection}
                   thicknessVal={thicknessVal}
@@ -633,7 +633,7 @@ export default function App() {
                   isStarryRandom={isStarryRandom}
                   setIsStarryRandom={setIsStarryRandom}
                   fpsVal={fpsVal}
-                  setFpsVal={setFpsVal}
+                  setFpsVal={changeProfileFps}
                   bgColor={bgColor}
                   setBgColor={setBgColor}
                   setActiveTab={setActiveTab}

@@ -12,6 +12,9 @@ class TestGlobalLightingDaemon(unittest.TestCase):
         with runtime.TestAutomationReloadDaemon().daemon(config) as (_,_,path):
             code, settings, _ = request(19897,"/api/lighting/global")
             self.assertEqual(code,200); self.assertEqual(settings["api_version"],1); self.assertEqual(settings["fps"],25)
+            profile=request(19897,"/api/lighting/profiles/base")[1]
+            self.assertEqual(request(19897,"/api/lighting/profiles/base","PATCH",
+                {"expected_revision":profile["revision"],"fps":2**64})[0],400)
             original=path.read_bytes()
             def patch(value,**extra):
                 return request(19897,"/api/lighting/global","PATCH",{"expected_revision":settings["revision"],"fps":value,**extra})
@@ -28,6 +31,18 @@ class TestGlobalLightingDaemon(unittest.TestCase):
                 while request(19897,"/api/runtime/status")[1]["runtime"]["fps"] != fps:
                     self.assertLess(time.monotonic(),deadline);time.sleep(.05)
             wait_fps(40)
+            invalid=dict(saved); invalid["fps"]="bad"
+            temp=path.with_suffix(".invalid"); temp.write_text(json.dumps(invalid)); os.replace(temp,path)
+            deadline=time.monotonic()+5
+            while request(19897,"/api/runtime/status")[1].get("config",{}).get("healthy",True):
+                self.assertLess(time.monotonic(),deadline);time.sleep(.05)
+            failed=request(19897,"/api/runtime/status")[1]
+            self.assertIn("/fps",failed["config"]["last_error"])
+            self.assertEqual(failed["runtime"]["fps"],40)
+            temp=path.with_suffix(".recovered"); temp.write_text(json.dumps(saved)); os.replace(temp,path)
+            deadline=time.monotonic()+5
+            while not request(19897,"/api/runtime/status")[1]["config"]["healthy"]:
+                self.assertLess(time.monotonic(),deadline);time.sleep(.05)
             saved["default_profile"]="override"
             temp=path.with_suffix(".next"); temp.write_text(json.dumps(saved));os.replace(temp,path)
             wait_fps(60)

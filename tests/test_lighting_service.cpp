@@ -1,6 +1,8 @@
 #include "test_util.h"
 #include "config/lighting_service.h"
 #include "config/rule_engine.h"
+#include "config/config_contract.h"
+#include "config/config_writer_util.h"
 #include "third_party/json.hpp"
 
 #include <filesystem>
@@ -697,6 +699,54 @@ int main() {
         aura::RuleEngine reader; CHECK(reader.LoadConfig(global_path), "global config remains valid runtime input");
         CHECK(reader.GetFps() == 100, "runtime consumes persisted global FPS");
         std::filesystem::remove(global_path);
+    }
+
+    {
+        const auto path = CreateTempConfigFile("config_contract", R"({"profiles":{"desktop":{"type":"static"}},"orchestration":{"rules":[]},"opaque":{"keep":true}})");
+        auto read_config = [&]() { std::ifstream input(path); return nlohmann::json::parse(input); };
+        const auto original = read_config();
+        aura::RuleEngine reader;
+        CHECK(reader.LoadConfig(path) && reader.GetFps() == 25, "missing optional root fields use documented defaults");
+        for (const auto& invalid : {
+                 R"([])",
+                 R"({"fps":"25","profiles":{"desktop":{"type":"static"}}})",
+                 R"({"fps":9,"profiles":{"desktop":{"type":"static"}}})",
+                 R"({"fps":101,"profiles":{"desktop":{"type":"static"}}})",
+                 R"({"profiles":{}})",
+                 R"({"default_profile":"missing","profiles":{"desktop":{"type":"static"}}})",
+                 R"({"profiles":{"desktop":{"type":"unknown"}}})",
+                 R"({"profiles":{"desktop":{"type":"static","color":[256,0,0]}}})",
+                 R"({"profiles":{"desktop":{"type":"breathing","period_ms":0}}})",
+                 R"({"profiles":{"desktop":{"type":"wave","direction":"sideways"}}})",
+                 R"({"profiles":{"desktop":{"type":"static","brightness":256}}})"}) {
+            bool rejected = false;
+            try { aura::AtomicWriteConfigFile(path, invalid); }
+            catch (const std::exception&) { rejected = true; }
+            CHECK(rejected, "invalid configuration rejected before atomic replacement");
+            CHECK(read_config() == original, "invalid write preserves existing configuration");
+        }
+        for (int boundary : {10, 100}) {
+            auto document = original;
+            document["fps"] = boundary;
+            CHECK(aura::AtomicWriteConfigFile(path, document.dump()), "valid FPS boundary is writable");
+            CHECK(reader.LoadConfig(path) && reader.GetFps() == boundary, "runtime reads canonical FPS boundary");
+        }
+        std::filesystem::remove(path);
+    }
+
+    {
+        const auto path = CreateTempConfigFile("same_timestamp_reload", R"({"fps":25,"profiles":{"desktop":{"type":"static"}}})");
+        aura::RuleEngine reader;
+        CHECK(reader.LoadConfig(path), "initial config loads for replacement identity test");
+        const auto original_time = std::filesystem::last_write_time(path);
+        for (int fps : {40, 60}) {
+            const auto content = std::string(R"({"fps":)") + std::to_string(fps) + R"(,"profiles":{"desktop":{"type":"static"}}})";
+            CHECK(aura::AtomicWriteConfigFile(path, content), "rapid config replacement succeeds");
+            std::filesystem::last_write_time(path, original_time);
+            CHECK(reader.CheckAndReload() && reader.GetFps() == fps,
+                "atomic replacement reloads newest config even when timestamp is unchanged");
+        }
+        std::filesystem::remove(path);
     }
 
     // 清理测试临时文件

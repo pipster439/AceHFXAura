@@ -88,6 +88,23 @@ public sealed class ProductizationTests
         await supervisor.StopAsync();
     }
     [TestMethod]
+    public async Task RejectedHotReloadIsVisibleWhileCoreRemainsReady()
+    {
+        var response = new {
+            status = "ok", api_version = 1,
+            identity = new { service = "aura_daemon", instance_id = "valid-core", process_id = 15,
+                product_version = "0.1.0-alpha.4", config_path = "config.json" },
+            config = new { healthy = false, last_error = "/fps must be an integer in [10,100]" },
+            studio_web = new { suppressed = false }, hardware = new { connected = false }, runtime = new { dry_run = true }
+        };
+        var client = new AuraControlClient(new(new Handler(_ => Task.FromResult(Json(response)))));
+        var supervisor = new DaemonSupervisor(client);
+        await supervisor.RefreshAsync();
+        Assert.IsTrue(supervisor.CoreReady);
+        Assert.Contains("/fps", supervisor.StatusDescription);
+        await supervisor.StopAsync();
+    }
+    [TestMethod]
     public async Task WebReadinessIsInvalidatedWhenCoreRestarts()
     {
         string instance = "first";
