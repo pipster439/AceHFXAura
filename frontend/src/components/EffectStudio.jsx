@@ -1,7 +1,8 @@
 import { normalizePublication } from '../blockly/publication.js';
 import { stageEffect, effectConfig, getEffectLifecycleStatus, fetchPublishReadiness } from '../utils/applyEffect.js';
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import Blockly, { loadSafeWorkspaceJson } from '../blockly/index.js';
+import { dismissForOverlay } from '../blockly/dismissForOverlay.js';
 import { registerCustomBlocks } from '../blockly/customBlocks';
 import { DEFAULT_INJECT_OPTIONS } from '../blockly/theme';
 import { EFFECT_STUDIO_TOOLBOX } from '../blockly/toolboxes';
@@ -31,10 +32,14 @@ export default function EffectStudio({
   showToast,
   onPreviewFrameUpdate,
   activeEffectName,
-  onEffectNameChange
+  onEffectNameChange,
+  embedded = false,
+  compact = false,
+  overlayOpen = false
 }) {
   const blocklyDivRef = useRef(null);
   const workspaceRef = useRef(null);
+  useLayoutEffect(() => { if (overlayOpen) return dismissForOverlay(workspaceRef.current); }, [overlayOpen]);
   const [effectName, setEffectName] = useState(activeEffectName || 'custom_rainbow');
   const effectNameRef = useRef(effectName);
   effectNameRef.current = effectName;
@@ -44,6 +49,7 @@ export default function EffectStudio({
   const [isPlaying, setIsPlaying] = useState(true);
   const [cppCode, setCppCode] = useState('');
   const [isCodeModalOpen, setIsCodeModalOpen] = useState(false);
+  const [showCompactControls, setShowCompactControls] = useState(false);
   const [isCompiling, setIsCompiling] = useState(false);
   const [compilerLog, setCompilerLog] = useState(null);
   const [compilerSuccess, setCompilerSuccess] = useState(null);
@@ -128,9 +134,12 @@ export default function EffectStudio({
 
     const handleResize = () => Blockly.svgResize(ws);
     window.addEventListener('resize', handleResize);
+    const observer = new ResizeObserver(handleResize);
+    observer.observe(blocklyDivRef.current);
 
     return () => {
       window.removeEventListener('resize', handleResize);
+      observer.disconnect();
       try { sessionStorage.setItem('aura-effect-draft', JSON.stringify({ name: effectNameRef.current, publication: publicationRef.current, json: Blockly.serialization.workspaces.save(ws) })); } catch {}
       ws.dispose();
       workspaceRef.current = null;
@@ -290,7 +299,12 @@ export default function EffectStudio({
   const lifecycle = getEffectLifecycleStatus(currentEffectData);
 
   return (
-    <div className="flex flex-col gap-4 p-1 h-full min-h-[560px]">
+    <div className={`flex flex-col gap-3 p-1 h-full ${embedded ? 'min-h-[320px]' : 'min-h-[560px]'}`}>
+      {embedded && compact && <button type="button" aria-expanded={showCompactControls} onClick={() => setShowCompactControls(!showCompactControls)}
+        className="shrink-0 rounded-md-sm bg-md-surface-container px-3 py-1.5 text-left text-xs font-semibold">
+        {showCompactControls ? '收起作品操作' : '作品操作 · 保存与发布'}
+      </button>}
+      <div className={embedded && compact ? (showCompactControls ? 'flex max-h-[45%] shrink-0 flex-col gap-3 overflow-y-auto' : 'hidden') : 'contents'}>
       <div className="flex items-center gap-3">
         <label>发布方式 <select aria-label="发布方式" disabled={isCompiling} value={publication.mode}
           onChange={e => setPublication(normalizePublication({ ...publication, mode: e.target.value }))}>
@@ -475,8 +489,9 @@ export default function EffectStudio({
       </div>
 
       {editError && <p role="alert" className="text-sm text-md-error">{editError}</p>}
+      </div>
       {/* Google Blockly 主画布 */}
-      <div className="flex-1 w-full h-full relative rounded-md-lg overflow-hidden border border-md-outline-variant shadow-md-level1 bg-md-surface-container-low">
+      <div className="flex-1 min-h-[240px] w-full relative rounded-md-lg overflow-hidden border border-md-outline-variant shadow-md-level1 bg-md-surface-container-low">
         <div ref={blocklyDivRef} className="absolute inset-0 w-full h-full" />
       </div>
 

@@ -873,12 +873,25 @@ LightingControlService::OpResult LightingControlService::UpdateBaseLighting(
 // HTTP 安全防御检查 (127.0.0.1:19897 写接口防御)
 // ========================================================
 bool LightingControlService::ValidatePatchRequestSecurity(const httplib::Request& req, httplib::Response& res) {
-    // 1. Host 校验：必须为环回地址
+    auto loopback_authority = [](const std::string& authority) {
+        for (const std::string name : {"127.0.0.1", "localhost", "[::1]"}) {
+            if (authority == name) return true;
+            if (authority.rfind(name + ":", 0) == 0) {
+                auto port = authority.substr(name.size() + 1);
+                if (port.empty() || port.size() > 5 || port.find_first_not_of("0123456789") != std::string::npos) return false;
+                return std::stoi(port) > 0 && std::stoi(port) <= 65535;
+            }
+        }
+        return false;
+    };
+    auto trusted_url = [&](const std::string& url) {
+        if (url.rfind("http://", 0) != 0) return false;
+        auto authority = url.substr(7);
+        authority = authority.substr(0, authority.find_first_of("/?#"));
+        return loopback_authority(authority);
+    };
     std::string host = req.get_header_value("Host");
-    bool host_ok = (host == "127.0.0.1" || host == "localhost" || host == "[::1]" ||
-                    host.rfind("127.0.0.1:", 0) == 0 ||
-                    host.rfind("localhost:", 0) == 0 ||
-                    host.rfind("[::1]:", 0) == 0);
+    bool host_ok = loopback_authority(host);
     if (!host_ok) {
         res.status = 403;
         res.set_content(R"json({"status":"error","error":"Forbidden","message":"Host must be loopback"})json", "application/json; charset=utf-8");
@@ -897,7 +910,7 @@ bool LightingControlService::ValidatePatchRequestSecurity(const httplib::Request
     // WinUI 原生 HttpClient 默认无 Origin，允许通过；若存在必须为合法环回地址
     std::string origin = req.get_header_value("Origin");
     if (!origin.empty()) {
-        bool origin_ok = (origin.rfind("http://127.0.0.1", 0) == 0 || origin.rfind("http://localhost", 0) == 0);
+        bool origin_ok = trusted_url(origin);
         if (!origin_ok) {
             res.status = 403;
             res.set_content(R"json({"status":"error","error":"Forbidden","message":"Untrusted Origin rejected"})json", "application/json; charset=utf-8");
@@ -907,7 +920,7 @@ bool LightingControlService::ValidatePatchRequestSecurity(const httplib::Request
 
     std::string referer = req.get_header_value("Referer");
     if (!referer.empty()) {
-        bool referer_ok = (referer.rfind("http://127.0.0.1", 0) == 0 || referer.rfind("http://localhost", 0) == 0);
+        bool referer_ok = trusted_url(referer);
         if (!referer_ok) {
             res.status = 403;
             res.set_content(R"json({"status":"error","error":"Forbidden","message":"Untrusted Referer rejected"})json", "application/json; charset=utf-8");
@@ -918,7 +931,59 @@ bool LightingControlService::ValidatePatchRequestSecurity(const httplib::Request
     return true;
 }
 
+LightingControlService::OpResult LightingControlService::GetGlobalFps(int& fps, std::string& revision) {
+    std::string content;
+    if (!ReadRawConfigFile(content, revision)) return {500, "Read Error", "Cannot read configuration", ""};
+    try {
+        auto root = nlohmann::ordered_json::parse(content);
+        if (!root.is_object()) return {500, "Read Error", "Configuration must be an object", revision};
+        fps = root.contains("fps") && root["fps"].is_number() ? std::clamp(root["fps"].get<int>(), 10, 100) : 25;
+        return {200, "", "", revision};
+    } catch (const std::exception&) { return {500, "Read Error", "Invalid configuration", revision}; }
+}
+
+LightingControlService::OpResult LightingControlService::UpdateGlobalFps(int fps, const std::string& expected, std::string& revision) {
+    if (expected.empty() || fps < 10 || fps > 100) return {400, "Validation Error", "Expected revision and integer FPS in [10,100] are required", ""};
+    NamedConfigLock lock(kConfigWriteMutexName, 5000);
+    if (!lock.IsAcquired()) return {500, "Write Error", "Cannot acquire configuration lock", ""};
+    std::string content;
+    if (!ReadRawConfigFile(content, revision)) return {500, "Read Error", "Cannot read configuration", ""};
+    if (revision != expected) return {409, "Conflict", "Configuration has been modified externally", revision};
+    try {
+        auto root = nlohmann::ordered_json::parse(content);
+        if (!root.is_object()) return {500, "Read Error", "Configuration must be an object", revision};
+        root["fps"] = fps;
+        auto formatted = root.dump(2);
+        if (!AtomicWriteConfigFile(config_path_, formatted, file_replacer_)) return {500, "Write Error", "Cannot atomically replace configuration", revision};
+        revision = ComputeFileRevision(formatted);
+        return {200, "", "Global FPS saved", revision};
+    } catch (const std::exception&) { return {500, "Write Error", "Cannot update configuration", revision}; }
+}
+
 void LightingControlService::RegisterRoutes(httplib::Server& svr) {
+    svr.Get("/api/lighting/global", [this](const httplib::Request&, httplib::Response& res) {
+        int fps = 25; std::string revision;
+        auto op = GetGlobalFps(fps, revision); res.status = op.http_status;
+        nlohmann::json body = {{"status", res.status == 200 ? "ok" : "error"}, {"api_version", 1}, {"revision", revision}};
+        if (res.status == 200) body["fps"] = fps;
+        else { body["error"] = op.error_code; body["message"] = op.message; }
+        res.set_content(body.dump(), "application/json; charset=utf-8");
+    });
+    svr.Patch("/api/lighting/global", [this](const httplib::Request& req, httplib::Response& res) {
+        if (!ValidatePatchRequestSecurity(req, res)) return;
+        auto body = nlohmann::json::parse(req.body, nullptr, false);
+        if (!body.is_object() || body.size() != 2 || !body.contains("expected_revision") || !body["expected_revision"].is_string() ||
+            !body.contains("fps") || !body["fps"].is_number_integer() || body["fps"] < 10 || body["fps"] > 100) {
+            res.status = 400; res.set_content(R"({"status":"error","message":"Only expected_revision and integer fps in [10,100] are accepted"})", "application/json"); return;
+        }
+        std::string revision;
+        auto op = UpdateGlobalFps(body["fps"].get<int>(), body["expected_revision"].get<std::string>(), revision);
+        res.status = op.http_status;
+        nlohmann::json result = {{"status", res.status == 200 ? "ok" : "error"}, {"api_version", 1}, {"message", op.message}};
+        if (res.status == 200) result["revision"] = revision;
+        else { result["error"] = op.error_code; result["current_revision"] = op.current_revision; }
+        res.set_content(result.dump(), "application/json; charset=utf-8");
+    });
     // 1. GET /api/lighting/profiles - 获取轻量 Profile 列表
     svr.Get("/api/lighting/profiles", [this](const httplib::Request&, httplib::Response& res) {
         std::vector<ProfileSummary> profiles;

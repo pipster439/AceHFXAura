@@ -8,52 +8,8 @@
     Background="Transparent"
     mc:Ignorable="d">
 
-    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-        <StackPanel x:Name="RootPanel" Spacing="20" Padding="24,20,24,24">
-            <VisualStateManager.VisualStateGroups>
-                <VisualStateGroup>
-                    <!-- 宽屏视图：双列布局 (窗口宽度 >= 720px) -->
-                    <VisualState x:Name="WideState">
-                        <VisualState.StateTriggers>
-                            <AdaptiveTrigger MinWindowWidth="720" />
-                        </VisualState.StateTriggers>
-                        <VisualState.Setters>
-                            <Setter Target="CardGridCol1.Width" Value="*" />
-                            <Setter Target="DeviceCard.(Grid.Row)" Value="0" />
-                            <Setter Target="DeviceCard.(Grid.Column)" Value="0" />
-                            <Setter Target="DaemonCard.(Grid.Row)" Value="0" />
-                            <Setter Target="DaemonCard.(Grid.Column)" Value="1" />
-                            <Setter Target="ProfileCard.(Grid.Row)" Value="1" />
-                            <Setter Target="ProfileCard.(Grid.Column)" Value="0" />
-                            <Setter Target="GsiCard.(Grid.Row)" Value="1" />
-                            <Setter Target="GsiCard.(Grid.Column)" Value="1" />
-                            <Setter Target="QuickCard.(Grid.Row)" Value="2" />
-                            <Setter Target="QuickCard.(Grid.Column)" Value="0" />
-                            <Setter Target="QuickCard.(Grid.ColumnSpan)" Value="2" />
-                        </VisualState.Setters>
-                    </VisualState>
-                    <!-- 窄屏视图：单列平铺 (窗口宽度 < 720px，完全兼容 600 DIP 最小物理约束) -->
-                    <VisualState x:Name="NarrowState">
-                        <VisualState.StateTriggers>
-                            <AdaptiveTrigger MinWindowWidth="0" />
-                        </VisualState.StateTriggers>
-                        <VisualState.Setters>
-                            <Setter Target="CardGridCol1.Width" Value="0" />
-                            <Setter Target="DeviceCard.(Grid.Row)" Value="0" />
-                            <Setter Target="DeviceCard.(Grid.Column)" Value="0" />
-                            <Setter Target="DaemonCard.(Grid.Row)" Value="1" />
-                            <Setter Target="DaemonCard.(Grid.Column)" Value="0" />
-                            <Setter Target="ProfileCard.(Grid.Row)" Value="2" />
-                            <Setter Target="ProfileCard.(Grid.Column)" Value="0" />
-                            <Setter Target="GsiCard.(Grid.Row)" Value="3" />
-                            <Setter Target="GsiCard.(Grid.Column)" Value="0" />
-                            <Setter Target="QuickCard.(Grid.Row)" Value="4" />
-                            <Setter Target="QuickCard.(Grid.Column)" Value="0" />
-                            <Setter Target="QuickCard.(Grid.ColumnSpan)" Value="1" />
-                        </VisualState.Setters>
-                    </VisualState>
-                </VisualStateGroup>
-            </VisualStateManager.VisualStateGroups>
+    <ScrollViewer x:Name="PageScroll" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Visible" HorizontalContentAlignment="Stretch">
+        <StackPanel x:Name="RootPanel" Spacing="20" MaxWidth="1200" HorizontalAlignment="Left">
 
             <!-- 标题区 -->
             <StackPanel Spacing="4">
@@ -218,12 +174,6 @@
                 </Border>
             </Grid>
 
-            <!-- 状态通道指引 -->
-            <InfoBar Title="Aura Control API v1 已接入"
-                     Message="本页面已通过 daemon 核心端口 (http://127.0.0.1:19897/api/runtime/status) 实时同步真实设备连接、协议通道、活跃方案与推流帧率。"
-                     IsOpen="True"
-                     IsClosable="False"
-                     Severity="Success" />
         </StackPanel>
     </ScrollViewer>
 </Page>

@@ -1,254 +1,134 @@
-using System;
-using System.Diagnostics;
-using System.IO;
-using System.Net.Http;
 using System.Runtime.InteropServices;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Aura_WinUI.Services;
 
 public sealed class DaemonSupervisor : IDaemonSupervisor
 {
-    private const uint SYNCHRONIZE = 0x00100000;
-    private const string DAEMON_MUTEX_NAME = @"Local\RogFalchionAceHfxDaemonMutex";
-    private const string DAEMON_SHUTDOWN_EVENT_NAME = @"Local\RogFalchionAceHfxDaemonShutdownEvent";
+    private readonly IAuraControlClient _client;
+    private readonly AuraWebClient _web;
+    private readonly Func<RuntimeLayout> _prepare;
+    private readonly Func<RuntimeLayout, IOwnedDaemonProcess> _start;
+    private readonly Func<bool> _mutexExists;
+    private readonly SemaphoreSlim _lifecycle = new(1, 1);
+    private readonly CancellationTokenSource _shutdown = new();
+    private IOwnedDaemonProcess? _child;
+    private static readonly Lazy<DaemonSupervisor> Singleton = new(() => new());
+    public static DaemonSupervisor Instance => Singleton.Value;
 
-    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-    private static extern IntPtr OpenMutex(uint dwDesiredAccess, bool bInheritHandle, string lpName);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool CloseHandle(IntPtr hObject);
-
-    private readonly HttpClient _http = new() { Timeout = TimeSpan.FromMilliseconds(1500) };
-    private readonly object _taskLock = new();
-    private Task? _inFlightStartTask;
-
-    private Process? _spawnedProcess;
-    private string _status = "未初始化";
-
+    public DaemonSupervisor(IAuraControlClient? client = null, AuraWebClient? web = null,
+        Func<RuntimeLayout>? prepare = null, Func<RuntimeLayout, IOwnedDaemonProcess>? start = null, Func<bool>? mutexExists = null)
+    {
+        _client = client ?? AuraControlClient.Instance; _web = web ?? new();
+        _prepare = prepare ?? (() => { var layout = RuntimeLayoutResolver.Resolve(); RuntimePreparer.Prepare(layout); return layout; });
+        _start = start ?? (layout => new OwnedDaemonProcess(layout)); _mutexExists = mutexExists ?? CheckMutexExists;
+    }
     public bool IsDaemonRunning { get; private set; }
+    public bool CoreReady { get; private set; }
     public bool IsWebServerReady { get; private set; }
-    public string StatusDescription => _status;
-    public DaemonOwnership Ownership { get; private set; } = DaemonOwnership.None;
-
+    public bool StudioWebReady => IsWebServerReady;
+    public bool WebSuppressed { get; private set; }
+    public string StatusDescription { get; private set; } = "未初始化";
+    public string? OwnedRuntimeDirectory { get; private set; }
+    public RuntimeIdentityDto? Identity { get; private set; }
+    public DaemonOwnership Ownership { get; private set; }
     public event Action<string>? StatusChanged;
 
-    private static DaemonSupervisor? _instance;
-    public static DaemonSupervisor Instance => _instance ??= new DaemonSupervisor();
-
-    public static bool CheckMutexExists()
+    public async Task RefreshAsync(CancellationToken token = default)
     {
-        IntPtr hMutex = OpenMutex(SYNCHRONIZE, false, DAEMON_MUTEX_NAME);
-        if (hMutex != IntPtr.Zero)
-        {
-            CloseHandle(hMutex);
-            return true;
-        }
-        return false;
+        var status = await _client.GetRuntimeStatusAsync(token);
+        if (token.IsCancellationRequested || _shutdown.IsCancellationRequested) return;
+        AcceptStatus(status);
+    }
+
+    internal void AcceptStatus(RuntimeStatus status)
+    {
+        if (_shutdown.IsCancellationRequested) return;
+        var previousInstance = Identity?.InstanceId;
+        Identity = status.Data?.Identity;
+        IsDaemonRunning = status.IsOnline;
+        CoreReady = status.IsOnline && Identity is { Service: "aura_daemon", ProcessId: > 0 } && !string.IsNullOrEmpty(Identity.InstanceId);
+        WebSuppressed = status.Data?.StudioWeb.Suppressed == true;
+        if (!CoreReady || WebSuppressed || previousInstance != Identity?.InstanceId) IsWebServerReady = false;
+        if (_child is { HasExited: false } && CoreReady && Identity!.InstanceId == _child.InstanceId && Identity.ProcessId == _child.Id)
+            Ownership = DaemonOwnership.SpawnedByWinUI;
+        else if (status.IsOnline) Ownership = DaemonOwnership.AttachedPreExisting;
+        else if (_child is null || _child.HasExited) Ownership = DaemonOwnership.None;
+        UpdateStatus(CoreReady ? $"核心已就绪 · {Ownership} · {Identity!.ProductVersion}" :
+            status.IsOnline ? "外部核心版本不兼容，仅可查看；请在外部升级后重新连接" : status.ErrorMessage);
     }
 
     public async Task<bool> ProbeWebServerAsync()
     {
-        try
-        {
-            var res = await _http.GetAsync("http://127.0.0.1:19898/api/status");
-            if (res.IsSuccessStatusCode)
-            {
-                IsWebServerReady = true;
-                return true;
-            }
-        }
-        catch
-        {
-            // Web 接口未就绪
-        }
-
-        IsWebServerReady = false;
-        return false;
+        var result = await _web.GetStatusAsync(_shutdown.Token);
+        IsWebServerReady = CoreReady && !WebSuppressed && result.IsSuccess && result.Value is { Service: "aura_web_ui", WebApiVersion: 2 } value &&
+            Identity != null && value.DaemonInstanceId == Identity.InstanceId;
+        return IsWebServerReady;
     }
 
-    public Task EnsureStartedAsync()
+    public async Task EnsureStartedAsync()
     {
-        // 串行化并发调用 (App.OnLaunched、HomePage.Loaded、StudioPage.Loaded 等共享同一启动 Task)
-        lock (_taskLock)
-        {
-            if (_inFlightStartTask != null && !_inFlightStartTask.IsCompleted)
-            {
-                return _inFlightStartTask;
-            }
-
-            _inFlightStartTask = EnsureStartedCoreAsync();
-            return _inFlightStartTask;
-        }
-    }
-
-    private async Task EnsureStartedCoreAsync()
-    {
-        UpdateStatus("正在探测后台核心状态...");
-
-        // 1. 检查守护进程 Mutex
-        if (CheckMutexExists())
-        {
-            IsDaemonRunning = true;
-            if (_spawnedProcess == null)
-            {
-                Ownership = DaemonOwnership.AttachedPreExisting;
-            }
-            UpdateStatus("守护进程已在运行中");
-
-            // 检查 Web 服务是否可通
-            if (await ProbeWebServerAsync())
-            {
-                UpdateStatus("核心与 Web 服务已就绪");
-            }
-            else
-            {
-                UpdateStatus("守护进程运行中 (Web 服务就绪中...)");
-            }
-            return;
-        }
-
-        // 2. 互斥体不存在，使用 RuntimeLayoutResolver 解析规范布局并启动
-        var layout = RuntimeLayoutResolver.Resolve();
-        if (layout == null)
-        {
-            UpdateStatus("未找到 aura_daemon.exe 可执行文件");
-            IsDaemonRunning = false;
-            Ownership = DaemonOwnership.None;
-            return;
-        }
-
-        UpdateStatus("正在启动后台守护进程...");
+        if (_shutdown.IsCancellationRequested) return;
         try
         {
-            var psi = new ProcessStartInfo
+            await _lifecycle.WaitAsync(_shutdown.Token);
+            try
             {
-                FileName = layout.DaemonExecutablePath,
-                WorkingDirectory = layout.WorkingDirectory,
-                Arguments = $"--config \"{layout.ConfigPath}\" --keymap \"{layout.KeymapPath}\"",
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-
-            var proc = Process.Start(psi);
-            if (proc != null)
-            {
-                _spawnedProcess = proc;
-                Ownership = DaemonOwnership.SpawnedByWinUI;
-                IsDaemonRunning = true;
-            }
-            else
-            {
-                UpdateStatus("守护进程启动失败 (未能创建进程句柄)");
-                IsDaemonRunning = false;
-                Ownership = DaemonOwnership.None;
-                return;
-            }
-
-            // 等待 Web 端口开放 (最多 5 秒)
-            for (int i = 0; i < 25; i++)
-            {
-                await Task.Delay(200);
-                if (await ProbeWebServerAsync())
+                await RefreshAsync(_shutdown.Token);
+                if (IsDaemonRunning) return; // Never acquire ownership by attaching.
+                if (_child?.HasExited == true) { _child.Dispose(); _child = null; }
+                if (_child == null && _mutexExists())
+                { UpdateStatus("检测到外部核心，但 Control API 尚未就绪；不会启动或停止它"); return; }
+                if (_child == null)
                 {
-                    UpdateStatus("守护进程与 Web 服务已就绪");
-                    return;
+                    UpdateStatus("正在准备并启动后台核心...");
+                    var layout = await Task.Run(_prepare, _shutdown.Token);
+                    _shutdown.Token.ThrowIfCancellationRequested();
+                    _child = _start(layout);
+                    OwnedRuntimeDirectory = layout.RuntimeDirectory;
+                }
+                using var deadline = CancellationTokenSource.CreateLinkedTokenSource(_shutdown.Token);
+                deadline.CancelAfter(TimeSpan.FromSeconds(10));
+                while (!deadline.IsCancellationRequested)
+                {
+                    await RefreshAsync(deadline.Token);
+                    if (CoreReady) return;
+                    if (_child.HasExited) { UpdateStatus("后台核心已退出，请查看数据目录中的 aura_daemon.log"); return; }
+                    await Task.Delay(200, deadline.Token);
                 }
             }
-
-            UpdateStatus("守护进程已启动，等待 Web 服务响应...");
+            finally { _lifecycle.Release(); }
         }
-        catch (Exception ex)
-        {
-            UpdateStatus($"启动失败: {ex.Message}");
-            IsDaemonRunning = false;
-            Ownership = DaemonOwnership.None;
-        }
+        catch (OperationCanceledException) { if (!_shutdown.IsCancellationRequested) UpdateStatus("核心启动等待超时，可重新连接；不会重复启动进程"); }
+        catch (Exception ex) { ClientSettings.Log(ex); UpdateStatus("核心启动失败: " + ex.Message); }
     }
 
     public async Task StopAsync()
     {
-        UpdateStatus("正在请求守护进程退出...");
-
-        // 1. 发送优雅停机通知 (Named Event: RogFalchionAceHfxDaemonShutdownEvent)
+        _shutdown.Cancel();
+        await _lifecycle.WaitAsync();
         try
         {
-            if (EventWaitHandle.TryOpenExisting(DAEMON_SHUTDOWN_EVENT_NAME, out var shutdownEvent))
+            // This retained object can only represent our own spawned child, including a failed startup.
+            // An attached service never receives an event or a termination request.
+            if (_child != null)
             {
-                using (shutdownEvent)
-                {
-                    shutdownEvent.Set();
-                }
+                try { await _child.StopAsync(); }
+                finally { _child.Dispose(); _child = null; }
             }
+            var attached = Ownership == DaemonOwnership.AttachedPreExisting;
+            CoreReady = false; IsWebServerReady = false; Ownership = DaemonOwnership.None;
+            IsDaemonRunning = attached;
+            UpdateStatus(attached ? "客户端已断开，外部核心保持运行" : "后台核心已停止");
         }
-        catch
-        {
-            // 忽略事件打开异常
-        }
-
-        // 2. 根据所有权执行退出等待与兜底策略
-        if (Ownership == DaemonOwnership.SpawnedByWinUI && _spawnedProcess != null && !_spawnedProcess.HasExited)
-        {
-            try
-            {
-                // 等待进程优雅退出 (最长等待 3.5 秒)
-                using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(3500));
-                await _spawnedProcess.WaitForExitAsync(cts.Token);
-            }
-            catch (OperationCanceledException)
-            {
-                // 优雅退出超时，仅对 WinUI 自己拉起的进程执行最后兜底强杀
-                try
-                {
-                    if (!_spawnedProcess.HasExited)
-                    {
-                        _spawnedProcess.Kill(true);
-                    }
-                }
-                catch
-                {
-                    // 忽略强杀异常
-                }
-            }
-            catch
-            {
-                // 忽略等待异常
-            }
-            _spawnedProcess = null;
-        }
-        else if (Ownership == DaemonOwnership.AttachedPreExisting)
-        {
-            // 外部预先启动的守护进程：WinUI 发送停机通知并等待其释放 Mutex，超时绝不越权强杀
-            bool mutexReleased = false;
-            for (int i = 0; i < 35; i++)
-            {
-                await Task.Delay(100);
-                if (!CheckMutexExists())
-                {
-                    mutexReleased = true;
-                    break;
-                }
-            }
-
-            if (!mutexReleased)
-            {
-                // 超时后互斥体依然存在：不强杀，保持运行状态，不伪装成已停止
-                IsDaemonRunning = true;
-                UpdateStatus("守护进程未在超时时间内退出，已保留其运行");
-                return;
-            }
-        }
-
-        Ownership = DaemonOwnership.None;
-        IsDaemonRunning = false;
-        IsWebServerReady = false;
-        UpdateStatus("守护进程已停止");
+        finally { _lifecycle.Release(); }
     }
-
-    private void UpdateStatus(string desc)
+    private void UpdateStatus(string status) { StatusDescription = status; StatusChanged?.Invoke(status); }
+    public static bool CheckMutexExists()
     {
-        _status = desc;
-        StatusChanged?.Invoke(desc);
+        var handle = OpenMutex(0x00100000, false, @"Local\RogFalchionAceHfxDaemonMutex");
+        if (handle == IntPtr.Zero) return false;
+        CloseHandle(handle); return true;
     }
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] private static extern IntPtr OpenMutex(uint access, bool inherit, string name);
+    [DllImport("kernel32.dll")] private static extern bool CloseHandle(IntPtr handle);
 }

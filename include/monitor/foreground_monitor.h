@@ -13,7 +13,10 @@ using ForegroundCallback = std::function<void(const std::string& process_name, H
 
 class ForegroundMonitor {
 public:
-    ForegroundMonitor();
+    using ForegroundProvider = std::function<HWND()>;
+    using ProcessResolver = std::function<std::string(HWND)>;
+
+    ForegroundMonitor(ForegroundProvider foreground_provider = {}, ProcessResolver process_resolver = {});
     ~ForegroundMonitor();
 
     void SetCallback(ForegroundCallback cb);
@@ -24,6 +27,8 @@ public:
     std::string GetCurrentProcessName() const;
 
 private:
+    friend class ForegroundMonitorTestPeer;
+
     static void CALLBACK WinEventProc(
         HWINEVENTHOOK hWinEventHook,
         DWORD event,
@@ -35,7 +40,16 @@ private:
     );
 
     void MonitorThreadProc();
+    enum class ForegroundSource { Event, Reconciled };
+    // Both WinEvent and periodic reconciliation use this resolver and publisher.
+    std::string ResolveForeground(HWND hwnd) const;
+    void PublishForeground(const std::string& process_name, HWND hwnd, ForegroundSource source);
+    void ObserveForegroundEvent(HWND hwnd);
+    void ReconcileForeground();
     static std::string GetProcessNameFromHwnd(HWND hwnd);
+
+    ForegroundProvider foreground_provider_;
+    ProcessResolver process_resolver_;
 
     ForegroundCallback callback_;
     std::thread thread_;
@@ -48,6 +62,8 @@ private:
     // （此前这里声明过一个从未被使用的 atomic<const char*> 缓存字段，已删除。）
     mutable std::mutex name_mutex_;
     std::string current_process_name_;
+    unsigned int unresolved_reconciliations_{0};
+    bool invalid_event_logged_{false};
 };
 
 } // namespace aura

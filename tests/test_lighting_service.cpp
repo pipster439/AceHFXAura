@@ -678,6 +678,27 @@ int main() {
         CHECK(svc.UpdateBaseLighting(p_bad_bool, dummy).http_status == 400, "boolean 传入字符串拒绝 (400)");
     }
 
+    {
+        auto global_path = CreateTempConfigFile("global_fps", R"({"default_profile":"base","profiles":{"base":{"type":"static"},"override":{"type":"static","fps":60}},"custom":{"keep":[1,null]}})");
+        aura::LightingControlService global(global_path);
+        int fps=0; std::string revision, next;
+        CHECK(global.GetGlobalFps(fps, revision).http_status == 200 && fps == 25, "global default 25");
+        auto original_revision = revision;
+        CHECK(global.UpdateGlobalFps(10, revision, next).http_status == 200, "global lower boundary");
+        CHECK(global.UpdateGlobalFps(100, original_revision, revision).http_status == 409, "global stale revision");
+        CHECK(global.UpdateGlobalFps(100, next, revision).http_status == 200, "global upper boundary");
+        CHECK(global.UpdateGlobalFps(101, revision, next).http_status == 400, "global rejects out of range");
+        CHECK(global.UpdateGlobalFps(25, "", next).http_status == 400, "global requires revision");
+        std::ifstream input(global_path); auto data=nlohmann::json::parse(input); input.close();
+        CHECK(data["fps"] == 100 && data["profiles"]["override"]["fps"] == 60 && !data["profiles"]["base"].contains("fps") && data["custom"]["keep"][1].is_null(), "global preserves overrides and unrelated data");
+        global.SetFileReplacerForTesting([](const std::wstring&, const std::wstring&) { return false; });
+        CHECK(global.UpdateGlobalFps(25, revision, next).http_status == 500, "global atomic failure");
+        CHECK(global.GetGlobalFps(fps, next).http_status == 200 && fps == 100 && next == revision, "global atomic failure preserves original");
+        aura::RuleEngine reader; CHECK(reader.LoadConfig(global_path), "global config remains valid runtime input");
+        CHECK(reader.GetFps() == 100, "runtime consumes persisted global FPS");
+        std::filesystem::remove(global_path);
+    }
+
     // 清理测试临时文件
     std::error_code ec;
     std::filesystem::remove(test_cfg_path, ec);

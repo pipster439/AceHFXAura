@@ -16,10 +16,13 @@ import Studio from './components/Studio';
 import { GRADIENT_PRESETS } from './constants/keyboardLayout';
 import { DEFAULT_KEYBOARD_BG, TACTICAL_PALETTE } from './tokens/keyboardPresets.tokens';
 import { rgbToHex, hexToRgb } from './utils/color';
+import { readHostSettings, listenForHostTheme } from './utils/embeddedHost.js';
 
 export default function App() {
+  const [host] = useState(() => readHostSettings(window.location.search, localStorage));
+  const embedded = host.embedded;
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [activeTab, setActiveTab] = useState('lighting');
+  const [activeTab, setActiveTab] = useState(host.tab);
   const [config, setConfig] = useState(null);
   const [currentProfileName, setCurrentProfileName] = useState('desktop');
 
@@ -38,9 +41,7 @@ export default function App() {
   const [fpsVal, setFpsVal] = useState(25);
 
   // MD3E 主题模式 (默认暗黑)
-  const [theme, setTheme] = useState(() => {
-    return localStorage.getItem('aura-theme') || 'dark';
-  });
+  const [theme, setTheme] = useState(host.theme);
 
   const toggleTheme = () => {
     const nextTheme = theme === 'dark' ? 'light' : 'dark';
@@ -52,6 +53,10 @@ export default function App() {
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
+
+  useEffect(() => embedded
+    ? listenForHostTheme(window.chrome?.webview, setTheme)
+    : undefined, [embedded]);
 
   // 逐键涂装选中集合
   const [selectedKeyNames, setSelectedKeyNames] = useState(new Set());
@@ -522,6 +527,37 @@ export default function App() {
     showToast(`已删除方案: ${name}`);
   };
 
+  const studio = <Studio onConfigChanged={async()=>{coordinatorRef.current?.bumpGeneration();await fetchConfig();}}
+    config={config}
+    onSaveConfig={saveConfigDirectly}
+    currentProfileName={currentProfileName}
+    showToast={showToast}
+    blocklyFrame={blocklyFrame}
+    onPreviewFrameUpdate={handleBlocklyPreviewFrame}
+    currentEffect={currentEffect}
+    isMasterLightOn={isMasterLightOn}
+    isAnalogEnabled={isAnalogEnabled}
+    brightnessVal={brightnessVal}
+    speedIndex={speedIndex}
+    currentDirection={currentDirection}
+    thicknessVal={thicknessVal}
+    gradientStops={gradientStops}
+    isStarryRandom={isStarryRandom}
+    selectedKeyNames={selectedKeyNames}
+    onToggleKeySelection={handleToggleKeySelection}
+    bgColor={bgColor}
+    fpsVal={fpsVal}
+    embedded={embedded}
+    initialWorkType={host.tab === 'automation' ? 'orchestration' : 'effect'}
+  />;
+
+  if (embedded) return (
+    <div data-aura-host="winui" className="h-screen w-screen min-w-0 overflow-hidden bg-md-surface text-md-on-surface font-sans">
+      {studio}
+      <Toast toast={toast} onClose={() => setToast(null)} />
+    </div>
+  );
+
   return (
     <div className="flex h-screen w-screen bg-md-surface text-md-on-surface overflow-hidden font-sans select-none">
       {/* 左侧 MD3E Navigation Rail / Drawer */}
@@ -617,29 +653,7 @@ export default function App() {
                 />
               )}
 
-              {['studio', 'blockly_effect', 'blockly_orchestrator'].includes(activeTab) && (
-                <Studio onConfigChanged={async()=>{coordinatorRef.current?.bumpGeneration();await fetchConfig();}}
-                  config={config}
-                  onSaveConfig={saveConfigDirectly}
-                  currentProfileName={currentProfileName}
-                  showToast={showToast}
-                  blocklyFrame={blocklyFrame}
-                  onPreviewFrameUpdate={handleBlocklyPreviewFrame}
-                  currentEffect={currentEffect}
-                  isMasterLightOn={isMasterLightOn}
-                  isAnalogEnabled={isAnalogEnabled}
-                  brightnessVal={brightnessVal}
-                  speedIndex={speedIndex}
-                  currentDirection={currentDirection}
-                  thicknessVal={thicknessVal}
-                  gradientStops={gradientStops}
-                  isStarryRandom={isStarryRandom}
-                  selectedKeyNames={selectedKeyNames}
-                  onToggleKeySelection={handleToggleKeySelection}
-                  bgColor={bgColor}
-                  fpsVal={fpsVal}
-                />
-              )}
+              {['studio', 'blockly_effect', 'blockly_orchestrator'].includes(activeTab) && studio}
 
               {activeTab === 'automation' && <AutomationAuthoring onConfigChanged={async()=>{coordinatorRef.current?.bumpGeneration();await fetchConfig();}}/>}
               {activeTab === 'gsi' && <GsiSettings config={config} showToast={showToast}/>}

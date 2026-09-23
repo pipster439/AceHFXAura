@@ -1,0 +1,2 @@
+#pragma once
+#define AURA_PRODUCT_VERSION "@AURA_VERSION@"

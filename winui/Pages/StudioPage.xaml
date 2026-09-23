@@ -17,6 +17,7 @@
 
         <!-- 加载与状态等待面板 -->
         <StackPanel x:Name="LoadingPanel"
+                    MaxWidth="430" Margin="24"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center"
                     Spacing="16">
@@ -25,6 +26,7 @@
                           Width="48"
                           Height="48" />
             <TextBlock x:Name="LoadingStatusText"
+                       TextWrapping="Wrap"
                        Text="正在连接 Aura Blockly Studio (127.0.0.1:19898)..."
                        Style="{ThemeResource BodyTextBlockStyle}"
                        HorizontalAlignment="Center" />
@@ -33,6 +35,7 @@
                     Click="RetryBtn_Click"
                     HorizontalAlignment="Center"
                     Visibility="Collapsed" />
+            <HyperlinkButton Content="获取 Microsoft WebView2 Runtime" NavigateUri="https://developer.microsoft.com/microsoft-edge/webview2/" HorizontalAlignment="Center"/>
         </StackPanel>
 
         <!-- 错误与状态提示 -->
@@ -40,6 +43,10 @@
                  VerticalAlignment="Top"
                  Margin="24,12,24,0"
                  IsOpen="False"
-                 IsClosable="True" />
+                 IsClosable="True">
+            <InfoBar.ActionButton>
+                <Button Content="重新连接 Studio" Click="RetryBtn_Click" />
+            </InfoBar.ActionButton>
+        </InfoBar>
     </Grid>
 </Page>

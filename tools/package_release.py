@@ -1,17 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-=============================================================================
-Aura LEGACY C++ launcher packaging (not WinUI)
+"""Aura WinUI x64 packaging entrypoint.
+Default: verified self-contained WinUI ZIP with native sidecars.
+--legacy: retained C++ launcher builder for historical engineering tests only.
 See docs/development/PACKAGING.md for scope and side effects.
-=============================================================================
-功能：
-1. 编译最新的 Release 二进制文件 (aura_daemon.exe, aura_web_ui.exe)
-2. 验证并准备所有可再分发资产 (web/index.html, calibrated_keymap.json)
-3. 编译生成单一独立可执行文件 dist/Aura.exe（不内嵌 ASUS 专有 DLL）
-4. 同时打包按 VERSION 命名的绿色便携 Zip 压缩包
-5. 输出校验信息与 GitHub Release 发布指引
-=============================================================================
 """
 
 import argparse
@@ -405,11 +397,22 @@ def main():
     parser = argparse.ArgumentParser(description="Aura 独立发布包自动化构建流水线")
     parser.add_argument("--version", type=str, default=None,
                         help="兼容旧命令的版本校验值；必须与仓库根目录 VERSION 一致")
-    parser.add_argument("--skip-zip", action="store_true", help="跳过便携 Zip 包生成，仅输出独立单文件 Aura.exe")
+    parser.add_argument("--skip-zip", action="store_true", help="跳过 ZIP，仅输出发行目录（legacy 模式输出旧 launcher）")
     parser.add_argument("--clean", action="store_true", help="构建前清理既有 build 目录（用于切换生成器或纯净重构）")
+    parser.add_argument("--legacy", action="store_true", help="显式构建旧 C++ launcher，非 alpha.4 主发行包")
+    parser.add_argument("--build-dir", default=None, help="WinUI 包使用的 C++ build 目录")
+    parser.add_argument("--skip-build", action="store_true", help="复用已验证的 C++ build；仍重新构建 frontend 和 publish WinUI")
     args = parser.parse_args()
 
     version = resolve_release_version(args.version)
+    if not args.legacy:
+        if args.clean:
+            parser.error("WinUI packaging does not delete build directories; select a new --build-dir")
+        from package_winui import build
+        build(version, VS_GENERATOR, VCVARS_BAT, args.build_dir, args.skip_build, args.skip_zip)
+        return
+    global DIST_DIR
+    DIST_DIR = os.path.join(REPO_ROOT, "dist", "legacy")
 
     print("=========================================================")
     print(f" Aura 单文件独立发布包构建流水线 (Release: {version})")

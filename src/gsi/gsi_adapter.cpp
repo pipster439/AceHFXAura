@@ -859,14 +859,28 @@ nlohmann::json GsiAdapter::QueueSimulation(const nlohmann::json& request) {
     enabled=request.value("enabled",enabled);
     if (!enabled && (request.size()!=1 || !request.contains("enabled"))) throw std::runtime_error("Enable simulation before changing inputs");
     simulation_commands_.emplace_back(++submitted_,request);
-    return {{"status","queued"},{"sequence",submitted_}};
+    return {{"status","queued"},{"sequence",submitted_},{"instance_id",instance_id_}};
 }
 
 nlohmann::json GsiAdapter::SimulationStatus() const {
     std::lock_guard<std::mutex> lock(source_mutex_);
-    return {{"enabled",simulation_},{"source",simulation_?"simulation":"real"},{"heartbeat",heartbeat_},
+    return {{"gsi_api_version",1},{"instance_id",instance_id_},{"enabled",simulation_},{"source",simulation_?"simulation":"real"},{"heartbeat",heartbeat_},
         {"heartbeat_ms",heartbeat_ms_},{"foreground_process",state_.GetForegroundProcess()},
         {"freshness",automation_freshness_},{"payload",simulated_payload_},{"applied_sequence",applied_},{"pending",simulation_commands_.size()}};
+}
+
+nlohmann::json GsiAdapter::CurrentStatus() const {
+    // Same lock order as owner evaluation: source -> state. Never label old simulation data REAL.
+    std::lock_guard<std::mutex> lock(source_mutex_);
+    auto snapshot = state_.ToJson();
+    snapshot["studio_runtime"] = 2;
+    snapshot["gsi_api_version"] = 1;
+    snapshot["instance_id"] = instance_id_;
+    snapshot["source"] = simulation_ ? "simulation" : "real";
+    snapshot["freshness"] = automation_freshness_;
+    auto telemetry = state_.GetAutomationTelemetry();
+    snapshot["source_epoch"] = telemetry ? nlohmann::json(telemetry->source_epoch) : nlohmann::json(nullptr);
+    return snapshot;
 }
 
 AutomationEvaluation GsiAdapter::EvaluateAutomation(RuleEngine& engine, const std::string& real_process, std::optional<uint64_t> time) {
@@ -961,8 +975,7 @@ void GsiAdapter::SetupRoutes() {
 
     // 查询当前扁平化状态
     auto gsi_get_handler = [this](const httplib::Request&, httplib::Response& res) {
-        auto snapshot = state_.ToJson();
-        snapshot["studio_runtime"] = 2;
+        auto snapshot = CurrentStatus();
         std::string json_str = snapshot.dump();
         res.set_content(json_str, "application/json; charset=utf-8");
     };

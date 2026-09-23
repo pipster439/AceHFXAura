@@ -1,18 +1,26 @@
-import React,{useEffect,useRef,useState} from 'react';
+import React,{useEffect,useLayoutEffect,useRef,useState} from 'react';
 import Blockly from '../blockly/index.js';
+import { dismissForOverlay } from '../blockly/dismissForOverlay.js';
 import {DEFAULT_INJECT_OPTIONS} from '../blockly/theme.js';
 import {registerAutomationBlocks,automationToolbox,automationWorkspace,serializeAutomation,effectKey,installAutomationIdentityGuard} from '../blockly/automationV2.js';
 import {automationRequest} from '../utils/automationAuthoring.js';
 import GsiSimulation from './GsiSimulation.jsx';
 
-export default function AutomationAuthoring({onConfigChanged}) {
+export default function AutomationAuthoring({onConfigChanged,overlayOpen=false}) {
   const host=useRef(null),workspace=useRef(null),catalog=useRef([]),revision=useRef('');
+  const overlayOpenRef=useRef(overlayOpen),restoreOverlayRef=useRef(null);
+  overlayOpenRef.current=overlayOpen;
+  useLayoutEffect(()=>{
+    restoreOverlayRef.current?.();
+    restoreOverlayRef.current=overlayOpen ? dismissForOverlay(workspace.current) : null;
+  },[overlayOpen]);
   const [error,setError]=useState(''),[busy,setBusy]=useState(false),[ready,setReady]=useState(false),[preview,setPreview]=useState('');
   const load=async()=>{
     const [data,caps,effects]=await Promise.all([automationRequest('v2/records'),automationRequest('v2/capabilities'),automationRequest('v2/effects')]);
     if(data.revision!==effects.revision)throw new Error('配置已变化，请重新加载');
     catalog.current=[...effects.effects];
     for(const {record} of data.records)if(record.action.type==='trigger_effect'&&!catalog.current.some(e=>effectKey(e.reference)===effectKey(record.action.effect)))catalog.current.push({label:record.action.effect.name,reference:record.action.effect,available:false});
+    restoreOverlayRef.current?.(); restoreOverlayRef.current=null;
     workspace.current?.dispose(); workspace.current=null;
     registerAutomationBlocks(Blockly,catalog.current,Object.keys(data.profiles),caps.events);
     workspace.current=Blockly.inject(host.current,{...DEFAULT_INJECT_OPTIONS,toolbox:automationToolbox});
@@ -20,11 +28,12 @@ export default function AutomationAuthoring({onConfigChanged}) {
     Blockly.serialization.workspaces.load(automationWorkspace(data.records.map(r=>r.record)),workspace.current);
     for(const block of workspace.current.getAllBlocks(false))block.updateTriggerVisibility?.();
     Blockly.svgResize(workspace.current);
+    if(overlayOpenRef.current)restoreOverlayRef.current=dismissForOverlay(workspace.current);
     requestAnimationFrame(()=>{if(workspace.current){Blockly.svgResize(workspace.current);workspace.current.zoomToFit();}});
     revision.current=data.revision;setReady(true);
   };
   const run=async work=>{setBusy(true);setError('');try{await work();}catch(e){setError(e.message);}finally{setBusy(false);}};
-  useEffect(()=>{run(load);const observer=new ResizeObserver(()=>{if(workspace.current)Blockly.svgResize(workspace.current);});observer.observe(host.current);return()=>{observer.disconnect();workspace.current?.dispose();};},[]);
+  useEffect(()=>{run(load);const observer=new ResizeObserver(()=>{if(workspace.current)Blockly.svgResize(workspace.current);});observer.observe(host.current);return()=>{observer.disconnect();restoreOverlayRef.current?.();workspace.current?.dispose();};},[]);
   const save=()=>run(async()=>{
     const rules=serializeAutomation(workspace.current,catalog.current);
     const result=await automationRequest('v2/rules','PUT',{expected_revision:revision.current,rules});

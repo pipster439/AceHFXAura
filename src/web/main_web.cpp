@@ -31,6 +31,8 @@ int wmain(int argc, wchar_t* argv[]) {
     int port = 19898;
     std::filesystem::path config_path = L"config.json";
     std::filesystem::path sdk_include_dir;
+    std::filesystem::path web_root;
+    std::string daemon_instance;
     std::wstring shutdown_event_name;
     bool has_explicit_config = false;
 
@@ -61,6 +63,10 @@ int wmain(int argc, wchar_t* argv[]) {
             }
             config_path = argv[++i];
             has_explicit_config = true;
+        } else if (arg == L"--web-root" || arg == L"--daemon-instance") {
+            if (i + 1 >= argc) { std::cerr << "Missing path/identity\n"; return 1; }
+            if (arg == L"--web-root") web_root = std::filesystem::absolute(argv[++i]);
+            else daemon_instance = std::filesystem::path(argv[++i]).u8string();
         } else if (arg == L"--sdk-include") {
             if (i + 1 >= argc) {
                 std::cerr << "[WebUI] 错误: --sdk-include 缺少路径参数\n";
@@ -131,7 +137,10 @@ int wmain(int argc, wchar_t* argv[]) {
         }
     }
 
-    aura::WebServer server(config_path, port, sdk_include_dir);
+    if (!web_root.empty() && !std::filesystem::is_regular_file(web_root / "index.html")) {
+        std::cerr << "Packaged Studio web/index.html missing\n"; return 1;
+    }
+    aura::WebServer server(config_path, port, sdk_include_dir, web_root, daemon_instance);
     g_server_ptr = &server;
 
     // 安装控制台信号处理器（支持手动命令行调试时按 Ctrl+C 平滑退出）

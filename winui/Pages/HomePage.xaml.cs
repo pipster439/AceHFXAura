@@ -1,3 +1,4 @@
+using Aura_WinUI.Common;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
@@ -17,6 +18,12 @@ public sealed partial class HomePage : Page
     public HomePage()
     {
         InitializeComponent();
+        PageLayout.Attach(this, PageScroll, RootPanel, width => {
+            var wide = width >= 720; CardGridCol1.Width = new GridLength(wide ? 1 : 0, GridUnitType.Star);
+            var cards = new FrameworkElement[] { DeviceCard, DaemonCard, ProfileCard, GsiCard, QuickCard };
+            for (int i = 0; i < cards.Length; i++) { Grid.SetRow(cards[i], wide ? i / 2 : i); Grid.SetColumn(cards[i], wide ? i % 2 : 0); }
+            Grid.SetColumnSpan(QuickCard, wide ? 2 : 1);
+        });
         Loaded += HomePage_Loaded;
         Unloaded += HomePage_Unloaded;
     }
@@ -122,7 +129,11 @@ public sealed partial class HomePage : Page
                 return;
             }
 
-            DispatcherQueue.TryEnqueue(() => ApplyStatusToUi(status));
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (!token.IsCancellationRequested && IsLoaded && !App.IsShuttingDown)
+                { DaemonSupervisor.Instance.AcceptStatus(status); ApplyStatusToUi(status); }
+            });
         }
         catch (OperationCanceledException)
         {

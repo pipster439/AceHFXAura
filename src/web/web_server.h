@@ -30,7 +30,8 @@ bool CompileCppSourceToDll(const std::string& effect_name,
 
 class WebServer {
 public:
-    WebServer(const std::filesystem::path& config_path, int port, const std::filesystem::path& sdk_include_dir = {});
+    WebServer(const std::filesystem::path& config_path, int port, const std::filesystem::path& sdk_include_dir = {},
+        const std::filesystem::path& web_root = {}, const std::string& daemon_instance = "");
     ~WebServer();
 
     // 启动 HTTP 服务（阻塞直到 stop() 被调用）
@@ -53,6 +54,9 @@ private:
     std::filesystem::path config_path_{"config.json"};
     int port_{19898};
     std::filesystem::path sdk_include_dir_;
+    std::filesystem::path web_root_;
+    std::string daemon_instance_;
+    std::mutex cfg_mutex_;
     httplib::Server svr_;
     std::atomic<bool> is_running_{false};
     mutable std::mutex file_mutex_;

@@ -1,3 +1,4 @@
+using Aura_WinUI.Common;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -13,6 +14,10 @@ namespace Aura_WinUI.Pages;
 public sealed partial class LightingPage : Page
 {
     private readonly IAuraControlClient _client;
+    private CancellationTokenSource? _lifetime;
+    private bool _saving, _reloadOnEnter, _fpsDialog;
+    private readonly List<Grid> _parameterRows = new();
+    private double _contentWidth;
 
     // 预设列表与服务端干净状态
     private readonly List<LightingPresetItemDto> _presets = new();
@@ -34,24 +39,36 @@ public sealed partial class LightingPage : Page
         _isApplyingModel = true;
 
         InitializeComponent();
+        PageLayout.Attach(this, LightingContent, PageContent, width => {
+            _contentWidth = width;
+            PageLayout.Columns(LightingStatusGrid, width >= 1000 ? 3 : width >= 600 ? 2 : 1);
+            foreach (var row in _parameterRows) ArrangeParameter(row);
+        });
+        PageLayout.Notification(this, StatusInfoBar);
+        WrapParameter(BrightnessPanel);
+        WrapParameter(PeriodPanel);
 
         _isApplyingModel = false;
 
         _client = AuraControlClient.Instance;
 
+        NavigationCacheMode = Microsoft.UI.Xaml.Navigation.NavigationCacheMode.Required;
         Loaded += LightingPage_Loaded;
+        Unloaded += (_, _) => { _lifetime?.Cancel(); StatusInfoBar.IsOpen = false; };
     }
 
     private async void LightingPage_Loaded(object sender, RoutedEventArgs e)
     {
-        await LoadLightingPageDataAsync();
-        await RefreshRuntimeStatusAsync();
+        _lifetime?.Cancel(); _lifetime?.Dispose(); _lifetime = new();
+        var token = _lifetime.Token;
+        if (!_saving && (_cleanLighting == null || _reloadOnEnter)) await LoadLightingPageDataAsync(token);
+        if (!token.IsCancellationRequested) await RefreshRuntimeStatusAsync(token);
     }
 
     private async void RefreshStatusBtn_Click(object sender, RoutedEventArgs e)
     {
         // 约束 4: 刷新状态按钮只刷新运行时状态，严禁覆盖或丢弃未保存的本地草稿
-        await RefreshRuntimeStatusAsync();
+        await RefreshRuntimeStatusAsync(_lifetime?.Token ?? new CancellationToken(true));
     }
 
     private void OpenStudioBtn_Click(object sender, RoutedEventArgs e)
@@ -69,11 +86,19 @@ public sealed partial class LightingPage : Page
         }
     }
 
-    private async Task RefreshRuntimeStatusAsync()
+    private async Task RefreshRuntimeStatusAsync(CancellationToken token = default)
     {
         try
         {
-            var status = await _client.GetRuntimeStatusAsync();
+            if (token == default) token = _lifetime?.Token ?? new CancellationToken(true);
+            var status = await _client.GetRuntimeStatusAsync(token);
+            var global = await AuraControlClient.Instance.GetGlobalLightingAsync(token);
+            var detail = status.IsOnline && !string.IsNullOrEmpty(status.Data?.Runtime.ActiveProfile) ?
+                await _client.GetProfileAsync(status.Data.Runtime.ActiveProfile, token) : null;
+            if (token.IsCancellationRequested) return;
+            GlobalFpsText.Text = global.IsSuccess ? $"{global.Value!.Fps} FPS" : "暂不可用：" + global.Error;
+            DeviceStateText.Text = status.DeviceStatusDisplayName;
+            FpsSourceText.Text = detail?.IsSuccess == true ? (detail.Profile!.FpsInherited ? "继承全局默认" : "当前方案单独设置") : "—";
             if (ActiveProfileText == null || ActiveFpsText == null || ActiveBackendText == null)
             {
                 return;
@@ -127,14 +152,15 @@ public sealed partial class LightingPage : Page
         }
     }
 
-    private async Task LoadLightingPageDataAsync()
+    private async Task LoadLightingPageDataAsync(CancellationToken token)
     {
         try
         {
             _isApplyingModel = true;
 
             // 1. 加载预设 Catalog (单一事实来源)
-            var pRes = await _client.GetLightingPresetsAsync();
+            var pRes = await _client.GetLightingPresetsAsync(token);
+            if (token.IsCancellationRequested) return;
             if (!pRes.IsSuccess)
             {
                 _isApplyingModel = false;
@@ -152,7 +178,8 @@ public sealed partial class LightingPage : Page
             }
 
             // 2. 加载 Base Lighting
-            var bRes = await _client.GetBaseLightingAsync();
+            var bRes = await _client.GetBaseLightingAsync(token);
+            if (token.IsCancellationRequested) return;
             if (!bRes.IsSuccess || bRes.Lighting == null)
             {
                 _isApplyingModel = false;
@@ -167,6 +194,7 @@ public sealed partial class LightingPage : Page
             ApplyCleanLightingToUi();
 
             _isApplyingModel = false;
+            _reloadOnEnter = false;
             SetDirty(false);
         }
         catch (Exception ex)
@@ -383,6 +411,7 @@ public sealed partial class LightingPage : Page
     {
         if (DynamicParametersPanel == null) return;
 
+        foreach (var row in DynamicParametersPanel.Children.OfType<StackPanel>().SelectMany(p => p.Children.OfType<Grid>()).ToArray()) _parameterRows.Remove(row);
         DynamicParametersPanel.Children.Clear();
 
         if (_draftPreset == null || _draftPreset.ParameterSchema == null || _draftPreset.ParameterSchema.Count == 0)
@@ -418,7 +447,7 @@ public sealed partial class LightingPage : Page
         var container = new StackPanel
         {
             Spacing = 6,
-            MaxWidth = 540,
+
             HorizontalAlignment = HorizontalAlignment.Left
         };
 
@@ -489,6 +518,7 @@ public sealed partial class LightingPage : Page
 
         container.Children.Add(dropDownBtn);
         DynamicParametersPanel.Children.Add(container);
+        WrapParameter(container);
     }
 
     private void BuildBooleanControl(EffectParamSchemaDto schema)
@@ -499,7 +529,7 @@ public sealed partial class LightingPage : Page
         {
             Header = schema.DisplayName,
             IsOn = curVal,
-            MaxWidth = 540,
+
             HorizontalAlignment = HorizontalAlignment.Left
         };
 
@@ -510,7 +540,10 @@ public sealed partial class LightingPage : Page
             EvaluateDirty();
         };
 
-        DynamicParametersPanel.Children.Add(toggle);
+        var wrapper = new StackPanel();
+        wrapper.Children.Add(new TextBlock { Text = schema.DisplayName, TextWrapping = TextWrapping.Wrap, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
+        toggle.Header = null; wrapper.Children.Add(toggle);
+        DynamicParametersPanel.Children.Add(wrapper); WrapParameter(wrapper);
     }
 
     private void BuildEnumControl(EffectParamSchemaDto schema)
@@ -518,7 +551,7 @@ public sealed partial class LightingPage : Page
         var container = new StackPanel
         {
             Spacing = 6,
-            MaxWidth = 540,
+
             HorizontalAlignment = HorizontalAlignment.Left
         };
 
@@ -564,6 +597,7 @@ public sealed partial class LightingPage : Page
 
         container.Children.Add(combo);
         DynamicParametersPanel.Children.Add(container);
+        WrapParameter(container);
     }
 
     private void BuildNumberControl(EffectParamSchemaDto schema)
@@ -571,7 +605,7 @@ public sealed partial class LightingPage : Page
         var container = new StackPanel
         {
             Spacing = 6,
-            MaxWidth = 540,
+
             HorizontalAlignment = HorizontalAlignment.Stretch
         };
 
@@ -585,7 +619,7 @@ public sealed partial class LightingPage : Page
             new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
         grid.ColumnDefinitions.Add(
-            new ColumnDefinition { Width = GridLength.Auto });
+            new ColumnDefinition { Width = new GridLength(64) });
 
         var header = new TextBlock
         {
@@ -632,6 +666,7 @@ public sealed partial class LightingPage : Page
 
         container.Children.Add(slider);
         DynamicParametersPanel.Children.Add(container);
+        WrapParameter(container);
     }
 
     private void BrightnessSlider_ValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
@@ -718,7 +753,7 @@ public sealed partial class LightingPage : Page
         _isDirty = dirty;
         if (SaveBtn != null)
         {
-            SaveBtn.IsEnabled = dirty;
+            SaveBtn.IsEnabled = dirty && !_saving;
         }
         if (DirtyHintText != null)
         {
@@ -736,13 +771,89 @@ public sealed partial class LightingPage : Page
     private static string? ExtractString(object? val) => EffectParamValueComparer.ExtractString(val);
     private static double? ExtractDouble(object? val) => EffectParamValueComparer.ExtractDouble(val);
 
-    private async void SaveBtn_Click(object sender, RoutedEventArgs e)
+    private void WrapParameter(StackPanel panel)
     {
-        if (!_isDirty || _cleanLighting == null)
+        if (panel.Children.Count < 2) return;
+        var title = panel.Children[0]; panel.Children.RemoveAt(0);
+        var label = new StackPanel { Spacing = 6 }; label.Children.Add(title);
+        var editor = new StackPanel { Spacing = 8, HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Center };
+        while (panel.Children.Count > 0)
         {
-            return;
+            var item = panel.Children[0]; panel.Children.RemoveAt(0);
+            if (item is TextBlock) label.Children.Add(item); else editor.Children.Add(item);
+        }
+        var row = new Grid { ColumnSpacing = 24, RowSpacing = 8, HorizontalAlignment = HorizontalAlignment.Stretch };
+        row.RowDefinitions.Add(new() { Height = GridLength.Auto }); row.RowDefinitions.Add(new() { Height = GridLength.Auto });
+        row.ColumnDefinitions.Add(new()); row.ColumnDefinitions.Add(new());
+        row.Children.Add(label); row.Children.Add(editor); panel.Children.Add(row);
+        panel.HorizontalAlignment = HorizontalAlignment.Stretch;
+        _parameterRows.Add(row); ArrangeParameter(row);
+    }
+    private void ArrangeParameter(Grid row)
+    {
+        bool wide = _contentWidth >= 720;
+        row.ColumnDefinitions[0].Width = wide ? new GridLength(260) : new GridLength(1, GridUnitType.Star);
+        row.ColumnDefinitions[1].Width = wide ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
+        Grid.SetRow((FrameworkElement)row.Children[1], wide ? 0 : 1); Grid.SetColumn((FrameworkElement)row.Children[1], wide ? 1 : 0);
+    }
+
+    private async void GlobalFps_Click(object sender, RoutedEventArgs e)
+    {
+        if (_fpsDialog || _saving || _lifetime == null) return;
+        _fpsDialog = true; GlobalFpsButton.IsEnabled = false; var token = _lifetime.Token;
+        try
+        {
+            if (_isDirty)
+            {
+                var dirty = new ContentDialog { XamlRoot = XamlRoot, Title = "先处理未保存的灯效", Content = "刷新率将独立保存。请选择如何处理当前灯效草稿。",
+                    PrimaryButtonText = "保存灯效", SecondaryButtonText = "放弃草稿", CloseButtonText = "取消", DefaultButton = ContentDialogButton.Close };
+                var choice = await dirty.ShowAsync();
+                if (token.IsCancellationRequested || choice == ContentDialogResult.None) return;
+                if (choice == ContentDialogResult.Primary) { if (!await SaveDraftAsync()) return; }
+                else { await LoadLightingPageDataAsync(token); if (_isDirty) return; }
+            }
+            var current = await AuraControlClient.Instance.GetGlobalLightingAsync(token);
+            if (token.IsCancellationRequested) return;
+            if (!current.IsSuccess) { ShowNotification(InfoBarSeverity.Error, "无法读取全局刷新率", current.Error); return; }
+            var input = new NumberBox { Header = "全局默认 FPS", Minimum = 10, Maximum = 100, Value = current.Value!.Fps, SmallChange = 1, SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Inline };
+            var body = new StackPanel { Spacing = 12 }; body.Children.Add(input);
+            body.Children.Add(new TextBlock { Text = "范围 10–100 FPS，默认参考值 25 FPS。方案独立设置的 FPS 保持不变。", TextWrapping = TextWrapping.Wrap });
+            var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = "设置全局默认刷新率", Content = body,
+                PrimaryButtonText = "保存", CloseButtonText = "取消", DefaultButton = ContentDialogButton.Primary };
+            input.ValueChanged += (_, _) => dialog.IsPrimaryButtonEnabled = double.IsFinite(input.Value) && input.Value == Math.Truncate(input.Value) && input.Value >= 10 && input.Value <= 100;
+            if (await dialog.ShowAsync() != ContentDialogResult.Primary || token.IsCancellationRequested) return;
+            _reloadOnEnter = true;
+            var result = await AuraControlClient.Instance.UpdateGlobalLightingAsync((int)input.Value, current.Value.Revision, token);
+            if (token.IsCancellationRequested) return;
+            await LoadLightingPageDataAsync(token); await RefreshRuntimeStatusAsync(token);
+            ShowNotification(result.IsSuccess ? InfoBarSeverity.Success : InfoBarSeverity.Error, result.IsSuccess ? "全局配置已保存" : "刷新率未确认保存",
+                result.IsSuccess ? "已重新读取配置。当前方案独立设置的刷新率不受影响；当前目标值请查看上方状态。" : result.StatusCode == 409 ? "配置已被其他编辑器修改。已刷新，请重新检查后设置。" : result.Error);
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) { if (!token.IsCancellationRequested) ShowNotification(InfoBarSeverity.Error, "刷新率设置失败", ex.Message); }
+        finally { _fpsDialog = false; GlobalFpsButton.IsEnabled = true; }
+    }
+
+    private async void SaveBtn_Click(object sender, RoutedEventArgs e) => await SaveDraftAsync();
+
+    private async Task<bool> SaveDraftAsync()
+    {
+        bool saved = false;
+        if (_saving || !_isDirty || _cleanLighting == null || _lifetime == null)
+        {
+            return false;
         }
 
+        var token = _lifetime.Token;
+        _saving = true;
+        LightingContent.IsEnabled = false;
+        SaveBtn.IsEnabled = false;
+        try
+        {
+        await DaemonSupervisor.Instance.RefreshAsync(token);
+        if (token.IsCancellationRequested) return false;
+        if (!DaemonSupervisor.Instance.CoreReady) { ShowNotification(InfoBarSeverity.Warning, "核心不兼容", "请连接 alpha.4 核心后再保存。"); return false; }
+        _reloadOnEnter = true;
         SaveBtn.IsEnabled = false;
 
         // 构建真正 Sparse Patch
@@ -818,31 +929,44 @@ public sealed partial class LightingPage : Page
             }
         }
 
-        var res = await _client.UpdateBaseLightingAsync(patch);
+        var res = await _client.UpdateBaseLightingAsync(patch, token);
+        if (token.IsCancellationRequested) return false;
 
         if (res.IsSuccess)
         {
-            ShowNotification(InfoBarSeverity.Success, "配置已保存", "系统默认灯效已成功更新并通过热重载生效。");
-            await LoadLightingPageDataAsync();
-            await RefreshRuntimeStatusAsync();
+            saved = true;
+            ShowNotification(InfoBarSeverity.Success, "配置已保存", "默认灯效配置已保存，运行状态请以核心回读及实际灯效为准。");
+            await LoadLightingPageDataAsync(token);
+            await RefreshRuntimeStatusAsync(_lifetime?.Token ?? new CancellationToken(true));
         }
         else if (res.IsConflict)
         {
             // 约束 4: 409 冲突处理，明确提示后重新拉取并丢弃 stale draft
             ShowNotification(InfoBarSeverity.Warning, "配置已被外部修改", "配置文件已被其他编辑器修改，已自动为您重新载入最新配置，本地草稿已丢弃。");
-            await LoadLightingPageDataAsync();
-            await RefreshRuntimeStatusAsync();
+            await LoadLightingPageDataAsync(token);
+            await RefreshRuntimeStatusAsync(_lifetime?.Token ?? new CancellationToken(true));
         }
         else
         {
+            _reloadOnEnter = false;
             ShowNotification(InfoBarSeverity.Error, "保存失败", res.ErrorMessage);
-            SaveBtn.IsEnabled = true;
         }
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+        catch (Exception ex) { if (!token.IsCancellationRequested) ShowNotification(InfoBarSeverity.Error, "保存失败", ex.Message); }
+        finally
+        {
+            _saving = false; LightingContent.IsEnabled = true; SetDirty(_isDirty);
+            if (token.IsCancellationRequested && IsLoaded && _reloadOnEnter && _lifetime is { IsCancellationRequested: false })
+                await LoadLightingPageDataAsync(_lifetime.Token);
+        }
+        return saved && !_isDirty;
     }
 
     private void ShowNotification(InfoBarSeverity severity, string title, string message)
     {
-        if (StatusInfoBar == null) return;
+        if (StatusInfoBar == null || !IsLoaded || App.IsShuttingDown) return;
+        StatusInfoBar.IsOpen = false;
         StatusInfoBar.Severity = severity;
         StatusInfoBar.Title = title;
         StatusInfoBar.Message = message;

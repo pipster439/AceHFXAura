@@ -24,7 +24,7 @@ int main() {
         auto rise=EffectRule("process-rise","rising","white");rise.erase("scope");rise["when"]["condition"]={{"field","process"},{"value","cs2.exe"}};
         config["orchestration"]["rules"].push_back(rise);
         std::ofstream(path)<<config.dump();RuleEngine rules;Check(rules.LoadConfig(path.string()),"load");
-        GsiAdapter adapter;EffectEngine effect;Keymap keymap;FrameBuffer frame;
+        GsiAdapter adapter;adapter.SetInstanceId("test-instance");EffectEngine effect;Keymap keymap;FrameBuffer frame;
         auto tick=[&](uint64_t now) {
             auto evaluation=adapter.EvaluateAutomation(rules,"desktop.exe",now);
             const auto freshness=adapter.SimulationStatus()["freshness"];
@@ -40,6 +40,7 @@ int main() {
         tick(1);adapter.QueueSimulation({{"enabled",true},{"bomb","planted"},{"round_kills",10}});
         Check(tick(10)==0 && adapter.GetState().GetRecentEvents().empty(),"source entry seeds all detector histories and process rising");
         Check(adapter.SimulationStatus()["foreground_process"]=="cs2.exe","simulated scope visible");
+        Check(adapter.CurrentStatus()["source"]=="simulation" && adapter.CurrentStatus()["instance_id"]=="test-instance", "current telemetry labels source and instance atomically");
         adapter.QueueSimulation({{"health",10}});Check(tick(20)==0 && frame.buffer[0]==50,"health drives real persistent composition");
         adapter.AcceptLivePayload({{"player",{{"state",{{"health",100},{"round_kills",999}}}}}});
         Check(adapter.GetState().GetNumber("player.state.health")==10,"live state excluded");
@@ -56,6 +57,7 @@ int main() {
         adapter.QueueSimulation({{"heartbeat",true}});Check(tick(4020)==0 && frame.buffer[0]==50,"recovery restores state without event replay");
         adapter.QueueSimulation({{"foreground_process","desktop.exe"}});tick(4030);Check(frame.buffer[0]==10,"simulated scope cancellation");
         adapter.QueueSimulation({{"enabled",false}});Check(tick(4040)==0,"exit has no synthetic rising");
+        Check(adapter.CurrentStatus()["source"]=="real" && !adapter.CurrentStatus()["data"].contains("player.state.health") && adapter.CurrentStatus()["events"].empty() && adapter.CurrentStatus()["last_updated_sec"] == -1, "REAL starts without stale simulation fields");
         adapter.AcceptLivePayload({{"player",{{"state",{{"health",80},{"round_kills",1000}}}}},{"round",{{"bomb","exploded"},{"phase","over"}}}});
         auto real=adapter.GetState().GetAutomationTelemetry();
         Check(tick(real->received_at_ms)==0 && adapter.GetState().GetRecentEvents().empty(),"next real payload seeds all history without replay");

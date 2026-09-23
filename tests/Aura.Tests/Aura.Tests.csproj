@@ -16,6 +16,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Include="..\..\winui\Services\AuraControlClient.cs" Link="Services\AuraControlClient.cs" />
+    <Compile Include="..\..\winui\Services\*.cs" Link="Services\%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

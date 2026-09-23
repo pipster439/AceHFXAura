@@ -23,6 +23,9 @@ public sealed partial class MainWindow : Window
     {
         CurrentInstance = this;
         InitializeComponent();
+        RootGrid.RequestedTheme = Enum.TryParse<ElementTheme>(ClientSettings.Current.Theme, out var theme) ? theme : ElementTheme.Default;
+        RootGrid.ActualThemeChanged += RootThemeChanged;
+        TrayIconManager.MinimizeToTrayEnabled = ClientSettings.Current.MinimizeToTray;
 
         CurrentNavFrame = NavFrame;
         CurrentNavView = NavView;
@@ -41,7 +44,7 @@ public sealed partial class MainWindow : Window
 
         try
         {
-            AppWindow.SetIcon("Assets/AppIcon.ico");
+            AppWindow.SetIcon(System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"));
         }
         catch
         {
@@ -55,13 +58,7 @@ public sealed partial class MainWindow : Window
         _trayIcon = new TrayIconManager(this, ShowAndBringToFront, () => { _ = App.RequestExit(); });
 
         // 5. 监听后台守护进程状态变化并同步托盘提示
-        DaemonSupervisor.Instance.StatusChanged += (status) =>
-        {
-            DispatcherQueue.TryEnqueue(() =>
-            {
-                _trayIcon.UpdateStatus(status);
-            });
-        };
+        DaemonSupervisor.Instance.StatusChanged += OnDaemonStatus;
 
         // 6. 监听导航完成事件，同步更新 TitleBar 返回按钮可见性与 NavigationView 选中项
         NavFrame.Navigated += NavFrame_Navigated;
@@ -69,27 +66,6 @@ public sealed partial class MainWindow : Window
         // 7. 默认进入首页
         NavigateTo(typeof(HomePage));
 
-        // 8. 自动化导航压力验证钩子 (支持环境变量或 G:\Aura\nav_stress_trigger.txt 触发)
-        int stressCycles = 0;
-        string triggerPath = @"G:\Aura\nav_stress_trigger.txt";
-        if (System.IO.File.Exists(triggerPath))
-        {
-            try
-            {
-                string content = System.IO.File.ReadAllText(triggerPath).Trim();
-                int.TryParse(content, out stressCycles);
-            }
-            catch { }
-        }
-        if (stressCycles <= 0)
-        {
-            string? stressCyclesEnv = Environment.GetEnvironmentVariable("AURA_TEST_NAV_STRESS");
-            int.TryParse(stressCyclesEnv, out stressCycles);
-        }
-        if (stressCycles > 0)
-        {
-            _ = RunNavStressTestAsync(stressCycles);
-        }
     }
 
     private void MainWindow_Closing(AppWindow sender, AppWindowClosingEventArgs args)
@@ -117,6 +93,7 @@ public sealed partial class MainWindow : Window
 
     public void ShowAndBringToFront()
     {
+        if (App.IsShuttingDown) return;
         AppWindow.Show();
         IntPtr hWnd = WindowNative.GetWindowHandle(this);
         WindowHelper.ShowWindow(hWnd, WindowHelper.SW_RESTORE);
@@ -210,48 +187,19 @@ public sealed partial class MainWindow : Window
         };
     }
 
+    private void OnDaemonStatus(string status) => DispatcherQueue.TryEnqueue(() => { if (!App.IsShuttingDown) _trayIcon.UpdateStatus(status); });
+
     public void DisposeTray()
     {
+        RootGrid.ActualThemeChanged -= RootThemeChanged;
+        DaemonSupervisor.Instance.StatusChanged -= OnDaemonStatus;
+        StudioPage.CloseHost();
         _trayIcon.Dispose();
+        WindowHelper.RemoveConstraints(this);
+        AppWindow.Closing -= MainWindow_Closing;
+        NavFrame.Navigated -= NavFrame_Navigated;
     }
 
-    private async Task RunNavStressTestAsync(int cycles)
-    {
-        string resultFile = @"G:\Aura\nav_stress_result.txt";
-        Console.WriteLine($"[NAV_STRESS] Starting {cycles} navigation cycles (Home <-> Lighting)...");
-        try
-        {
-            System.IO.File.WriteAllText(resultFile, $"STARTING {cycles} cycles at {DateTime.Now}\n");
-            await Task.Delay(800);
-            for (int i = 1; i <= cycles; i++)
-            {
-                DispatcherQueue?.TryEnqueue(() => NavigateTo(typeof(LightingPage)));
-                await Task.Delay(300);
-                DispatcherQueue?.TryEnqueue(() => NavigateTo(typeof(HomePage)));
-                await Task.Delay(250);
-                Console.WriteLine($"[NAV_STRESS] Cycle {i}/{cycles} passed.");
-                System.IO.File.AppendAllText(resultFile, $"Cycle {i}/{cycles} passed at {DateTime.Now}\n");
-            }
-            Console.WriteLine($"[NAV_STRESS] All {cycles} navigation cycles completed successfully!");
-            System.IO.File.AppendAllText(resultFile, $"SUCCESS {cycles} cycles completed at {DateTime.Now}\n");
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine($"[NAV_STRESS_ERROR] {ex}");
-            System.IO.File.AppendAllText(resultFile, $"FAILED: {ex}\n");
-        }
-        finally
-        {
-            bool autoExit = Environment.GetEnvironmentVariable("AURA_TEST_NAV_STRESS_AUTOEXIT") == "1"
-                || System.IO.File.Exists(@"G:\Aura\nav_stress_trigger.txt");
-            if (autoExit)
-            {
-                await Task.Delay(500);
-                DispatcherQueue?.TryEnqueue(() =>
-                {
-                    Application.Current.Exit();
-                });
-            }
-        }
-    }
+    private void RootThemeChanged(FrameworkElement sender, object args) => StudioPage.HostThemeChanged();
+
 }

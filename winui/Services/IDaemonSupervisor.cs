@@ -13,6 +13,8 @@ public enum DaemonOwnership
 public interface IDaemonSupervisor
 {
     bool IsDaemonRunning { get; }
+    bool CoreReady { get; }
+    bool StudioWebReady { get; }
     bool IsWebServerReady { get; }
     string StatusDescription { get; }
     DaemonOwnership Ownership { get; }

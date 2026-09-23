@@ -53,15 +53,34 @@ jobs:
         working-directory: tests
         env:
           AURA_BIN_DIR: ${{ github.workspace }}/build/Release
-        run: python -B -m unittest -v test_runtime_entrypoints.TestWebUiEntrypoint test_runtime_entrypoints.TestDaemonEntrypoint test_automation_v2_daemon test_automation_authoring_daemon test_automation_effect_daemon test_automation_reload_daemon test_automation_retrigger_daemon
+        run: python -B -m unittest -v test_runtime_entrypoints.TestWebUiEntrypoint test_runtime_entrypoints.TestDaemonEntrypoint test_automation_v2_daemon test_automation_authoring_daemon test_automation_effect_daemon test_automation_reload_daemon test_automation_retrigger_daemon test_global_lighting_daemon
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
       - name: Run .NET Client Tests
-        run: dotnet test tests/Aura.Tests/Aura.Tests.csproj -c Release
+        env:
+          AURA_INTEGRATION_BIN: ${{ github.workspace }}/build/Release
+        # DesktopSmoke creates a real WinUI window and is run locally on the final package.
+        run: dotnet test tests/Aura.Tests/Aura.Tests.csproj -c Release --filter "TestCategory!=DesktopSmoke"
       - name: Build WinUI Desktop Client (Release)
         run: dotnet build winui/Aura.WinUI.csproj -c Release -p:Platform=x64
+      - name: GSI configuration contract
+        working-directory: tests
+        env:
+          AURA_BIN_DIR: ${{ github.workspace }}/build/Release
+        run: python -B -m unittest -v test_winui_productization.TestGsiConfigurationContract
+      - name: Publish and verify WinUI ZIP
+        run: python tools/package_release.py --build-dir build --skip-build
+      - name: Packaged runtime smoke
+        shell: pwsh
+        run: |
+          $candidate = Get-ChildItem dist -Directory -Filter 'Aura-v*-windows-x64-*' | Select-Object -First 1
+          if (-not $candidate) { throw 'WinUI package missing' }
+          $env:AURA_PACKAGE_DIR = $candidate.FullName
+          Set-Location tests
+          python -B -m unittest -v test_winui_productization.TestPackagedRuntime
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
   frontend:
     name: Frontend tests and build

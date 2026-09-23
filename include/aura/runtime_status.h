@@ -7,6 +7,11 @@
 namespace aura {
 
 struct RuntimeStatusSnapshot {
+    std::string instance_id;
+    std::string product_version;
+    std::string config_path;
+    uint32_t process_id = 0;
+    bool web_suppressed = false;
     bool hardware_connected = false;
     std::string adapter_state = "uninitialized";
     std::string configured_backend = "auto";
@@ -19,12 +24,16 @@ struct RuntimeStatusSnapshot {
     bool dry_run = false;
 
     bool gsi_active = false;
+    std::string gsi_source = "real";
     std::string foreground_process;
 
     nlohmann::json ToJson() const {
         nlohmann::json j;
         j["status"] = "ok";
         j["api_version"] = 1;
+        j["identity"] = {{"service", "aura_daemon"}, {"process_id", process_id},
+            {"instance_id", instance_id}, {"product_version", product_version}, {"config_path", config_path}};
+        j["studio_web"] = {{"suppressed", web_suppressed}};
 
         j["hardware"] = {
             {"connected", hardware_connected},
@@ -43,7 +52,7 @@ struct RuntimeStatusSnapshot {
         };
 
         j["gsi"] = {
-            {"active", gsi_active}
+            {"active", gsi_active}, {"source", gsi_source}
         };
 
         return j;

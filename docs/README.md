@@ -11,7 +11,8 @@ Current code is the implementation authority. Guides below have distinct roles; 
 | [Testing](testing/TESTING.md) / [CI](testing/CI.md) | Automated tests, manual tools and evidence limits |
 | [Manual acceptance](testing/MANUAL_TESTS.md) | Physical keyboard and CS2 checks |
 | [Studio workflow](studio/STUDIO_WORKFLOW.md) | Blockly editing, preview, publishing and orchestration |
-| [Packaging](development/PACKAGING.md) / [Release checklist](development/RELEASE_CHECKLIST.md) | Legacy launcher packaging and release gates |
+| [Packaging](development/PACKAGING.md) / [Release checklist](development/RELEASE_CHECKLIST.md) | WinUI ZIP layout, runtime ownership and release gates |
+| [alpha.4 client contract](development/ALPHA4_CLIENT_CONTRACT.md) | Native GSI routes, client lifecycle and validation |
 | [Cleanup audit](development/REPOSITORY_CLEANUP.md) | Complete pre-cleanup tracked-file inventory and decisions |
 | [Repository hygiene](development/REPOSITORY_HYGIENE.md) | Tracking boundaries, audit artifact policy and Git rules |
 | [History](archive/README.md) | Superseded decisions, reports and patch snapshots |

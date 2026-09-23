@@ -7,9 +7,9 @@ GitHub Actions runs on pushes, pull requests, and manual dispatches.
 
 The Windows job builds its own binaries and passes that exact directory through `AURA_BIN_DIR`. Runtime tests use temporary configuration and application-data directories; daemon lifecycle tests use `--dry-run`.
 
-The legacy single-file `Aura.exe` launcher does not embed an ASUS driver and does not package WinUI. Hosted CI does not run packaging or launcher acceptance. See [packaging limits](../development/PACKAGING.md). Physical lighting remains manual.
+Windows CI also verifies GSI cfg contracts, publishes the default self-contained WinUI ZIP, checks its file manifest/version resources, and runs the packaged native runtime outside checkout assets. `Aura.exe` is the GUI; the legacy launcher is only available with `--legacy`. DesktopSmoke creates a real WinUI window and is excluded from hosted CI; run it locally against the final package with `AURA_PACKAGE_DIR`. Physical lighting and visual desktop acceptance remain manual. See [packaging](../development/PACKAGING.md).
 
-Run all three entrypoint suites locally after building the daemon/WebUI and packaging a current launcher:
+The historical three-entrypoint command additionally requires an explicitly built legacy launcher (not the alpha.4 GUI):
 
 ```powershell
 python -B tests/test_runtime_entrypoints.py

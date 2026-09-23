@@ -1,21 +1,70 @@
-# Packaging status: legacy launcher
+# alpha.4 WinUI packaging
 
-`package_release.bat` and `package_release.ps1` both delegate to [tools/package_release.py](../../tools/package_release.py). They are shell conveniences, not separate packaging implementations.
+`package_release.bat` and `package_release.ps1` forward to `tools/package_release.py`. The default pipeline produces an unpackaged, self-contained **Windows 11 x64 WinUI ZIP**. `Aura.exe` is the GUI, never a daemon candidate. `--legacy` retains the historical C++ launcher under `dist/legacy/` for engineering use only.
 
-The pipeline builds the C++ daemon and Web server, embeds runtime assets and plugin SDK headers into the legacy `Aura.exe` launcher, and emits a portable ZIP. It does **not** build or package the WinUI client. Public packages must not contain ASUS proprietary DLLs. Native HID does not require them; explicit legacy compatibility or auto fallback uses installed, gated ASUS components.
+## Build and output
 
-This cleanup retains the pipeline because launcher/runtime tests and existing release workflows still depend on it. It does not certify a WinUI release or redesign installation.
+```powershell
+python tools/package_release.py
+# Reuse a native build already compiled/tested with the same VERSION:
+python tools/package_release.py --build-dir build --skip-build
+# Verify an extracted candidate:
+python tools/package_winui.py --verify dist/Aura-v<VERSION>-windows-x64-<build-id>
+```
 
-Known follow-up work before shipping WinUI:
+The default rebuilds frontend assets, builds the native sidecars, publishes WinUI, verifies required files/roles/hashes/x64 PE architecture, then emits a versioned directory, ZIP and `.sha256`. `--skip-build` skips only native compilation. `--skip-zip` retains the verified directory. There is no release publishing, local deployment, config migration or user-runtime deletion. Do not pass `--clean` to the new pipeline. A stale native build is detected by the packaged runtime version test, so use `--skip-build` only after rebuilding.
 
-- Define WinUI distribution, runtime dependencies and daemon/Web/SDK asset layout; validate source, portable and installed startup.
-- Build/packaging is not deployment: CMake writes to its build directory; packaging writes to `dist/`. Neither copies executables to the checkout root nor clears `%LOCALAPPDATA%/Aura/runtime`. `--clean` only clears the build directory; a mismatched generator is refused.
-- Validate packaged Studio publishing, upgrade/migration and graceful exit on actual Windows hardware.
+Build prerequisites: VS 2022/2026 C++ desktop workload + Windows SDK, CMake, Python, Node/npm, .NET 10 SDK. The installed Visual Studio supplies app-local x64 VC CRT redistributables. No ASUS proprietary binaries may enter the package.
 
-Use the [release checklist](RELEASE_CHECKLIST.md). Automated CI does not publish packages or prove keyboard behavior.
+```text
+Aura-v<VERSION>-windows-x64-<build-id>/
+  Aura.exe / Aura.dll / Aura.deps.json / Aura.runtimeconfig.json
+  Aura.pri / App.xbf / MainWindow.xbf / Pages/*.xbf / Assets/
+  .NET and Windows App SDK self-contained dependencies
+  runtime-payload/
+    runtime-manifest.json
+    aura_daemon.exe
+    aura_web_ui.exe
+    config.example.json
+    calibrated_keymap.json
+    web/index.html
+    include/engine/{effect.h,plugin_interface.h}
+    include/aura/{aura_types.h,keymap.h}
+    MSVC redistributable CRT DLLs
+  LICENSE / README_RELEASE.md / checksums.json
+```
 
-For isolated candidate validation, set `LOCALAPPDATA` to an empty validation directory before invoking the canonical script, to isolate launcher execution from the user runtime. Inspect ZIP entries and extracted embedded resources; run the launcher with `--dry-run` outside the checkout. Portable configuration lives beside Aura.exe; standalone configuration lives in `%LOCALAPPDATA%/Aura/config.json`.
+Keep the complete directory together. Ordinary .NET publish omitted application PRI/XBF resources in the current SDK combination; the project explicitly includes them in publish output and packaging requires them.
 
-## Adopting a breaking candidate locally
+## Data and update contract
 
-Keep a backup of the current config and executables. Run the new daemon with `--validate-config <actual-config-path>` before replacing any local runtime. If it reports `migration_required`, use the development migration tool and review any refused mapping; do not delete records or enable a hidden fallback to make startup succeed. Validate the new config, then run the candidate with `--dry-run --config <new-config>` before explicitly deploying the matching config and binaries together. A successful package build alone does not authorize upgrading the local checkout runtime.
+Canonical data root is `%LOCALAPPDATA%/Aura`. `AURA_DATA_ROOT` explicitly overrides it. A `portable.marker` beside the GUI selects that directory as data root only when no override is set. ZIPs do not include the marker or a user `config.json`.
+
+```text
+<data-root>/
+  config.json                  # durable user configuration; template copied only if absent
+  plugins/                     # durable Studio sources, DLLs, shadow cache
+  client-settings.json         # theme / tray preference, separate from daemon configuration
+  logs/winui.log               # GUI exception log
+  aura_daemon.log              # native log, working directory = data root
+  WebView2/                    # persistent browser profile
+  runtime/<version>-<build-id>/ # verified replaceable files from runtime-payload
+```
+
+Resolve performs no file mutations and never searches ancestors or current working directory. Prepare verifies payload SHA-256, copies to a unique staging directory, verifies again, then renames to its cache location. Existing caches are verified; corrupt files fail closed. Old version directories are retained, never removed while a process might use them. GUI preferences never mutate daemon config. Plugin paths/publication and config revision semantics remain unchanged.
+
+Exit the old GUI from its tray before switching packages. The new GUI uses the same durable data and a separate version/build runtime cache. An existing external daemon is attached without ownership or automatic upgrade; stop/upgrade it using its original launcher. For alpha.3 portable data, preserve config **and plugins**, explicitly point to the existing data root, and inspect any absolute paths. No automatic Automation migration or path rewriting occurs. Standalone legacy daemon marker compatibility remains `%LOCALAPPDATA%/Aura/.daemon_running`; it is not authoritative ownership evidence.
+
+Development is explicit: set `AURA_DEV_ROOT` to the checkout and optionally `AURA_DEV_BIN` to its native Release directory (default `<checkout>/build/Release`). Set a separate `AURA_DATA_ROOT`. The GUI passes explicit web/SDK roots. An unset dev variable must never fall back to a checkout or `G:/Aura`.
+
+## Process contract
+
+WinUI starts daemon suspended, assigns its private kill-on-close Job Object, then resumes. It retains the child process and gives it a unique instance ID/private shutdown event. The daemon similarly owns web through its job. Graceful GUI exit signals only its retained child; after a bounded timeout it may terminate that child. Closing the GUI job also prevents its child tree from becoming orphaned. Attaching an existing daemon grants no shutdown/kill right. A mutex without a compatible Control API prevents another spawn.
+
+`CoreReady` requires Control API v1 and daemon identity. `StudioWebReady` additionally requires Web API v2 and the same daemon instance. A suppressed/missing web service does not make core/GSI offline. The two sidecars carry UTF-8 process manifests for Unicode data paths; this follows [Microsoft's process code-page guidance](https://learn.microsoft.com/en-us/windows/apps/design/globalizing/use-utf8-code-page).
+
+## Dependencies and signing
+
+.NET and Windows App SDK are bundled; no source checkout is needed. Studio requires WebView2 Evergreen Runtime. Native Studio publishing additionally requires local x64 MSVC Build Tools and Windows SDK; drafts do not. The four SDK headers travel in the verified payload. No Plugin ABI change or native crash isolation is provided.
+
+Current candidates are unsigned. SHA-256 establishes file consistency, not publisher identity or SmartScreen reputation. Do not claim signing, automatic updates, installer integration, or enterprise deployment. A Release can only be approved after [the release checklist](RELEASE_CHECKLIST.md), including manual Windows/keyboard/CS2 validation.

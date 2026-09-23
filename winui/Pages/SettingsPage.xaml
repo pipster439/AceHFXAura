@@ -8,37 +8,8 @@
     Background="Transparent"
     mc:Ignorable="d">
 
-    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-        <StackPanel Spacing="20" Padding="24,20,24,24" MaxWidth="860" HorizontalAlignment="Stretch">
-            <VisualStateManager.VisualStateGroups>
-                <VisualStateGroup>
-                    <VisualState x:Name="SettingsWide">
-                        <VisualState.StateTriggers>
-                            <AdaptiveTrigger MinWindowWidth="640" />
-                        </VisualState.StateTriggers>
-                    </VisualState>
-                    <!-- 窄窗口状态 (600 DIP 或收起模式)：设置行操作控件允许下沉重排，防止挤压文字与横向滚动 -->
-                    <VisualState x:Name="SettingsNarrow">
-                        <VisualState.StateTriggers>
-                            <AdaptiveTrigger MinWindowWidth="0" />
-                        </VisualState.StateTriggers>
-                        <VisualState.Setters>
-                            <Setter Target="ThemeControlContainer.(Grid.Row)" Value="1" />
-                            <Setter Target="ThemeControlContainer.(Grid.Column)" Value="0" />
-                            <Setter Target="ThemeControlContainer.HorizontalAlignment" Value="Left" />
-                            <Setter Target="TrayControlContainer.(Grid.Row)" Value="1" />
-                            <Setter Target="TrayControlContainer.(Grid.Column)" Value="0" />
-                            <Setter Target="TrayControlContainer.HorizontalAlignment" Value="Left" />
-                            <Setter Target="DaemonControlContainer.(Grid.Row)" Value="1" />
-                            <Setter Target="DaemonControlContainer.(Grid.Column)" Value="0" />
-                            <Setter Target="DaemonControlContainer.HorizontalAlignment" Value="Left" />
-                            <Setter Target="BrowserControlContainer.(Grid.Row)" Value="1" />
-                            <Setter Target="BrowserControlContainer.(Grid.Column)" Value="0" />
-                            <Setter Target="BrowserControlContainer.HorizontalAlignment" Value="Left" />
-                        </VisualState.Setters>
-                    </VisualState>
-                </VisualStateGroup>
-            </VisualStateManager.VisualStateGroups>
+    <ScrollViewer x:Name="PageScroll" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Visible" HorizontalContentAlignment="Stretch">
+        <StackPanel x:Name="PageContent" Spacing="20" MaxWidth="1200" HorizontalAlignment="Left">
 
             <StackPanel Spacing="4">
                 <TextBlock Text="设置 (Settings)" Style="{ThemeResource TitleTextBlockStyle}" TextWrapping="Wrap" />
@@ -156,6 +127,10 @@
                             </StackPanel>
                         </Grid>
 
+                        <TextBlock x:Name="StudioStatusText" Text="Studio：正在检测…" TextWrapping="Wrap"/>
+                        <Expander Header="运行时详细信息" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                            <TextBlock x:Name="RuntimeDetailsText" TextWrapping="Wrap" IsTextSelectionEnabled="True"/>
+                        </Expander>
                         <MenuFlyoutSeparator />
 
                         <Grid ColumnSpacing="16" RowSpacing="10">
@@ -168,8 +143,8 @@
                                 <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
                             <StackPanel Grid.Row="0" Grid.Column="0" Spacing="4">
-                                <TextBlock Text="本地 Web 调试端口" FontWeight="SemiBold" TextWrapping="Wrap" />
-                                <TextBlock Text="http://127.0.0.1:19898 (本机回环 loopback 调试访问)"
+                                <TextBlock Text="Studio 浏览器入口" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                <TextBlock Text="在默认浏览器中打开本机 Studio"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                            Style="{ThemeResource CaptionTextBlockStyle}"
                                            TextWrapping="Wrap" />
@@ -195,7 +170,7 @@
                         Padding="16">
                     <StackPanel Spacing="8">
                         <TextBlock Text="AceHFXAura WinUI 3 Desktop Client" FontWeight="SemiBold" TextWrapping="Wrap" />
-                        <TextBlock Text="版本: v0.1.0-alpha.2 (Phase 1 Shell)" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                        <TextBlock x:Name="VersionText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                         <TextBlock Text="专为 ASUS ROG Falchion Ace HFX 打造的原生桌面客户端与磁轴灯效生态"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                    Style="{ThemeResource CaptionTextBlockStyle}"

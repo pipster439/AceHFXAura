@@ -26,7 +26,10 @@ WebUiSupervisor::~WebUiSupervisor() {
     }
 }
 
-void WebUiSupervisor::StartSupervisor(const std::filesystem::path& config_path, int port) {
+void WebUiSupervisor::StartSupervisor(const std::filesystem::path& config_path, int port,
+    const std::filesystem::path& runtime_root, const std::filesystem::path& web_root,
+    const std::filesystem::path& sdk_include, const std::string& instance_id) {
+    runtime_root_ = runtime_root; web_root_ = web_root; sdk_include_ = sdk_include; instance_id_ = instance_id;
     config_path_ = config_path.wstring();
     port_ = port;
     stop_requested_.store(false, std::memory_order_release);
@@ -62,6 +65,7 @@ void WebUiSupervisor::SetSuppressed(bool suppressed) {
 }
 
 std::wstring WebUiSupervisor::FindExecutablePath() const {
+    if (!runtime_root_.empty()) return (runtime_root_ / "aura_web_ui.exe").wstring();
     wchar_t mod_path[MAX_PATH];
     if (GetModuleFileNameW(nullptr, mod_path, MAX_PATH)) {
         std::filesystem::path current_exe(mod_path);
@@ -120,6 +124,11 @@ bool WebUiSupervisor::StartChildProcess() {
                           L" --config \"" + config_path_ + L"\" --shutdown-event \"" + event_name + L"\"";
 
     STARTUPINFOW si{};
+    const auto web = runtime_root_.empty() ? web_root_ : runtime_root_ / "web";
+    const auto sdk = runtime_root_.empty() ? sdk_include_ : runtime_root_ / "include";
+    if (!web.empty()) wcmdline += L" --web-root \"" + web.wstring() + L"\"";
+    if (!sdk.empty()) wcmdline += L" --sdk-include \"" + sdk.wstring() + L"\"";
+    if (!instance_id_.empty()) wcmdline += L" --daemon-instance \"" + std::wstring(instance_id_.begin(), instance_id_.end()) + L"\"";
     si.cb = sizeof(si);
     si.dwFlags = STARTF_USESHOWWINDOW;
     si.wShowWindow = SW_HIDE;
@@ -132,7 +141,7 @@ bool WebUiSupervisor::StartChildProcess() {
         nullptr,
         nullptr,
         FALSE,
-        CREATE_NO_WINDOW,
+        CREATE_NO_WINDOW | CREATE_SUSPENDED,
         nullptr,
         nullptr,
         &si,
@@ -158,8 +167,12 @@ bool WebUiSupervisor::StartChildProcess() {
     }
 
     // 绑定至 Job Object 防孤儿
-    if (hJob_) {
-        AssignProcessToJobObject(hJob_, pi_.hProcess);
+    if (!hJob_ || !AssignProcessToJobObject(hJob_, pi_.hProcess) || ResumeThread(pi_.hThread) == static_cast<DWORD>(-1)) {
+        TerminateProcess(pi_.hProcess, 1);
+        CloseHandle(pi_.hProcess); CloseHandle(pi_.hThread); ZeroMemory(&pi_, sizeof(pi_));
+        if (hShutdownEvent_) { CloseHandle(hShutdownEvent_); hShutdownEvent_ = nullptr; }
+        LOG_ERROR("[WebUI] Cannot safely assign/resume owned sidecar");
+        return false;
     }
 
     is_running_.store(true, std::memory_order_release);

@@ -1,4 +1,4 @@
-# LEGACY C++ launcher packaging; does not package WinUI. See docs/development/PACKAGING.md.
+# WinUI ZIP by default; --legacy explicitly selects the old C++ launcher.
 <#
 .SYNOPSIS
     Aura Release Packaging Script for PowerShell
@@ -6,7 +6,7 @@
         .\package_release.ps1
 #>
 [CmdletBinding()]
-param()
+param([Parameter(ValueFromRemainingArguments=$true)][string[]]$PackageArguments)
 
 $ErrorActionPreference = "Stop"
 
@@ -35,7 +35,7 @@ if (-not $pythonExe) {
 }
 
 Write-Host "[*] Using Python: $pythonExe" -ForegroundColor Gray
-& $pythonExe $scriptPath
+& $pythonExe $scriptPath @PackageArguments
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host "`n[OK] Release build complete! Check the dist/ directory." -ForegroundColor Green

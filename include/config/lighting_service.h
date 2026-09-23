@@ -174,6 +174,8 @@ public:
     OpResult GetPresetCatalog(std::vector<BuiltinLightingPreset>& out_presets);
     OpResult GetBaseLighting(BaseLightingDetail& out_detail);
     OpResult UpdateBaseLighting(const BaseLightingPatchInput& patch, std::string& out_new_revision);
+    OpResult GetGlobalFps(int& fps, std::string& revision);
+    OpResult UpdateGlobalFps(int fps, const std::string& expected_revision, std::string& revision);
 
 private:
     std::filesystem::path config_path_;

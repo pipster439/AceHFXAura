@@ -45,17 +45,23 @@ public sealed class RuntimeInfoStatusDto
 
 public sealed class GsiStatusDto
 {
+    [JsonPropertyName("source")]
+    public string Source { get; set; } = "";
     [JsonPropertyName("active")]
     public bool Active { get; set; }
 }
 
 public sealed class RuntimeStatusResponseDto
 {
+    [JsonPropertyName("identity")]
+    public RuntimeIdentityDto? Identity { get; set; }
+    [JsonPropertyName("studio_web")]
+    public StudioWebStateDto StudioWeb { get; set; } = new();
     [JsonPropertyName("status")]
     public string Status { get; set; } = "";
 
     [JsonPropertyName("api_version")]
-    public int ApiVersion { get; set; } = 1;
+    public int ApiVersion { get; set; }
 
     [JsonPropertyName("hardware")]
     public HardwareStatusDto Hardware { get; set; } = new();
@@ -157,7 +163,7 @@ public sealed class RuntimeStatus
             {
                 return "Idle";
             }
-            return Data.Gsi.Active ? "Active" : "Idle";
+            return (Data.Gsi.Source switch { "simulation" => "SIMULATION · ", "real" => "REAL · ", _ => "" }) + (Data.Gsi.Active ? "Active" : "Idle");
         }
     }
 
@@ -195,7 +201,7 @@ public sealed class ProfileListResponseDto
     public string Status { get; set; } = "";
 
     [JsonPropertyName("api_version")]
-    public int ApiVersion { get; set; } = 1;
+    public int ApiVersion { get; set; }
 
     [JsonPropertyName("revision")]
     public string Revision { get; set; } = "";
@@ -234,7 +240,7 @@ public sealed class ProfileDetailResponseDto
     public string Status { get; set; } = "";
 
     [JsonPropertyName("api_version")]
-    public int ApiVersion { get; set; } = 1;
+    public int ApiVersion { get; set; }
 
     [JsonPropertyName("revision")]
     public string Revision { get; set; } = "";
@@ -267,7 +273,7 @@ public sealed class ProfilePatchResponseDto
     public string Status { get; set; } = "";
 
     [JsonPropertyName("api_version")]
-    public int ApiVersion { get; set; } = 1;
+    public int ApiVersion { get; set; }
 
     [JsonPropertyName("message")]
     public string Message { get; set; } = "";
@@ -474,7 +480,7 @@ public sealed class LightingPresetListResponseDto
     public string Status { get; set; } = "";
 
     [JsonPropertyName("api_version")]
-    public int ApiVersion { get; set; } = 1;
+    public int ApiVersion { get; set; }
 
     [JsonPropertyName("presets")]
     public List<LightingPresetItemDto> Presets { get; set; } = new();
@@ -513,7 +519,7 @@ public sealed class BaseLightingResponseDto
     public string Status { get; set; } = "";
 
     [JsonPropertyName("api_version")]
-    public int ApiVersion { get; set; } = 1;
+    public int ApiVersion { get; set; }
 
     [JsonPropertyName("revision")]
     public string Revision { get; set; } = "";
@@ -550,7 +556,7 @@ public sealed class BaseLightingPatchResponseDto
     public string Status { get; set; } = "";
 
     [JsonPropertyName("api_version")]
-    public int ApiVersion { get; set; } = 1;
+    public int ApiVersion { get; set; }
 
     [JsonPropertyName("message")]
     public string Message { get; set; } = "";
@@ -740,7 +746,7 @@ public interface IAuraControlClient
 
 }
 
-public sealed class AuraControlClient : IAuraControlClient
+public sealed partial class AuraControlClient : IAuraControlClient
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -911,7 +917,7 @@ public sealed class AuraControlClient : IAuraControlClient
             if (res.StatusCode == System.Net.HttpStatusCode.OK)
             {
                 var okDto = JsonSerializer.Deserialize<ProfilePatchResponseDto>(resJson, JsonOptions);
-                if (okDto != null && string.Equals(okDto.Status, "ok", StringComparison.OrdinalIgnoreCase))
+                if (okDto != null && okDto.ApiVersion == 1 && !string.IsNullOrEmpty(okDto.Revision) && string.Equals(okDto.Status, "ok", StringComparison.OrdinalIgnoreCase))
                 {
                     return UpdateProfileResult.Success(okDto.Revision);
                 }
@@ -1054,7 +1060,7 @@ public sealed class AuraControlClient : IAuraControlClient
             if (res.StatusCode == System.Net.HttpStatusCode.OK)
             {
                 var okDto = JsonSerializer.Deserialize<BaseLightingPatchResponseDto>(resJson, JsonOptions);
-                if (okDto != null && string.Equals(okDto.Status, "ok", StringComparison.OrdinalIgnoreCase))
+                if (okDto != null && okDto.ApiVersion == 1 && !string.IsNullOrEmpty(okDto.Revision) && string.Equals(okDto.Status, "ok", StringComparison.OrdinalIgnoreCase))
                 {
                     return UpdateBaseLightingResult.Success(okDto.Revision);
                 }

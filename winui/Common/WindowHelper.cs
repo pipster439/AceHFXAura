@@ -83,6 +83,16 @@ public static class WindowHelper
         SetWindowSubclass(hWnd, _subclassProc, (UIntPtr)SUBCLASS_ID, UIntPtr.Zero);
     }
 
+    public static void RemoveConstraints(Microsoft.UI.Xaml.Window window)
+    {
+        if (_subclassProc != null)
+            RemoveWindowSubclass(WindowNative.GetWindowHandle(window), _subclassProc, (UIntPtr)SUBCLASS_ID);
+        _subclassProc = null;
+    }
+
+    [DllImport("comctl32.dll")]
+    private static extern bool RemoveWindowSubclass(IntPtr hwnd, SubclassProc callback, UIntPtr id);
+
     private static IntPtr WindowSubclassCallback(IntPtr hWnd, uint uMsg, IntPtr wParam, IntPtr lParam, UIntPtr uIdSubclass, UIntPtr dwRefData)
     {
         if (uMsg == WM_GETMINMAXINFO)

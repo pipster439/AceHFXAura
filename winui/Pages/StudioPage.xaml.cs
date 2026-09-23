@@ -1,7 +1,6 @@
-using System;
-using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Navigation;
 using Microsoft.Web.WebView2.Core;
 using Aura_WinUI.Services;
 
@@ -9,101 +8,106 @@ namespace Aura_WinUI.Pages;
 
 public sealed partial class StudioPage : Page
 {
-    private const string STUDIO_URL = "http://127.0.0.1:19898/";
-    private bool _isInitialized = false;
-
+    private static StudioPage? _host;
+    private bool _initialized, _initializing, _closed, _active, _checking;
+    private string? _lastTheme;
+    private readonly DispatcherTimer _retry = new() { Interval = TimeSpan.FromSeconds(3) };
     public StudioPage()
     {
         InitializeComponent();
-        Loaded += StudioPage_Loaded;
+        NavigationCacheMode = NavigationCacheMode.Required; // One retained editor, preserving unsaved Blockly work.
+        _host = this;
+        Loaded += (_, _) => { _active = true; _retry.Start(); _ = InitializeStudioAsync(); SyncTheme(); };
+        Unloaded += (_, _) => { _active = false; _retry.Stop(); };
+        ActualThemeChanged += ThemeChanged;
+        _retry.Tick += (_, _) => { if (!_initialized) _ = InitializeStudioAsync(); else _ = RefreshAvailabilityAsync(); };
     }
-
-    private async void StudioPage_Loaded(object sender, RoutedEventArgs e)
+    private async Task RefreshAvailabilityAsync()
     {
-        if (!_isInitialized)
-        {
-            await InitializeStudioAsync();
-        }
-    }
-
-    private async void RetryBtn_Click(object sender, RoutedEventArgs e)
-    {
-        await InitializeStudioAsync();
-    }
-
-    private async Task InitializeStudioAsync()
-    {
-        LoadingPanel.Visibility = Visibility.Visible;
-        LoadingRing.IsActive = true;
-        RetryBtn.Visibility = Visibility.Collapsed;
-        LoadingStatusText.Text = "正在验证 Aura Web 服务就绪状态...";
-        StudioInfoBar.IsOpen = false;
-
-        // 1. 确保后台守护进程与 Web 服务正在运行
-        await DaemonSupervisor.Instance.EnsureStartedAsync();
-
-        bool isReady = await DaemonSupervisor.Instance.ProbeWebServerAsync();
-        if (!isReady)
-        {
-            LoadingStatusText.Text = "无法连接至本地 Aura Web 服务 (127.0.0.1:19898)";
-            LoadingRing.IsActive = false;
-            RetryBtn.Visibility = Visibility.Visible;
-            StudioInfoBar.Title = "服务未就绪";
-            StudioInfoBar.Message = "Aura 核心或 Web 服务未正常启动，或当前正处于游戏节能静默状态。";
-            StudioInfoBar.Severity = InfoBarSeverity.Warning;
-            StudioInfoBar.IsOpen = true;
-            return;
-        }
-
-        LoadingStatusText.Text = "正在初始化 WebView2 渲染内核...";
+        if (_checking || !_active || _closed) return;
+        _checking = true;
         try
         {
+            await DaemonSupervisor.Instance.RefreshAsync();
+            var ready = await DaemonSupervisor.Instance.ProbeWebServerAsync();
+            if (!_active || _closed) return;
+            StudioInfoBar.Title = DaemonSupervisor.Instance.WebSuppressed ? "Studio Web 服务已被免打扰规则暂停" : "Studio Web 服务暂不可用";
+            StudioInfoBar.Message = "编辑器草稿保留；服务恢复后可继续保存。核心与 GSI 状态请查看原生页面。";
+            StudioInfoBar.IsOpen = !ready;
+        }
+        catch (OperationCanceledException) { }
+        finally { _checking = false; }
+    }
+    private async void RetryBtn_Click(object sender, RoutedEventArgs e) => await InitializeStudioAsync(true);
+    private string CurrentTheme => MainWindow.CurrentInstance?.Content is FrameworkElement root && root.ActualTheme == ElementTheme.Light ? "light" : "dark";
+    private void ThemeChanged(FrameworkElement sender, object args) => SyncTheme();
+    public static void HostThemeChanged() => _host?.SyncTheme();
+    private void SyncTheme(bool force = false)
+    {
+        if (_closed || !_initialized || StudioWebView.CoreWebView2 == null) return;
+        var theme = CurrentTheme;
+        if (!force && _lastTheme == theme) return;
+        StudioWebView.CoreWebView2.PostWebMessageAsJson(EmbeddedStudioNavigation.ThemeMessage(theme));
+        _lastTheme = theme;
+    }
+    private async Task InitializeStudioAsync(bool force = false)
+    {
+        if (_closed || !_active || _initializing || (_initialized && !force)) return;
+        _initializing = true;
+        try
+        {
+            LoadingPanel.Visibility = Visibility.Visible; LoadingRing.IsActive = true;
+            RetryBtn.Visibility = Visibility.Collapsed; StudioInfoBar.IsOpen = false;
+            await DaemonSupervisor.Instance.EnsureStartedAsync();
+            var ready = await DaemonSupervisor.Instance.ProbeWebServerAsync();
+            if (_closed || !_active) return;
+            if (!ready)
+            {
+                ShowError(DaemonSupervisor.Instance.WebSuppressed ? "Studio Web 服务已被免打扰规则暂停；核心与 GSI 可继续运行。" :
+                    "Studio Web 服务尚未就绪。请检查核心状态；页面会自动重试。");
+                return;
+            }
             await StudioWebView.EnsureCoreWebView2Async();
-
-            // 配置 DevTools 策略: Debug 构建允许调试，Release 默认关闭
+            if (_closed || !_active) return;
 #if DEBUG
             StudioWebView.CoreWebView2.Settings.AreDevToolsEnabled = true;
 #else
             StudioWebView.CoreWebView2.Settings.AreDevToolsEnabled = false;
 #endif
             StudioWebView.CoreWebView2.Settings.IsStatusBarEnabled = false;
-            StudioWebView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = true;
-
-            StudioWebView.NavigationCompleted -= StudioWebView_NavigationCompleted;
-            StudioWebView.NavigationCompleted += StudioWebView_NavigationCompleted;
-
-            LoadingStatusText.Text = "正在载入 Blockly Studio...";
-            StudioWebView.Source = new Uri(STUDIO_URL);
-            _isInitialized = true;
+            StudioWebView.NavigationCompleted -= NavigationCompleted;
+            StudioWebView.NavigationCompleted += NavigationCompleted;
+            StudioWebView.CoreWebView2.NavigationStarting -= NavigationStarting;
+            StudioWebView.CoreWebView2.NavigationStarting += NavigationStarting;
+            StudioWebView.Source = EmbeddedStudioNavigation.InitialUrl("studio", CurrentTheme);
+            _lastTheme = null;
+            _initialized = true;
         }
-        catch (Exception ex)
-        {
-            LoadingRing.IsActive = false;
-            LoadingStatusText.Text = $"WebView2 初始化失败: {ex.Message}";
-            RetryBtn.Visibility = Visibility.Visible;
-            StudioInfoBar.Title = "WebView2 异常";
-            StudioInfoBar.Message = ex.Message;
-            StudioInfoBar.Severity = InfoBarSeverity.Error;
-            StudioInfoBar.IsOpen = true;
-        }
+        catch (Exception ex) { if (!_closed && _active) ShowError("Studio 初始化失败：" + ex.Message + "。请确认 Microsoft WebView2 Runtime 已安装。"); }
+        finally { _initializing = false; }
     }
-
-    private void StudioWebView_NavigationCompleted(WebView2 sender, CoreWebView2NavigationCompletedEventArgs args)
+    private void NavigationStarting(CoreWebView2 sender, CoreWebView2NavigationStartingEventArgs args)
     {
-        if (args.IsSuccess)
-        {
-            LoadingPanel.Visibility = Visibility.Collapsed;
-            StudioWebView.Visibility = Visibility.Visible;
-        }
-        else
-        {
-            LoadingRing.IsActive = false;
-            LoadingStatusText.Text = $"网页加载失败 (代码: {args.WebErrorStatus})";
-            RetryBtn.Visibility = Visibility.Visible;
-            StudioInfoBar.Title = "Studio 加载失败";
-            StudioInfoBar.Message = $"无法加载 {STUDIO_URL}，请检查端口 19898 是否被占用。";
-            StudioInfoBar.Severity = InfoBarSeverity.Error;
-            StudioInfoBar.IsOpen = true;
-        }
+        if (!Uri.TryCreate(args.Uri, UriKind.Absolute, out var uri) || uri.Scheme != "http" || uri.Host != "127.0.0.1" || uri.Port != 19898)
+            args.Cancel = true;
+    }
+    private void NavigationCompleted(WebView2 sender, CoreWebView2NavigationCompletedEventArgs args)
+    {
+        if (_closed) return; // A retained page can finish navigation while another native page is visible.
+        if (args.IsSuccess) { LoadingPanel.Visibility = Visibility.Collapsed; StudioWebView.Visibility = Visibility.Visible; SyncTheme(true); }
+        else { _initialized = false; ShowError("Studio 加载失败：" + args.WebErrorStatus); }
+    }
+    private void ShowError(string message)
+    {
+        LoadingRing.IsActive = false; LoadingStatusText.Text = message; RetryBtn.Visibility = Visibility.Visible;
+    }
+    public static void CloseHost()
+    {
+        if (_host is not { } host || host._closed) return;
+        host._closed = true; host._retry.Stop();
+        host.ActualThemeChanged -= host.ThemeChanged;
+        host.StudioWebView.NavigationCompleted -= host.NavigationCompleted;
+        if (host.StudioWebView.CoreWebView2 != null) host.StudioWebView.CoreWebView2.NavigationStarting -= host.NavigationStarting;
+        host.StudioWebView.Close(); _host = null;
     }
 }

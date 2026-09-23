@@ -1,5 +1,13 @@
 cmake_minimum_required(VERSION 3.20)
-project(aura_project LANGUAGES CXX)
+project(aura_project LANGUAGES CXX RC)
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" AURA_VERSION LIMIT_COUNT 1)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION")
+configure_file(tools/aura_version.h.in "${CMAKE_CURRENT_BINARY_DIR}/generated/aura_version.h" @ONLY)
+include_directories("${CMAKE_CURRENT_BINARY_DIR}/generated")
+string(REGEX MATCH "^[0-9]+\\.[0-9]+\\.[0-9]+" AURA_NUMERIC_VERSION "${AURA_VERSION}")
+string(REPLACE "." "," AURA_RC_VERSION "${AURA_NUMERIC_VERSION}")
+set(AURA_RC_VERSION "${AURA_RC_VERSION},0")
+configure_file(tools/aura_version.rc.in "${CMAKE_CURRENT_BINARY_DIR}/generated/aura_version.rc" @ONLY)
 
 # CMAKE_BUILD_TYPE 未设时显式设置默认值
 if(NOT CMAKE_BUILD_TYPE)
@@ -87,6 +95,7 @@ set(DAEMON_HEADERS
 )
 
 add_executable(aura_daemon ${DAEMON_SOURCES} ${DAEMON_HEADERS})
+target_sources(aura_daemon PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated/aura_version.rc")
 
 if (MSVC)
     target_compile_options(aura_daemon PRIVATE /permissive-)
@@ -125,8 +134,10 @@ set(WEB_HEADERS
 )
 
 add_executable(aura_web_ui ${WEB_SOURCES} ${WEB_HEADERS})
+target_sources(aura_web_ui PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated/aura_version.rc")
 
 target_link_libraries(aura_web_ui PRIVATE
+    advapi32
     ws2_32
     crypt32
     user32
@@ -317,6 +328,10 @@ get_target_property(AUTOMATION_RULE_TEST_LIBRARIES test_gsi_rules LINK_LIBRARIES
 target_link_libraries(test_automation_v2 PRIVATE ${AUTOMATION_RULE_TEST_LIBRARIES})
 add_test(NAME automation_v2 COMMAND test_automation_v2)
 set_tests_properties(automation_v2 PROPERTIES TIMEOUT 30)
+add_executable(test_foreground_monitor tests/test_foreground_monitor.cpp src/monitor/foreground_monitor.cpp ${AUTOMATION_RULE_TEST_SOURCES})
+target_link_libraries(test_foreground_monitor PRIVATE ${AUTOMATION_RULE_TEST_LIBRARIES})
+add_test(NAME foreground_monitor COMMAND test_foreground_monitor)
+set_tests_properties(foreground_monitor PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" TIMEOUT 30)
 add_executable(test_automation_authoring tests/test_automation_authoring.cpp ${AUTOMATION_RULE_TEST_SOURCES})
 target_link_libraries(test_automation_authoring PRIVATE ${AUTOMATION_RULE_TEST_LIBRARIES})
 add_test(NAME automation_authoring COMMAND test_automation_authoring)
@@ -379,3 +394,7 @@ if(Python3_Interpreter_FOUND)
     add_test(NAME packaging_local_state COMMAND ${Python3_EXECUTABLE} -X utf8 "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_packaging_local_state.py")
     add_test(NAME automation_migration COMMAND ${Python3_EXECUTABLE} -X utf8 "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_automation_migration.py" "$<TARGET_FILE:aura_daemon>")
 endif()
+
+# Windows 11 release sidecars use UTF-8 for argv, filesystem and JSON paths.
+target_sources(aura_daemon PRIVATE tools/runtime.manifest)
+target_sources(aura_web_ui PRIVATE tools/runtime.manifest)

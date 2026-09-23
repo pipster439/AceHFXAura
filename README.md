@@ -4,7 +4,7 @@ Aura 是面向 **ROG Falchion Ace HFX** 的高性能独立 Windows 灯光控制�
 
 当前 alpha 版本号以仓库根目录的 [`VERSION`](VERSION) 为单一事实源；核心能力与已知限制见 [`CHANGELOG.md`](CHANGELOG.md)。
 
-当前开发线包含原生 Lighting 与 Automation v2：支持 state / rising / event 规则和有界 stack / queue 重触发。自动化测试与真机验收是不同证据；alpha.3 的键盘与 CS2 验收仍由 Owner 执行。详见 [文档索引](docs/README.md) 和 [当前架构](docs/architecture/README.md)。
+当前 alpha.4 开发线把 WinUI 推进为发行入口，并提供原生 Game Integration。继续复用 alpha.3 的 Native HID、Automation v2、GSI 与 Studio publication 语义，不扩展硬件控制协议。自动化测试与真机验收是不同证据；alpha.4 候选的桌面交互、键盘与 CS2 验收仍须单独完成。详见 [文档索引](docs/README.md) 和 [当前架构](docs/architecture/README.md)。
 
 ## 硬件后端架构 (Hardware Backends)
 
@@ -45,13 +45,12 @@ Aura 是面向 **ROG Falchion Ace HFX** 的高性能独立 Windows 灯光控制�
 - ROG Falchion Ace HFX 机械键盘
 - Native HID 路径不依赖本地 ASUS 闭源驱动；显式 legacy_hal 或 auto 回退需要本地已安装且通过 Gate 的 `AacKbHal_x64.dll`
 - Visual Studio 2022 / 2026 Build Tools 或 Visual Studio，安装“使用 C++ 的桌面开发”、x64 MSVC 工具集和 Windows SDK（用于 Studio 制作并编译发布原生光效 DLL）
-- CMake 3.20 或更新版本
-- Node.js 与 npm（构建 Web Studio 时需要）
-- .NET 10 SDK（WinUI / Aura.Tests）；WinUI 依赖版本以 `winui/Aura.WinUI.csproj` 为准；Studio 需要 WebView2 runtime
+- Microsoft WebView2 Evergreen Runtime（Studio）；WinUI、.NET 与 Windows App SDK 运行依赖随 ZIP 分发
+- 仅从源码构建需要 CMake 3.20+、Node.js/npm 和 .NET 10 SDK；运行候选 ZIP 不需要源码 checkout 或这些 SDK
 
-> Studio 的“发布”会在运行时查找 `vcvars64.bat` 和 `cl.exe`，并使用 Plugin SDK 头文件（单文件运行时自动释放，源码环境使用仓库 `include/`）编译插件。只查看、编辑和保存草稿不触发 C++ 编译。
+> Studio 的“发布”会在运行时查找 `vcvars64.bat` 和 `cl.exe`，并使用 Plugin SDK 头文件（WinUI 包中校验并缓存到 runtime，显式开发环境使用仓库 `include/`）编译插件。只查看、编辑和保存草稿不触发 C++ 编译。
 
-> 这个 MSVC 要求不仅用于从源码构建：即使使用单文件 `Aura.exe`，只要要在 Studio 中“发布”原生光效，也必须安装 Visual Studio Build Tools 的 C++ Desktop workload、x64 MSVC 工具集和 Windows SDK。
+> 这个 MSVC 要求不仅用于从源码构建：即使使用 WinUI ZIP，只要要在 Studio 中“发布”原生光效，也必须安装 Visual Studio Build Tools 的 C++ Desktop workload、x64 MSVC 工具集和 Windows SDK。
 
 ## 从源码构建
 
@@ -79,11 +78,24 @@ dotnet build winui/Aura.WinUI.csproj -c Release -p:Platform=x64
 - `aura_web_ui.exe`：仅绑定本机回环地址的配置与 Studio 服务；
 - `test_gsi_rules.exe`：原生规则、GSI 和叠加行为测试。
 
-构建完成后，CMake 还会把两个运行程序复制到仓库根目录。后续命令都应在仓库根目录执行。
+CMake 仅写入构建目录，不复制到仓库根目录或用户 runtime。多配置生成器的程序位于 `build/Release/`。
 
 ## 首次运行
 
-从源码使用 WinUI：完成上述 C++ 和 WinUI 构建后，可在 Visual Studio 运行 `winui/Aura.WinUI.csproj`（x64 Release）。`RuntimeLayoutResolver` 会在源码目录发现 daemon、keymap 和示例配置；Home / Lighting 连接 19897，Studio 通过 WebView2 加载 19898。当前 legacy `dist/Aura.exe` 不包含 WinUI。
+发行候选：解压完整的 `Aura-v<VERSION>-windows-x64.zip`，运行目录内 **Aura.exe**。它是 WinUI 主程序；daemon/web 是独立 sidecar，禁止只复制 GUI EXE。首次运行将 manifest 中的只读资源校验并缓存到 `%LOCALAPPDATA%/Aura/runtime/<version>-<build-id>/`；配置与插件保存在 `%LOCALAPPDATA%/Aura/`，更新 runtime 不覆盖它们。
+
+需要便携数据时，在首次启动前在 Aura.exe 旁创建 `portable.marker`；或显式设置 `AURA_DATA_ROOT`。从 alpha.3 便携目录迁移时保留 `config.json` **及** `plugins/`，显式选择原数据目录；不自动猜测工作目录、迁移 Automation 或改写插件引用。
+
+源码调试必须显式选择开发布局，以下环境变量需设置在启动 WinUI/Visual Studio 的同一会话中：
+
+```powershell
+$env:AURA_DEV_ROOT = (Get-Location).Path
+$env:AURA_DEV_BIN = Join-Path $env:AURA_DEV_ROOT 'build/Release'
+$env:AURA_DATA_ROOT = Join-Path $env:LOCALAPPDATA 'Aura-dev'
+dotnet run --project winui/Aura.WinUI.csproj -c Release -p:Platform=x64 --no-launch-profile
+```
+
+Home / Lighting / Game Integration 的运行数据直接连接 19897；Studio 和 GSI 配置安装服务位于 19898。关闭到托盘保留核心；托盘“退出”只停止本次 WinUI 启动的核心与其 web 子进程，连接到的外部核心保持运行。第二次启动只激活已有窗口。
 
 也可单独运行 daemon 和浏览器 Studio：
 
@@ -91,7 +103,7 @@ dotnet build winui/Aura.WinUI.csproj -c Release -p:Platform=x64
 2. 在仓库根目录启动：
 
    ```cmd
-   aura_daemon.exe
+   build\Release\aura_daemon.exe
    ```
 
 3. daemon 会自动启动同目录的 `aura_web_ui.exe`。浏览器访问 [http://127.0.0.1:19898](http://127.0.0.1:19898)。
@@ -170,7 +182,7 @@ Profile 只保存逻辑方案名与当前 `plugin_name` 引用。Activate Profil
 ## 当前运行结构
 
 ```text
-WinUI Home / Lighting ── Control / Lighting API ──► daemon :19897
+WinUI Home / Lighting / Game Integration ── Control / Lighting API ──► daemon :19897
 WinUI WebView2 / 浏览器 Studio (127.0.0.1:19898)
         │ 配置 / 编译 / 预览 / GSI 诊断
         ▼
@@ -220,23 +232,21 @@ aura_web_ui.exe --port 19898 --config config.json
 
 此模式没有 daemon，因此硬件预览、插件加载确认和 GSI 实时状态不可用。
 
-## Legacy launcher 发布包
+## WinUI x64 发布候选
 
-此入口仅打包 C++ launcher、daemon 和 Web Studio，不包含 WinUI；限制及后续工作见 [Packaging](docs/development/PACKAGING.md)。
-
-在仓库根目录执行：
+默认入口已切换到 unpackaged/self-contained WinUI ZIP；详细布局、依赖与升级行为见 [Packaging](docs/development/PACKAGING.md)。
 
 ```cmd
 package_release.bat
 ```
 
-脚本会从 [`VERSION`](VERSION) 读取版本，通过 `vswhere` 检测本机安装的 Visual Studio 版本（支持 Visual Studio 2022 与 Visual Studio 2026）并动态匹配对应 CMake 生成器，构建两个 Release 进程、校验可再分发资产，并生成 `dist/Aura.exe` 和便携 ZIP。
+脚本从 `VERSION` 生成客户端、原生程序及包元数据，构建前端、C++ sidecar 并发布 WinUI；输出 `dist/Aura-v<VERSION>-windows-x64-<build-id>/`、ZIP 与 SHA-256。它不部署到用户目录、不清理用户 runtime、不自动发布 GitHub Release。旧 launcher 仅保留显式 `--legacy` 工程入口，产物位于 `dist/legacy/`，不是 alpha.4 默认包。
 
 出于保守的第三方资产策略，打包脚本不会从本机复制、内嵌或附带 `AacKbHal_x64.dll`。仅在显式选择 legacy HAL 或 auto 回退到 HAL 时，程序从用户已安装的 ASUS 官方目录/注册路径定位 DLL，并且只加载通过已验证 SHA-256 与内存签名 Gate 的版本。如果缺失或版本不受支持，请通过 Armoury Crate / ASUS 官方驱动包安装或修复，不要从非官方来源下载 DLL。
 
 发布前请逐项完成 [`RELEASE_CHECKLIST.md`](docs/development/RELEASE_CHECKLIST.md)。
 
-单文件 `Aura.exe` 会自动释放运行时所需的 Aura Plugin SDK，因此无需源码 checkout 即可使用 Studio 的原生发布功能。原生发布仍要求本机安装 Visual Studio / Build Tools 的 C++ Desktop workload、x64 MSVC 工具集和 Windows SDK。
+WinUI ZIP 携带 Aura Plugin SDK，随 runtime 校验后缓存，因此无需源码 checkout 即可使用 Studio 的原生发布功能。原生发布仍要求本机安装 Visual Studio / Build Tools 的 C++ Desktop workload、x64 MSVC 工具集和 Windows SDK。
 
 ## 验证
 
@@ -276,4 +286,4 @@ See [LICENSE](LICENSE) for details.
 
 Automation 页面明确显示 REAL GSI / SIMULATION。开启后由 daemon 提供模拟前台（默认 cs2.exe）、health/armor、bomb、round phase 和 round kills；“+1 kill”改变计数并经过真实事件检测、V2 规则、合成与输出。默认自动心跳 1000 ms，按 freshness 缩短，可暂停以测试过期。模拟期间真实 CS2 POST 正常返回 2xx，但不参与权威状态；退出后下一份真实数据建立基线，不回放事件。Effect Preview 的本地 JS 输入只预览单个效果。
 
-本次 breaking cleanup 取代此前 alpha.3 候选；目标版本仍为 0.1.0-alpha.3。新候选须重新构建、验证、打包和计算哈希，不沿用旧候选证据。
+原生 Game Integration 也使用同一 daemon-backed simulation：管理数据源和诊断状态；规则编辑继续在 Studio / Automation 完成。alpha.4 不改变上述 Automation 语义。候选包必须重新构建、验证、计算哈希并完成发行清单，不沿用 alpha.3 的验收结果。

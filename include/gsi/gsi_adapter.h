@@ -183,6 +183,8 @@ public:
     void AcceptLivePayload(const nlohmann::json& payload);
     nlohmann::json QueueSimulation(const nlohmann::json& request);
     nlohmann::json SimulationStatus() const;
+    nlohmann::json CurrentStatus() const;
+    void SetInstanceId(std::string id) { instance_id_ = std::move(id); }
     AutomationEvaluation EvaluateAutomation(RuleEngine& engine, const std::string& real_process,
         std::optional<uint64_t> now = std::nullopt);
 
@@ -221,6 +223,7 @@ private:
     GsiState state_;
     mutable std::mutex source_mutex_;
     bool simulation_{false}, heartbeat_{true}, live_baseline_{false};
+    std::string instance_id_;
     std::string simulated_process_{"cs2.exe"};
     nlohmann::json simulated_payload_;
     nlohmann::json automation_freshness_;

@@ -16,15 +16,12 @@ public partial class App : Application
 
     public App()
     {
+        Environment.SetEnvironmentVariable("WEBVIEW2_USER_DATA_FOLDER", System.IO.Path.Combine(RuntimeLayoutResolver.DataRoot, "WebView2"));
         InitializeComponent();
         UnhandledException += (sender, e) =>
         {
             Console.Error.WriteLine($"[FATAL] Xaml UnhandledException: {e.Exception}");
-            try
-            {
-                System.IO.File.AppendAllText(@"G:\Aura\aura_winui_crash.log", $"[{DateTime.Now}] Xaml: {e.Exception}\n");
-            }
-            catch { }
+            ClientSettings.Log(e.Exception);
         };
     }
 
@@ -32,11 +29,12 @@ public partial class App : Application
     {
         lock (_activationLock)
         {
+            if (IsShuttingDown) return;
             if (_window is MainWindow mw && mw.DispatcherQueue != null)
             {
                 mw.DispatcherQueue.TryEnqueue(() =>
                 {
-                    mw.ShowAndBringToFront();
+                    if (!IsShuttingDown) mw.ShowAndBringToFront();
                 });
             }
             else
@@ -49,6 +47,8 @@ public partial class App : Application
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
+        if (IsShuttingDown) return;
+        if (_window is MainWindow existing) { existing.ShowAndBringToFront(); return; }
         // 1. 启动后台守护进程探测与自动拉起 (异步非阻塞，内部通过共享 Task 实现串行化)
         _ = DaemonSupervisor.Instance.EnsureStartedAsync();
 
@@ -56,6 +56,8 @@ public partial class App : Application
         var mainWindow = new MainWindow();
         _window = mainWindow;
         mainWindow.Activate();
+        if (Validation.LayoutValidation.Requested) _ = Validation.LayoutValidation.RunAsync(mainWindow);
+        else if (Validation.StudioValidation.Requested) _ = Validation.StudioValidation.RunAsync(mainWindow);
 
         // 3. 检查并处理窗口创建前可能已到达的激活事件
         lock (_activationLock)

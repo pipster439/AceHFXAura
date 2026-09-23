@@ -11,6 +11,7 @@
 #include "config/lighting_service.h"
 #include "config/automation_service.h"
 #include "aura/runtime_status.h"
+#include "aura_version.h"
 #include "utils/logger.h"
 #include "utils/system_info.h"
 
@@ -193,11 +194,24 @@ int main(int argc, char* argv[]) {
         bool has_explicit_config = false;
         aura::HardwareBackend cli_backend = aura::HardwareBackend::Auto;
         bool has_cli_backend = false;
+        std::filesystem::path runtime_root, web_root, sdk_include;
+        std::string instance_id = std::to_string(GetCurrentProcessId()) + "-" + std::to_string(GetTickCount64());
+        std::wstring private_shutdown_event;
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
         if (arg == "--probe-hardware") {
             probe_mode = true;
+        } else if (arg == "--instance-id" || arg == "--shutdown-event" || arg == "--runtime-root" || arg == "--web-root" || arg == "--sdk-include") {
+            if (i + 1 >= argc) { std::cerr << "Missing value for " << arg << "\n"; return 1; }
+            std::string value = argv[++i];
+            if (arg == "--instance-id") {
+                if (value.empty() || value.find_first_not_of("0123456789abcdef-") != std::string::npos) return 1;
+                instance_id = value;
+            } else if (arg == "--shutdown-event") private_shutdown_event = std::filesystem::path(value).wstring();
+            else if (arg == "--runtime-root") runtime_root = std::filesystem::absolute(value);
+            else if (arg == "--web-root") web_root = std::filesystem::absolute(value);
+            else sdk_include = std::filesystem::absolute(value);
         } else if (arg == "--dry-run") {
             dry_run = true;
         } else if (arg == "--test-init") {
@@ -366,7 +380,7 @@ int main(int argc, char* argv[]) {
         LOG_WARN("检测到已有另一个 ROG Falchion Ace HFX 守护进程正在运行，自动唤起 Web 配置面板...");
         std::cout << "[Aura] 检测到守护进程已在后台运行。\n";
         std::cout << "[Aura] 正在自动打开 Web 控制面板: http://127.0.0.1:19898/ ...\n";
-        ShellExecuteW(nullptr, L"open", L"http://127.0.0.1:19898/", nullptr, nullptr, SW_SHOWNORMAL);
+        if (private_shutdown_event.empty()) ShellExecuteW(nullptr, L"open", L"http://127.0.0.1:19898/", nullptr, nullptr, SW_SHOWNORMAL);
         if (hMutex) CloseHandle(hMutex);
         Sleep(1500);
         return 0;
@@ -389,9 +403,10 @@ int main(int argc, char* argv[]) {
     // 采用 RAII 守卫确保在任何异常、提前退出或正常退出路径下均安全 CloseHandle
     struct ShutdownEventScope {
         HANDLE handle = nullptr;
-        ShutdownEventScope() {
-            handle = CreateEventW(NULL, TRUE, FALSE, L"Local\\RogFalchionAceHfxDaemonShutdownEvent");
-            if (handle) {
+        explicit ShutdownEventScope(const std::wstring& private_name) {
+            handle = private_name.empty() ? CreateEventW(NULL, TRUE, FALSE, L"Local\\RogFalchionAceHfxDaemonShutdownEvent")
+                : OpenEventW(SYNCHRONIZE, FALSE, private_name.c_str());
+            if (handle && private_name.empty()) {
                 ResetEvent(handle);
             }
         }
@@ -401,7 +416,8 @@ int main(int argc, char* argv[]) {
                 handle = nullptr;
             }
         }
-    } shutdown_event_scope;
+    } shutdown_event_scope(private_shutdown_event);
+    if (!private_shutdown_event.empty() && !shutdown_event_scope.handle) { CloseHandle(hMutex); return 1; }
     HANDLE hShutdownEvent = shutdown_event_scope.handle;
 
     // 6. 检测异常退出标记 (在底层驱动初始化并就绪前严禁写入状态文件，防止启动崩溃形成死循环)
@@ -577,6 +593,7 @@ int main(int argc, char* argv[]) {
     auto lighting_service = std::make_shared<aura::LightingControlService>(std::filesystem::path(config_path));
     auto automation_service = std::make_shared<aura::AutomationControlService>(std::filesystem::path(config_path));
     aura::GsiAdapter gsi_adapter;
+    gsi_adapter.SetInstanceId(instance_id);
     gsi_adapter.SetStatusStore(status_store);
     gsi_adapter.SetLightingService(lighting_service);
     gsi_adapter.SetAutomationService(automation_service);
@@ -661,7 +678,7 @@ int main(int argc, char* argv[]) {
 
     // 11. 启动网页配置服务后台监护器 (默认桌面状态自动拉起，由独立工线程异步监护)
     aura::WebUiSupervisor web_supervisor;
-    web_supervisor.StartSupervisor(std::filesystem::path(config_path), 19898);
+    web_supervisor.StartSupervisor(std::filesystem::absolute(config_path), 19898, runtime_root, web_root, sdk_include, instance_id);
 
     // 12. 启动前台窗口监控线程 (WinEventHook 专属消息线程)
     // 线程纪律：WinEventHook 回调运行在监控线程，只做【最小化通知】——把前台进程名写入
@@ -708,8 +725,13 @@ int main(int argc, char* argv[]) {
     std::string last_proc_seen = "__UNSET__";
 
     // 运行时只读状态快照生成器 (主线程独占写入 RuntimeStatusStore，网络线程只读获取纯内存副本)
-    auto update_status_snapshot = [&]() {
+    auto update_status_snapshot = [&](const std::string& evaluated_foreground) {
         aura::RuntimeStatusSnapshot snap;
+        snap.instance_id = instance_id;
+        snap.process_id = GetCurrentProcessId();
+        snap.product_version = AURA_PRODUCT_VERSION;
+        snap.config_path = std::filesystem::absolute(config_path).u8string();
+        snap.web_suppressed = web_supervisor.IsSuppressed();
         snap.hardware_connected = (!dry_run) && adapter.IsConnected();
         snap.adapter_state = aura::AdapterStateToString(adapter.GetState());
         snap.configured_backend = aura::HardwareBackendToString(adapter.GetConfiguredBackend());
@@ -720,12 +742,13 @@ int main(int argc, char* argv[]) {
         snap.target_fps = target_fps;
         snap.dry_run = dry_run;
         snap.gsi_active = gsi_adapter.GetState().IsActive();
-        snap.foreground_process = monitor.GetCurrentProcessName();
+        snap.gsi_source = gsi_adapter.SimulationStatus()["source"].get<std::string>();
+        snap.foreground_process = evaluated_foreground;
         status_store->Update(snap);
     };
 
     // 填入初始运行态快照
-    update_status_snapshot();
+    update_status_snapshot(monitor.GetCurrentProcessName());
 
     while (g_running.load(std::memory_order_acquire)) {
         // 检查是否有外部管理端发出的优雅停机通知
@@ -834,7 +857,7 @@ int main(int argc, char* argv[]) {
         }
 
         // 每一轮推流、重连检测、规则匹配与配置热重载完成后，在节拍对齐 sleep 前刷新状态快照
-        update_status_snapshot();
+        update_status_snapshot(cur_proc);
 
         // 对齐帧节拍
         next_tick += frame_time;

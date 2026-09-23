@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { 
   Sparkles, 
   GitBranch, 
@@ -55,10 +55,23 @@ export default function Studio({
   onToggleKeySelection,
   bgColor,
   fpsVal,
-  onConfigChanged
+  onConfigChanged,
+  embedded = false,
+  initialWorkType = 'effect'
 }) {
   // 当前激活的作品类型：'effect' (光效) 或 'orchestration' (自动化)
-  const [activeWorkType, setActiveWorkType] = useState('effect');
+  const [activeWorkType, setActiveWorkType] = useState(initialWorkType);
+  const rootRef = useRef(null);
+  const [compact, setCompact] = useState(false);
+  const [openPanel, setOpenPanel] = useState(null);
+  const overlayOpen = embedded && compact && !!openPanel;
+  useEffect(() => {
+    if (!embedded || !rootRef.current) return;
+    const observer = new ResizeObserver(([entry]) => setCompact(entry.contentRect.width < 1000));
+    observer.observe(rootRef.current);
+    return () => observer.disconnect();
+  }, [embedded]);
+  useEffect(() => { if (!compact) setOpenPanel(null); }, [compact]);
   const [activeEffectName, setActiveEffectName] = useState(() => {
     const keys = Object.keys(config?.blockly_effects || {});
     return keys[0] || 'custom_rainbow';
@@ -268,9 +281,15 @@ export default function Studio({
   );
 
   return (
-    <div className="flex h-[calc(100vh-100px)] w-full overflow-hidden gap-4 select-none">
+    <div ref={rootRef} data-studio-workspace={activeWorkType} className={`flex w-full min-w-0 overflow-hidden select-none ${embedded ? 'relative h-full gap-2 p-2 bg-md-surface' : 'h-[calc(100vh-100px)] gap-4'}`}>
+      {embedded && compact && <div className="absolute left-2 right-2 top-2 z-10 flex gap-2 rounded-md-md bg-md-surface-container p-1">
+        <button type="button" onClick={() => setOpenPanel(openPanel === 'works' ? null : 'works')} aria-label="作品列表" className="rounded-md-sm px-2 py-1 text-xs">作品与类型</button>
+        <span className="min-w-0 flex-1 truncate py-1 text-center text-xs">{activeWorkType === 'effect' ? activeEffectName : 'Automation v2'}</span>
+        <button type="button" onClick={() => setOpenPanel(openPanel === 'inspector' ? null : 'inspector')} aria-label="预览与检查" className="rounded-md-sm px-2 py-1 text-xs">预览/检查</button>
+      </div>}
+      {embedded && compact && openPanel && <button type="button" data-studio-overlay="scrim" aria-label="关闭工作台面板" onClick={() => setOpenPanel(null)} className="absolute inset-0 z-10 bg-black/30" />}
       {/* 1. 左侧：作品列表导航轨 (Works List) */}
-      <div className="w-72 shrink-0 flex flex-col bg-md-surface-container-low border border-md-outline-variant rounded-md-xl shadow-md-level1 overflow-hidden">
+      <div data-studio-overlay="works" className={`${embedded && compact ? `absolute inset-y-2 left-2 z-20 w-[min(18rem,85%)] ${openPanel === 'works' ? '' : 'hidden'}` : 'w-72 shrink-0'} flex flex-col bg-md-surface-container-low border border-md-outline-variant rounded-md-xl shadow-md-level1 overflow-hidden`}>
         {/* 头部标题与新建按钮 */}
         <div className="p-3 border-b border-md-outline-variant bg-md-surface-container/50 flex flex-col gap-2.5">
           <div className="flex items-center justify-between">
@@ -349,7 +368,7 @@ export default function Studio({
           {/* 自动化作品项 (Orchestration) */}
           {(filterType === 'all' || filterType === 'orchestration') && (
             <div
-              onClick={() => setActiveWorkType('orchestration')}
+              onClick={() => { setActiveWorkType('orchestration'); setOpenPanel(null); }}
               className={`group flex items-center justify-between p-2.5 rounded-md-lg border transition-all cursor-pointer ${
                 activeWorkType === 'orchestration'
                   ? 'bg-md-primary/10 border-md-primary text-md-on-surface shadow-xs'
@@ -398,6 +417,7 @@ export default function Studio({
                         if (!isEditing) {
                           setActiveEffectName(name);
                           setActiveWorkType('effect');
+                          setOpenPanel(null);
                         }
                       }}
                       className={`group flex items-center justify-between p-2.5 rounded-md-lg border transition-all cursor-pointer ${
@@ -518,9 +538,13 @@ export default function Studio({
       </div>
 
       {/* 2. 中间：Blockly 核心编辑区 (Center Canvas) */}
-      <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden">
+      <div data-studio-editor inert={overlayOpen ? '' : undefined} aria-hidden={overlayOpen ? 'true' : undefined}
+        className={`flex-1 flex flex-col h-full min-w-0 overflow-y-auto overflow-x-hidden ${embedded && compact ? 'relative z-0 pt-10' : ''} ${overlayOpen ? 'pointer-events-none' : ''}`}>
         {activeWorkType === 'effect' ? (
           <EffectStudio
+            embedded={embedded}
+            compact={compact}
+            overlayOpen={overlayOpen}
             config={config}
             onSaveConfig={onSaveConfig}
             showToast={showToast}
@@ -530,6 +554,7 @@ export default function Studio({
           />
         ) : (
           <AutomationAuthoring
+            overlayOpen={overlayOpen}
             config={config}
             onSaveConfig={onSaveConfig}
             profiles={config?.profiles}
@@ -541,7 +566,7 @@ export default function Studio({
       </div>
 
       {/* 3. 右侧：键盘预览或自动化检查器工作台 */}
-      <div className="w-84 shrink-0 flex flex-col bg-md-surface-container-low border border-md-outline-variant rounded-md-xl shadow-md-level1 p-3 gap-3 overflow-y-auto">
+      <div data-studio-overlay="inspector" className={`${embedded && compact ? `absolute inset-y-2 right-2 z-20 w-[min(21rem,85%)] ${openPanel === 'inspector' ? '' : 'hidden'}` : 'w-84 shrink-0'} flex flex-col bg-md-surface-container-low border border-md-outline-variant rounded-md-xl shadow-md-level1 p-3 gap-3 overflow-y-auto`}>
         {activeWorkType === 'effect' ? (
           <>
             {/* 顶部标题与状态指示 */}

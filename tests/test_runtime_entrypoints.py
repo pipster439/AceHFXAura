@@ -183,10 +183,41 @@ def run_proc(args: List[str], cwd: str, timeout: float = 6.0, env: Optional[Dict
         return subprocess.CompletedProcess(args, returncode=-999, stdout=stdout, stderr=stderr)
 
 
+def _owned_child_handles(parent_pid):
+    """Retain handles solely to wait for this test process's descendants after job teardown."""
+    if os.name != "nt":
+        return []
+    import ctypes
+    from ctypes import wintypes
+    class Entry(ctypes.Structure):
+        _fields_ = [("size",wintypes.DWORD),("usage",wintypes.DWORD),("pid",wintypes.DWORD),
+            ("heap",ctypes.c_size_t),("module",wintypes.DWORD),("threads",wintypes.DWORD),
+            ("parent",wintypes.DWORD),("priority",wintypes.LONG),("flags",wintypes.DWORD),("exe",wintypes.WCHAR*260)]
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+    kernel.OpenProcess.restype = wintypes.HANDLE
+    kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel.Process32FirstW.argtypes = kernel.Process32NextW.argtypes = [wintypes.HANDLE,ctypes.POINTER(Entry)]
+    snapshot = kernel.CreateToolhelp32Snapshot(2,0)
+    if snapshot == wintypes.HANDLE(-1).value: return []
+    pairs=[]; entry=Entry();entry.size=ctypes.sizeof(entry)
+    try:
+        valid=kernel.Process32FirstW(snapshot,ctypes.byref(entry))
+        while valid:
+            pairs.append((entry.pid,entry.parent))
+            valid=kernel.Process32NextW(snapshot,ctypes.byref(entry))
+    finally: kernel.CloseHandle(snapshot)
+    owned={parent_pid}; changed=True
+    while changed:
+        before=len(owned);owned.update(pid for pid,parent in pairs if parent in owned);changed=len(owned)!=before
+    return [handle for pid in owned if pid!=parent_pid if (handle:=kernel.OpenProcess(0x100000,False,pid))]
+
+
 def terminate_proc(proc: subprocess.Popen, timeout: float = 3.0):
-    """Gracefully terminate a process, escalating to taskkill / tree kill on Windows if necessary."""
+    """Terminate only the test-created process and wait for its job-owned descendants to drain."""
     if proc.poll() is not None:
         return
+    children = _owned_child_handles(proc.pid)
     try:
         proc.terminate()
         proc.wait(timeout=timeout)
@@ -200,6 +231,16 @@ def terminate_proc(proc: subprocess.Popen, timeout: float = 3.0):
             proc.kill()
         except Exception:
             pass
+    finally:
+        if children:
+            import ctypes
+            from ctypes import wintypes
+            kernel=ctypes.WinDLL("kernel32",use_last_error=True)
+            kernel.WaitForSingleObject.argtypes=[wintypes.HANDLE,wintypes.DWORD]
+            kernel.CloseHandle.argtypes=[wintypes.HANDLE]
+            for handle in children:
+                try: kernel.WaitForSingleObject(handle,int(timeout*1000))
+                finally: kernel.CloseHandle(handle)
 
 
 def get_free_port() -> int:

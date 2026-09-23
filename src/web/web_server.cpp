@@ -8,6 +8,7 @@
 #include <windows.h>
 
 #include "web/web_server.h"
+#include "aura_version.h"
 #include "config/config_writer_util.h"
 #include "config/lighting_service.h"
 #include "third_party/json.hpp"
@@ -23,6 +24,22 @@
 namespace aura {
 
 namespace {
+
+nlohmann::json DescribeGsiCfg(const std::filesystem::path& directory, const std::string& expected) {
+    const auto path = directory / "gamestate_integration_aura.cfg";
+    std::error_code ec;
+    const bool exists = std::filesystem::exists(path, ec);
+    std::string state = exists ? "unreadable" : "missing", revision = exists ? "" : "missing";
+    if (ec) { state = "unreadable"; revision.clear(); }
+    if (exists && !ec) {
+        std::ifstream input(path, std::ios::binary);
+        if (input) {
+            const std::string content((std::istreambuf_iterator<char>(input)), {});
+            if (!input.bad()) { revision = ComputeFileRevision(content); state = content == expected ? "matching" : "different"; }
+        }
+    }
+    return {{"path",directory.u8string()},{"exists",exists},{"template_match",state},{"revision",revision}};
+}
 
 // -----------------------------------------------------------------------------
 // Win32 Code Page & UTF-8 Encoding Helpers
@@ -282,6 +299,7 @@ SdkDiscoveryResult DiscoverPluginSdkIncludeDir(const std::filesystem::path& expl
     if (!explicit_sdk_path.empty()) {
         if (probe(explicit_sdk_path)) return update_sdk_cache(result);
         if (probe(explicit_sdk_path / "include")) return update_sdk_cache(result);
+        return update_sdk_cache(result); // An explicit bundle path must never fall back to a checkout.
     }
     const wchar_t* env_sdk = _wgetenv(L"AURA_SDK_INCLUDE_DIR");
     if (env_sdk && env_sdk[0] != L'\0') {
@@ -752,8 +770,9 @@ bool ValidateWriteRequest(const httplib::Request& req, httplib::Response& res) {
 
 } // namespace
 
-WebServer::WebServer(const std::filesystem::path& config_path, int port, const std::filesystem::path& sdk_include_dir)
-    : config_path_(config_path), port_(port), sdk_include_dir_(sdk_include_dir) {
+WebServer::WebServer(const std::filesystem::path& config_path, int port, const std::filesystem::path& sdk_include_dir,
+    const std::filesystem::path& web_root, const std::string& daemon_instance)
+    : config_path_(config_path), port_(port), sdk_include_dir_(sdk_include_dir), web_root_(web_root), daemon_instance_(daemon_instance) {
     SetupRoutes();
 }
 
@@ -792,14 +811,14 @@ void WebServer::SetupRoutes() {
     });
 
     // 静态资源兜底 (支持外部 css/js/ico 等，带 R6 词法路径穿越校验)
-    svr_.Get("/web/(.*)", [](const httplib::Request& req, httplib::Response& res) {
+    svr_.Get("/web/(.*)", [this](const httplib::Request& req, httplib::Response& res) {
         std::string subpath = req.matches[1];
         if (!IsSafeWebSubpath(subpath)) {
             res.status = 404;
             return;
         }
         std::error_code ec;
-        std::filesystem::path p = std::filesystem::path("web") / subpath;
+        std::filesystem::path p = (web_root_.empty() ? std::filesystem::path("web") : web_root_) / subpath;
         if (std::filesystem::exists(p, ec) && !std::filesystem::is_directory(p, ec)) {
             std::ifstream f(p, std::ios::binary);
             if (f.is_open()) {
@@ -827,6 +846,8 @@ void WebServer::SetupRoutes() {
         nlohmann::json j = {
              {"status", "ok"},
              {"service", "aura_web_ui"},
+             {"daemon_instance_id", daemon_instance_},
+             {"product_version", AURA_PRODUCT_VERSION},
              {"web_api_version", 2},
              {"timestamp", now_ms},
              {"studio_publish_ready", sdk_ok && msvc_ok},
@@ -1023,6 +1044,7 @@ void WebServer::SetupRoutes() {
 
     // 获取 CS2 GSI 配置文件模板及检测到的安装路径
     svr_.Get("/api/gsi/cfg", [this](const httplib::Request&, httplib::Response& res) {
+        std::lock_guard<std::mutex> cfg_lock(cfg_mutex_);
         std::vector<std::filesystem::path> paths = DetectCs2CfgPaths();
         std::string detected_utf8 = paths.empty() ? "" : paths[0].u8string();
         std::vector<std::string> paths_utf8;
@@ -1038,12 +1060,16 @@ void WebServer::SetupRoutes() {
         }
 
         nlohmann::json j = {
+            {"gsi_api_version", 1},
             {"filename", "gamestate_integration_aura.cfg"},
             {"content", GetGsiCfgTemplate()},
             {"detected_path", detected_utf8},
             {"all_paths", paths_utf8},
             {"installed", installed}
         };
+        j["paths"] = nlohmann::json::array();
+        for (const auto& path : paths) j["paths"].push_back(DescribeGsiCfg(path, GetGsiCfgTemplate()));
+        res.set_header("Cache-Control", "no-store");
         res.set_content(j.dump(2), "application/json; charset=utf-8");
     });
 
@@ -1112,15 +1138,27 @@ void WebServer::SetupRoutes() {
             }
 
             std::filesystem::path file_path = p / "gamestate_integration_aura.cfg";
-            std::ofstream out(file_path, std::ios::trunc | std::ios::binary);
-            if (!out.is_open()) {
-                res.status = 500;
-                res.set_content(R"json({"status":"error","message":"无法向目标文件写入数据，请检查文件写权限"})json", "application/json; charset=utf-8");
+            std::lock_guard<std::mutex> cfg_lock(cfg_mutex_);
+            const auto current = DescribeGsiCfg(p, GetGsiCfgTemplate());
+            if (j.contains("expected_cfg_revision") && (!j["expected_cfg_revision"].is_string() ||
+                j["expected_cfg_revision"].get<std::string>().empty() || j["expected_cfg_revision"] != current["revision"])) {
+                res.status = 409;
+                res.set_content(R"({"status":"error","message":"GSI cfg changed or is unreadable; detect again before installing"})", "application/json");
                 return;
             }
-
-            out << GetGsiCfgTemplate();
-            out.flush();
+            // Separate Valve text transaction: never pass this file through Automation config validation.
+            auto temporary = file_path;
+            temporary += ".tmp-" + std::to_string(GetCurrentProcessId());
+            {
+                std::ofstream out(temporary, std::ios::binary | std::ios::trunc);
+                out << GetGsiCfgTemplate(); out.flush();
+                if (!out.good()) { out.close(); std::filesystem::remove(temporary, ec);
+                    res.status = 500; res.set_content(R"({"message":"Cannot write GSI cfg; previous file retained"})", "application/json"); return; }
+            }
+            if (!MoveFileExW(temporary.c_str(), file_path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+                std::filesystem::remove(temporary, ec);
+                res.status = 500; res.set_content(R"({"message":"Cannot replace GSI cfg; previous file retained"})", "application/json"); return;
+            }
 
             nlohmann::json resp = {
                 {"status", "ok"},
@@ -1414,6 +1452,11 @@ void WebServer::Stop() {
 }
 
 std::string WebServer::LoadHtmlContent() const {
+    if (!web_root_.empty()) {
+        std::ifstream input(web_root_ / "index.html", std::ios::binary);
+        if (!input) return "Studio assets unavailable; reinstall the complete Aura package.";
+        return std::string(std::istreambuf_iterator<char>(input), {});
+    }
     // 优先从本地文件系统加载最新的 index.html，方便前端热调试与非预期 CWD 启动
     std::vector<std::filesystem::path> candidates = {
         "web/index.html",
@@ -1497,7 +1540,7 @@ std::vector<std::filesystem::path> WebServer::DetectCs2CfgPaths() const {
     std::vector<std::filesystem::path> result;
 
     // 常见可能盘符路径优先扫描
-    const std::vector<std::filesystem::path> prefixes = {
+    std::vector<std::filesystem::path> prefixes = {
         L"D:\\SteamLibrary",
         L"C:\\Program Files (x86)\\Steam",
         L"C:\\SteamLibrary",
@@ -1509,6 +1552,10 @@ std::vector<std::filesystem::path> WebServer::DetectCs2CfgPaths() const {
         L"E:\\Steam"
     };
 
+    wchar_t steam_path[32768]{}; DWORD steam_bytes = sizeof(steam_path);
+    if (RegGetValueW(HKEY_CURRENT_USER, L"Software\\Valve\\Steam", L"SteamPath", RRF_RT_REG_SZ, nullptr, steam_path, &steam_bytes) == ERROR_SUCCESS)
+        prefixes.insert(prefixes.begin(), std::filesystem::path(steam_path));
+
     for (const auto& pre : prefixes) {
         std::filesystem::path p = pre / "steamapps" / "common" / "Counter-Strike Global Offensive" / "game" / "csgo" / "cfg";
         if (std::filesystem::exists(p) && std::filesystem::is_directory(p)) {
@@ -1517,7 +1564,8 @@ std::vector<std::filesystem::path> WebServer::DetectCs2CfgPaths() const {
     }
 
     // 解析 Steam libraryfolders.vdf
-    std::filesystem::path vdf_path = L"C:\\Program Files (x86)\\Steam\\steamapps\\libraryfolders.vdf";
+    for (const auto& steam_root : prefixes) {
+    std::filesystem::path vdf_path = steam_root / "steamapps" / "libraryfolders.vdf";
     if (std::filesystem::exists(vdf_path)) {
         std::ifstream f(vdf_path);
         std::string line;
@@ -1550,6 +1598,9 @@ std::vector<std::filesystem::path> WebServer::DetectCs2CfgPaths() const {
         }
     }
 
+    }
+    std::sort(result.begin(), result.end());
+    result.erase(std::unique(result.begin(), result.end()), result.end());
     return result;
 }
 

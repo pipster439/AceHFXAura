@@ -1,4 +1,12 @@
-## 0.1.0-alpha.3 candidate — breaking Automation cleanup (unreleased)
+## 0.1.0-alpha.4 candidate — WinUI desktop productization (unreleased)
+
+- WinUI is the default x64 ZIP entrypoint, with self-contained desktop dependencies, verified runtime payloads and VERSION-derived metadata.
+- Separate core/Studio readiness, private owned-daemon shutdown, external-daemon attachment without shutdown authority, explicit dev/portable layouts.
+- Native Game Integration manages CS2 cfg installation and displays real GSI/daemon-backed simulation; Automation authoring stays in Studio.
+- User config/plugins and WebView2 data remain outside replaceable runtime assets. No new hardware commands, Automation semantics or Plugin ABI changes.
+- Candidate automated validation and physical Windows/HFX/CS2 acceptance are recorded separately; this entry does not claim a public release.
+
+## 0.1.0-alpha.3 candidate — breaking Automation cleanup (historical)
 
 Supersedes the prior alpha.3 candidate. Automation v2 is the only supported model; retired nonempty sections require explicit development migration. Direct V2 Blockly authoring uses typed effect selections. Daemon-backed GSI simulation isolates sources and exercises real event detection and composition. Plugin ABI v1, LegacyEnvelope and legacy_hal remain supported. All candidate packaging and hashes must be regenerated; no release or tag is created by this work.
 

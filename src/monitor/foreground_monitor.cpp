@@ -2,6 +2,9 @@
 #include "monitor/key_input_hub.h"
 #include "utils/logger.h"
 #include <algorithm>
+#include <cctype>
+#include <chrono>
+#include <cstdint>
 
 namespace aura {
 
@@ -20,8 +23,10 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
     return CallNextHookEx(NULL, nCode, wParam, lParam);
 }
 
-ForegroundMonitor::ForegroundMonitor()
-    : running_(false),
+ForegroundMonitor::ForegroundMonitor(ForegroundProvider foreground_provider, ProcessResolver process_resolver)
+    : foreground_provider_(foreground_provider ? std::move(foreground_provider) : ForegroundProvider(GetForegroundWindow)),
+      process_resolver_(process_resolver ? std::move(process_resolver) : ProcessResolver(GetProcessNameFromHwnd)),
+      running_(false),
       thread_id_(0),
       hook_handle_(nullptr) {
     g_monitor_instance = this;
@@ -60,8 +65,9 @@ std::string ForegroundMonitor::GetProcessNameFromHwnd(HWND hwnd) {
         // Convert to std::string (ASCII/UTF-8)
         int len = WideCharToMultiByte(CP_UTF8, 0, wname.c_str(), -1, nullptr, 0, nullptr, nullptr);
         if (len > 0) {
-            process_name.resize(len - 1);
+            process_name.resize(len);
             WideCharToMultiByte(CP_UTF8, 0, wname.c_str(), -1, &process_name[0], len, nullptr, nullptr);
+            process_name.pop_back();
         }
     }
     CloseHandle(hProcess);
@@ -83,8 +89,9 @@ std::string ForegroundMonitor::GetProcessNameFromHwnd(HWND hwnd) {
                         std::wstring cwname = (clast_slash != std::wstring::npos) ? cwpath.substr(clast_slash + 1) : cwpath;
                         int clen = WideCharToMultiByte(CP_UTF8, 0, cwname.c_str(), -1, nullptr, 0, nullptr, nullptr);
                         if (clen > 0) {
-                            std::string cname(clen - 1, '\0');
+                            std::string cname(clen, '\0');
                             WideCharToMultiByte(CP_UTF8, 0, cwname.c_str(), -1, &cname[0], clen, nullptr, nullptr);
+                            cname.pop_back();
                             CloseHandle(hChildProc);
                             return cname;
                         }
@@ -97,6 +104,62 @@ std::string ForegroundMonitor::GetProcessNameFromHwnd(HWND hwnd) {
     }
 
     return process_name;
+}
+
+std::string ForegroundMonitor::ResolveForeground(HWND hwnd) const {
+    return hwnd ? process_resolver_(hwnd) : "";
+}
+
+void ForegroundMonitor::PublishForeground(const std::string& process_name, HWND hwnd, ForegroundSource source) {
+    auto canonical = [](std::string value) {
+        std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
+            return static_cast<char>(std::tolower(c));
+        });
+        return value;
+    };
+
+    std::string previous;
+    {
+        std::lock_guard<std::mutex> lock(name_mutex_);
+        if (canonical(current_process_name_) == canonical(process_name)) return;
+        previous = current_process_name_;
+        current_process_name_ = process_name;
+    }
+    if (source == ForegroundSource::Event) {
+        LOG_INFO("[Foreground] event: " + (process_name.empty() ? "(unknown)" : process_name));
+    } else {
+        LOG_INFO("[Foreground] reconciled: " + (previous.empty() ? "(unknown)" : previous) +
+                 " -> " + (process_name.empty() ? "(unknown)" : process_name));
+    }
+    if (callback_) callback_(process_name, hwnd);
+}
+
+void ForegroundMonitor::ObserveForegroundEvent(HWND hwnd) {
+    const std::string process_name = ResolveForeground(hwnd);
+    if (process_name.empty()) {
+        if (!invalid_event_logged_) {
+            LOG_INFO("[Foreground] invalid transient HWND ignored");
+            invalid_event_logged_ = true;
+        }
+        return;
+    }
+    invalid_event_logged_ = false;
+    unresolved_reconciliations_ = 0;
+    PublishForeground(process_name, hwnd, ForegroundSource::Event);
+}
+
+void ForegroundMonitor::ReconcileForeground() {
+    const HWND hwnd = foreground_provider_();
+    const std::string process_name = ResolveForeground(hwnd);
+    if (process_name.empty()) {
+        // A single missing/vanished HWND is common during fullscreen transitions.
+        // Two consecutive authoritative samples allow a real desktop/unknown state to converge.
+        if (unresolved_reconciliations_ < 2) ++unresolved_reconciliations_;
+        if (unresolved_reconciliations_ < 2) return;
+    } else {
+        unresolved_reconciliations_ = 0;
+    }
+    PublishForeground(process_name, hwnd, ForegroundSource::Reconciled);
 }
 
 void CALLBACK ForegroundMonitor::WinEventProc(
@@ -114,23 +177,17 @@ void CALLBACK ForegroundMonitor::WinEventProc(
 
     if (!g_monitor_instance) return;
 
-    std::string proc_name = GetProcessNameFromHwnd(hwnd);
-    {
-        std::lock_guard<std::mutex> lock(g_monitor_instance->name_mutex_);
-        g_monitor_instance->current_process_name_ = proc_name;
-    }
-
-    if (g_monitor_instance->callback_) {
-        g_monitor_instance->callback_(proc_name, hwnd);
+    if (g_monitor_instance->running_.load(std::memory_order_acquire)) {
+        g_monitor_instance->ObserveForegroundEvent(hwnd);
     }
 }
 
 void ForegroundMonitor::MonitorThreadProc() {
-    thread_id_.store(GetCurrentThreadId(), std::memory_order_release);
-
     // Ensure thread has a complete input message queue
     MSG msg;
     PeekMessage(&msg, NULL, 0, 0, PM_NOREMOVE);
+    thread_id_.store(GetCurrentThreadId(), std::memory_order_release);
+    if (!running_.load(std::memory_order_acquire)) return;
 
     hook_handle_ = SetWinEventHook(
         EVENT_SYSTEM_FOREGROUND,
@@ -148,18 +205,10 @@ void ForegroundMonitor::MonitorThreadProc() {
         return;
     }
 
-    LOG_INFO("前台窗口监控线程启动成功 (事件驱动模式，无轮询)");
+    LOG_INFO("前台窗口监控线程启动成功 (WinEvent + 400ms reconciliation)");
 
     // Initial check for currently active foreground window
-    HWND initial_fg = GetForegroundWindow();
-    std::string proc = initial_fg ? GetProcessNameFromHwnd(initial_fg) : "";
-    {
-        std::lock_guard<std::mutex> lock(name_mutex_);
-        current_process_name_ = proc;
-    }
-    if (callback_) {
-        callback_(proc, initial_fg);
-    }
+    ReconcileForeground();
 
     // 注册全局低开销键盘钩子，捕捉真实物理敲击以驱动按键响应与涟漪光效
     HHOOK kb_hook = SetWindowsHookExW(
@@ -177,10 +226,34 @@ void ForegroundMonitor::MonitorThreadProc() {
         LOG_WARN("WH_KEYBOARD_LL 注册失败: 0x" + std::to_string(GetLastError()));
     }
 
-    // Windows Message Pump (blocks until message arrives, 0% CPU)
-    while (running_ && GetMessage(&msg, NULL, 0, 0) > 0) {
-        TranslateMessage(&msg);
-        DispatchMessage(&msg);
+    // Keep pumping hook messages, with a monotonic 400ms deadline even if messages arrive often.
+    // The timeout runs on this thread; the render thread only reads the cached name.
+    constexpr auto kReconcileInterval = std::chrono::milliseconds(400);
+    auto next_reconcile = std::chrono::steady_clock::now() + kReconcileInterval;
+    while (running_.load(std::memory_order_acquire)) {
+        unsigned int dispatched = 0;
+        while (dispatched++ < 64 && PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
+            if (msg.message == WM_QUIT) {
+                running_.store(false, std::memory_order_release);
+                break;
+            }
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
+        }
+        if (!running_.load(std::memory_order_acquire)) break;
+        const auto now = std::chrono::steady_clock::now();
+        if (now >= next_reconcile) {
+            ReconcileForeground();
+            next_reconcile = now + kReconcileInterval;
+            continue;
+        }
+        const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(next_reconcile - now);
+        const DWORD wait = MsgWaitForMultipleObjectsEx(0, nullptr,
+            static_cast<DWORD>(std::max<int64_t>(1, remaining.count())), QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+        if (wait == WAIT_FAILED) {
+            LOG_ERROR("[Foreground] message wait failed: " + std::to_string(GetLastError()));
+            break;
+        }
     }
 
     if (kb_hook) {
@@ -192,12 +265,17 @@ void ForegroundMonitor::MonitorThreadProc() {
         hook_handle_ = nullptr;
     }
 
+    running_.store(false, std::memory_order_release);
+
     LOG_INFO("前台窗口监控线程安全退出");
 }
 
 bool ForegroundMonitor::Start() {
     if (running_.load(std::memory_order_acquire)) return true;
 
+    // A failed hook/wait may have ended the previous thread without a Stop call.
+    if (thread_.joinable()) thread_.join();
+    thread_id_.store(0, std::memory_order_release);
     running_.store(true, std::memory_order_release);
     thread_ = std::thread(&ForegroundMonitor::MonitorThreadProc, this);
     return true;
