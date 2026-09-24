@@ -97,23 +97,23 @@ public sealed class RuntimeStatus
         {
             if (!IsOnline || Data == null)
             {
-                return "Disconnected";
+                return "未连接";
             }
             if (IsDryRun)
             {
-                return "Dry-Run";
+                return "模拟运行";
             }
             if (Data.Hardware.Connected)
             {
-                return "Connected";
+                return "已连接";
             }
             var st = Data.Hardware.State;
             if (string.Equals(st, "connecting", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(st, "backoff_wait", StringComparison.OrdinalIgnoreCase))
             {
-                return "Reconnecting";
+                return "正在重连";
             }
-            return "Disconnected";
+            return "未连接";
         }
     }
 
@@ -123,23 +123,23 @@ public sealed class RuntimeStatus
         {
             if (!IsOnline || Data == null)
             {
-                return "Unknown";
+                return "未知";
             }
             if (IsDryRun)
             {
-                return "Dry-Run";
+                return "模拟运行";
             }
             var b = Data.Hardware.ActiveBackend;
             return b switch
             {
-                "native_hid" => "Native HID",
+                "native_hid" => "原生 HID",
                 "legacy_hal" => "ASUS HAL",
-                _ => "Unknown"
+                _ => "未知"
             };
         }
     }
 
-    public string CoreStatusDisplayName => IsOnline ? "Running" : "Offline";
+    public string CoreStatusDisplayName => IsOnline ? "运行中" : "离线";
 
     public string ActiveProfileDisplayName
     {
@@ -171,13 +171,13 @@ public sealed class RuntimeStatus
         {
             if (!IsOnline || Data == null)
             {
-                return "Idle";
+                return "空闲";
             }
-            return (Data.Gsi.Source switch { "simulation" => "SIMULATION · ", "real" => "REAL · ", _ => "" }) + (Data.Gsi.Active ? "Active" : "Idle");
+            return (Data.Gsi.Source switch { "simulation" => "模拟 · ", "real" => "真实 · ", _ => "" }) + (Data.Gsi.Active ? "活跃" : "空闲");
         }
     }
 
-    public static RuntimeStatus Offline(string error = "Daemon Offline") => new()
+    public static RuntimeStatus Offline(string error = "核心服务离线") => new()
     {
         IsOnline = false,
         ErrorMessage = error,

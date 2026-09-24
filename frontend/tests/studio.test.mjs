@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import Blockly, { loadSafeWorkspaceJson } from '../src/blockly/index.js';
+import Blockly, { loadSafeWorkspaceJson, assertNoLegacyEventPulse, LEGACY_EVENT_PULSE_MESSAGE } from '../src/blockly/index.js';
 import { registerCustomBlocks } from '../src/blockly/customBlocks.js';
 import { JsTranspiler } from '../src/blockly/jsTranspiler.js';
 import { CppTranspiler } from '../src/blockly/cppTranspiler.js';
@@ -13,8 +13,7 @@ import { EFFECT_STUDIO_TOOLBOX } from '../src/blockly/toolboxes.js';
 import { EFFECT_PRESETS } from '../src/blockly/presets.js';
 import {
   BOOLEAN_GSI_STATES,
-  BOOLEAN_STATE_DROPDOWN_OPTIONS,
-  EVENT_DROPDOWN_OPTIONS
+  BOOLEAN_STATE_DROPDOWN_OPTIONS
 } from '../src/constants/gsiDictionary.js';
 registerCustomBlocks();
 const num = n => ({ type: 'math_number', fields: { NUM: n } });
@@ -171,6 +170,36 @@ test('effect lifecycle: draft, unpublished changes, and published states', () =>
   const modifiedDraft = effectConfig(publishedCfg, 'fx1', { blocks: [{ id: 1 }] });
   assert.ok(modifiedDraft.blockly_effects.fx1.source_updated_at >= modifiedDraft.blockly_effects.fx1.published_at);
   assert.equal(modifiedDraft.blockly_effects.fx1.applied_plugin_name, 'fx1_dll');
+});
+
+test('creation metadata uses the existing publication contract and preserves an existing draft', () => {
+  const base={blockly_effects:{},profiles:{}};
+  const continuous=effectConfig(base,'ambient',{blocks:{languageVersion:0,blocks:[]}},undefined,{mode:'continuous',fade_out_ms:300});
+  assert.deepEqual(continuous.blockly_effects.ambient.publication,{mode:'continuous',fade_out_ms:0});
+  const once=effectConfig(continuous,'kill',{blocks:{languageVersion:0,blocks:[]}},undefined,{mode:'one_shot',fade_out_ms:300});
+  assert.deepEqual(once.blockly_effects.kill.publication,{mode:'one_shot',fade_out_ms:300});
+  assert.deepEqual(once.blockly_effects.ambient.publication,{mode:'continuous',fade_out_ms:0});
+  const edited=effectConfig(once,'kill',{blocks:{languageVersion:0,blocks:[]}});
+  assert.deepEqual(edited.blockly_effects.kill.publication,{mode:'one_shot',fade_out_ms:300});
+});
+
+test('old event pulse workspaces are rejected before Blockly can substitute a boolean dropdown value',()=>{
+  assert.match(LEGACY_EVENT_PULSE_MESSAGE,/事件触发条件已迁移到自动化工作室，请使用自动化事件规则。/);
+  assert.doesNotMatch(LEGACY_EVENT_PULSE_MESSAGE,/Automation 事件规则/);
+  const old={blocks:{languageVersion:0,blocks:[{type:'gsi_get_boolean',fields:{PATH:'event.kill'}}]}};
+  const w=new Blockly.Workspace();
+  try {
+    assert.throws(()=>assertNoLegacyEventPulse(old),/事件触发条件已迁移到自动化工作室/);
+    assert.throws(()=>loadSafeWorkspaceJson(old,w),/事件触发条件已迁移到自动化工作室/);
+    assert.equal(w.getAllBlocks(false).length,0);
+    assert.throws(()=>assertNoLegacyEventPulse({blocks:[{type:'orch_event_triggered',fields:{EVENT:'event.kill'}}]}),/自动化工作室/);
+    const state={blocks:{languageVersion:0,blocks:[{type:'controls_if',inputs:{IF0:{block:{type:'gsi_get_boolean',fields:{PATH:'player.state.helmet'},inputs:{DEFAULT:{block:{type:'logic_boolean',fields:{BOOL:'FALSE'}}}}}}}}]}};
+    assert.doesNotThrow(()=>loadSafeWorkspaceJson(state,w,true));
+    const block=w.getBlocksByType('controls_if',false)[0];
+    assert.match(CppTranspiler.valueToCpp(block,'IF0'),/GetBool\("player.state.helmet"/);
+    assert.match(JsTranspiler.valueToJs(block,'IF0'),/player.state.helmet/);
+    assert.deepEqual(BOOLEAN_GSI_STATES.map(s=>s.key),['player.state.helmet','player.state.defusekit']);
+  } finally {w.dispose();}
 });
 
 test('simplified EFFECT_STUDIO_TOOLBOX has 5 core categories and Advanced group', () => {

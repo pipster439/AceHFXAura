@@ -27,7 +27,7 @@
                           Height="48" />
             <TextBlock x:Name="LoadingStatusText"
                        TextWrapping="Wrap"
-                       Text="正在连接 Aura Blockly Studio (127.0.0.1:19898)..."
+                       Text="正在连接 Aura Blockly 工作室 (127.0.0.1:19898)..."
                        Style="{ThemeResource BodyTextBlockStyle}"
                        HorizontalAlignment="Center" />
             <Button x:Name="RetryBtn"
@@ -35,7 +35,7 @@
                     Click="RetryBtn_Click"
                     HorizontalAlignment="Center"
                     Visibility="Collapsed" />
-            <HyperlinkButton Content="获取 Microsoft WebView2 Runtime" NavigateUri="https://developer.microsoft.com/microsoft-edge/webview2/" HorizontalAlignment="Center"/>
+            <HyperlinkButton Content="获取 Microsoft WebView2 运行时" NavigateUri="https://developer.microsoft.com/microsoft-edge/webview2/" HorizontalAlignment="Center"/>
         </StackPanel>
 
         <!-- 错误与状态提示 -->
@@ -45,7 +45,7 @@
                  IsOpen="False"
                  IsClosable="True">
             <InfoBar.ActionButton>
-                <Button Content="重新连接 Studio" Click="RetryBtn_Click" />
+                <Button Content="重新连接工作室" Click="RetryBtn_Click" />
             </InfoBar.ActionButton>
         </InfoBar>
     </Grid>

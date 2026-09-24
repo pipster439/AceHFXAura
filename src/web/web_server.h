@@ -7,6 +7,7 @@
 #include <mutex>
 #include <filesystem>
 #include "third_party/httplib.h"
+#include "third_party/json.hpp"
 
 namespace aura {
 
@@ -19,6 +20,8 @@ struct SdkDiscoveryResult {
 bool IsValidPluginSdkDir(const std::filesystem::path& dir);
 SdkDiscoveryResult DiscoverPluginSdkIncludeDir(const std::filesystem::path& explicit_sdk_path = {});
 std::filesystem::path FindVcvars64Bat(const std::filesystem::path& explicit_path = {});
+// Same byte-for-byte inspection used by cfg discovery and installation.
+nlohmann::json InspectGsiCfg(const std::filesystem::path& directory, const std::string& expected);
 
 bool CompileCppSourceToDll(const std::string& effect_name, 
                            const std::string& source_code, 

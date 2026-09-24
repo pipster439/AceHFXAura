@@ -241,6 +241,11 @@ void ResolutionAndEvaluation(const fs::path& dir) {
     Check(runtime.ActiveCount()==0,"actual RuleEngine startup seeds");
     gsi.UpdateFromPayloadAt({{"player",{{"state",{{"round_kills",1}}}}}},200); tick(200);
     Check(runtime.ActiveCount()==1,"actual RuleEngine event admission creates runtime instance");
+    const auto activations=runtime.TakeActivations();
+    Check(activations.size()==1 && activations[0].rule_id=="kill" &&
+        activations[0].packet_sequence==2 && activations[0].at_ms>0,
+        "kill admission has a matching successful layer activation marker");
+    Check(runtime.TakeActivations().empty(),"activation markers drain once");
     auto rising=config;
     rising["orchestration"]["rules"][0]["when"]={{"mode","rising"},{"condition",{{"field","player.state.health"},{"op","<"},{"value",15}}}};
     std::ofstream(file)<<rising.dump(); Check(rules.LoadConfig(file.string()),"load rising runtime rule");

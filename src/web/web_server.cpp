@@ -26,7 +26,7 @@ namespace aura {
 
 namespace {
 
-nlohmann::json DescribeGsiCfg(const std::filesystem::path& directory, const std::string& expected) {
+nlohmann::json DescribeGsiCfgImpl(const std::filesystem::path& directory, const std::string& expected) {
     const auto path = directory / "gamestate_integration_aura.cfg";
     std::error_code ec;
     const bool exists = std::filesystem::exists(path, ec);
@@ -109,6 +109,10 @@ inline std::string EnsureUtf8(const std::string& input) {
 }
 
 } // namespace
+
+nlohmann::json InspectGsiCfg(const std::filesystem::path& directory, const std::string& expected) {
+    return DescribeGsiCfgImpl(directory, expected);
+}
 
 std::filesystem::path FindVcvars64Bat(const std::filesystem::path& explicit_path) {
     // Testing override: simulate clean machine with no MSVC
@@ -1069,7 +1073,7 @@ void WebServer::SetupRoutes() {
             {"installed", installed}
         };
         j["paths"] = nlohmann::json::array();
-        for (const auto& path : paths) j["paths"].push_back(DescribeGsiCfg(path, GetGsiCfgTemplate()));
+        for (const auto& path : paths) j["paths"].push_back(InspectGsiCfg(path, GetGsiCfgTemplate()));
         res.set_header("Cache-Control", "no-store");
         res.set_content(j.dump(2), "application/json; charset=utf-8");
     });
@@ -1140,7 +1144,7 @@ void WebServer::SetupRoutes() {
 
             std::filesystem::path file_path = p / "gamestate_integration_aura.cfg";
             std::lock_guard<std::mutex> cfg_lock(cfg_mutex_);
-            const auto current = DescribeGsiCfg(p, GetGsiCfgTemplate());
+            const auto current = InspectGsiCfg(p, GetGsiCfgTemplate());
             if (j.contains("expected_cfg_revision") && (!j["expected_cfg_revision"].is_string() ||
                 j["expected_cfg_revision"].get<std::string>().empty() || j["expected_cfg_revision"] != current["revision"])) {
                 res.status = 409;
@@ -1509,9 +1513,9 @@ std::string WebServer::GetGsiCfgTemplate() {
     return R"rawcfg("Aura CS2 GSI Integration"
 {
     "uri" "http://127.0.0.1:19897/"
-    "timeout" "5.0"
-    "buffer"  "0.1"
-    "throttle" "0.1"
+    "timeout" "0.5"
+    "buffer"  "0.01"
+    "throttle" "0.0"
     "heartbeat" "1.0"
     "data"
     {

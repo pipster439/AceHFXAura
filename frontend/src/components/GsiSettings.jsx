@@ -126,7 +126,7 @@ export default function GsiSettings({
         <div>
           <h3 className="font-bold text-md-on-surface text-base flex items-center gap-2">
             <Crosshair className="w-5 h-5 text-md-primary" />
-            CS2 Game State Integration (GSI) 游戏深度联动
+            CS2 GSI 游戏联动
           </h3>
           <p className="text-xs text-md-on-surface-variant mt-0.5">
             基于 Valve 官方 GSI 规范，实时捕获游戏内血量、护甲、C4 炸弹与击杀事件，并与键盘灯效硬件联动。
@@ -165,7 +165,7 @@ export default function GsiSettings({
         </div>
         <span className="text-xs opacity-90 font-medium">
           {isCs2Foreground
-            ? '当前遥测可供 Automation v2 使用；规则在 Automation 页面编辑'
+            ? '当前遥测可供自动化规则使用；规则在工作室的自动化页面编辑'
             : '保护非游戏体验：切回 CS2 窗口时自动瞬间恢复光效'}
         </span>
       </div>

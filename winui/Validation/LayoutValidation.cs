@@ -1,4 +1,5 @@
 using System.Text.Json;
+using CommunityToolkit.WinUI.Controls;
 using Aura_WinUI.Pages;
 using Aura_WinUI.Services;
 using Microsoft.UI.Xaml;
@@ -130,10 +131,11 @@ internal static class LayoutValidation
             if (!simulated.IsSuccess) throw new InvalidOperationException(simulated.Error);
             var banner=Find<InfoBar>(game,"SimulationBanner");
             await Until(()=>banner.IsOpen && Find<TextBlock>(game,"HealthText").Text=="37","Simulation state did not reach native page");
-            if (advanced.IsExpanded || Find<TextBlock>(game,"SourceText").Text!="SIMULATION") throw new InvalidOperationException("Simulation state hidden by advanced section");
+            if (advanced.IsExpanded || Find<TextBlock>(game,"SourceText").Text!="模拟") throw new InvalidOperationException("Simulation state hidden by advanced section");
             await Screenshot(window,directory,"Simulation-advanced-collapsed");
-            Invoke((Button)banner.ActionButton);
-            await Until(()=>!banner.IsOpen && Find<TextBlock>(game,"SourceText").Text=="REAL GSI","Return to real data failed");
+            if (!((Button)banner.ActionButton).Content.Equals("打开自动化工作室")) throw new InvalidOperationException("Simulation owner link missing");
+            await AuraControlClient.Instance.UpdateSimulationAsync(new() { Enabled=false });
+            await Until(()=>!banner.IsOpen && Find<TextBlock>(game,"SourceText").Text=="真实 GSI","Return to real data failed");
             foreach (var theme in new[] { ElementTheme.Dark, ElementTheme.Light })
             foreach (var size in new[] { (600,500), (800,600), (1060,720), (1600,1000), (0,0) })
             {
@@ -147,6 +149,14 @@ internal static class LayoutValidation
                 {
                     window.NavigateTo(type); await Task.Delay(450);
                     var page = (Page)MainWindow.CurrentNavFrame!.Content;
+                    if (type == typeof(SettingsPage))
+                    {
+                        var cards = Descendants(page).OfType<SettingsCard>().ToArray();
+                        if (cards.Length < 3 || cards.Any(card => card.IsClickEnabled))
+                            throw new InvalidOperationException("SettingsCard hierarchy or click semantics invalid");
+                        if (Find<SettingsExpander>(page,"CoreSettingsExpander").IsExpanded)
+                            throw new InvalidOperationException("Core details should start collapsed");
+                    }
                     var scroll = Find<ScrollViewer>(page, type == typeof(LightingPage) ? "LightingContent" : "PageScroll");
                     var panel = Find<StackPanel>(page, type == typeof(HomePage) ? "RootPanel" : "PageContent");
                     var name = $"{theme}-{(size.Item1 == 0 ? "Maximized" : $"{size.Item1}x{size.Item2}")}-{type.Name}";
@@ -156,7 +166,16 @@ internal static class LayoutValidation
                     var tracked = panel.Children.OfType<FrameworkElement>().ToArray();
                     var bounds = tracked.Select(e => (Left(e,page),e.ActualWidth)).ToArray();
                     foreach (var expander in Descendants(page).OfType<Expander>().ToArray()) expander.IsExpanded = true;
-                    await Task.Delay(180);
+                    foreach (var expander in Descendants(page).OfType<SettingsExpander>().ToArray()) expander.IsExpanded = true;
+                    await Task.Delay(500);
+                    if (type == typeof(SettingsPage))
+                    {
+                        var reconnect = Find<Button>(page,"RestartDaemonBtn");
+                        if (reconnect.ActualWidth < 1 || !reconnect.IsEnabled)
+                            throw new InvalidOperationException("SettingsExpander lost reconnect action");
+                        if (Descendants(page).OfType<SettingsCard>().Count() < 8)
+                            throw new InvalidOperationException("SettingsExpander items did not render");
+                    }
                     var dx = Math.Abs(Left(panel,page)-left); var dw = Math.Abs(panel.ActualWidth-width);
                     if (dx>1 || dw>1 || scroll.ScrollableWidth>1) throw new InvalidOperationException($"Unstable/overflowing layout: {name}, dx={dx}, dw={dw}");
                     for (int i=0;i<tracked.Length;i++)
@@ -164,6 +183,7 @@ internal static class LayoutValidation
                             throw new InvalidOperationException("Expander changed sibling geometry: "+name);
                     await Screenshot(window,directory,name+"-expanded");
                     foreach (var expander in Descendants(page).OfType<Expander>().ToArray()) expander.IsExpanded = false;
+                    foreach (var expander in Descendants(page).OfType<SettingsExpander>().ToArray()) expander.IsExpanded = false;
                     foreach (var bar in Descendants(page).OfType<InfoBar>().Where(b=>b.Name is "ResultBar" or "StatusInfoBar"))
                     { bar.Severity=InfoBarSeverity.Error;bar.Message="布局验证：这是一条测试通知，不是服务错误。";bar.IsOpen=true; }
                     await Task.Delay(120);

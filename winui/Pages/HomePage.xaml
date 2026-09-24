@@ -74,12 +74,12 @@
                         <StackPanel Orientation="Horizontal" Spacing="12">
                             <FontIcon Glyph="&#xEC05;" FontSize="24" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
                             <StackPanel>
-                                <TextBlock Text="核心服务 (daemon)" Style="{ThemeResource SubtitleTextBlockStyle}" />
+                                <TextBlock Text="核心服务" Style="{ThemeResource SubtitleTextBlockStyle}" />
                                 <TextBlock x:Name="DaemonStatusText" Text="正在检测..." Style="{ThemeResource BodyTextBlockStyle}" FontWeight="SemiBold" TextWrapping="Wrap" />
                             </StackPanel>
                         </StackPanel>
                         <TextBlock x:Name="DaemonDetailText"
-                                   Text="正在连接 Control API (127.0.0.1:19897)..."
+                                   Text="正在连接核心服务 (127.0.0.1:19897)..."
                                    Style="{ThemeResource CaptionTextBlockStyle}"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                    TextWrapping="Wrap" />
@@ -123,7 +123,7 @@
                             <FontIcon Glyph="&#xE7FC;" FontSize="24" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
                             <StackPanel>
                                 <TextBlock Text="游戏联动 (CS2 GSI)" Style="{ThemeResource SubtitleTextBlockStyle}" />
-                                <TextBlock x:Name="GsiStatusText" Text="Idle" Style="{ThemeResource BodyTextBlockStyle}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                <TextBlock x:Name="GsiStatusText" Text="空闲" Style="{ThemeResource BodyTextBlockStyle}" FontWeight="SemiBold" TextWrapping="Wrap" />
                             </StackPanel>
                         </StackPanel>
                         <TextBlock Text="炸弹倒计时、血量呼吸、击杀瞬态光效同步中"
@@ -151,12 +151,12 @@
                             <Button x:Name="OpenStudioBtn"
                                     Grid.Column="0"
                                     Click="OpenStudioBtn_Click"
-                                    AutomationProperties.Name="进入 Blockly Studio"
-                                    ToolTipService.ToolTip="进入 Blockly Studio"
+                                    AutomationProperties.Name="进入 Blockly 工作室"
+                                    ToolTipService.ToolTip="进入 Blockly 工作室"
                                     Style="{ThemeResource AccentButtonStyle}">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <FontIcon Glyph="&#xE943;" FontSize="16" />
-                                    <TextBlock Text="进入 Blockly Studio" />
+                                    <TextBlock Text="进入 Blockly 工作室" />
                                 </StackPanel>
                             </Button>
                             <Button x:Name="RefreshStatusBtn"

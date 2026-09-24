@@ -19,10 +19,21 @@ public sealed partial class HomePage : Page
     {
         InitializeComponent();
         PageLayout.Attach(this, PageScroll, RootPanel, width => {
-            var wide = width >= 720; CardGridCol1.Width = new GridLength(wide ? 1 : 0, GridUnitType.Star);
+            var context = width >= 1300;
+            var wide = width >= 720;
+            CardGridCol1.Width = new GridLength(wide ? (context ? 0.42 : 1) : 0, GridUnitType.Star);
+            CardGridCol0.Width = new GridLength(context ? 1 : 1, GridUnitType.Star);
             var cards = new FrameworkElement[] { DeviceCard, DaemonCard, ProfileCard, GsiCard, QuickCard };
             for (int i = 0; i < cards.Length; i++) { Grid.SetRow(cards[i], wide ? i / 2 : i); Grid.SetColumn(cards[i], wide ? i % 2 : 0); }
-            Grid.SetColumnSpan(QuickCard, wide ? 2 : 1);
+            if (context)
+            {
+                Grid.SetRow(DeviceCard, 0); Grid.SetColumn(DeviceCard, 0);
+                Grid.SetRow(DaemonCard, 1); Grid.SetColumn(DaemonCard, 0);
+                Grid.SetRow(QuickCard, 2); Grid.SetColumn(QuickCard, 0);
+                Grid.SetRow(ProfileCard, 0); Grid.SetColumn(ProfileCard, 1);
+                Grid.SetRow(GsiCard, 1); Grid.SetColumn(GsiCard, 1);
+            }
+            Grid.SetColumnSpan(QuickCard, wide && !context ? 2 : 1);
         });
         Loaded += HomePage_Loaded;
         Unloaded += HomePage_Unloaded;
@@ -166,7 +177,7 @@ public sealed partial class HomePage : Page
         {
             DeviceStatusText.Foreground = (Brush)Application.Current.Resources["SystemFillColorSuccessBrush"];
         }
-        else if (status.DeviceStatusDisplayName == "Reconnecting")
+        else if (status.DeviceStatusDisplayName == "正在重连")
         {
             DeviceStatusText.Foreground = (Brush)Application.Current.Resources["SystemFillColorAttentionBrush"];
         }

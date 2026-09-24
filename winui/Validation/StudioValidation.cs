@@ -97,12 +97,21 @@ internal static class StudioValidation
         var categoryToolbox = (await Eval(view, "!!document.querySelector('.blocklyToolbox')")).GetBoolean();
         if (categoryToolbox)
         {
-            await Click(view, """
+            var point = await Eval(view, """
                 (()=>{const category=document.querySelector('.blocklyToolboxCategoryContainer');
-                  category?.focus(); return !!category;})()
+                  if (!category) return null;
+                  const rect=category.getBoundingClientRect();
+                  return {x:rect.left+rect.width/2,y:rect.top+rect.height/2};})()
                 """);
-            await Until(async () => (await Eval(view, "!!document.querySelector('.blocklyToolbox [aria-selected=\"true\"]')")).GetBoolean(),
-                "Blockly category did not select before opening overlay");
+            if (point.ValueKind != JsonValueKind.Object) throw new InvalidOperationException("Blockly category is missing");
+            var x = point.GetProperty("x").GetDouble();
+            var y = point.GetProperty("y").GetDouble();
+            await view.CoreWebView2.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent",
+                JsonSerializer.Serialize(new { type="mousePressed", x, y, button="left", clickCount=1 }));
+            await view.CoreWebView2.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent",
+                JsonSerializer.Serialize(new { type="mouseReleased", x, y, button="left", clickCount=1 }));
+            await Until(async () => (await Eval(view, "(() => {const f=document.querySelector('.blocklyToolboxFlyout,.blocklyFlyout');return !!f && getComputedStyle(f).display!=='none'})()")).GetBoolean(),
+                "Blockly category did not open its flyout before opening overlay");
         }
         else await Until(async () => (await Eval(view, "(() => {const f=document.querySelector('.blocklyFlyout');return !!f && getComputedStyle(f).display!=='none'})()")).GetBoolean(),
             "Automation's permanent flyout was not visible before opening overlay");
@@ -153,6 +162,64 @@ internal static class StudioValidation
                 throw new InvalidOperationException("Embedded Studio contains the standalone product shell");
             results.Add(new { phase = "initial", state = initial });
             await Capture(view, directory, "embedded-effect");
+
+            // Exercise the real React creation dialog against this isolated config.
+            await Eval(view, """
+                (() => { window.__createSaves=[]; const original=window.fetch;
+                  window.fetch=async (...args) => { const response=await original(...args);
+                    if (String(args[0])==='/api/config' && args[1]?.method==='POST') window.__createSaves.push(response.status);
+                    return response; }; return true; })()
+                """);
+            async Task OpenCreationDialog()
+            {
+                await Click(view, "(() => {const button=document.querySelector('button[title=\"新建光效草稿\"]');button?.click();return !!button})()");
+                await Until(async () => (await Eval(view, "!!document.querySelector('[role=dialog][aria-label=\"新建光效草稿\"]')")).GetBoolean(), "Creation dialog did not open");
+            }
+            await OpenCreationDialog();
+            if (!(await Eval(view, "(() => {const d=document.querySelector('[role=dialog]');return [...d.querySelectorAll('button')].filter(b=>b.textContent.trim()==='取消').length===1 && !!d.querySelector('input[type=radio][value=continuous]:checked') && !d.querySelector('input[type=number]')})()")).GetBoolean())
+                throw new InvalidOperationException("Creation dialog has duplicate Cancel or incorrect default lifecycle");
+            await Click(view, "(() => {const r=document.querySelector('[role=dialog] input[type=radio][value=one_shot]');r?.click();return !!r})()");
+            await Until(async () => (await Eval(view, "document.querySelector('[role=dialog] input[type=number]')?.value==='300'")).GetBoolean(), "One-shot fade control did not appear");
+            await Eval(view, "window.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})); true");
+            await Until(async () => !(await Eval(view, "!!document.querySelector('[role=dialog]')")).GetBoolean(), "Escape did not cancel creation");
+            await OpenCreationDialog();
+            await Click(view, "(() => {const x=document.querySelector('[role=dialog] button[aria-label=\"关闭新建光效弹窗\"]');x?.click();return !!x})()");
+            await Until(async () => !(await Eval(view, "!!document.querySelector('[role=dialog]')")).GetBoolean(), "Close button did not cancel creation");
+            await OpenCreationDialog();
+            await Click(view, "(() => {const mask=document.querySelector('[role=dialog]')?.parentElement;mask?.dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));return !!mask})()");
+            await Until(async () => !(await Eval(view, "!!document.querySelector('[role=dialog]')")).GetBoolean(), "Backdrop did not cancel creation");
+            if (!(await Eval(view, "window.__createSaves.length===0")).GetBoolean()) throw new InvalidOperationException("Cancelled creation saved a draft");
+            results.Add(new { phase = "creation cancel methods" });
+            async Task CreateDraft(string name, string mode)
+            {
+                await OpenCreationDialog();
+                await Eval(view, """
+                    (() => {const d=document.querySelector('[role=dialog]'), input=d.querySelector('input[type=text]');
+                      const setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;
+                      setter.call(input,'_DRAFT_NAME_');input.dispatchEvent(new Event('input',{bubbles:true}));
+                      d.querySelector('input[type=radio][value=_DRAFT_MODE_]').click();return true;})()
+                    """.Replace("_DRAFT_NAME_", name).Replace("_DRAFT_MODE_", mode));
+                await Until(async () => (await Eval(view, "!!document.querySelector('[role=dialog] button[type=submit]:not(:disabled)')")).GetBoolean(), "Creation form did not accept the draft name");
+                await Click(view, "(() => {const b=document.querySelector('[role=dialog] button[type=submit]');b?.click();return !!b})()");
+                await Until(async () => !(await Eval(view, "!!document.querySelector('[role=dialog]')")).GetBoolean(), "Draft was not created");
+            }
+            bool PublicationSaved(string name, string mode, int fade)
+            {
+                var dataRoot = Environment.GetEnvironmentVariable("AURA_DATA_ROOT");
+                if (string.IsNullOrWhiteSpace(dataRoot)) return false;
+                using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(dataRoot, "config.json")));
+                if (!document.RootElement.GetProperty("blockly_effects").TryGetProperty(name, out var effect)) return false;
+                var publication = effect.GetProperty("publication");
+                return publication.GetProperty("mode").GetString() == mode && publication.GetProperty("fade_out_ms").GetInt32() == fade;
+            }
+            await CreateDraft("validation_continuous", "continuous");
+            await Until(() => Task.FromResult(PublicationSaved("validation_continuous", "continuous", 0)), "Continuous creation did not persist publication metadata");
+            await CreateDraft("validation_once", "one_shot");
+            await Until(() => Task.FromResult(PublicationSaved("validation_once", "one_shot", 300)), "One-shot creation did not persist publication metadata");
+            if (!(await Eval(view, "document.querySelector('[aria-label=\"当前光效生命周期\"]')?.innerText.includes('单次光效 · 淡出 300 ms') ?? false")).GetBoolean())
+                throw new InvalidOperationException("One-shot lifecycle badge is not visible after creation");
+            results.Add(new { phase = "creation publication roundtrip" });
+            await Click(view, "(() => {document.querySelector('[data-studio-overlay=\"scrim\"]')?.click();return true})()");
 
             // A selected Blockly toolbox previously escaped above the compact works panel.
             var scaleAtStart = window.Content.XamlRoot.RasterizationScale;

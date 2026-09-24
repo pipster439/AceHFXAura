@@ -11,7 +11,7 @@ public sealed partial class GameIntegrationPage : Page
     private readonly AuraWebClient _web = new();
     private CancellationTokenSource? _lifetime;
     private SimulationState? _simulation;
-    private bool _busy, _detecting, _installing;
+    private bool _detecting, _installing;
     private long _generation;
 
     public GameIntegrationPage()
@@ -19,15 +19,14 @@ public sealed partial class GameIntegrationPage : Page
         InitializeComponent();
         PageLayout.Attach(this, PageScroll, PageContent, width => {
             PageLayout.Columns(StatusCards, width >= 1000 ? 4 : width >= 480 ? 2 : 1);
-            PageLayout.Columns(TelemetryGrid, width >= 900 ? 5 : width >= 600 ? 3 : 2);
-            PageLayout.Columns(SimulationFields, width >= 720 ? 2 : 1);
             PageLayout.Columns(CfgActions, width >= 720 ? 2 : 1);
-            PageLayout.Columns(SimulationActions, width >= 720 ? 3 : 1);
+            var wide = width >= 1300;
+            GameColumns.ColumnDefinitions[1].Width = wide ? new GridLength(0.44, GridUnitType.Star) : new GridLength(0);
+            Grid.SetColumn(CfgCard, wide ? 1 : 0);
+            Grid.SetRow(CfgCard, wide ? 0 : 1);
+            PageLayout.Columns(TelemetryGrid, wide ? 3 : width >= 900 ? 5 : width >= 600 ? 3 : 2);
         });
         PageLayout.Notification(this, ResultBar);
-        BombBox.ItemsSource = new[] { "carried", "dropped", "planting", "planted", "defusing", "defused", "exploded" };
-        PhaseBox.ItemsSource = new[] { "freezetime", "live", "over" };
-        BombBox.SelectedIndex = 0; PhaseBox.SelectedIndex = 1;
         Loaded += (_, _) =>
         {
             _lifetime?.Cancel(); _lifetime?.Dispose();
@@ -53,14 +52,14 @@ public sealed partial class GameIntegrationPage : Page
                 if (data.IsSuccess && _simulation?.InstanceId == data.Value!.InstanceId && _simulation.Source == data.Value.Source)
                 {
                     var value = data.Value;
-                    SourceText.Text = value.Source == "simulation" ? "SIMULATION" : "REAL GSI";
+                    SourceText.Text = value.Source == "simulation" ? "模拟" : "真实 GSI";
                     ConnectionText.Text = value.Connected ? "已连接" : "等待游戏数据";
                     LastUpdateText.Text = value.LastUpdatedSec < 0 ? "尚无数据" : value.LastUpdatedSec.ToString("0.0") + " 秒前";
                     ForegroundStatusText.Text = value.IsCs2Foreground ? "CS2 在前台" : "CS2 不在前台";
                     EmptyStateText.Text = value.LastUpdatedSec < 0 ? WaitingMessage(value.Source) :
                         value.Freshness?.Fresh == false ? "游戏数据已过期；正在等待新的状态更新。" : "以下为游戏数据源最近报告的状态。";
                     FreshnessText.Text = value.Freshness is { } freshness ?
-                        $"Automation {(freshness.Fresh ? "Fresh" : "Stale")} · 年龄 {freshness.AgeMs?.ToString() ?? "—"} ms / 阈值 {freshness.ThresholdMs} ms（核心最近评估）" : "等待 Automation 评估";
+                        $"自动化数据{(freshness.Fresh ? "新鲜" : "已过期")} · 年龄 {freshness.AgeMs?.ToString() ?? "—"} 毫秒 / 阈值 {freshness.ThresholdMs} 毫秒（核心最近评估）" : "等待自动化评估";
                     ForegroundText.Text = "前台进程：" + value.ForegroundProcess;
                     HealthText.Text = value.Field("player.state.health"); ArmorText.Text = value.Field("player.state.armor");
                     KillsText.Text = value.Field("player.state.round_kills");
@@ -83,7 +82,7 @@ public sealed partial class GameIntegrationPage : Page
     }
     private string WaitingMessage(string source)
     {
-        if (source == "simulation") return "SIMULATION 已启用；在高级调试中发送模拟数据。";
+        if (source == "simulation") return "模拟已启用；请在工作室的自动化页面编辑模拟数据。";
         return (CfgPathsBox.SelectedItem as GsiCfgPath)?.TemplateMatch switch
         {
             "matching" => "连接配置已安装，等待 CS2 数据。请启动或重启游戏并进入对局。",
@@ -96,10 +95,6 @@ public sealed partial class GameIntegrationPage : Page
     {
         SimulationBanner.IsOpen = _simulation?.Enabled == true;
         QueueText.Text = _simulation == null ? "模拟状态不可用" : $"已应用序号：{_simulation.AppliedSequence} · 排队：{_simulation.Pending} · 心跳：{_simulation.HeartbeatMs} ms";
-        SourceButton.IsEnabled = !_busy && _simulation != null && DaemonSupervisor.Instance.CoreReady;
-        SourceButton.Content = _simulation?.Enabled == true ? "返回 REAL GSI" : "启用 SIMULATION";
-        SimulationControls.IsEnabled = SourceButton.IsEnabled && _simulation?.Enabled == true;
-        HeartbeatButton.Content = _simulation?.Heartbeat == true ? "暂停自动心跳" : "恢复自动心跳";
     }
     private async Task DetectAsync(CancellationToken token)
     {
@@ -156,32 +151,11 @@ public sealed partial class GameIntegrationPage : Page
         catch (Exception ex) { if (!token.IsCancellationRequested) Show(ex.Message, true); }
         finally { _installing = false; if (IsLoaded) UpdateInstallButton(); }
     }
-    private async Task SendAsync(SimulationPatch patch)
+    private void OpenStudio_Click(object sender, RoutedEventArgs e)
     {
-        if (_busy || !DaemonSupervisor.Instance.CoreReady) return;
-        var token = Token; _busy = true; UpdateButtons();
-        try
-        {
-            var result = await _core.UpdateSimulationAsync(patch, token);
-            if (token.IsCancellationRequested) return;
-            if (result.IsSuccess) _simulation = result.Value;
-            Show(result.IsSuccess ? "核心已确认应用；当前状态以实时数据为准。" : result.Error, !result.IsSuccess);
-        }
-        catch (OperationCanceledException) { }
-        finally { _busy = false; if (IsLoaded) UpdateButtons(); }
+        StudioPage.OpenAutomation();
+        MainWindow.CurrentInstance?.NavigateTo(typeof(StudioPage));
     }
-    private async void ReturnReal_Click(object sender, RoutedEventArgs e) => await SendAsync(new() { Enabled = false });
-    private async void Source_Click(object sender, RoutedEventArgs e) => await SendAsync(new() { Enabled = _simulation?.Enabled != true });
-    private async void Kill_Click(object sender, RoutedEventArgs e) => await SendAsync(new() { IncrementKill = true });
-    private async void Heartbeat_Click(object sender, RoutedEventArgs e) => await SendAsync(new() { Heartbeat = _simulation?.Heartbeat != true });
-    private async void ApplySimulation_Click(object sender, RoutedEventArgs e)
-    {
-        if (new[] { HealthBox.Value, ArmorBox.Value, KillsBox.Value }.Any(x => !double.IsFinite(x) || x != Math.Truncate(x)))
-        { Show("请输入有效整数。", true); return; }
-        await SendAsync(new() { Health = (int)HealthBox.Value, Armor = (int)ArmorBox.Value, RoundKills = (int)KillsBox.Value,
-            ForegroundProcess = ProcessBox.Text, Bomb = BombBox.SelectedItem as string, RoundPhase = PhaseBox.SelectedItem as string });
-    }
-    private void OpenStudio_Click(object sender, RoutedEventArgs e) => MainWindow.CurrentInstance?.NavigateTo(typeof(StudioPage));
     private void Show(string message, bool error)
     { if (!IsLoaded) return; ResultBar.IsOpen = false; ResultBar.Message = message; ResultBar.Severity = error ? InfoBarSeverity.Warning : InfoBarSeverity.Success; ResultBar.IsOpen = true; }
 }

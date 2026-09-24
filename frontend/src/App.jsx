@@ -1,6 +1,5 @@
 import GsiSettings from './components/GsiSettings';
 import { ensureStudioRuntime } from './utils/applyEffect.js';
-import AutomationAuthoring from './components/AutomationAuthoring';
 import { ConfigSaveCoordinator } from './utils/configSaveCoordinator.js';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -577,9 +576,9 @@ export default function App() {
       />
 
       {/* 右侧主工作区：工作室自包含右侧键盘与工作台；其他 Tab 保持顶部常驻键盘 */}
-      <div className={`flex-1 flex flex-col h-full overflow-y-auto overflow-x-hidden ${['studio', 'blockly_effect', 'blockly_orchestrator'].includes(activeTab) ? 'p-3' : 'p-6 gap-6'}`}>
+      <div className={`flex-1 flex flex-col h-full overflow-y-auto overflow-x-hidden ${['studio', 'automation', 'blockly_effect', 'blockly_orchestrator'].includes(activeTab) ? 'p-3' : 'p-6 gap-6'}`}>
         {/* 常驻键盘可视化舞台 (仅在非工作室 Tab 下显示，工作室由内部工作台自包含) */}
-        {!['studio', 'blockly_effect', 'blockly_orchestrator'].includes(activeTab) && (
+        {!['studio', 'automation', 'blockly_effect', 'blockly_orchestrator'].includes(activeTab) && (
           <KeyboardVisualizer
             activeTab={activeTab}
             currentEffect={currentEffect}
@@ -653,9 +652,8 @@ export default function App() {
                 />
               )}
 
-              {['studio', 'blockly_effect', 'blockly_orchestrator'].includes(activeTab) && studio}
+              {['studio', 'automation', 'blockly_effect', 'blockly_orchestrator'].includes(activeTab) && studio}
 
-              {activeTab === 'automation' && <AutomationAuthoring onConfigChanged={async()=>{coordinatorRef.current?.bumpGeneration();await fetchConfig();}}/>}
               {activeTab === 'gsi' && <GsiSettings config={config} showToast={showToast}/>}
               {activeTab === 'profiles' && (
                 <ProfileManager

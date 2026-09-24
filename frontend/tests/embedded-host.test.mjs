@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readHostSettings, listenForHostTheme } from '../src/utils/embeddedHost.js';
+import { readHostSettings, listenForHostTheme, listenForHostOpenAutomation } from '../src/utils/embeddedHost.js';
 
 test('standalone keeps the existing shell tab and stored theme', () => {
   let reads = 0;
@@ -26,5 +26,18 @@ test('the one-way host listener ignores business messages and invalid themes', (
   for (const message of [{ type: 'save', config: {} }, { type: 'theme_changed', theme: 'system' }, { type: 'theme_changed', theme: '<script>' }]) handler({ data: message });
   handler({ data: { type: 'theme_changed', theme: 'light' } });
   assert.deepEqual(received, ['light']);
+  stop(); assert.equal(handler, null);
+});
+
+test('native Automation entry switches the retained editor without a navigation request', () => {
+  let handler; let opens = 0;
+  const webview = {
+    addEventListener(type, callback) { assert.equal(type, 'message'); handler = callback; },
+    removeEventListener(type, callback) { assert.equal(type, 'message'); assert.equal(callback, handler); handler = null; }
+  };
+  const stop = listenForHostOpenAutomation(webview, () => opens++);
+  handler({ data: { type: 'theme_changed', theme: 'light' } });
+  handler({ data: { type: 'open_automation' } });
+  assert.equal(opens, 1);
   stop(); assert.equal(handler, null);
 });

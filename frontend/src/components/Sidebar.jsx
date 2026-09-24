@@ -36,7 +36,6 @@ export default function Sidebar({
     { id: 'perkey', label: '逐键涂装', icon: Keyboard },
     { id: 'studio', label: '工作室', icon: Sparkles },
     { id: 'gsi', label: 'CS2 遥测诊断', icon: Crosshair },
-    { id: 'automation', label: 'Automation', icon: Workflow },
     { id: 'profiles', label: '方案管理', icon: SlidersHorizontal }
   ];
 
@@ -162,7 +161,7 @@ export default function Sidebar({
               {!isCollapsed && <span>{theme === 'dark' ? '暗黑模式' : '明亮模式'}</span>}
             </span>
             {!isCollapsed && (
-              <span className="text-[11px] text-md-on-surface-variant">MD3E</span>
+              <span className="text-[11px] text-md-on-surface-variant">主题</span>
             )}
           </button>
         )}
@@ -175,7 +174,7 @@ export default function Sidebar({
           {!isCollapsed && (
             <div className="flex flex-col min-w-0">
               <span className="font-semibold truncate text-md-on-surface">
-                {isServiceOnline ? '守护进程运行中' : '守护进程离线'}
+                {isServiceOnline ? '核心服务运行中' : '核心服务离线'}
               </span>
               <span className="text-[11px] text-md-on-surface-variant truncate">
                 {isSaving ? '正在同步硬件...' : '修改实时硬件生效'}

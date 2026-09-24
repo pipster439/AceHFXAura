@@ -26,45 +26,103 @@ export function installAutomationIdentityGuard(Blockly, workspace) {
   return ()=>workspace.removeChangeListener(listener);
 }
 
-export function registerAutomationBlocks(Blockly, catalog, profiles, events) {
+export function lifecycleSummary(entry, mode = 'event') {
+  const lifecycle = entry?.lifecycle;
+  if (lifecycle?.kind === 'studio_publication') {
+    const publication = lifecycle.publication;
+    return publication?.mode === 'one_shot'
+      ? `单次光效 · 序列结束后淡出 ${publication.fade_out_ms} ms`
+      : '持续光效';
+  }
+  if (lifecycle?.kind === 'lifecycle_capable') return '支持原生生命周期的插件';
+  return mode === 'state' ? '旧式光效 · 条件成立期间运行' : '兼容单次播放 · 主机兼容生命周期（约 1200 ms，末尾约 400 ms 淡出）';
+}
+
+const comparisonOps = ['==','!=','<','<=','>','>=','contains'];
+const fieldOptions = fields => choices(fields.map(f => [`${f.category} · ${f.label}`, f.key]));
+export function registerAutomationBlocks(Blockly, catalog, profiles, events, fields = []) {
+  const eventRows = events.map(e => typeof e === 'string' ? {id:e,label:e,category:'事件',description:e} : e);
+  const eventMap = new Map(eventRows.map(e => [e.id,e]));
+  const fieldMap = new Map(fields.map(f => [f.key,f]));
   const definitions = [
-    {type:'av2_root', message0:'Automation v2 %1', args0:[{type:'input_statement',name:'RULES',check:'V2Rule'}],colour:210},
+    {type:'av2_root', message0:'自动化规则 %1', args0:[{type:'input_statement',name:'RULES',check:'V2Rule'}],colour:210},
     ...[['state','当条件成立期间'],['rising','当条件首次成立时'],['event','当事件发生时']].map(([mode,label])=>({
       type:mode==='event'?'av2_event_mode':`av2_${mode}`,message0:`${label} %1`,args0:[{type:'input_value',name:'WHEN',check:'V2Condition'}],
       message1:'仅在范围内 %1',args1:[{type:'input_value',name:'SCOPE',check:'V2Condition'}],
       message2:'启用 %1 执行 %2',args2:[{type:'field_checkbox',name:'ENABLED',checked:true},{type:'input_statement',name:'ACTION',check:mode==='state'?['V2Play','V2Profile']:'V2Play'}],
       previousStatement:'V2Rule',nextStatement:'V2Rule',colour:210})),
-    {type:'av2_profile',message0:'Activate Profile %1 DND %2',args0:[{type:'field_dropdown',name:'PROFILE',options:choices(profiles.map(p=>[p,p]))},{type:'field_checkbox',name:'DND',checked:false}],previousStatement:'V2Profile',colour:160},
-    {type:'av2_event',message0:'事件 %1',args0:[{type:'field_dropdown',name:'EVENT',options:choices(events.map(e=>[e,e]))}],output:'V2Condition',colour:40},
-    {type:'av2_compare',message0:'字段 %1 %2 值 %3',args0:[{type:'field_input',name:'FIELD',text:'player.state.health'},{type:'field_dropdown',name:'OP',options:['==','!=','<','<=','>','>=','contains'].map(x=>[x,x])},{type:'field_input',name:'VALUE',text:'20'}],output:'V2Condition',colour:40},
-    ...['and','or'].map(op=>({type:`av2_${op}`,message0:`%1 ${op.toUpperCase()} %2`,args0:[{type:'input_value',name:'A',check:'V2Condition'},{type:'input_value',name:'B',check:'V2Condition'}],output:'V2Condition',colour:40})),
-    {type:'av2_not',message0:'NOT %1',args0:[{type:'input_value',name:'A',check:'V2Condition'}],output:'V2Condition',colour:40}
+    {type:'av2_profile',message0:'激活方案 %1 免打扰 %2',args0:[{type:'field_dropdown',name:'PROFILE',options:choices(profiles.map(p=>[p,p]))},{type:'field_checkbox',name:'DND',checked:false}],previousStatement:'V2Profile',colour:160},
+    {type:'av2_event',message0:'事件 %1',args0:[{type:'field_dropdown',name:'EVENT',options:choices(eventRows.map(e=>[`${e.category} · ${e.label}`,e.id]))}],output:'V2Condition',colour:40},
+    {type:'av2_common_compare',message0:'常用字段 %1 %2 值 %3',args0:[{type:'field_dropdown',name:'FIELD',options:fieldOptions(fields)},{type:'field_dropdown',name:'OP',options:comparisonOps.map(x=>[x,x])},{type:'field_input',name:'VALUE',text:'20'}],output:'V2Condition',colour:40},
+    {type:'av2_compare',message0:'自定义字段 %1 %2 值 %3',args0:[{type:'field_input',name:'FIELD',text:'player.state.health'},{type:'field_dropdown',name:'OP',options:comparisonOps.map(x=>[x,x])},{type:'field_input',name:'VALUE',text:'20'}],output:'V2Condition',colour:40},
+    ...['and','or'].map(op=>({type:`av2_${op}`,message0:`%1 ${op==='and'?'且':'或'} %2`,args0:[{type:'input_value',name:'A',check:'V2Condition'},{type:'input_value',name:'B',check:'V2Condition'}],output:'V2Condition',colour:40})),
+    {type:'av2_not',message0:'非 %1',args0:[{type:'input_value',name:'A',check:'V2Condition'}],output:'V2Condition',colour:40}
   ];
   Blockly.defineBlocksWithJsonArray(definitions);
+  Blockly.Blocks.av2_event.init = function() {
+    this.jsonInit(definitions.find(d => d.type === 'av2_event'));
+    this.setTooltip(() => eventMap.get(this.getFieldValue('EVENT'))?.description || '事件发生一次，对应一次触发。');
+  };
+  Blockly.Blocks.av2_common_compare.init = function() {
+    this.jsonInit(definitions.find(d => d.type === 'av2_common_compare'));
+    const operatorField = this.getField('OP');
+    operatorField.setOptions(function() {
+      const field = fieldMap.get(this.getSourceBlock()?.getFieldValue('FIELD'));
+      return (field?.operators?.length ? field.operators : comparisonOps).map(op => [op,op]);
+    });
+    this.setOnChange(() => {
+      const options = operatorField.getOptions();
+      if (!options.some(([,op]) => op === this.getFieldValue('OP'))) this.setFieldValue(options[0][1], 'OP');
+    });
+    this.setTooltip(() => {
+      const field = fieldMap.get(this.getFieldValue('FIELD'));
+      if (!field) return '选择一个常用字段；未知字段请使用自定义字段积木。';
+      const values = field.values ? ` 可用值：${Object.entries(field.values).map(([key,label]) => `${label} (${key})`).join('、')}。` : '';
+      return `${field.description} 类型：${field.type}。${values}`;
+    });
+  };
   Blockly.Blocks.av2_play={init() {
     this.appendDummyInput().appendField('播放光效').appendField(new Blockly.FieldDropdown(choices(catalog.map(e=>[`${e.label}${e.available?'':'（不可用）'}`,effectKey(e.reference)]))),'EFFECT');
+    this.appendDummyInput('LIFECYCLE').appendField('生命周期：待选择');
     this.appendDummyInput().appendField('优先级').appendField(new Blockly.FieldNumber(20,-2147483648,2147483647,1),'PRIORITY');
     this.appendDummyInput().appendField('合成方式').appendField(new Blockly.FieldDropdown([
-      ['Alpha 混合（非黑覆盖）','overlay/alpha'],['亮度叠加','overlay/additive'],['完全覆盖','replace/alpha'],['亮度叠加（全覆盖）','replace/additive']]),'COMPOSITION');
+      ['透明度混合（非黑覆盖）','overlay/alpha'],['亮度叠加','overlay/additive'],['完全覆盖','replace/alpha'],['亮度叠加（全覆盖）','replace/additive']]),'COMPOSITION');
     this.appendDummyInput('RETRIGGER').appendField('重触发').appendField(new Blockly.FieldDropdown([['重新开始','restart'],['活动时忽略','ignore_while_active'],['叠放','stack'],['排队','queue']]),'RETRIGGER');
     this.setPreviousStatement(true,'V2Play'); this.setColour(160);
     this.updateTriggerVisibility=()=>{const parent=this.getSurroundParent();const visible=!!parent && parent.type!=='av2_state';const input=this.getInput('RETRIGGER');if(input.isVisible()!==visible){input.setVisible(visible);if(this.rendered)this.render();}};
-    this.setOnChange(()=>this.updateTriggerVisibility());
+    this.setOnChange(()=>{
+      this.updateTriggerVisibility();
+      const selected = catalog.find(e => effectKey(e.reference) === this.getFieldValue('EFFECT'));
+      const mode = this.getSurroundParent()?.type === 'av2_state' ? 'state' : 'event';
+      const label = `生命周期：${lifecycleSummary(selected, mode)}`;
+      const field = this.getInput('LIFECYCLE')?.fieldRow?.[0];
+      if (field?.getValue() !== label) field?.setValue(label);
+    });
   }};
 }
 
-export const automationToolbox={kind:'flyoutToolbox',contents:['root','state','rising','event','play','profile','compare','event_leaf','and','or','not'].map(name=>({kind:'block',type:name==='event_leaf'?'av2_event':'av2_'+(name==='event'?'event_rule':name)}))};
+export const automationToolbox={kind:'flyoutToolbox',contents:['root','state','rising','event','play','profile','common_compare','compare','event_leaf','and','or','not'].map(name=>({kind:'block',type:name==='event_leaf'?'av2_event':'av2_'+(name==='event'?'event_rule':name)}))};
 // Event containers and event leaves have deliberately different block identities.
 automationToolbox.contents[3].type='av2_event_mode';
 
-export function serializeAutomation(workspace, catalog) {
+export function serializeAutomation(workspace, catalog, fields = []) {
+  const fieldMap = new Map(fields.map(f => [f.key, f]));
   const roots=workspace.getTopBlocks(true);
-  if(roots.length!==1 || roots[0].type!=='av2_root') throw new Error('请使用一个 Automation 根节点，并连接所有规则');
+  if(roots.length!==1 || roots[0].type!=='av2_root') throw new Error('请使用一个自动化根节点，并连接所有规则');
   const condition=block=>{
     if(!block) throw new Error('请连接触发条件');
     const field=n=>block.getFieldValue(n);
     if(block.type==='av2_event') return {event:field('EVENT')};
-    if(block.type==='av2_compare') {let value;try{value=JSON.parse(field('VALUE'));}catch{value=field('VALUE');}return {field:field('FIELD'),op:field('OP'),value};}
+    if(block.type==='av2_compare' || block.type==='av2_common_compare') {
+      const key=field('FIELD'),op=field('OP');
+      const metadata=block.type==='av2_common_compare' ? fieldMap.get(key) : null;
+      if(metadata?.operators && !metadata.operators.includes(op)) throw new Error(`${metadata.label} 仅支持 ${metadata.operators.join(' / ')}`);
+      let value;try{value=JSON.parse(field('VALUE'));}catch{value=field('VALUE');}
+      if(metadata?.type==='number' && (typeof value!=='number' || !Number.isFinite(value))) throw new Error(`${metadata.label} 需要数值`);
+      if(metadata?.type==='bool' && typeof value!=='boolean') throw new Error(`${metadata.label} 需要 true 或 false`);
+      if(metadata?.type==='string' && typeof value!=='string') value=field('VALUE');
+      return {field:key,op,value};
+    }
     if(block.type==='av2_not') return {not:condition(block.getInputTargetBlock('A'))};
     if(['av2_and','av2_or'].includes(block.type)) return {[block.type.slice(4)]:[condition(block.getInputTargetBlock('A')),condition(block.getInputTargetBlock('B'))]};
     throw new Error('不支持的条件积木');
@@ -83,7 +141,7 @@ export function serializeAutomation(workspace, catalog) {
     const action=block.getInputTargetBlock('ACTION');
     if(!action || action.getNextBlock()) throw new Error('每条规则必须有一个动作');
     if(action.type==='av2_profile') {
-      if(mode!=='state')throw new Error('Activate Profile 仅支持 state');
+      if(mode!=='state')throw new Error('激活方案仅支持持续条件');
       rule.action={type:'activate_profile',profile:action.getFieldValue('PROFILE')};rule.dnd=action.getFieldValue('DND')==='TRUE';
     } else if(action.type==='av2_play') {
       const selected=catalog.find(e=>effectKey(e.reference)===action.getFieldValue('EFFECT'));
@@ -100,11 +158,12 @@ export function serializeAutomation(workspace, catalog) {
   return rules;
 }
 
-export function automationWorkspace(rules) {
+export function automationWorkspace(rules, fields = []) {
+  const knownFields = new Set(fields.map(f => f.key));
   const input=block=>({block});
   const condition=c=>{
     if(c.event)return {type:'av2_event',fields:{EVENT:c.event}};
-    if(c.field)return {type:'av2_compare',fields:{FIELD:c.field,OP:c.op||'==',VALUE:JSON.stringify(c.value)}};
+    if(c.field)return {type:knownFields.has(c.field)?'av2_common_compare':'av2_compare',fields:{FIELD:c.field,OP:c.op||'==',VALUE:knownFields.has(c.field) && typeof c.value==='string'?c.value:JSON.stringify(c.value)}};
     const op=c.and?'and':c.or?'or':c.not?'not':c.type||c.op;
     const children=c[op] || c.conditions || (c.condition?[c.condition]:[]);
     if(op==='not')return {type:'av2_not',inputs:{A:input(condition(c.not||children[0]))}};

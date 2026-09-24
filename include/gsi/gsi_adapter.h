@@ -78,7 +78,7 @@ public:
     AutomationInputDrain DrainAutomationInputs();
     std::shared_ptr<const AutomationTelemetry> GetAutomationTelemetry() const;
 
-    // 导出当前所有扁平化字段为 JSON (含活跃事件及最近事件队列)
+    // 导出当前所有扁平化字段及最近事件队列为 JSON
     nlohmann::json ToJson() const;
 
     // 检查 GSI 是否在指定时间内收到过有效心跳
@@ -89,9 +89,6 @@ public:
 
     // 获取最近触发的游戏事件流
     std::vector<GameEventRecord> GetRecentEvents(size_t max_count = 30) const;
-
-    // 检查某个事件是否在指定脉冲窗口期内活跃
-    bool IsEventActive(const std::string& event_name, uint64_t pulse_window_ms = 1500) const;
 
     // 手动触发指定事件
     void TriggerEvent(const std::string& name, 
@@ -116,14 +113,8 @@ private:
 
     void DetectGameEvents(const nlohmann::json& payload, uint64_t now_ms);
 
-    // 已改为 const：内部只写入 mutable 的 flat_state_ / last_event_sync_ms_，
-    // 因此 Evaluate() 与 ToJson() 不再需要 const_cast。
-    void SyncEventFieldsToFlatState(uint64_t now_ms) const;
-
     mutable std::mutex mutex_;
-    mutable std::unordered_map<std::string, GsiValue> flat_state_;
-    // 事件脉冲刷新节流：同一毫秒内只重算一次（见 SyncEventFieldsToFlatState）
-    mutable uint64_t last_event_sync_ms_{0};
+    std::unordered_map<std::string, GsiValue> flat_state_;
     uint64_t last_update_ms_{0};
     uint64_t packet_count_{0};
     uint64_t automation_epoch_{1}, automation_sequence_{0}, automation_received_ms_{0};
@@ -136,10 +127,8 @@ private:
     bool seeding_{false};
     std::string foreground_process_;
 
-    // 完整游戏事件历史与脉冲时钟
+    // 完整游戏事件历史与诊断字段
     std::deque<GameEventRecord> recent_events_;
-    std::unordered_map<std::string, uint64_t> event_timestamps_;
-    std::unordered_map<std::string, uint64_t> event_sequences_;
     std::string last_event_name_;
     std::string last_event_label_;
 

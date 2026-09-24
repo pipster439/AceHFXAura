@@ -35,8 +35,20 @@ if (Blockly.Msg && typeof Blockly.Msg === 'object') {
   }
 }
 
+export const LEGACY_EVENT_PULSE_MESSAGE = '事件触发条件已迁移到自动化工作室，请使用自动化事件规则。旧 event.* 布尔脉冲积木不可继续编译。';
+export function assertNoLegacyEventPulse(jsonState) {
+  const visit = node => {
+    if (!node || typeof node !== 'object') return;
+    if (node.type === 'gsi_get_boolean' && typeof node.fields?.PATH === 'string' && node.fields.PATH.startsWith('event.')) throw new Error(LEGACY_EVENT_PULSE_MESSAGE);
+    if (node.type === 'orch_event_triggered') throw new Error(LEGACY_EVENT_PULSE_MESSAGE);
+    for (const value of Object.values(node)) visit(value);
+  };
+  visit(jsonState);
+}
+
 export function loadSafeWorkspaceJson(jsonState, ws, strict = false) {
   if (!jsonState || !ws) return;
+  assertNoLegacyEventPulse(jsonState);
   try {
     const state = (jsonState.blocks && !Array.isArray(jsonState.blocks))
       ? jsonState

@@ -23,6 +23,7 @@ public sealed partial class MainWindow : Window
     {
         CurrentInstance = this;
         InitializeComponent();
+        if (NavView.SettingsItem is NavigationViewItem settingsItem) settingsItem.Content = "设置";
         RootGrid.RequestedTheme = Enum.TryParse<ElementTheme>(ClientSettings.Current.Theme, out var theme) ? theme : ElementTheme.Default;
         RootGrid.ActualThemeChanged += RootThemeChanged;
         TrayIconManager.MinimizeToTrayEnabled = ClientSettings.Current.MinimizeToTray;

@@ -45,8 +45,17 @@ Version source: [`VERSION`](../../VERSION). A generated ZIP is a candidate, not 
 - [ ] Inspect 600x500, 800x600, 1060x720 DIP and maximized, long paths, slider dragging, theme selection, scroll bottom, and light/dark at 100/150/200% DPI. Passing one host scale is not acceptance of the others.
 - [ ] GSI empty states distinguish missing setup, installed/waiting, stale data and unavailable core. Simulation is clearly visible even with advanced diagnostics collapsed; player fields retain missing/unknown semantics.
 - [ ] Settings keeps product/version and core/Studio status visible, technical details collapsed; unknown external runtime paths are not inferred from the client's layout.
+- [ ] Settings uses Toolkit SettingsCard for individual settings and SettingsExpander for core details. Check Header/Description/Icon/Content alignment, expand/collapse, toggle/ComboBox keyboard focus and no accidental whole-card click on 600×500 through wide layouts.
+- [ ] Audit every WinUI page and embedded Blockly toolbox, block label, dialogs, status and buttons in Chinese. Keep technical names and serialized/API identifiers unchanged; check long Chinese text at 100/150/200% DPI.
+- [ ] At 1920×1080 maximized and 2560/3840 equivalent width, Home, Lighting, Game Integration and Settings show useful context beside primary content; at 600×500, 800×600 and 1060×720 they return to compact layout without horizontal scrolling.
+- [ ] Game Integration has no simulation input editor. Its simulation banner links to 工作室 → 自动化; enable/edit/heartbeat/+kill/exit remains available there only, without changing /api/gsi/simulation.
+- [ ] Studio gives Blockly the largest editing area, collapses low-value controls and puts simulation/inspector in a side panel. Check toolbox/flyout z-order and that opening panels or navigating away/back retains one WebView and an unsaved workspace.
+- [ ] Self-contained x64 package manifest lists CommunityToolkit.WinUI.Controls.SettingsControls; SettingsPage.xbf, Aura.pri and Toolkit DLL are present, and Settings loads from the extracted package without a source checkout.
 
 ## Embedded Studio gates
+
+- [ ] 新建持续/单次光效分别保存 `publication.mode` 与淡出值；弹窗只有一个“取消”，Esc、遮罩、关闭按钮均不创建草稿。编辑器在窄屏及嵌入模式显示当前生命周期，刷新后恢复；单次序列结束才淡出。
+- [ ] Automation 常用字段/自定义字段、中文事件说明、canonical JSON roundtrip 和旧插件兼容单次摘要在最终候选包中可见。旧 `event.*` 布尔 pulse 工作区显示迁移诊断；真实 GSI 布尔状态仍可读。`event.ace` 显示“推定”。
 
 - [ ] UI-005: standalone `/` retains the full Web shell and stored theme; embedded Studio has no second product sidebar or external page scrolling.
 - [ ] Embedded `studio` and `automation` URL entry, WinUI initial/dynamic theme, Blockly resize, 600×500 through maximized layout, and 50 native navigation reentries pass on the final package.

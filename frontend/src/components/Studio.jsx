@@ -25,6 +25,8 @@ import {
 } from 'lucide-react';
 import EffectStudio from './EffectStudio';
 import AutomationAuthoring from './AutomationAuthoring';
+import GsiSimulation from './GsiSimulation';
+import { listenForHostOpenAutomation } from '../utils/embeddedHost.js';
 import KeyboardVisualizer from './KeyboardVisualizer';
 import { 
   getEffectLifecycleStatus, 
@@ -34,6 +36,7 @@ import {
   renameEffectInConfig
 } from '../utils/applyEffect';
 import { EFFECT_PRESETS } from '../blockly/presets';
+import { normalizePublication } from '../blockly/publication.js';
 
 export default function Studio({
   config,
@@ -61,16 +64,19 @@ export default function Studio({
 }) {
   // 当前激活的作品类型：'effect' (光效) 或 'orchestration' (自动化)
   const [activeWorkType, setActiveWorkType] = useState(initialWorkType);
+  useEffect(() => {
+    if (embedded) return listenForHostOpenAutomation(window.chrome?.webview, () => setActiveWorkType('orchestration'));
+  }, [embedded]);
   const rootRef = useRef(null);
   const [compact, setCompact] = useState(false);
   const [openPanel, setOpenPanel] = useState(null);
-  const overlayOpen = embedded && compact && !!openPanel;
+  const overlayOpen = compact && !!openPanel;
   useEffect(() => {
-    if (!embedded || !rootRef.current) return;
+    if (!rootRef.current) return;
     const observer = new ResizeObserver(([entry]) => setCompact(entry.contentRect.width < 1000));
     observer.observe(rootRef.current);
     return () => observer.disconnect();
-  }, [embedded]);
+  }, []);
   useEffect(() => { if (!compact) setOpenPanel(null); }, [compact]);
   const [activeEffectName, setActiveEffectName] = useState(() => {
     const keys = Object.keys(config?.blockly_effects || {});
@@ -85,6 +91,15 @@ export default function Studio({
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
   const [newEffectName, setNewEffectName] = useState('');
   const [newEffectTemplate, setNewEffectTemplate] = useState('blank');
+  const [newPublicationMode, setNewPublicationMode] = useState('continuous');
+  const [newFadeOutMs, setNewFadeOutMs] = useState(300);
+  const closeNewModal = () => setIsNewModalOpen(false);
+  useEffect(() => {
+    if (!isNewModalOpen) return;
+    const onKeyDown = event => { if (event.key === 'Escape') closeNewModal(); };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isNewModalOpen]);
 
   // 编辑名称状态 (重命名)
   const [editingEffectName, setEditingEffectName] = useState(null);
@@ -117,7 +132,8 @@ export default function Studio({
       }
     }
 
-    const nextConfig = effectConfig(config, clean, initialJson || { blocks: { languageVersion: 0, blocks: [] } });
+    const publication = normalizePublication({ mode: newPublicationMode, fade_out_ms: Number(newFadeOutMs) });
+    const nextConfig = effectConfig(config, clean, initialJson || { blocks: { languageVersion: 0, blocks: [] } }, undefined, publication);
     const ok = await onSaveConfig(nextConfig);
     if (ok) {
       showToast?.(`已新建光效草稿「${clean}」`, 'success');
@@ -125,6 +141,8 @@ export default function Studio({
       setActiveWorkType('effect');
       setIsNewModalOpen(false);
       setNewEffectName('');
+      setNewPublicationMode('continuous');
+      setNewFadeOutMs(300);
     }
   };
 
@@ -171,7 +189,7 @@ export default function Studio({
       showToast?.('克隆名称冲突，操作取消', 'error');
       return;
     }
-    const nextConfig = effectConfig(config, cloneName, src.blockly_json);
+    const nextConfig = effectConfig(config, cloneName, src.blockly_json, undefined, src.publication);
     const ok = await onSaveConfig(nextConfig);
     if (ok) {
       showToast?.(`已克隆光效: ${cloneName}`, 'success');
@@ -282,24 +300,24 @@ export default function Studio({
 
   return (
     <div ref={rootRef} data-studio-workspace={activeWorkType} className={`flex w-full min-w-0 overflow-hidden select-none ${embedded ? 'relative h-full gap-2 p-2 bg-md-surface' : 'h-[calc(100vh-100px)] gap-4'}`}>
-      {embedded && compact && <div className="absolute left-2 right-2 top-2 z-10 flex gap-2 rounded-md-md bg-md-surface-container p-1">
+      {compact && <div className="absolute left-2 right-2 top-2 z-10 flex gap-2 rounded-md-md bg-md-surface-container p-1">
         <button type="button" onClick={() => setOpenPanel(openPanel === 'works' ? null : 'works')} aria-label="作品列表" className="rounded-md-sm px-2 py-1 text-xs">作品与类型</button>
-        <span className="min-w-0 flex-1 truncate py-1 text-center text-xs">{activeWorkType === 'effect' ? activeEffectName : 'Automation v2'}</span>
+        <span className="min-w-0 flex-1 truncate py-1 text-center text-xs">{activeWorkType === 'effect' ? activeEffectName : '自动化'}</span>
         <button type="button" onClick={() => setOpenPanel(openPanel === 'inspector' ? null : 'inspector')} aria-label="预览与检查" className="rounded-md-sm px-2 py-1 text-xs">预览/检查</button>
       </div>}
-      {embedded && compact && openPanel && <button type="button" data-studio-overlay="scrim" aria-label="关闭工作台面板" onClick={() => setOpenPanel(null)} className="absolute inset-0 z-10 bg-black/30" />}
+      {compact && openPanel && <button type="button" data-studio-overlay="scrim" aria-label="关闭工作台面板" onClick={() => setOpenPanel(null)} className="absolute inset-0 z-10 bg-black/30" />}
       {/* 1. 左侧：作品列表导航轨 (Works List) */}
-      <div data-studio-overlay="works" className={`${embedded && compact ? `absolute inset-y-2 left-2 z-20 w-[min(18rem,85%)] ${openPanel === 'works' ? '' : 'hidden'}` : 'w-72 shrink-0'} flex flex-col bg-md-surface-container-low border border-md-outline-variant rounded-md-xl shadow-md-level1 overflow-hidden`}>
+      <div data-studio-overlay="works" className={`${compact ? `absolute inset-y-2 left-2 z-20 w-[min(18rem,85%)] ${openPanel === 'works' ? '' : 'hidden'}` : 'w-56 shrink-0'} flex flex-col bg-md-surface-container-low border border-md-outline-variant rounded-md-xl shadow-md-level1 overflow-hidden`}>
         {/* 头部标题与新建按钮 */}
         <div className="p-3 border-b border-md-outline-variant bg-md-surface-container/50 flex flex-col gap-2.5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-2 min-w-0">
               <div className="w-7 h-7 rounded-md-full bg-md-primary/15 text-md-primary flex items-center justify-center font-bold">
                 <Layers className="w-4 h-4" />
               </div>
-              <span className="font-bold text-xs text-md-on-surface">作品列表</span>
+              <span className="font-bold text-xs text-md-on-surface whitespace-nowrap">作品列表</span>
             </div>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 min-w-0">
               <input
                 type="file"
                 ref={fileInputRef}
@@ -310,7 +328,7 @@ export default function Studio({
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="h-7 px-2 flex items-center gap-1 rounded-md-full bg-md-surface-container-high text-md-on-surface hover:bg-md-surface-container-highest text-xs font-medium transition-colors cursor-pointer border border-md-outline-variant"
+                className="h-7 flex-1 min-w-0 px-2 flex items-center justify-center gap-1 whitespace-nowrap rounded-md-full bg-md-surface-container-high text-md-on-surface hover:bg-md-surface-container-highest text-xs font-medium transition-colors cursor-pointer border border-md-outline-variant"
                 title="导入光效配置 (.json)"
               >
                 <Upload className="w-3 h-3" />
@@ -319,7 +337,7 @@ export default function Studio({
               <button
                 type="button"
                 onClick={() => setIsNewModalOpen(true)}
-                className="h-7 px-2.5 flex items-center gap-1 rounded-md-full bg-md-primary text-md-on-primary hover:bg-md-primary/90 text-xs font-bold transition-transform active:scale-95 cursor-pointer shadow-xs"
+                className="h-7 flex-1 min-w-0 px-2.5 flex items-center justify-center gap-1 whitespace-nowrap rounded-md-full bg-md-primary text-md-on-primary hover:bg-md-primary/90 text-xs font-bold transition-transform active:scale-95 cursor-pointer shadow-xs"
                 title="新建光效草稿"
               >
                 <Plus className="w-3.5 h-3.5" />
@@ -350,7 +368,7 @@ export default function Studio({
                 <button
                   key={tab.id}
                   onClick={() => setFilterType(tab.id)}
-                  className={`flex-1 py-1 text-center rounded-md-full transition-all cursor-pointer text-[11px] ${
+                  className={`flex-1 min-w-0 py-1 text-center whitespace-nowrap rounded-md-full transition-all cursor-pointer text-[11px] ${
                     filterType === tab.id
                       ? 'bg-md-secondary-container text-md-on-secondary-container font-bold shadow-xs'
                       : 'text-md-on-surface-variant hover:text-md-on-surface'
@@ -375,7 +393,7 @@ export default function Studio({
                   : 'bg-md-surface-container border-transparent hover:border-md-outline-variant/60 text-md-on-surface-variant hover:text-md-on-surface'
               }`}
             >
-              <div className="flex items-center gap-2.5 min-w-0">
+              <div className="flex items-center gap-2.5 min-w-0 flex-1">
                 <div className={`w-7 h-7 rounded-md-md flex items-center justify-center shrink-0 ${
                   activeWorkType === 'orchestration' ? 'bg-md-primary text-md-on-primary' : 'bg-md-surface-container-high text-md-on-surface-variant'
                 }`}>
@@ -384,10 +402,10 @@ export default function Studio({
                 <div className="flex flex-col min-w-0">
                   <span className="font-bold text-xs truncate">主联动规则编排 [经典 / 进阶]</span>
                   <div className="flex items-center gap-1.5 mt-0.5">
-                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-md-secondary/15 text-md-secondary font-semibold">
+                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-md-secondary/15 text-md-secondary font-semibold whitespace-nowrap">
                       经典自动化
                     </span>
-                    <span className="text-[10px] text-emerald-400 font-semibold">
+                    <span className="text-[10px] text-emerald-400 font-semibold whitespace-nowrap">
                       ● 运行中
                     </span>
                   </div>
@@ -420,7 +438,7 @@ export default function Studio({
                           setOpenPanel(null);
                         }
                       }}
-                      className={`group flex items-center justify-between p-2.5 rounded-md-lg border transition-all cursor-pointer ${
+                      className={`group relative flex items-center justify-between p-2.5 rounded-md-lg border transition-all cursor-pointer ${
                         isSelected
                           ? 'bg-md-primary/10 border-md-primary text-md-on-surface shadow-xs'
                           : 'bg-md-surface-container border-transparent hover:border-md-outline-variant/60 text-md-on-surface-variant hover:text-md-on-surface'
@@ -467,10 +485,10 @@ export default function Studio({
                             <span className="font-bold text-xs truncate" title={name}>{name}</span>
                           )}
                           <div className="flex items-center gap-1.5 mt-0.5">
-                            <span className="text-[10px] px-1.5 py-0.2 rounded bg-md-surface-container-highest text-md-on-surface-variant font-semibold">
+                            <span className="text-[10px] px-1.5 py-0.2 rounded bg-md-surface-container-highest text-md-on-surface-variant font-semibold whitespace-nowrap">
                               光效
                             </span>
-                            <span className={`text-[10px] px-1.5 py-0.2 rounded border font-semibold ${lifecycle.badgeClass}`}>
+                            <span className={`text-[10px] px-1.5 py-0.2 rounded border font-semibold whitespace-nowrap ${lifecycle.badgeClass}`}>
                               {lifecycle.label}
                             </span>
                           </div>
@@ -479,7 +497,7 @@ export default function Studio({
 
                       {/* 悬停快捷按钮 */}
                       {!isEditing && (
-                        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 ml-1">
+                        <div className="absolute right-2 top-2 flex items-center gap-0.5 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto transition-opacity rounded bg-md-surface-container-high shadow-sm px-0.5">
                           <button
                             type="button"
                             onClick={(e) => {
@@ -526,20 +544,11 @@ export default function Studio({
           )}
         </div>
 
-        {/* 底部兼容设置快捷入口 */}
-        <div className="p-2 border-t border-md-outline-variant bg-md-surface-container/30 flex flex-col gap-1 text-xs">
-          <div className="flex items-center justify-between text-xs text-md-on-surface-variant px-1 font-semibold">
-            <span>高级与兼容功能</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-
-          </div>
-        </div>
       </div>
 
       {/* 2. 中间：Blockly 核心编辑区 (Center Canvas) */}
       <div data-studio-editor inert={overlayOpen ? '' : undefined} aria-hidden={overlayOpen ? 'true' : undefined}
-        className={`flex-1 flex flex-col h-full min-w-0 overflow-y-auto overflow-x-hidden ${embedded && compact ? 'relative z-0 pt-10' : ''} ${overlayOpen ? 'pointer-events-none' : ''}`}>
+        className={`flex-1 flex flex-col h-full min-w-0 overflow-y-auto overflow-x-hidden ${compact ? (embedded ? 'relative z-0 pt-10' : 'relative pt-10') : ''} ${overlayOpen ? 'pointer-events-none' : ''}`}>
         {activeWorkType === 'effect' ? (
           <EffectStudio
             embedded={embedded}
@@ -566,7 +575,7 @@ export default function Studio({
       </div>
 
       {/* 3. 右侧：键盘预览或自动化检查器工作台 */}
-      <div data-studio-overlay="inspector" className={`${embedded && compact ? `absolute inset-y-2 right-2 z-20 w-[min(21rem,85%)] ${openPanel === 'inspector' ? '' : 'hidden'}` : 'w-84 shrink-0'} flex flex-col bg-md-surface-container-low border border-md-outline-variant rounded-md-xl shadow-md-level1 p-3 gap-3 overflow-y-auto`}>
+      <div data-studio-overlay="inspector" className={`${compact ? `absolute inset-y-2 right-2 z-20 w-[min(21rem,85%)] ${openPanel === 'inspector' ? '' : 'hidden'}` : 'w-72 shrink-0'} flex flex-col bg-md-surface-container-low border border-md-outline-variant rounded-md-xl shadow-md-level1 p-3 gap-3 overflow-y-auto`}>
         {activeWorkType === 'effect' ? (
           <>
             {/* 顶部标题与状态指示 */}
@@ -613,7 +622,7 @@ export default function Studio({
               <div className="flex items-center justify-between">
                 <span className="text-md-on-surface-variant font-medium">作品类型:</span>
                 <span className="font-semibold text-md-primary">
-                  独立光效 (Effect)
+                  独立光效
                 </span>
               </div>
               <div className="flex items-center justify-between">
@@ -629,45 +638,34 @@ export default function Studio({
               </div>
             </div>
 
-            {/* 调试说明与提示 */}
-            <div className="p-3 bg-md-surface-container-lowest border border-md-outline-variant rounded-md-md flex flex-col gap-1.5 text-[11px] text-md-on-surface-variant leading-relaxed">
-              <div className="flex items-center gap-1.5 font-bold text-md-on-surface">
-                <CheckCircle2 className="w-3.5 h-3.5 text-md-primary" />
-                <span>实时调试提示</span>
-              </div>
-              <p>
-                • 在中间 Blockly 中拼装积木，右侧虚拟键盘将以 ~25 FPS 保持帧同步。
-              </p>
-              <p>
-                • 点击「保存草稿」记录源码；点击「发布」转译为原生动态链接库，直接推送到硬件。
-              </p>
-            </div>
           </>
         ) : (
-          <p>Automation 模拟使用 daemon 实际输出；编辑光效预览仅用于单效果。</p>
+          <GsiSimulation />
         )}
       </div>
 
       {/* 新建光效模态弹窗 */}
       {isNewModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
-          <div className="w-full max-w-md bg-md-surface-container border border-md-outline-variant rounded-md-xl shadow-md-level3 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4" onMouseDown={event => { if (event.target === event.currentTarget) closeNewModal(); }}>
+          <div role="dialog" aria-modal="true" aria-label="新建光效草稿" className="w-full max-w-md bg-md-surface-container border border-md-outline-variant rounded-md-xl shadow-md-level3 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
             <div className="p-4 border-b border-md-outline-variant bg-md-surface-container-high flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-md-primary" />
                 <span className="font-bold text-sm text-md-on-surface">新建光效草稿</span>
               </div>
               <button
-                onClick={() => setIsNewModalOpen(false)}
+                type="button"
+                aria-label="关闭新建光效弹窗"
+                onClick={closeNewModal}
                 className="text-xs text-md-on-surface-variant hover:text-md-on-surface cursor-pointer"
               >
-                取消
+                <X className="w-4 h-4" />
               </button>
             </div>
 
             <form onSubmit={handleCreateNewEffect} className="p-4 flex flex-col gap-4">
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-md-on-surface">光效标识名称 (ID):</label>
+                <label className="text-xs font-semibold text-md-on-surface">光效标识名称：</label>
                 <input
                   type="text"
                   placeholder="如: my_wave_effect"
@@ -693,10 +691,17 @@ export default function Studio({
                 </select>
               </div>
 
+              <fieldset className="flex flex-col gap-2 border-t border-md-outline-variant pt-3">
+                <legend className="text-xs font-bold text-md-on-surface">播放方式</legend>
+                <label className="flex gap-2 text-xs text-md-on-surface"><input type="radio" name="new-publication-mode" value="continuous" checked={newPublicationMode === 'continuous'} onChange={() => setNewPublicationMode('continuous')} /><span><strong>持续光效</strong><br /><span className="text-md-on-surface-variant">用于环境灯效、状态灯效等，会持续运行。</span></span></label>
+                <label className="flex gap-2 text-xs text-md-on-surface"><input type="radio" name="new-publication-mode" value="one_shot" checked={newPublicationMode === 'one_shot'} onChange={() => setNewPublicationMode('one_shot')} /><span><strong>单次光效</strong><br /><span className="text-md-on-surface-variant">用于击杀、受击、回合事件等。Blockly 序列执行结束后自动结束。</span></span></label>
+                {newPublicationMode === 'one_shot' && <label className="text-xs text-md-on-surface">结束后淡出 <input type="number" min="0" max="60000" step="1" value={newFadeOutMs} onChange={event => setNewFadeOutMs(Math.min(60000, Math.max(0, Math.trunc(Number(event.target.value) || 0))))} className="w-20 rounded border border-md-outline bg-md-surface-container-lowest px-2 py-1" /> ms</label>}
+              </fieldset>
+
               <div className="flex justify-end gap-2 pt-2 border-t border-md-outline-variant">
                 <button
                   type="button"
-                  onClick={() => setIsNewModalOpen(false)}
+                  onClick={closeNewModal}
                   className="h-8 px-4 rounded-md-full border border-md-outline text-xs text-md-on-surface hover:bg-md-surface-container-high cursor-pointer"
                 >
                   取消

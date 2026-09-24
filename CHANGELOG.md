@@ -1,5 +1,8 @@
 ## 0.1.0-alpha.4 candidate — WinUI desktop productization (unreleased)
 
+- Alpha breaking cleanup：移除 Effect Studio 的 `event.*` 持续布尔脉冲与 `event_sequence.*` 旧视图。旧 `gsi_get_boolean(event.*)` / `orch_event_triggered` 工作区加载时给出迁移诊断；请改用 Automation v2 事件规则。Automation occurrence、近期事件诊断和旧插件 one-shot Host compatibility envelope 保留。
+- 光效新建与编辑均显式显示持续/单次生命周期及序列结束后淡出；Automation 选择光效时显示实际发布生命周期或兼容播放摘要。常用 GSI 字段和离散事件提供中文分类、说明及 canonical key 保留。`event.ace` 明确为本回合击杀数达到五次的推定。
+
 - WinUI is the default x64 ZIP entrypoint, with self-contained desktop dependencies, verified runtime payloads and VERSION-derived metadata.
 - Separate core/Studio readiness, private owned-daemon shutdown, external-daemon attachment without shutdown authority, explicit dev/portable layouts.
 - Native Game Integration manages CS2 cfg installation and displays real GSI/daemon-backed simulation; Automation authoring stays in Studio.

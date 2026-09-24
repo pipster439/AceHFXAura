@@ -46,9 +46,13 @@ def product_version(path):
 
 def verify_package(directory):
     directory = Path(directory)
-    for name in ("Aura.exe", "Aura.dll", "Aura.deps.json", "Aura.runtimeconfig.json", "Aura.pri", "App.xbf", "MainWindow.xbf", "Pages/GameIntegrationPage.xbf", "Pages/StudioPage.xbf", "Assets/AppIcon.ico", "coreclr.dll", "Microsoft.UI.Xaml.dll"):
+    for name in ("Aura.exe", "Aura.dll", "Aura.deps.json", "Aura.runtimeconfig.json", "Aura.pri", "App.xbf", "MainWindow.xbf", "Pages/GameIntegrationPage.xbf", "Pages/SettingsPage.xbf", "Pages/StudioPage.xbf", "Assets/AppIcon.ico", "coreclr.dll", "Microsoft.UI.Xaml.dll", "CommunityToolkit.WinUI.Controls.SettingsControls.dll"):
         if not (directory / name).is_file():
             raise RuntimeError(f"Incomplete self-contained WinUI output: {name}")
+    dependencies = json.loads((directory / "Aura.deps.json").read_text(encoding="utf-8"))
+    if not any(name.startswith("CommunityToolkit.WinUI.Controls.SettingsControls/")
+               for name in dependencies.get("libraries", {})):
+        raise RuntimeError("SettingsControls dependency missing from package manifest")
     payload = directory / "runtime-payload"
     manifest = json.loads((payload / "runtime-manifest.json").read_text(encoding="utf-8"))
     if manifest["schema_version"] != 1:

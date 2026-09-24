@@ -9,6 +9,7 @@ namespace Aura_WinUI.Pages;
 public sealed partial class StudioPage : Page
 {
     private static StudioPage? _host;
+    private static bool _openAutomation;
     private bool _initialized, _initializing, _closed, _active, _checking;
     private string? _lastTheme;
     private readonly DispatcherTimer _retry = new() { Interval = TimeSpan.FromSeconds(3) };
@@ -22,6 +23,16 @@ public sealed partial class StudioPage : Page
         ActualThemeChanged += ThemeChanged;
         _retry.Tick += (_, _) => { if (!_initialized) _ = InitializeStudioAsync(); else _ = RefreshAvailabilityAsync(); };
     }
+    public static void OpenAutomation()
+    {
+        _openAutomation = true;
+        if (_host?._initialized == true && _host.StudioWebView.CoreWebView2 != null &&
+            _host.StudioWebView.Visibility == Visibility.Visible)
+        {
+            _host.StudioWebView.CoreWebView2.PostWebMessageAsJson("{\"type\":\"open_automation\"}");
+            _openAutomation = false;
+        }
+    }
     private async Task RefreshAvailabilityAsync()
     {
         if (_checking || !_active || _closed) return;
@@ -31,7 +42,7 @@ public sealed partial class StudioPage : Page
             await DaemonSupervisor.Instance.RefreshAsync();
             var ready = await DaemonSupervisor.Instance.ProbeWebServerAsync();
             if (!_active || _closed) return;
-            StudioInfoBar.Title = DaemonSupervisor.Instance.WebSuppressed ? "Studio Web 服务已被免打扰规则暂停" : "Studio Web 服务暂不可用";
+            StudioInfoBar.Title = DaemonSupervisor.Instance.WebSuppressed ? "工作室网页服务已被免打扰规则暂停" : "工作室网页服务暂不可用";
             StudioInfoBar.Message = "编辑器草稿保留；服务恢复后可继续保存。核心与 GSI 状态请查看原生页面。";
             StudioInfoBar.IsOpen = !ready;
         }
@@ -63,8 +74,8 @@ public sealed partial class StudioPage : Page
             if (_closed || !_active) return;
             if (!ready)
             {
-                ShowError(DaemonSupervisor.Instance.WebSuppressed ? "Studio Web 服务已被免打扰规则暂停；核心与 GSI 可继续运行。" :
-                    "Studio Web 服务尚未就绪。请检查核心状态；页面会自动重试。");
+                ShowError(DaemonSupervisor.Instance.WebSuppressed ? "工作室网页服务已被免打扰规则暂停；核心与 GSI 可继续运行。" :
+                    "工作室网页服务尚未就绪。请检查核心状态；页面会自动重试。");
                 return;
             }
             await StudioWebView.EnsureCoreWebView2Async();
@@ -79,11 +90,12 @@ public sealed partial class StudioPage : Page
             StudioWebView.NavigationCompleted += NavigationCompleted;
             StudioWebView.CoreWebView2.NavigationStarting -= NavigationStarting;
             StudioWebView.CoreWebView2.NavigationStarting += NavigationStarting;
-            StudioWebView.Source = EmbeddedStudioNavigation.InitialUrl("studio", CurrentTheme);
+            StudioWebView.Source = EmbeddedStudioNavigation.InitialUrl(_openAutomation ? "automation" : "studio", CurrentTheme);
+            _openAutomation = false;
             _lastTheme = null;
             _initialized = true;
         }
-        catch (Exception ex) { if (!_closed && _active) ShowError("Studio 初始化失败：" + ex.Message + "。请确认 Microsoft WebView2 Runtime 已安装。"); }
+        catch (Exception ex) { if (!_closed && _active) ShowError("工作室初始化失败：" + ex.Message + "。请确认 Microsoft WebView2 运行时已安装。"); }
         finally { _initializing = false; }
     }
     private void NavigationStarting(CoreWebView2 sender, CoreWebView2NavigationStartingEventArgs args)
@@ -94,8 +106,12 @@ public sealed partial class StudioPage : Page
     private void NavigationCompleted(WebView2 sender, CoreWebView2NavigationCompletedEventArgs args)
     {
         if (_closed) return; // A retained page can finish navigation while another native page is visible.
-        if (args.IsSuccess) { LoadingPanel.Visibility = Visibility.Collapsed; StudioWebView.Visibility = Visibility.Visible; SyncTheme(true); }
-        else { _initialized = false; ShowError("Studio 加载失败：" + args.WebErrorStatus); }
+        if (args.IsSuccess)
+        {
+            LoadingPanel.Visibility = Visibility.Collapsed; StudioWebView.Visibility = Visibility.Visible; SyncTheme(true);
+            if (_openAutomation) OpenAutomation();
+        }
+        else { _initialized = false; ShowError("工作室加载失败：" + args.WebErrorStatus); }
     }
     private void ShowError(string message)
     {

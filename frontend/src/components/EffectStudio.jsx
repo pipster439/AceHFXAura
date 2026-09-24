@@ -1,7 +1,7 @@
 import { normalizePublication } from '../blockly/publication.js';
 import { stageEffect, effectConfig, getEffectLifecycleStatus, fetchPublishReadiness } from '../utils/applyEffect.js';
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
-import Blockly, { loadSafeWorkspaceJson } from '../blockly/index.js';
+import Blockly, { loadSafeWorkspaceJson, assertNoLegacyEventPulse } from '../blockly/index.js';
 import { dismissForOverlay } from '../blockly/dismissForOverlay.js';
 import { registerCustomBlocks } from '../blockly/customBlocks';
 import { DEFAULT_INJECT_OPTIONS } from '../blockly/theme';
@@ -50,11 +50,14 @@ export default function EffectStudio({
   const [cppCode, setCppCode] = useState('');
   const [isCodeModalOpen, setIsCodeModalOpen] = useState(false);
   const [showCompactControls, setShowCompactControls] = useState(false);
+  const [showLifecycleControls, setShowLifecycleControls] = useState(false);
   const [isCompiling, setIsCompiling] = useState(false);
   const [compilerLog, setCompilerLog] = useState(null);
   const [compilerSuccess, setCompilerSuccess] = useState(null);
   const [isCopied, setIsCopied] = useState(false);
   const [editError, setEditError] = useState(null);
+  const [legacyWorkspaceError, setLegacyWorkspaceError] = useState(null);
+  const legacyWorkspaceBlockedRef = useRef(false);
   const [publishReadiness, setPublishReadiness] = useState({
     ready: true,
     sdkFound: true,
@@ -110,8 +113,11 @@ export default function EffectStudio({
     // 默认加载第一个样例模板
     const defaultPreset = EFFECT_PRESETS[0];
     if (localDraft?.json) {
-      publicationRef.current = normalizePublication(localDraft.publication); setPublication(publicationRef.current);
-      loadSafeWorkspaceJson(localDraft.json, ws); setEffectName(localDraft.name); effectNameRef.current = localDraft.name;
+      try {
+        assertNoLegacyEventPulse(localDraft.json);
+        publicationRef.current = normalizePublication(localDraft.publication); setPublication(publicationRef.current);
+        loadSafeWorkspaceJson(localDraft.json, ws); setEffectName(localDraft.name); effectNameRef.current = localDraft.name;
+      } catch (err) { legacyWorkspaceBlockedRef.current = true; setLegacyWorkspaceError(err.message); }
     } else if (defaultPreset?.blocklyJson) {
       loadSafeWorkspaceJson(defaultPreset.blocklyJson, ws);
     }
@@ -140,7 +146,7 @@ export default function EffectStudio({
     return () => {
       window.removeEventListener('resize', handleResize);
       observer.disconnect();
-      try { sessionStorage.setItem('aura-effect-draft', JSON.stringify({ name: effectNameRef.current, publication: publicationRef.current, json: Blockly.serialization.workspaces.save(ws) })); } catch {}
+      try { if (!legacyWorkspaceBlockedRef.current) sessionStorage.setItem('aura-effect-draft', JSON.stringify({ name: effectNameRef.current, publication: publicationRef.current, json: Blockly.serialization.workspaces.save(ws) })); } catch {}
       ws.dispose();
       workspaceRef.current = null;
     };
@@ -153,7 +159,11 @@ export default function EffectStudio({
       publicationRef.current = normalizePublication(effectData?.publication); setPublication(publicationRef.current);
       workspaceRef.current.clear();
       if (effectData?.blockly_json) {
-        loadSafeWorkspaceJson(effectData.blockly_json, workspaceRef.current);
+        try { loadSafeWorkspaceJson(effectData.blockly_json, workspaceRef.current); legacyWorkspaceBlockedRef.current = false; setLegacyWorkspaceError(null); }
+        catch (err) { legacyWorkspaceBlockedRef.current = true; setLegacyWorkspaceError(err.message); }
+      } else {
+        legacyWorkspaceBlockedRef.current = false;
+        setLegacyWorkspaceError(null);
       }
       setEffectName(activeEffectName);
       effectNameRef.current = activeEffectName;
@@ -240,6 +250,8 @@ export default function EffectStudio({
     if (!workspaceRef.current || !preset.blocklyJson) return;
     workspaceRef.current.clear();
     loadSafeWorkspaceJson(preset.blocklyJson, workspaceRef.current);
+    legacyWorkspaceBlockedRef.current = false;
+    setLegacyWorkspaceError(null);
     updateEffectName(preset.id);
     showToast?.(`已加载预设: ${preset.name}`, 'info');
   };
@@ -270,6 +282,7 @@ export default function EffectStudio({
 
   const saveWorkspace = async (apply) => {
     if (!workspaceRef.current || !onSaveConfig || isCompiling) return;
+    if (legacyWorkspaceError) { showToast?.(legacyWorkspaceError, 'error'); return; }
     const name = effectName.trim();
     if (!/^[a-zA-Z_][a-zA-Z0-9_]{0,47}$/.test(name)) {
       showToast?.('名称需以字母或下划线开头，最多 48 个字符', 'error'); return;
@@ -300,20 +313,25 @@ export default function EffectStudio({
 
   return (
     <div className={`flex flex-col gap-3 p-1 h-full ${embedded ? 'min-h-[320px]' : 'min-h-[560px]'}`}>
-      {embedded && compact && <button type="button" aria-expanded={showCompactControls} onClick={() => setShowCompactControls(!showCompactControls)}
+      <div className="flex shrink-0 flex-wrap items-center gap-2 rounded-md-lg border border-md-primary/40 bg-md-primary-container/30 px-3 py-2 text-xs text-md-on-surface" aria-label="当前光效生命周期">
+        <strong className="font-mono">{effectName}</strong>
+        <span className={`rounded-md-full border px-2 py-0.5 font-semibold ${lifecycle.badgeClass}`}>{lifecycle.label}</span>
+        <button type="button" aria-expanded={showLifecycleControls} onClick={() => setShowLifecycleControls(!showLifecycleControls)} className="rounded-md-full border border-md-primary bg-md-primary-container px-2 py-1 font-bold text-md-on-primary-container">
+          {publication.mode === 'one_shot' ? `单次光效 · 淡出 ${publication.fade_out_ms} ms` : '持续光效'} · 编辑
+        </button>
+        <span className="text-md-on-surface-variant">{publication.mode === 'one_shot' ? 'Blockly 序列结束后淡出并结束' : '持续运行'}</span>
+      </div>
+      {showLifecycleControls && <div className="flex shrink-0 flex-wrap items-center gap-3 rounded-md-lg bg-md-surface-container px-3 py-2 text-xs text-md-on-surface">
+        <label>播放方式 <select aria-label="播放方式" disabled={isCompiling} value={publication.mode} onChange={e => setPublication(normalizePublication({ ...publication, mode: e.target.value }))}>
+          <option value="continuous">持续光效</option><option value="one_shot">单次光效</option>
+        </select></label>
+        {publication.mode === 'one_shot' && <label>序列结束后淡出 <input type="number" min="0" max="60000" disabled={isCompiling} value={publication.fade_out_ms} onChange={e => setPublication(normalizePublication({ ...publication, fade_out_ms: Math.min(60000, Math.max(0, Math.trunc(Number(e.target.value) || 0))) }))} className="w-20" /> ms</label>}
+      </div>}
+      {compact && <button type="button" aria-expanded={showCompactControls} onClick={() => setShowCompactControls(!showCompactControls)}
         className="shrink-0 rounded-md-sm bg-md-surface-container px-3 py-1.5 text-left text-xs font-semibold">
         {showCompactControls ? '收起作品操作' : '作品操作 · 保存与发布'}
       </button>}
-      <div className={embedded && compact ? (showCompactControls ? 'flex max-h-[45%] shrink-0 flex-col gap-3 overflow-y-auto' : 'hidden') : 'contents'}>
-      <div className="flex items-center gap-3">
-        <label>发布方式 <select aria-label="发布方式" disabled={isCompiling} value={publication.mode}
-          onChange={e => setPublication(normalizePublication({ ...publication, mode: e.target.value }))}>
-          <option value="continuous">持续循环</option><option value="one_shot">单次播放</option>
-        </select></label>
-        {publication.mode === 'one_shot' && <label>序列结束后淡出（毫秒） <input type="number" min="0" max="60000"
-          disabled={isCompiling} value={publication.fade_out_ms}
-          onChange={e => setPublication({ ...publication, fade_out_ms: Math.min(60000, Math.max(0, Math.trunc(Number(e.target.value) || 0))) })} /></label>}
-      </div>
+      <div className={compact ? (showCompactControls ? 'flex max-h-[45%] shrink-0 flex-col gap-3 overflow-y-auto' : 'hidden') : 'contents'}>
       {/* 顶部控制栏 (MD3E Top App Bar) */}
       <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-md-surface-container-low border border-md-outline-variant rounded-md-lg shadow-md-level1">
         <div className="flex items-center gap-3">
@@ -352,9 +370,6 @@ export default function EffectStudio({
                 </span>
               )}
             </div>
-            <span className="text-[11px] text-md-on-surface-variant">
-              保存草稿仅保存源码；发布后即转译并加载至硬件生效
-            </span>
           </div>
         </div>
 
@@ -398,7 +413,7 @@ export default function EffectStudio({
 
           <button
             onClick={handleSaveToConfig}
-            disabled={isCompiling}
+            disabled={isCompiling || !!legacyWorkspaceError}
             className="h-9 px-3.5 flex items-center gap-1.5 rounded-md-full bg-md-surface-container border border-md-outline-variant text-md-on-surface hover:bg-md-surface-container-high active:scale-95 transition-all text-xs font-semibold cursor-pointer disabled:opacity-50"
             title="保存当前积木草稿，保持正在运行的硬件版本不变"
           >
@@ -408,7 +423,7 @@ export default function EffectStudio({
 
           <button
             onClick={handleCompileAndReload}
-            disabled={isCompiling || !!editError}
+            disabled={isCompiling || !!editError || !!legacyWorkspaceError}
             className="h-9 px-4 flex items-center gap-2 rounded-md-full bg-md-primary text-md-on-primary hover:bg-md-primary/90 active:scale-95 transition-all text-xs font-bold shadow-md-level1 cursor-pointer disabled:opacity-50"
             title={
               publishReadiness.loaded && !publishReadiness.ready
@@ -425,15 +440,13 @@ export default function EffectStudio({
       </div>
 
       {/* 实时模拟与 GSI 传感器控制条 (供无游戏启动状态下调试积木) */}
-      <div className="flex flex-wrap items-center justify-between gap-4 px-4 py-2 bg-md-surface-container-lowest border border-md-outline-variant rounded-md-md text-xs">
-        <div className="flex items-center gap-2 text-md-on-surface-variant font-medium">
-          <Sliders className="w-4 h-4 text-md-secondary" />
-          <span>Effect Preview：本地输入（不测试 Automation）</span>
-        </div>
+      <details className="shrink-0 rounded-md-md bg-md-surface-container-lowest border border-md-outline-variant text-xs">
+        <summary className="cursor-pointer px-3 py-2 font-medium">光效预览 · 本地模拟输入</summary>
+        <div className="flex flex-wrap items-center justify-between gap-4 px-4 py-2">
 
         <div className="flex items-center gap-3">
           <label className="flex items-center gap-2">
-            <span className="text-md-on-surface-variant">血量 (Health):</span>
+            <span className="text-md-on-surface-variant">血量：</span>
             <input
               type="range"
               min="0"
@@ -454,9 +467,9 @@ export default function EffectStudio({
               onChange={(e) => setSimBomb(e.target.value)}
               className="h-7 px-2 bg-md-surface-container border border-md-outline rounded-md-xs text-xs text-md-on-surface font-medium outline-none"
             >
-              <option value="carried">随身携带 (carried)</option>
-              <option value="planted">已安放 (planted)</option>
-              <option value="defused">已拆除 (defused)</option>
+              <option value="carried">随身携带</option>
+              <option value="planted">已安放</option>
+              <option value="defused">已拆除</option>
             </select>
           </label>
 
@@ -480,7 +493,7 @@ export default function EffectStudio({
                 key={idx}
                 className="w-1.5 h-3 rounded-[1px] transition-colors duration-75"
                 style={{ backgroundColor: `rgb(${c[0]}, ${c[1]}, ${c[2]})` }}
-                title={`Key ${idx}: rgb(${c[0]}, ${c[1]}, ${c[2]})`}
+                title={`按键 ${idx}: RGB(${c[0]}, ${c[1]}, ${c[2]})`}
               />
             ))}
             <span className="text-[10px] text-md-on-surface-variant ml-1 font-mono">...68K</span>
@@ -488,7 +501,8 @@ export default function EffectStudio({
         </div>
       </div>
 
-      {editError && <p role="alert" className="text-sm text-md-error">{editError}</p>}
+      </details>
+      {(legacyWorkspaceError || editError) && <p role="alert" className="text-sm text-md-error">{legacyWorkspaceError || editError}</p>}
       </div>
       {/* Google Blockly 主画布 */}
       <div className="flex-1 min-h-[240px] w-full relative rounded-md-lg overflow-hidden border border-md-outline-variant shadow-md-level1 bg-md-surface-container-low">

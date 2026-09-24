@@ -77,7 +77,35 @@ void Crud(Harness& h) {
 void AtomicAndCatalog(Harness& h) {
     h.Write(Config());
     const auto before=h.Raw();
-    Check(h.Call("effects").body["effects"].size()==2 && h.Raw()==before,"catalog is read-only projection");
+    const auto catalog=h.Call("effects").body["effects"];
+    Check(catalog.size()==2 && h.Raw()==before,"catalog is read-only projection");
+    Check(catalog[0]["lifecycle"]["kind"]=="legacy_envelope" && catalog[1]["lifecycle"]["kind"]=="legacy_envelope",
+          "profiles without native lifecycle expose compatibility envelope");
+    const auto caps=h.service.AuthoringCapabilities();
+    Check(caps["event_positive_witness_required"]==true,"event rules retain positive occurrence witness");
+    Check(caps["event_metadata"].size()==caps["events"].size(),"every canonical event has authoring metadata");
+    bool ace=false,kill=false;
+    for (const auto& event:caps["event_metadata"]) {
+        if (event["id"]=="event.ace") ace=event["label"].get<std::string>().find("推定")!=std::string::npos && event["description"].get<std::string>().find("不是 CS2")!=std::string::npos;
+        if (event["id"]=="event.kill") kill=event["label"]=="击杀" && event["category"]=="战斗";
+    }
+    Check(ace && kill,"Chinese event labels and inferred ACE disclosure");
+    bool health=false,process=false,phase=false;
+    const Json numeric_operators={"==","!=","<","<=",">",">="};
+    const Json boolean_operators={"==","!="};
+    const Json string_operators={"==","!=","contains"};
+    for (const auto& field:caps["field_metadata"]) {
+        if (field["key"]=="player.state.health") health=field["type"]=="number";
+        const auto& operators=field.at("operators");
+        Check(operators.is_array() && !operators.empty(),"every curated field declares operators");
+        if (field["key"]=="process.name") process=operators==boolean_operators;
+        else if (field["type"]=="number") Check(operators==numeric_operators,"numeric field operator contract");
+        else if (field["type"]=="bool") Check(operators==boolean_operators,"boolean field operator contract");
+        else if (field["type"]=="string") Check(operators==string_operators,"string field operator contract");
+        else Check(false,"curated field has a supported type");
+        if (field["key"]=="round.phase") phase=field["values"]["freezetime"]=="冻结时间";
+    }
+    Check(health && process && phase,"field metadata retains canonical keys and typed values");
     h.service.SetFileReplacerForTesting([](const fs::path&,const fs::path&){return false;});
     Check(h.Call("replace",{{"rules",Json::array({Rule("replacement")})}}).http_status==500 && h.Raw()==before,"failed transaction retains whole prior config");
     h.service.SetFileReplacerForTesting({});

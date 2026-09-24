@@ -66,8 +66,15 @@ struct AutomationDecision {
     bool admitted{false}; // one_shot only; while_true uses eligibility
     uint64_t source_epoch{0}, packet_sequence{0};
     size_t rule_order{0};
+    uint64_t admitted_at_ms{0}; // diagnostic clock; not used for evaluation
+    bool kill_related{false}; // diagnostic: event condition mentions event.kill
 };
 struct AutomationEvaluation {
+    struct KillLatencyObservation {
+        uint64_t source_epoch{0}, packet_sequence{0};
+        uint64_t received_at_ms{0}, detected_at_ms{0};
+    };
+    std::vector<KillLatencyObservation> kill_latency_observations;
     uint64_t config_generation{0};
     std::string foreground_process;
     std::shared_ptr<const Profile> profile;

@@ -290,6 +290,11 @@ AutomationEvaluation RuleEngine::EvaluateAutomation(GsiState& gsi,
         batches.push_back(capture(b->telemetry, b->occurrences));
     const auto current = capture(input.latest);
     auto out = EvaluateProfilesLocked(current);
+    for (const auto& b : input.batches) {
+        if (b->detected_at_ms && b->telemetry)
+            out.kill_latency_observations.push_back({b->telemetry->source_epoch,
+                b->telemetry->packet_sequence, b->telemetry->received_at_ms, b->detected_at_ms});
+    }
     out.foreground_process = current.foreground_process;
     out.automation_fresh = current.automation_fresh;
     if (current.telemetry) out.telemetry_age_ms = current.telemetry_age_ms;
@@ -331,6 +336,12 @@ AutomationEvaluation RuleEngine::EvaluateAutomation(GsiState& gsi,
     for (const auto& p : plan_) {
         const auto& r = p.automation;
         if (r.action.at("type") == "activate_profile") continue; // already evaluated once in arbitration
+        const auto contains_kill = [&](const auto& self, const ConditionNode& node) -> bool {
+            if (node.event == "event.kill") return true;
+            for (const auto& child : node.children) if (self(self, child)) return true;
+            return false;
+        };
+        const bool kill_related = r.mode == "event" && contains_kill(contains_kill, r.condition);
         if (r.mode == "state") {
             const auto truth = EvaluateRule(r, current).value.truth;
             out.decisions.push_back({r.id, r.action, truth, false, current.source_epoch, current.packet_sequence, p.config_order});
@@ -352,7 +363,8 @@ AutomationEvaluation RuleEngine::EvaluateAutomation(GsiState& gsi,
             if (r.mode == "rising") admitted = mem.previous == ConditionTruth::False && value.truth == ConditionTruth::True;
             if (r.mode == "event") admitted = !seed && scoped && mem.in_scope && !gap &&
                 s.automation_fresh && value.truth == ConditionTruth::True && value.positive_occurrence;
-            if (admitted) out.decisions.push_back({r.id, r.action, value.truth, true, s.source_epoch, s.packet_sequence, p.config_order});
+            if (admitted) out.decisions.push_back({r.id, r.action, value.truth, true, s.source_epoch, s.packet_sequence, p.config_order,
+                admitted_at_ms ? now : AutomationMonotonicMs(), kill_related});
             mem.previous = value.truth; mem.in_scope = scoped;
             mem.receipt = s.received_at_ms; mem.epoch = s.source_epoch; mem.sequence = s.packet_sequence;
         };

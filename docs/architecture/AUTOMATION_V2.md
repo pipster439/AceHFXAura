@@ -6,6 +6,14 @@ Stages 0–6 and the immutable admission snapshot / safe generation retirement f
 
 Rules tagged `model: automation_v2` share state / rising / event conditions. State supports Activate Profile or continuous Trigger Effect (`while_true`); rising/event support one-shot Trigger Effect. Event/rising profile latching is not implemented. Profile arbitration retains first-match precedence, while effect rules are evaluated independently.
 
+Effect Studio owns the animation sequence and its continuous/one-shot publication lifecycle. Automation owns trigger timing, conditions and event occurrences. Studio one-shot playback ends when its Blockly sequence reaches the terminal state, then fades over `publication.fade_out_ms`; no fixed playback duration is authored in Automation. Draft publication changes do not alter the applied plugin until a successful publish. The editor shows the draft lifecycle even in compact/embedded layout, while the Automation effect catalog describes the applied publication or the plugin's actual lifecycle capability.
+
+`event.kill`, `event.headshot`, `event.ace` and the other canonical event IDs are discrete detector occurrences: one observed transition produces one occurrence, never an N-millisecond Boolean pulse. The detector infers `event.ace` when the current player's round kill count first reaches five; CS2 does not send a separate ACE event. Capabilities expose Chinese event labels/categories/descriptions while JSON retains canonical IDs. A positive occurrence witness in event-mode WHEN remains mandatory.
+
+Authoring capabilities also expose a typed common-field catalog with Chinese names, descriptions, operators and known enum values. Blockly offers a common-field selector and a custom-field input. Known fields restore to the selector; unknown telemetry keys remain custom and round-trip unchanged. `process.name` only supports `==` and `!=`. The backend parser remains authoritative for all field/value validation.
+
+Older Effect Studio workspaces containing `gsi_get_boolean(event.*)` or `orch_event_triggered` are rejected with an explicit migration message before Blockly can substitute a different dropdown value. Use an Automation event rule instead. True state booleans such as `player.state.helmet` and `player.state.defusekit` remain readable by Effects. `event.last_event`, `event.last_label` and the recent-event history remain diagnostics. The host compatibility envelope for older plugins without native lifecycle callbacks remains supported for one-shot Automation actions (about 1200 ms with about 400 ms fade); it is independent of the removed event pulse view.
+
 
 ## Runtime and retrigger
 
@@ -25,7 +33,7 @@ New GSI decisions default to `automation_freshness_ms = 3000`, separate from the
 
 ## Evidence and ownership
 
-The native CTest suites exercise production evaluation, authoring, lifecycle, ABI, composition, retrigger and reconciliation. Python integration starts real dry-run daemons and tests publication/configuration transactions with MSVC. See [testing](../testing/TESTING.md) and [manual acceptance](../testing/MANUAL_TESTS.md). WinUI is the desktop client; Web Studio and its local service remain required. Public launcher packaging does not include WinUI.
+The native CTest suites exercise production evaluation, authoring, lifecycle, ABI, composition, retrigger and reconciliation. Python integration starts real dry-run daemons and tests publication/configuration transactions with MSVC. See [testing](../testing/TESTING.md) and [manual acceptance](../testing/MANUAL_TESTS.md). WinUI is the alpha.4 desktop entry point; Web Studio and its local service remain required. Packaging and manual acceptance are separate release gates.
 
 ## V2-only configuration and authoring
 

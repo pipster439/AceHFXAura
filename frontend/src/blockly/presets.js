@@ -5,7 +5,7 @@
 export const EFFECT_PRESETS = [
   {
     id: 'template_smooth_breath',
-    name: '双色平滑呼吸 (Breath)',
+    name: '双色平滑呼吸',
     description: '独立光效：全键盘在青色与紫红之间平滑呼吸往复循环（不依赖游戏）',
     blocklyJson: {
       languageVersion: 0,
@@ -52,7 +52,7 @@ export const EFFECT_PRESETS = [
   },
   {
     id: 'template_low_health_warning',
-    name: 'CS2 低血量警戒 (Health Warning)',
+    name: 'CS2 低血量警戒',
     description: '血量正常时全盘深海蓝，血量低于 25 时转为急促红黑呼吸闪烁',
     blocklyJson: {
       languageVersion: 0,
@@ -135,7 +135,7 @@ export const EFFECT_PRESETS = [
   },
   {
     id: 'kill_wave',
-    name: '击杀金色波纹 (Kill Wave)',
+    name: '击杀金色波纹',
     description: '以空格为中心向外迅速扩散的金色冲击波，用于击杀事件叠加',
     blocklyJson: {
       languageVersion: 0,
@@ -237,7 +237,7 @@ out_frame.Fill(r, g, 0);`,
   },
   {
     id: 'rainbow_radial_wave',
-    name: '极光径向波浪 (Rainbow Radial)',
+    name: '极光径向波浪',
     description: '以键盘中心为圆心扩散的彩虹涟漪环',
     blocklyJson: {
       languageVersion: 0,

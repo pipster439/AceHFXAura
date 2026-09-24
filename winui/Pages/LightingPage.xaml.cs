@@ -41,7 +41,13 @@ public sealed partial class LightingPage : Page
         InitializeComponent();
         PageLayout.Attach(this, LightingContent, PageContent, width => {
             _contentWidth = width;
-            PageLayout.Columns(LightingStatusGrid, width >= 1000 ? 3 : width >= 600 ? 2 : 1);
+            var wide = width >= 1300;
+            LightingOverview.ColumnDefinitions[1].Width = wide ? new GridLength(0.44, GridUnitType.Star) : new GridLength(0);
+            Grid.SetColumn(LightingStatusCard, wide ? 1 : 0);
+            Grid.SetRow(LightingStatusCard, 0);
+            Grid.SetColumn(GlobalFpsCard, 0);
+            Grid.SetRow(GlobalFpsCard, wide ? 0 : 1);
+            PageLayout.Columns(LightingStatusGrid, wide ? 2 : width >= 1000 ? 3 : width >= 600 ? 2 : 1);
             foreach (var row in _parameterRows) ArrangeParameter(row);
         });
         PageLayout.Notification(this, StatusInfoBar);
@@ -137,7 +143,7 @@ public sealed partial class LightingPage : Page
             {
                 ActiveProfileText.Text = "守护进程未连接";
                 ActiveFpsText.Text = "--";
-                ActiveBackendText.Text = "Offline";
+                ActiveBackendText.Text = "离线";
                 if (StatusMismatchInfoBar != null)
                 {
                     StatusMismatchInfoBar.IsOpen = false;
@@ -234,12 +240,12 @@ public sealed partial class LightingPage : Page
             }
             if (SelectedPresetText != null)
             {
-                SelectedPresetText.Text = $"{_cleanLighting.Effect} (由 Studio 管理的高级效果)";
+                SelectedPresetText.Text = $"{_cleanLighting.Effect}（由工作室管理的高级效果）";
             }
             if (AdvancedEffectBanner != null)
             {
                 AdvancedEffectBanner.IsOpen = true;
-                AdvancedEffectBanner.Message = $"当前默认方案 [{_cleanLighting.Effect}] 包含逐键自定义或插件逻辑，由 Studio 管理。您可在此选择下方任一内建预设替换默认灯效，或打开 Studio 进行逐键编排。";
+                AdvancedEffectBanner.Message = $"当前默认方案 [{_cleanLighting.Effect}] 包含逐键自定义或插件逻辑，由工作室管理。您可在此选择下方任一内建预设替换默认灯效，或打开工作室进行逐键编排。";
             }
             if (PeriodPanel != null)
             {

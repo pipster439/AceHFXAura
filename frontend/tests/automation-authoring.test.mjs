@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import Blockly from '../src/blockly/index.js';
-import {registerAutomationBlocks,automationWorkspace,serializeAutomation,installAutomationIdentityGuard} from '../src/blockly/automationV2.js';
+import {registerAutomationBlocks,automationWorkspace,serializeAutomation,installAutomationIdentityGuard,lifecycleSummary} from '../src/blockly/automationV2.js';
 import {automationRequest,sparsePatch} from '../src/utils/automationAuthoring.js';
 import {renameEffectInConfig} from '../src/utils/applyEffect.js';
 const catalog=[{label:'base',reference:{kind:'profile_effect',name:'base'},available:true},{label:'published',reference:{kind:'plugin',name:'published'},available:true},{label:'draft',reference:{kind:'plugin',name:'draft'},available:false}];
@@ -86,4 +86,71 @@ test('serializer rejects duplicate stable IDs instead of silently rewriting them
   Blockly.serialization.workspaces.load(automationWorkspace([rule('event'),rule('event')]),w);
   assert.throws(()=>serializeAutomation(w,catalog),/规则 ID 重复/);
  }finally{w.dispose();}
+});
+
+test('common fields restore to friendly selector while unknown fields preserve their canonical values',async()=>{
+ const fields=[
+  {key:'process.name',label:'前台程序',category:'系统',description:'前台可执行文件',type:'string',operators:['==','!=']},
+  {key:'player.state.health',label:'生命值',category:'玩家',description:'生命值',type:'number',operators:['==','!=','<','<=','>','>=']},
+  {key:'player.state.helmet',label:'头盔',category:'玩家',description:'是否有头盔',type:'bool',operators:['==','!=']},
+  {key:'round.phase',label:'回合阶段',category:'回合',description:'阶段',type:'string',operators:['==','!=','contains'],values:{freezetime:'冻结时间',live:'回合进行中',over:'回合结束'}}
+ ];
+ registerAutomationBlocks(Blockly,catalog,['base'],[{id:'event.kill',label:'击杀',category:'战斗',description:'发生一次'}],fields);
+ const rules=['player.state.health','process.name','player.state.helmet','round.phase','custom.dynamic.leaf'].map((key,i)=>{
+  const r=rule('state');r.id=`field-${i}`;r.when.condition={field:key,op:key==='player.state.health'?'<':key==='round.phase'?'contains':'==',value:[20,'cs2.exe',true,'live','任意值'][i]};return r;
+ });
+ const w=new Blockly.Workspace();
+ try {
+  Blockly.serialization.workspaces.load(automationWorkspace(rules,fields),w);
+  assert.equal(w.getBlocksByType('av2_common_compare',false).length,4);
+  assert.equal(w.getBlocksByType('av2_compare',false).length,1);
+  const restored=serializeAutomation(w,catalog,fields);
+  assert.deepEqual(restored.map(r=>r.when.condition),rules.map(r=>r.when.condition));
+  const process=w.getBlocksByType('av2_common_compare',false).find(b=>b.getFieldValue('FIELD')==='process.name');
+  assert.deepEqual(process.getField('OP').getOptions().map(([,op])=>op),['==','!=']);
+  process.getField('OP').setValue('<');
+  assert.equal(process.getFieldValue('OP'),'==');
+  const health=w.getBlocksByType('av2_common_compare',false).find(b=>b.getFieldValue('FIELD')==='player.state.health');
+  assert.deepEqual(health.getField('OP').getOptions().map(([,op])=>op),['==','!=','<','<=','>','>=']);
+  assert.equal(health.getFieldValue('OP'),'<');
+  health.setFieldValue('player.state.helmet','FIELD');
+  await new Promise(resolve=>setTimeout(resolve,0));
+  assert.deepEqual(health.getField('OP').getOptions().map(([,op])=>op),['==','!=']);
+  assert.equal(health.getFieldValue('OP'),'==');
+  health.setFieldValue('round.phase','FIELD');
+  await new Promise(resolve=>setTimeout(resolve,0));
+  health.setFieldValue('contains','OP');
+  assert.equal(health.getFieldValue('OP'),'contains');
+  assert.deepEqual(health.getField('OP').getOptions().map(([,op])=>op),['==','!=','contains']);
+  health.setFieldValue('player.state.health','FIELD');
+  await new Promise(resolve=>setTimeout(resolve,0));
+  assert.equal(health.getFieldValue('OP'),'==');
+  assert.deepEqual(health.getField('OP').getOptions().map(([,op])=>op),['==','!=','<','<=','>','>=']);
+  const custom=w.getBlocksByType('av2_compare',false)[0];
+  assert.equal(custom.getFieldValue('FIELD'),'custom.dynamic.leaf');
+  assert.deepEqual(custom.getField('OP').getOptions().map(([,op])=>op),['==','!=','<','<=','>','>=','contains']);
+  health.setFieldValue('abc','VALUE');
+  assert.throws(()=>serializeAutomation(w,catalog,fields),/需要数值/);
+ } finally {w.dispose();}
+});
+
+test('event labels and lifecycle summaries never change canonical action/event data',()=>{
+ const once={...catalog[0],lifecycle:{kind:'studio_publication',publication:{mode:'one_shot',fade_out_ms:300}}};
+ const continuous={...catalog[0],lifecycle:{kind:'studio_publication',publication:{mode:'continuous',fade_out_ms:0}}};
+ const native={...catalog[0],lifecycle:{kind:'lifecycle_capable'}};
+ assert.match(lifecycleSummary(once),/单次光效.*300 ms/);
+ assert.equal(lifecycleSummary(continuous),'持续光效');
+ assert.match(lifecycleSummary(native),/原生生命周期/);
+ assert.match(lifecycleSummary(catalog[0]),/1200 ms.*400 ms/);
+ assert.match(lifecycleSummary(catalog[0]),/主机兼容生命周期/);
+ assert.doesNotMatch(lifecycleSummary(catalog[0]),/Host compatibility envelope/);
+ const r=rule('event');
+ const w=new Blockly.Workspace();
+ try {
+  Blockly.serialization.workspaces.load(automationWorkspace([r]),w);
+  const event=w.getBlocksByType('av2_event',false)[0];
+  assert.equal(event.getFieldValue('EVENT'),'event.kill');
+  assert.ok(event.getField('EVENT').getOptions().some(([label,id])=>label==='战斗 · 击杀' && id==='event.kill'));
+  assert.equal(serializeAutomation(w,catalog)[0].when.condition.event,'event.kill');
+ } finally {w.dispose();}
 });

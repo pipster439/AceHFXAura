@@ -32,9 +32,15 @@ public sealed class DaemonSupervisor : IDaemonSupervisor
     public bool StudioWebReady => IsWebServerReady;
     public bool WebSuppressed { get; private set; }
     public string StatusDescription { get; private set; } = "未初始化";
+    public string ConfigStatusDescription { get; private set; } = "尚未取得配置状态";
     public string? OwnedRuntimeDirectory { get; private set; }
     public RuntimeIdentityDto? Identity { get; private set; }
     public DaemonOwnership Ownership { get; private set; }
+    public string OwnershipDescription => Ownership switch {
+        DaemonOwnership.SpawnedByWinUI => "由 Aura 启动",
+        DaemonOwnership.AttachedPreExisting => "连接到已有服务",
+        _ => "未连接"
+    };
     public event Action<string>? StatusChanged;
 
     public async Task RefreshAsync(CancellationToken token = default)
@@ -49,6 +55,8 @@ public sealed class DaemonSupervisor : IDaemonSupervisor
         if (_shutdown.IsCancellationRequested) return;
         var previousInstance = Identity?.InstanceId;
         Identity = status.Data?.Identity;
+        ConfigStatusDescription = status.Data == null ? "核心数据不可用" :
+            status.Data.Config.Healthy ? "配置正常" : "配置热重载失败：" + status.Data.Config.LastError;
         IsDaemonRunning = status.IsOnline;
         CoreReady = status.IsOnline && Identity is { Service: "aura_daemon", ProcessId: > 0 } && !string.IsNullOrEmpty(Identity.InstanceId);
         if (CoreReady) _startupFailureDescription = null;
@@ -59,7 +67,7 @@ public sealed class DaemonSupervisor : IDaemonSupervisor
         else if (status.IsOnline) Ownership = DaemonOwnership.AttachedPreExisting;
         else if (_child is null || _child.HasExited) Ownership = DaemonOwnership.None;
         UpdateStatus(CoreReady ? status.Data!.Config.Healthy
-                ? $"核心已就绪 · {Ownership} · {Identity!.ProductVersion}"
+                ? $"核心已就绪 · {OwnershipDescription} · {Identity!.ProductVersion}"
                 : $"配置热重载失败，仍使用先前有效配置：{status.Data.Config.LastError}" :
             status.IsOnline ? "外部核心版本不兼容，仅可查看；请在外部升级后重新连接" : _startupFailureDescription ?? status.ErrorMessage);
     }

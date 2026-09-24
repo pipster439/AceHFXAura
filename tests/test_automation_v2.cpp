@@ -1,6 +1,7 @@
 #include "gsi/gsi_adapter.h"
 #include "config/rule_engine.h"
 #include <filesystem>
+#include <algorithm>
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
@@ -181,6 +182,51 @@ void Events(const std::filesystem::path& dir) {
     // Initial engine sees an existing stream: never replays it.
     Harness startup(dir,Config(json::array({kill})));
     startup.Packet(1,100); startup.Packet(2,100,1); Check(Shots(startup.Tick(2))==0,"startup history discarded");
+}
+void FastCadenceAndHeartbeat(const std::filesystem::path& dir) {
+    auto kill=EffectRule("fast_kill","event",Event("event.kill"));
+    Harness h(dir,Config(json::array({kill})));
+    h.Packet(100,100,0); h.Tick(100);
+    // 1-second unchanged heartbeats keep telemetry inside the default 3000 ms window.
+    for (uint64_t t : {1100ULL,2100ULL,3100ULL}) {
+        h.Packet(t,100,0);
+        auto heartbeat=h.Tick(t);
+        Check(heartbeat.automation_fresh && heartbeat.freshness_threshold_ms==3000,
+            "1-second heartbeat remains fresh");
+        Check(Shots(heartbeat)==0 && heartbeat.kill_latency_observations.empty(),
+            "unchanged heartbeat creates no kill");
+    }
+    // Throttle=0 can send repeated identical snapshots; only the counter edge fires.
+    h.Packet(3110,100,1);
+    auto first=h.Tick(3110);
+    Check(Shots(first,"fast_kill")==1 && first.kill_latency_observations.size()==1,
+        "first kill admitted and traced");
+    Check(std::any_of(first.decisions.begin(),first.decisions.end(),[](const auto& decision) {
+        return decision.admitted && decision.rule_id=="fast_kill" && decision.kill_related && decision.admitted_at_ms==3110;
+    }),"kill admission marker belongs to the detected packet");
+    Check(first.kill_latency_observations[0].received_at_ms==3110 &&
+        first.kill_latency_observations[0].detected_at_ms>0,
+        "trace carries receipt and detector timestamps");
+    for (uint64_t t=3111;t<3121;++t) h.Packet(t,100,1);
+    auto repeats=h.Tick(3121);
+    Check(Shots(repeats)==0 && repeats.kill_latency_observations.empty(),
+        "ten identical unthrottled packets do not duplicate event.kill");
+    Check(h.Tick(6120).automation_fresh,"freshness includes exact 3000 ms boundary");
+    Check(!h.Tick(6121).automation_fresh,"freshness expires after 3000 ms");
+    Harness stats(dir,Config(json::array({kill})));
+    const auto stats_packet=[](int round, int match) {
+        return json{{"player",{{"state",{{"health",100},{"round_kills",round}}},
+            {"match_stats",{{"kills",match}}}}}};
+    };
+    stats.gsi.UpdateFromPayloadAt(stats_packet(0,10),100); stats.Tick(100);
+    stats.gsi.UpdateFromPayloadAt(stats_packet(1,11),200);
+    Check(Shots(stats.Tick(200),"fast_kill")==1,
+        "simultaneous round and match counter increases emit one kill");
+    stats.gsi.UpdateFromPayloadAt(stats_packet(1,12),300);
+    Check(Shots(stats.Tick(300),"fast_kill")==1,
+        "match_stats.kills increment remains the fallback");
+    stats.gsi.UpdateFromPayloadAt(stats_packet(1,12),301);
+    Check(Shots(stats.Tick(301))==0,"identical match stats do not duplicate fallback kill");
 }
 void PacketCoherence(const std::filesystem::path& dir) {
     GsiState concurrent;
@@ -382,7 +428,7 @@ int main() {
     const auto dir=std::filesystem::temp_directory_path()/("aura-v2-conformance-"+std::to_string(GetCurrentProcessId()));
     try {
         std::filesystem::create_directories(dir);
-        StateAndRising(dir); TruthAndSnapshot(dir); CoherentAdmission(dir); Events(dir); PacketCoherence(dir); ValidationAndPrecedence(dir); CandidateValidation(dir); PositiveOccurrenceValidation(dir);
+        StateAndRising(dir); TruthAndSnapshot(dir); CoherentAdmission(dir); Events(dir); FastCadenceAndHeartbeat(dir); PacketCoherence(dir); ValidationAndPrecedence(dir); CandidateValidation(dir); PositiveOccurrenceValidation(dir);
         std::filesystem::remove_all(dir);
         std::cout << "PASS: " << checks << " deterministic Automation v2 assertions\n"; return 0;
     } catch(const std::exception& e) { std::cerr << "FAIL after " << checks << ": " << e.what() << "\n"; return 1; }

@@ -514,6 +514,7 @@ extern "C" {
 
       case 'gsi_get_boolean': {
         const path = target.getFieldValue('PATH') || 'player.state.helmet';
+        if (path.startsWith('event.')) throw new Error('事件触发条件已迁移到自动化工作室，请使用自动化事件规则。');
         const def = this.valueToCpp(target, 'DEFAULT', 'false');
         return `(gsi ? gsi->GetBool("${path}", ${def}) : ${def})`;
       }

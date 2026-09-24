@@ -5,6 +5,7 @@
 #include <memory>
 #include <filesystem>
 #include <limits>
+#include <algorithm>
 #include "test_util.h"
 #include "config/rule_engine.h"
 #include "gsi/gsi_adapter.h"
@@ -28,6 +29,21 @@ int main() {
     // 真实失败计数器。在 Release 构建下普通 assert() 会被 /DNDEBUG 消除，
     // 因此全面使用 CHECK 宏，保证在 Release 与 Debug 下均具有真实校验力。
     int failures = 0;
+
+    // Discovery uses exact bytes, so older cadence files are reported for reinstall.
+    {
+        const auto directory = std::filesystem::temp_directory_path() /
+            ("aura-gsi-cfg-inspection-" + std::to_string(GetCurrentProcessId()));
+        std::filesystem::create_directories(directory);
+        const auto cfg = directory / "gamestate_integration_aura.cfg";
+        const std::string expected = "\"buffer\" \"0.01\"\n\"throttle\" \"0.0\"\n";
+        CHECK(aura::InspectGsiCfg(directory, expected)["template_match"] == "missing", "GSI cfg detection: missing");
+        { std::ofstream out(cfg, std::ios::binary); out << expected; }
+        CHECK(aura::InspectGsiCfg(directory, expected)["template_match"] == "matching", "GSI cfg detection: exact match");
+        { std::ofstream out(cfg, std::ios::binary | std::ios::trunc); out << "\"buffer\" \"0.1\"\n"; }
+        CHECK(aura::InspectGsiCfg(directory, expected)["template_match"] == "different", "GSI cfg detection: old cadence differs");
+        std::filesystem::remove_all(directory);
+    }
 
 
 
@@ -162,8 +178,15 @@ int main() {
         {"round", {{"phase", "freezetime"}}}
     };
     event_state.UpdateFromPayload(s0);
-    CHECK(event_state.GetBool("event.freezetime"),
-          "初始回合整备阶段: event.freezetime 为 true");
+    event_state.DrainAutomationInputs();
+    auto occurrence_count = [&event_state](const std::string& id) {
+        size_t count = 0;
+        for (const auto& batch : event_state.DrainAutomationInputs().batches)
+            count += std::count(batch->occurrences.begin(), batch->occurrences.end(), id);
+        return count;
+    };
+    CHECK(!event_state.GetBool("event.freezetime") && !event_state.GetBool("event.kill"),
+          "event.* 不再暴露持续布尔脉冲");
 
     // 跃迁 1: 回合开始交火 (RoundStarted)
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -171,9 +194,9 @@ int main() {
         {"round", {{"phase", "live"}}}
     };
     event_state.UpdateFromPayload(s1);
-    CHECK(event_state.GetBool("event.round_started") &&
+    CHECK(occurrence_count("event.round_started") == 1 &&
           (std::string(event_state.GetString("event.last_event")) == "RoundStarted"),
-          "回合开局事件: 成功触发 RoundStarted (event.round_started == true)");
+          "回合开局事件: 单次 RoundStarted occurrence 与诊断字段");
 
     // 跃迁 2: 玩家受到伤害 (PlayerTookDamage: 100 -> 68)
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -184,9 +207,9 @@ int main() {
         }}
     };
     event_state.UpdateFromPayload(s2);
-    CHECK(event_state.GetBool("event.damage") &&
+    CHECK(occurrence_count("event.damage") == 1 &&
           (std::string(event_state.GetString("event.last_event")) == "PlayerTookDamage"),
-          "受到伤害事件: 成功触发 PlayerTookDamage (event.damage == true, 剩余生命: 68)");
+          "受到伤害事件: 单次 PlayerTookDamage occurrence");
 
     // 跃迁 3: 玩家获得爆头击杀 (PlayerGotKill & PlayerGotHeadshotKill: kills 0 -> 1, hs 0 -> 1)
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -197,9 +220,19 @@ int main() {
         }}
     };
     event_state.UpdateFromPayload(s3);
-    CHECK(event_state.GetBool("event.kill") &&
-          event_state.GetBool("event.headshot"),
-          "击杀与爆头事件: 成功触发 PlayerGotKill & PlayerGotHeadshotKill");
+    {
+        size_t kills = 0, headshots = 0;
+        for (const auto& batch : event_state.DrainAutomationInputs().batches) {
+            kills += std::count(batch->occurrences.begin(), batch->occurrences.end(), "event.kill");
+            headshots += std::count(batch->occurrences.begin(), batch->occurrences.end(), "event.headshot");
+        }
+        CHECK(kills == 1 && headshots == 1 && !event_state.GetBool("event.kill"),
+              "击杀与爆头各一次 occurrence，且无布尔脉冲");
+    }
+    event_state.UpdateFromPayload({{"player",{{"state",{{"health",68},{"armor",85},{"round_kills",5},{"round_killhs",1}}},{"team","CT"}}}});
+    CHECK(occurrence_count("event.ace") == 1 &&
+          event_state.GetRecentEvents(1)[0].label.find("推定 ACE") != std::string::npos,
+          "ACE occurrence 与诊断文案明确为本回合五杀推定");
 
     // 跃迁 4: C4 炸弹安放 (BombPlanted)
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -207,8 +240,8 @@ int main() {
         {"bomb", {{"state", "planted"}, {"countdown", 40.0}}}
     };
     event_state.UpdateFromPayload(s4);
-    CHECK(event_state.GetBool("event.bomb_planted"),
-          "炸弹安放事件: 成功触发 BombPlanted (event.bomb_planted == true)");
+    CHECK(occurrence_count("event.bomb_planted") == 1,
+          "炸弹安放事件: 单次 BombPlanted occurrence");
 
     // 跃迁 5: C4 拆除成功 (BombDefused)
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -216,8 +249,8 @@ int main() {
         {"bomb", {{"state", "defused"}}}
     };
     event_state.UpdateFromPayload(s5);
-    CHECK(event_state.GetBool("event.bomb_defused"),
-          "炸弹拆除事件: 成功触发 BombDefused (event.bomb_defused == true)");
+    CHECK(occurrence_count("event.bomb_defused") == 1,
+          "炸弹拆除事件: 单次 BombDefused occurrence");
 
     // 跃迁 6: 我方阵营回合获胜 (TeamRoundVictory)
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -225,8 +258,8 @@ int main() {
         {"round", {{"phase", "over"}, {"win_team", "CT"}}}
     };
     event_state.UpdateFromPayload(s6);
-    CHECK(event_state.GetBool("event.round_victory"),
-          "回合胜利事件: 成功触发 TeamRoundVictory (event.round_victory == true)");
+    CHECK(occurrence_count("event.round_victory") == 1,
+          "回合胜利事件: 单次 TeamRoundVictory occurrence");
 
     // 验证事件流与 JSON 导出结构
     nlohmann::json j_full = event_state.ToJson();

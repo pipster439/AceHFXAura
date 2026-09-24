@@ -25,3 +25,13 @@ export function listenForHostTheme(webview, onTheme) {
   webview.addEventListener('message', receive);
   return () => webview.removeEventListener('message', receive);
 }
+
+// Switch the retained editor surface without navigating or reloading WebView2.
+export function listenForHostOpenAutomation(webview, onOpen) {
+  if (!webview?.addEventListener) return () => {};
+  const receive = event => {
+    if (event.data?.type === 'open_automation') onOpen();
+  };
+  webview.addEventListener('message', receive);
+  return () => webview.removeEventListener('message', receive);
+}

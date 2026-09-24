@@ -13,14 +13,17 @@
         <StackPanel x:Name="PageContent" Spacing="20" MaxWidth="1200" HorizontalAlignment="Left">
             <!-- 页面标题 -->
             <StackPanel Spacing="4">
-                <TextBlock Text="灯效管理 (Lighting)" Style="{ThemeResource TitleTextBlockStyle}" TextWrapping="Wrap" />
+                <TextBlock Text="灯效" Style="{ThemeResource TitleTextBlockStyle}" TextWrapping="Wrap" />
                 <TextBlock Text="基础灯效预设与渲染参数调控"
                            Style="{ThemeResource BodyTextBlockStyle}"
                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                            TextWrapping="Wrap" />
             </StackPanel>
 
-            <Border Padding="16" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"><StackPanel Spacing="16">
+            <Grid x:Name="LightingOverview" ColumnSpacing="16" RowSpacing="16">
+             <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="0"/></Grid.ColumnDefinitions>
+             <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+            <Border x:Name="LightingStatusCard" Padding="16" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"><StackPanel Spacing="16">
              <TextBlock Text="当前灯效状态" Style="{ThemeResource SubtitleTextBlockStyle}"/>
              <Grid x:Name="LightingStatusGrid" ColumnSpacing="20" RowSpacing="16">
               <StackPanel Spacing="4"><TextBlock Text="设备连接" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap"/><TextBlock x:Name="DeviceStateText" Text="—" FontWeight="SemiBold" TextWrapping="Wrap"/></StackPanel>
@@ -33,13 +36,14 @@
              <Button x:Name="RefreshStatusBtn" Content="刷新状态" Click="RefreshStatusBtn_Click"/>
              <InfoBar x:Name="StatusMismatchInfoBar" IsOpen="False" IsClosable="False" Severity="Informational"/>
             </StackPanel></Border>
-            <Border Padding="16" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"><StackPanel Spacing="10">
+            <Border x:Name="GlobalFpsCard" Padding="16" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"><StackPanel Spacing="10">
              <TextBlock Text="全局默认刷新率" Style="{ThemeResource SubtitleTextBlockStyle}"/>
              <TextBlock x:Name="GlobalFpsText" Text="正在读取…" FontWeight="SemiBold"/>
              <TextBlock Text="适用于继承全局设置的方案；独立设置刷新率的方案不受影响。范围 10–100 FPS，默认参考值 25 FPS。" TextWrapping="Wrap"/>
              <Button x:Name="GlobalFpsButton" Content="设置全局刷新率…" Click="GlobalFps_Click"/>
             </StackPanel></Border>
-            <InfoBar x:Name="AdvancedEffectBanner" IsOpen="False" IsClosable="False" Severity="Warning" Title="当前默认方案由 Studio 管理"><InfoBar.ActionButton><Button Content="打开 Studio" Click="OpenStudioBtn_Click"/></InfoBar.ActionButton></InfoBar>
+            </Grid>
+            <InfoBar x:Name="AdvancedEffectBanner" IsOpen="False" IsClosable="False" Severity="Warning" Title="当前默认方案由工作室管理"><InfoBar.ActionButton><Button Content="打开工作室" Click="OpenStudioBtn_Click"/></InfoBar.ActionButton></InfoBar>
             <!-- 5. 预设灯效选择卡片 (Builtin Presets) -->
             <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
@@ -48,7 +52,7 @@
                     Padding="16">
                 <StackPanel Spacing="16">
                     <StackPanel Spacing="4">
-                        <TextBlock Text="预设灯效 (Builtin Presets)" Style="{ThemeResource SubtitleTextBlockStyle}" />
+                        <TextBlock Text="预设灯效" Style="{ThemeResource SubtitleTextBlockStyle}" />
                         <TextBlock Text="选择系统内置的标准动态与静态光效预设；选择后将在下方加载规范参数"
                                    Style="{ThemeResource CaptionTextBlockStyle}"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
@@ -87,7 +91,7 @@
                     Padding="16">
                 <StackPanel Spacing="20">
                     <StackPanel Spacing="4">
-                        <TextBlock Text="参数调控 (Parameters)" Style="{ThemeResource SubtitleTextBlockStyle}" />
+                        <TextBlock Text="参数调控" Style="{ThemeResource SubtitleTextBlockStyle}" />
                         <TextBlock Text="调整本地草稿，点击“应用更改”后写入系统默认配置，无需重启守护进程"
                                    Style="{ThemeResource CaptionTextBlockStyle}"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
@@ -109,7 +113,7 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Text="亮度 (Brightness)" Style="{ThemeResource BodyStrongTextBlockStyle}" Grid.Column="0" TextWrapping="Wrap" VerticalAlignment="Center" />
+                            <TextBlock Text="亮度" Style="{ThemeResource BodyStrongTextBlockStyle}" Grid.Column="0" TextWrapping="Wrap" VerticalAlignment="Center" />
                             <TextBlock x:Name="BrightnessValueText" Width="64" TextAlignment="Right" Text="100%" Style="{ThemeResource BodyStrongTextBlockStyle}" Grid.Column="1" TextWrapping="NoWrap" VerticalAlignment="Center" />
                         </Grid>
                         <Slider x:Name="BrightnessSlider"
@@ -125,7 +129,7 @@
 
                     <!-- 动画周期 (仅当 supports_period == true 时显示) -->
                     <StackPanel x:Name="PeriodPanel" Spacing="6" HorizontalAlignment="Stretch" Visibility="Collapsed">
-                        <TextBlock Text="动画周期 (Animation Period)" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                        <TextBlock Text="动画周期" Style="{ThemeResource BodyStrongTextBlockStyle}" />
                         <NumberBox x:Name="PeriodNumberBox"
                                    Minimum="33"
                                    SmallChange="100"

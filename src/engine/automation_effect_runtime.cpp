@@ -11,11 +11,17 @@ AutomationEffectRuntime::Counters AutomationEffectRuntime::GetCounters() const {
 uint64_t AutomationEffectRuntime::Revision() const { std::lock_guard<std::mutex> lock(mutex_); return revision_; }
 size_t AutomationEffectRuntime::ActiveCount() const { std::lock_guard<std::mutex> lock(mutex_); return layers_.size(); }
 size_t AutomationEffectRuntime::DiagnosticCount() const { std::lock_guard<std::mutex> lock(mutex_); return diagnostics_.size(); }
+std::vector<AutomationEffectRuntime::ActivationRecord> AutomationEffectRuntime::TakeActivations() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    std::vector<ActivationRecord> result;
+    result.swap(activations_);
+    return result;
+}
 void AutomationEffectRuntime::Clear() {
     std::vector<Layer> retired_layers;
     std::deque<Token> retired_tokens;
     std::lock_guard<std::mutex> lock(mutex_);
-    ++revision_; retired_layers.swap(layers_); true_intervals_.clear(); interval_semantics_.clear(); interval_recipes_.clear(); diagnostics_.clear(); retired_tokens.swap(pending_);
+    ++revision_; retired_layers.swap(layers_); true_intervals_.clear(); interval_semantics_.clear(); interval_recipes_.clear(); diagnostics_.clear(); activations_.clear(); retired_tokens.swap(pending_);
 }
 void AutomationEffectRuntime::Diagnose(const std::string& id, const char* reason) {
     if (diagnostics_.size() >= 64) return;
@@ -32,6 +38,7 @@ void AutomationEffectRuntime::Consume(const AutomationEvaluation& evaluation, co
     std::deque<PreparedEffectSource> prepared_sources;
     std::deque<TriggeredEffectInstance> constructed_instances;
     std::lock_guard<std::mutex> lock(mutex_);
+    activations_.clear();
     // A rebuild completed after the caller began evaluating: consume no old work.
     if (expected_revision != revision_ || evaluation.config_generation < config_generation_) return;
     if (evaluation.config_generation != config_generation_ && !evaluation.reconciliation_complete) {
@@ -82,6 +89,7 @@ void AutomationEffectRuntime::Consume(const AutomationEvaluation& evaluation, co
             if (!instance) { Count(counters_.factory_failures); Diagnose(token.id,"queued factory failed; token consumed"); continue; }
             auto layer=MakeLayer(token.id,token.action,token.rule_order,instance,now);
             layer.semantic_identity=token.semantic_identity; layers_.push_back(std::move(layer));
+            if (token.kill_related) activations_.push_back({token.id, token.source_epoch, token.packet_sequence, AutomationMonotonicMs()});
         } catch (...) { Count(counters_.factory_failures); Diagnose(token.id,"queued factory threw; token consumed"); }
     }
     for (const auto& decision : evaluation.decisions) {
@@ -138,7 +146,8 @@ void AutomationEffectRuntime::Consume(const AutomationEvaluation& evaluation, co
                     auto layer=MakeLayer(decision.rule_id,action,decision.rule_order,instance,now);
                     if(status) layer.semantic_identity=status->semantic_identity;
                     layers_.push_back(std::move(layer));
-                } else pending_.push_back({decision.rule_id,status?status->semantic_identity:"",action,decision.rule_order,now,source});
+                    if (decision.kill_related) activations_.push_back({decision.rule_id, decision.source_epoch, decision.packet_sequence, AutomationMonotonicMs()});
+                } else pending_.push_back({decision.rule_id,status?status->semantic_identity:"",action,decision.rule_order,now,source,decision.source_epoch,decision.packet_sequence,decision.kill_related});
             } catch (...) { Count(counters_.unavailable); Diagnose(decision.rule_id,"queue source preparation/construction failed; admission consumed"); }
             continue;
         }
@@ -163,6 +172,7 @@ void AutomationEffectRuntime::Consume(const AutomationEvaluation& evaluation, co
             if (persistent && status) interval_recipes_[decision.rule_id]=status->recipe_identity+":generation="+std::to_string(generation?generation->generation_id:0);
             if (existing == layers_.end()) layers_.push_back(std::move(layer));
             else { retired_layers.push_back(std::move(*existing)); *existing = std::move(layer); } // retire after unlock
+            if (decision.kill_related) activations_.push_back({decision.rule_id, decision.source_epoch, decision.packet_sequence, AutomationMonotonicMs()});
         } catch (...) { Diagnose(decision.rule_id, "effect construction threw; previous instance retained"); }
     }
     std::sort(layers_.begin(), layers_.end(), [](const Layer& a, const Layer& b) { return a.order < b.order; });

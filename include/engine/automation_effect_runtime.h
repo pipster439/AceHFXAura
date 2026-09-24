@@ -46,6 +46,9 @@ public:
     size_t ActiveCount() const;
     size_t DiagnosticCount() const;
     size_t PendingCount() const;
+    // Successful event.kill-related layer creations/restarts in the most recent Consume call.
+    struct ActivationRecord { std::string rule_id; uint64_t source_epoch{0}, packet_sequence{0}, at_ms{0}; };
+    std::vector<ActivationRecord> TakeActivations();
     struct Counters { uint64_t capacity_drops{0}, expired{0}, unavailable{0}, factory_failures{0}, cancelled{0}; };
     Counters GetCounters() const;
 private:
@@ -63,6 +66,8 @@ private:
         size_t rule_order{0};
         uint64_t admitted{0};
         PreparedEffectSource source;
+        uint64_t source_epoch{0}, packet_sequence{0};
+        bool kill_related{false};
     };
     Layer MakeLayer(const std::string& id, const nlohmann::json& action, size_t order,
                     TriggeredEffectInstance instance, uint64_t now);
@@ -77,6 +82,7 @@ private:
     std::map<std::string, std::string> interval_semantics_;
     std::map<std::string, std::string> interval_recipes_;
     std::set<std::string> diagnostics_; // bounded to 64 messages until explicit reset
+    std::vector<ActivationRecord> activations_;
     FrameBuffer temporary_;
 };
 } // namespace aura

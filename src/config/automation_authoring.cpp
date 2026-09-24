@@ -4,6 +4,8 @@
 #include "config/rule_engine.h"
 #include "config/automation_limits.h"
 #include <set>
+#include <array>
+#include <unordered_map>
 
 namespace aura {
 namespace {
@@ -64,6 +66,64 @@ void ValidatePlan(const Ordered& root, const Ordered& rules) {
         if (!ids.insert(parsed.id).second) Fail(422,"duplicate_id",path+"/id","V2 IDs must be unique",parsed.id);
     }
 }
+Json EventMetadata() {
+    // IDs come from the detector's canonical list; this table only supplies authoring text.
+    static const std::unordered_map<std::string, std::array<const char*, 3>> text = {
+        {"event.kill",{"击杀","战斗","当前玩家击杀一名敌人时发生一次。"}},
+        {"event.headshot",{"爆头击杀","战斗","当前玩家完成一次爆头击杀时发生一次。"}},
+        {"event.ace",{"单回合五杀（推定 ACE）","战斗","当 Aura 观察到当前玩家本回合击杀数达到 5 时触发。这是基于 GSI 击杀计数的推定，不是 CS2 提供的独立 ACE 事件。"}},
+        {"event.damage",{"受到伤害","战斗","当前玩家生命值下降时发生一次。"}},
+        {"event.death",{"阵亡","战斗","当前玩家阵亡时发生一次。"}},
+        {"event.respawn",{"复活","战斗","当前玩家重新出生时发生一次。"}},
+        {"event.flashed",{"被闪","战斗","当前玩家被闪光影响时发生一次。"}},
+        {"event.burning",{"受到燃烧伤害","战斗","当前玩家受到燃烧影响时发生一次。"}},
+        {"event.bomb_planting",{"开始安放炸弹","炸弹","炸弹进入安放状态时发生一次。"}},
+        {"event.bomb_planted",{"炸弹已安放","炸弹","炸弹安放完成时发生一次。"}},
+        {"event.bomb_defusing",{"开始拆除炸弹","炸弹","炸弹进入拆除状态时发生一次。"}},
+        {"event.bomb_defused",{"炸弹已拆除","炸弹","炸弹拆除完成时发生一次。"}},
+        {"event.bomb_exploded",{"炸弹爆炸","炸弹","炸弹爆炸时发生一次。"}},
+        {"event.bomb_dropped",{"炸弹掉落","炸弹","炸弹掉落时发生一次。"}},
+        {"event.bomb_pickedup",{"拾起炸弹","炸弹","炸弹被拾起时发生一次。"}},
+        {"event.freezetime",{"冻结时间开始","回合","回合进入冻结购买阶段时发生一次。"}},
+        {"event.round_started",{"回合开始","回合","回合开始交火时发生一次。"}},
+        {"event.round_concluded",{"回合结束","回合","回合交火结束时发生一次。"}},
+        {"event.round_victory",{"我方回合获胜","回合","当前玩家所在队伍赢得回合时发生一次。"}},
+        {"event.round_loss",{"我方回合失败","回合","当前玩家所在队伍输掉回合时发生一次。"}},
+        {"event.warmup",{"热身开始","比赛","比赛进入热身阶段时发生一次。"}},
+        {"event.match_started",{"比赛开始","比赛","正式比赛开始时发生一次。"}},
+        {"event.intermission",{"中场阶段","比赛","比赛进入中场阶段时发生一次。"}},
+        {"event.gameover",{"比赛结束","比赛","比赛结束时发生一次。"}}
+    };
+    Json rows=Json::array();
+    for (const auto& id:AutomationEventNames()) {
+        const auto it=text.find(id);
+        if (it!=text.end()) rows.push_back({{"id",id},{"label",it->second[0]},{"category",it->second[1]},{"description",it->second[2]}});
+    }
+    return rows;
+}
+Json FieldMetadata() {
+    const Json number_operators={"==","!=","<","<=",">",">="};
+    const Json boolean_operators={"==","!="};
+    const Json string_operators={"==","!=","contains"};
+    return Json::array({
+        {{"key","process.name"},{"label","前台程序"},{"category","系统"},{"description","Aura 当前检测到的前台可执行文件，例如 cs2.exe。"},{"type","string"},{"operators",{"==","!="}}},
+        {{"key","player.state.health"},{"label","生命值"},{"category","玩家"},{"description","当前玩家生命值。"},{"type","number"},{"operators",{"==","!=","<","<=",">",">="}}},
+        {{"key","player.state.armor"},{"label","护甲"},{"category","玩家"},{"description","当前玩家护甲值。"},{"type","number"},{"operators",number_operators}},
+        {{"key","player.state.round_kills"},{"label","本回合击杀数"},{"category","玩家"},{"description","当前玩家本回合击杀数。"},{"type","number"},{"operators",number_operators}},
+        {{"key","player.state.round_killhs"},{"label","本回合爆头击杀数"},{"category","玩家"},{"description","当前玩家本回合爆头击杀数。"},{"type","number"},{"operators",number_operators}},
+        {{"key","player.match_stats.kills"},{"label","比赛总击杀数"},{"category","玩家"},{"description","当前玩家本场比赛击杀数。"},{"type","number"},{"operators",number_operators}},
+        {{"key","player.state.flashed"},{"label","被闪程度"},{"category","玩家"},{"description","当前玩家受到闪光影响的程度。"},{"type","number"},{"operators",number_operators}},
+        {{"key","player.state.burning"},{"label","燃烧程度"},{"category","玩家"},{"description","当前玩家受到燃烧影响的程度。"},{"type","number"},{"operators",number_operators}},
+        {{"key","player.state.helmet"},{"label","头盔"},{"category","玩家"},{"description","当前玩家是否拥有头盔。"},{"type","bool"},{"operators",boolean_operators}},
+        {{"key","player.state.defusekit"},{"label","拆弹器"},{"category","玩家"},{"description","当前玩家是否拥有拆弹器。"},{"type","bool"},{"operators",boolean_operators}},
+        {{"key","player.team"},{"label","所属阵营"},{"category","玩家"},{"description","当前玩家所属阵营。"},{"type","string"},{"operators",string_operators},{"values",{{"T","恐怖分子"},{"CT","反恐精英"}}}},
+        {{"key","round.phase"},{"label","回合阶段"},{"category","回合"},{"description","当前回合所处阶段。"},{"type","string"},{"operators",string_operators},{"values",{{"freezetime","冻结时间"},{"live","回合进行中"},{"over","回合结束"}}}},
+        {{"key","round.bomb"},{"label","回合炸弹状态"},{"category","回合"},{"description","回合摘要中的炸弹状态。"},{"type","string"},{"operators",string_operators},{"values",{{"carried","携带中"},{"dropped","已掉落"},{"planting","正在安放"},{"planted","已安放"},{"defusing","正在拆除"},{"defused","已拆除"},{"exploded","已爆炸"}}}},
+        {{"key","bomb.state"},{"label","炸弹详细状态"},{"category","炸弹"},{"description","炸弹对象报告的详细状态。"},{"type","string"},{"operators",string_operators},{"values",{{"carried","携带中"},{"dropped","已掉落"},{"planting","正在安放"},{"planted","已安放"},{"defusing","正在拆除"},{"defused","已拆除"},{"exploded","已爆炸"}}}},
+        {{"key","map.phase"},{"label","比赛阶段"},{"category","比赛"},{"description","整场比赛所处阶段。"},{"type","string"},{"operators",string_operators},{"values",{{"warmup","热身"},{"live","进行中"},{"intermission","中场"},{"gameover","结束"}}}},
+        {{"key","map.mode"},{"label","比赛模式"},{"category","比赛"},{"description","当前比赛模式。"},{"type","string"},{"operators",string_operators}}
+    });
+}
 }
 
 nlohmann::json AutomationControlService::AuthoringCapabilities() {
@@ -71,6 +131,7 @@ nlohmann::json AutomationControlService::AuthoringCapabilities() {
         {"pairings",Json::array({{{"mode","state"},{"action","activate_profile"}},{{"mode","state"},{"action","trigger_effect"},{"lifetime","while_true"}},
             {{"mode","rising"},{"action","trigger_effect"},{"lifetime","one_shot"}},{{"mode","event"},{"action","trigger_effect"},{"lifetime","one_shot"}}})},
         {"retrigger",{"restart","ignore_while_active","stack","queue"}},{"effect_kinds",{"profile_effect","plugin"}},{"events",AutomationEventNames()},
+        {"event_metadata",EventMetadata()},{"field_metadata",FieldMetadata()},
         {"stack",{{"max_active_per_rule",AutomationRetriggerLimits::stack_active}}},
         {"queue",{{"max_pending_per_rule",AutomationRetriggerLimits::pending_per_rule},{"max_pending_global",AutomationRetriggerLimits::pending_global},{"pending_ttl_ms",AutomationRetriggerLimits::pending_ttl_ms}}},
         {"global",{{"max_active_v2",AutomationRetriggerLimits::active_global}}},
@@ -112,12 +173,33 @@ AutomationControlService::AuthoringResult AutomationControlService::Author(const
                 const auto& recipe=item.value();
                 const auto plugin=recipe.value("type",std::string{})=="plugin" ?
                     recipe.value("plugin_name",recipe.value("plugin",recipe.value("effect",recipe.value("effect_name",recipe.value("plugin_path",std::string{}))))) : std::string{};
-                const bool available=recipe.value("type",std::string{})!="plugin" || (!plugin.empty() && PluginManager::Instance().GetGeneration(plugin));
+                const auto generation=plugin.empty() ? nullptr : PluginManager::Instance().GetGeneration(plugin);
+                const bool capable=generation && generation->lifecycle.version==1 && generation->lifecycle.is_finished;
+                const bool available=recipe.value("type",std::string{})!="plugin" || static_cast<bool>(generation);
+                Json lifecycle={{"kind",capable?"lifecycle_capable":"legacy_envelope"}};
+                if (capable && root.contains("blockly_effects") && root["blockly_effects"].is_object() && root["blockly_effects"].contains(item.key())) {
+                    const auto& studio=root["blockly_effects"][item.key()];
+                    if (studio.is_object() && studio.value("applied_plugin_name",std::string{})==plugin && studio.contains("applied_publication") && studio["applied_publication"].is_object()) {
+                        lifecycle={{"kind","studio_publication"},{"publication",studio["applied_publication"]}};
+                    }
+                }
                 effects.push_back({{"label",item.key()},{"reference",{{"kind","profile_effect"},{"name",item.key()}}},
-                    {"available",available},{"reason",available?"":"Plugin is unpublished or unavailable"}});
+                    {"available",available},{"reason",available?"":"Plugin is unpublished or unavailable"},{"lifecycle",lifecycle}});
             }
-            for(const auto& name:PluginManager::Instance().GetLoadedPluginNames())
-                effects.push_back({{"label",name},{"reference",{{"kind","plugin"},{"name",name}}},{"available",true},{"reason",""}});
+            for(const auto& name:PluginManager::Instance().GetLoadedPluginNames()) {
+                const auto generation=PluginManager::Instance().GetGeneration(name);
+                const bool capable=generation && generation->lifecycle.version==1 && generation->lifecycle.is_finished;
+                Json lifecycle={{"kind",capable?"lifecycle_capable":"legacy_envelope"}};
+                if (capable && root.contains("blockly_effects") && root["blockly_effects"].is_object())
+                    for (const auto& studio:root["blockly_effects"].items())
+                        if (studio.value().is_object() && studio.value().value("applied_plugin_name",std::string{})==name &&
+                            studio.value().contains("applied_publication") && studio.value()["applied_publication"].is_object()) {
+                            lifecycle={{"kind","studio_publication"},{"publication",studio.value()["applied_publication"]}};
+                            break;
+                        }
+                effects.push_back({{"label",name},{"reference",{{"kind","plugin"},{"name",name}}},{"available",true},{"reason",""},
+                    {"lifecycle",lifecycle}});
+            }
             return {200,{{"revision",revision},{"effects",effects}}};
         }
         if (!request.contains("expected_revision") || !request["expected_revision"].is_string() || request["expected_revision"].get<std::string>().empty())

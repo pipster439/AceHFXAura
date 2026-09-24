@@ -36,10 +36,10 @@ public sealed class AuraControlClientTests
         Assert.IsNotNull(result);
         Assert.IsFalse(result.IsOnline);
         StringAssert.Contains(result.ErrorMessage, "Connection refused");
-        Assert.AreEqual("Offline", result.CoreStatusDisplayName);
-        Assert.AreEqual("Disconnected", result.DeviceStatusDisplayName);
-        Assert.AreEqual("Unknown", result.BackendDisplayName);
-        Assert.AreEqual("Idle", result.GsiStatusDisplayName);
+        Assert.AreEqual("离线", result.CoreStatusDisplayName);
+        Assert.AreEqual("未连接", result.DeviceStatusDisplayName);
+        Assert.AreEqual("未知", result.BackendDisplayName);
+        Assert.AreEqual("空闲", result.GsiStatusDisplayName);
         Assert.AreEqual("--", result.ActiveProfileDisplayName);
         Assert.AreEqual("--", result.FpsDisplayName);
     }
@@ -69,7 +69,7 @@ public sealed class AuraControlClientTests
         Assert.IsNotNull(result);
         Assert.IsFalse(result.IsOnline);
         StringAssert.Contains(result.ErrorMessage, "Unsupported API version");
-        Assert.AreEqual("Offline", result.CoreStatusDisplayName);
+        Assert.AreEqual("离线", result.CoreStatusDisplayName);
     }
 
     [TestMethod]
@@ -133,12 +133,12 @@ public sealed class AuraControlClientTests
 
         Assert.IsNotNull(result);
         Assert.IsTrue(result.IsOnline);
-        Assert.AreEqual("Connected", result.DeviceStatusDisplayName);
-        Assert.AreEqual("Native HID", result.BackendDisplayName);
-        Assert.AreEqual("Running", result.CoreStatusDisplayName);
+        Assert.AreEqual("已连接", result.DeviceStatusDisplayName);
+        Assert.AreEqual("原生 HID", result.BackendDisplayName);
+        Assert.AreEqual("运行中", result.CoreStatusDisplayName);
         Assert.AreEqual("cs2", result.ActiveProfileDisplayName);
         Assert.AreEqual("25 FPS", result.FpsDisplayName);
-        Assert.AreEqual("Active", result.GsiStatusDisplayName);
+        Assert.AreEqual("活跃", result.GsiStatusDisplayName);
         Assert.AreEqual("HID\\VID_0B05&PID_1A38", result.Data?.Hardware.DevicePath);
     }
 
@@ -183,11 +183,11 @@ public sealed class AuraControlClientTests
         Assert.IsNotNull(result);
         Assert.IsTrue(result.IsOnline);
         Assert.IsTrue(result.IsDryRun);
-        Assert.AreEqual("Dry-Run", result.DeviceStatusDisplayName);
-        Assert.AreEqual("Dry-Run", result.BackendDisplayName);
-        Assert.AreEqual("Running", result.CoreStatusDisplayName);
+        Assert.AreEqual("模拟运行", result.DeviceStatusDisplayName);
+        Assert.AreEqual("模拟运行", result.BackendDisplayName);
+        Assert.AreEqual("运行中", result.CoreStatusDisplayName);
         Assert.AreEqual("desktop", result.ActiveProfileDisplayName);
-        Assert.AreEqual("Idle", result.GsiStatusDisplayName);
+        Assert.AreEqual("空闲", result.GsiStatusDisplayName);
     }
 
     [TestMethod]

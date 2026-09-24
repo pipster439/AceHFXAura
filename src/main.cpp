@@ -22,6 +22,7 @@
 #include <cctype>
 #include <cmath>
 #include <vector>
+#include <algorithm>
 #include <memory>
 #include <chrono>
 #include <thread>
@@ -776,6 +777,7 @@ int main(int argc, char* argv[]) {
             [&rule_engine](const nlohmann::json& reference) { return aura::ResolveAutomationEffect(reference, rule_engine); },
             effect_engine.GetElapsedMs(), effect_revision,
             [&rule_engine](const nlohmann::json& reference) { return aura::PrepareAutomationEffect(reference, rule_engine); });
+        const auto layer_activations = effect_engine.GetAutomationEffects().TakeActivations();
         const std::string& cur_proc = automation.foreground_process;
         gsi_adapter.GetState().SetForegroundProcess(cur_proc);
         std::shared_ptr<const aura::Profile> matched = automation.profile;
@@ -816,10 +818,60 @@ int main(int argc, char* argv[]) {
         effect_engine.Tick(frame_buf, keymap, &gsi_adapter.GetState());
 
         // 推流至硬件
+        bool frame_pushed = false;
         if (adapter.IsConnected()) {
-            adapter.PushFrame(frame_buf);
+            frame_pushed = adapter.PushFrame(frame_buf);
         } else {
             adapter.CheckReconnect();
+        }
+        // One diagnostic record per detected real kill. Missing stages stay explicit:
+        // admission can be denied by scope/freshness, and an admitted rule can queue
+        // or fail to create an effect. A successful push is not a visual HID ACK.
+        const bool real_gsi_source = (!automation.kill_latency_observations.empty() || !layer_activations.empty()) &&
+            gsi_adapter.SimulationStatus()["source"] == "real";
+        if (!automation.kill_latency_observations.empty() && real_gsi_source) {
+            const auto pushed_at_ms = frame_pushed ? aura::AutomationMonotonicMs() : 0;
+            for (const auto& kill : automation.kill_latency_observations) {
+                std::string rule_id;
+                uint64_t admitted_at_ms = 0, activated_at_ms = 0;
+                for (const auto& decision : automation.decisions) {
+                    if (!decision.admitted || !decision.kill_related || decision.source_epoch != kill.source_epoch ||
+                        decision.packet_sequence != kill.packet_sequence) continue;
+                    if (rule_id.empty()) rule_id = decision.rule_id;
+                    if (!admitted_at_ms || decision.admitted_at_ms < admitted_at_ms)
+                        admitted_at_ms = decision.admitted_at_ms;
+                    for (const auto& activation : layer_activations) {
+                        if (activation.rule_id == decision.rule_id &&
+                            activation.source_epoch == decision.source_epoch &&
+                            activation.packet_sequence == decision.packet_sequence &&
+                            (!activated_at_ms || activation.at_ms < activated_at_ms))
+                            activated_at_ms = activation.at_ms;
+                    }
+                }
+                const auto stamp = [](uint64_t value) { return value ? std::to_string(value) : "null"; };
+                LOG_INFO("[GSI latency] event.kill epoch=" << kill.source_epoch <<
+                    " packet=" << kill.packet_sequence << " rule=" << (rule_id.empty() ? "none" : rule_id) <<
+                    " payload_received_ms=" << kill.received_at_ms <<
+                    " event_kill_detected_ms=" << kill.detected_at_ms <<
+                    " automation_admitted_ms=" << stamp(admitted_at_ms) <<
+                    " effect_layer_activated_ms=" << stamp(activated_at_ms) <<
+                    " frame_pushed_ms=" << stamp(activated_at_ms ? pushed_at_ms : 0));
+            }
+        }
+        // A queued kill effect may activate on a later frame. The packet key
+        // joins this record to its earlier receipt/detection/admission record.
+        for (const auto& activation : layer_activations) {
+            if (!real_gsi_source) continue;
+            const bool detected_this_frame = std::any_of(automation.kill_latency_observations.begin(),
+                automation.kill_latency_observations.end(), [&](const auto& kill) {
+                    return kill.source_epoch == activation.source_epoch &&
+                        kill.packet_sequence == activation.packet_sequence;
+                });
+            if (detected_this_frame) continue;
+            LOG_INFO("[GSI latency] event.kill deferred epoch=" << activation.source_epoch <<
+                " packet=" << activation.packet_sequence << " rule=" << activation.rule_id <<
+                " effect_layer_activated_ms=" << activation.at_ms <<
+                " frame_pushed_ms=" << (frame_pushed ? std::to_string(aura::AutomationMonotonicMs()) : "null"));
         }
 
         total_frames++;

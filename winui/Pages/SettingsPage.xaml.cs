@@ -15,14 +15,10 @@ public sealed partial class SettingsPage : Page
     {
         InitializeComponent();
         PageLayout.Attach(this, PageScroll, PageContent, width => {
-            foreach (var control in new[] { ThemeControlContainer, TrayControlContainer, DaemonControlContainer, BrowserControlContainer }) {
-                bool narrow = width < 720;
-                Grid.SetRow(control, narrow ? 1 : 0); Grid.SetColumn(control, narrow ? 0 : 1);
-                Grid.SetColumnSpan(control, narrow ? 2 : 1);
-                control.HorizontalAlignment = HorizontalAlignment.Left;
-                if (control.Parent is Grid row && row.Children[0] is FrameworkElement label) Grid.SetColumnSpan(label, narrow ? 2 : 1);
-            }
-        });
+            var wide = width >= 1200;
+            SettingsColumns.ColumnDefinitions[1].Width = new GridLength(wide ? 360 : 0);
+            SettingsAside.Visibility = wide ? Visibility.Visible : Visibility.Collapsed;
+        }, maxWidth: 1400);
         Loaded += SettingsPage_Loaded;
         Unloaded += (_, _) => { _lifetime?.Cancel(); DaemonSupervisor.Instance.StatusChanged -= OnStatus; };
     }
@@ -111,13 +107,18 @@ public sealed partial class SettingsPage : Page
     {
         var supervisor = DaemonSupervisor.Instance;
         DaemonStatusDetailText.Text = supervisor.StatusDescription;
-        StudioStatusText.Text = supervisor.WebSuppressed ? "Studio：免打扰规则已暂停网页服务" : supervisor.StudioWebReady ? "Studio：可用" : "Studio：暂不可用";
+        StudioStatusText.Text = supervisor.WebSuppressed ? "工作室：免打扰规则已暂停网页服务" : supervisor.StudioWebReady ? "工作室：可用" : "工作室：暂不可用";
+        AsideCoreText.Text = supervisor.StatusDescription;
+        AsideStudioText.Text = StudioStatusText.Text;
+        ConfigHealthText.Text = supervisor.ConfigStatusDescription;
+        AsideConfigHealthText.Text = ConfigHealthText.Text;
         var id = supervisor.Identity;
         RuntimeDetailsText.Text = id == null ? "尚未取得核心信息" :
-            $"核心版本：{id.ProductVersion}\nPID：{id.ProcessId}\n实例：{id.InstanceId}\n连接方式：{supervisor.Ownership}\n配置：{id.ConfigPath}";
+            $"核心版本：{id.ProductVersion}\n进程编号：{id.ProcessId}\n实例：{id.InstanceId}\n连接方式：{supervisor.OwnershipDescription}\n配置：{id.ConfigPath}";
+        AsideConfigText.Text = id?.ConfigPath ?? "尚未取得核心信息";
         if (supervisor.Ownership == DaemonOwnership.SpawnedByWinUI && supervisor.OwnedRuntimeDirectory != null)
-            RuntimeDetailsText.Text += "\nRuntime：" + supervisor.OwnedRuntimeDirectory;
-        else if (id != null) RuntimeDetailsText.Text += "\nRuntime：外部核心未提供此路径";
+            RuntimeDetailsText.Text += "\n运行时：" + supervisor.OwnedRuntimeDirectory;
+        else if (id != null) RuntimeDetailsText.Text += "\n运行时：外部核心未提供此路径";
     }
     private void OnStatus(string status) => DispatcherQueue.TryEnqueue(() => { if (IsLoaded && !App.IsShuttingDown) UpdateDaemonDetail(); });
 }

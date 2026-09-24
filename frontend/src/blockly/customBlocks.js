@@ -4,7 +4,6 @@ import {
   getStateOptions,
   NUMERIC_STATE_DROPDOWN_OPTIONS,
   BOOLEAN_STATE_DROPDOWN_OPTIONS,
-  EVENT_DROPDOWN_OPTIONS,
   getDefaultThreshold,
   ALL_GSI_ENUM_VALUES
 } from '../constants/gsiDictionary.js';
@@ -26,7 +25,7 @@ export function registerCustomBlocks() {
   Blockly.common.defineBlocksWithJsonArray([
     {
       type: 'time_elapsed_ms',
-      message0: '运行毫秒 elapsed_ms',
+      message0: '运行时间（毫秒）',
       output: 'Number',
       style: 'clock_blocks',
       tooltip: '自光效启动以来流逝的绝对毫秒数 (uint64_t)',
@@ -34,7 +33,7 @@ export function registerCustomBlocks() {
     },
     {
       type: 'time_phase',
-      message0: '周期相位 周期: %1 ms',
+      message0: '周期相位 周期: %1 毫秒',
       args0: [
         {
           type: 'input_value',
@@ -55,10 +54,10 @@ export function registerCustomBlocks() {
           type: 'field_dropdown',
           name: 'TYPE',
           options: [
-            ['正弦波 (Sine)', 'SINE'],
-            ['三角波 (Triangle)', 'TRIANGLE'],
-            ['方波 (Square)', 'SQUARE'],
-            ['锯齿波 (Sawtooth)', 'SAW']
+            ['正弦波', 'SINE'],
+            ['三角波', 'TRIANGLE'],
+            ['方波', 'SQUARE'],
+            ['锯齿波', 'SAW']
           ]
         },
         { type: 'input_value', name: 'PHASE', check: 'Number' },
@@ -84,9 +83,9 @@ export function registerCustomBlocks() {
           options: [
             ['物理 X (0~15.5)', 'physical_x'],
             ['物理 Y (1.0~5.0)', 'physical_y'],
-            ['矩阵 行 (row 1~5)', 'row'],
-            ['矩阵 列 (col 1~15)', 'col'],
-            ['LED 索引 (led_id 0~67)', 'led_id']
+            ['矩阵行 (1~5)', 'row'],
+            ['矩阵列 (1~15)', 'col'],
+            ['LED 索引 (0~67)', 'led_id']
           ]
         }
       ],
@@ -219,9 +218,9 @@ export function registerCustomBlocks() {
             ['A 键', 'A'],
             ['S 键', 'S'],
             ['D 键', 'D'],
-            ['空格 (SPACE)', 'SPACE'],
+            ['空格键', 'SPACE'],
             ['ESC 键', 'ESC'],
-            ['回车 (ENTER)', 'ENTER'],
+            ['回车键', 'ENTER'],
             ['Q 键', 'Q'],
             ['E 键', 'E'],
             ['R 键', 'R'],
@@ -269,13 +268,13 @@ export function registerCustomBlocks() {
           type: 'field_dropdown',
           name: 'ZONE',
           options: [
-            ['全键盘 (All 68 Keys)', 'all'],
+            ['全键盘（68 键）', 'all'],
             ['WASD 方向区', 'wasd'],
-            ['方向导航键 (Arrows)', 'arrows'],
-            ['数字行 (Numeric 1-0)', 'numeric'],
-            ['主字母区 (Alpha A-Z)', 'alpha'],
-            ['功能修饰键 (Modifiers)', 'modifier'],
-            ['右侧导航列 (Navigation)', 'navigation']
+            ['方向导航键', 'arrows'],
+            ['数字行（1-0）', 'numeric'],
+            ['主字母区（A-Z）', 'alpha'],
+            ['功能修饰键', 'modifier'],
+            ['右侧导航列', 'navigation']
           ]
         },
         {
@@ -361,7 +360,7 @@ export function registerCustomBlocks() {
       ],
       output: 'Boolean',
       style: 'gsi_blocks',
-      tooltip: '从 CS2 GSI 提取布尔状态或瞬时事件脉冲',
+      tooltip: '从 CS2 GSI 提取持续布尔状态；离散事件请在自动化工作室使用事件规则',
       helpUrl: ''
     },
     {
@@ -400,11 +399,11 @@ export function registerCustomBlocks() {
           type: 'field_dropdown',
           name: 'STATE',
           options: [
-            ['已安放 (planted)', 'planted'],
-            ['随身携带 (carried)', 'carried'],
-            ['掉落 (dropped)', 'dropped'],
-            ['已拆除 (defused)', 'defused'],
-            ['已引爆 (exploded)', 'exploded']
+            ['已安放', 'planted'],
+            ['随身携带', 'carried'],
+            ['掉落', 'dropped'],
+            ['已拆除', 'defused'],
+            ['已引爆', 'exploded']
           ]
         }
       ],
@@ -419,7 +418,7 @@ export function registerCustomBlocks() {
     // =========================================================================
     {
       type: 'condition_and',
-      message0: '条件与 (AND) 条件A: %1 条件B: %2',
+      message0: '条件与 条件甲: %1 条件乙: %2',
       args0: [
         { type: 'input_value', name: 'COND0', check: ['Condition', 'Boolean'] },
         { type: 'input_value', name: 'COND1', check: ['Condition', 'Boolean'] }
@@ -431,7 +430,7 @@ export function registerCustomBlocks() {
     },
     {
       type: 'condition_or',
-      message0: '条件或 (OR) 条件A: %1 条件B: %2',
+      message0: '条件或 条件甲: %1 条件乙: %2',
       args0: [
         { type: 'input_value', name: 'COND0', check: ['Condition', 'Boolean'] },
         { type: 'input_value', name: 'COND1', check: ['Condition', 'Boolean'] }
@@ -443,7 +442,7 @@ export function registerCustomBlocks() {
     },
     {
       type: 'condition_not',
-      message0: '条件非 (NOT) %1',
+      message0: '条件非 %1',
       args0: [
         { type: 'input_value', name: 'COND', check: ['Condition', 'Boolean'] }
       ],
@@ -515,21 +514,6 @@ export function registerCustomBlocks() {
       output: 'String',
       style: 'process_blocks',
       tooltip: '获取当前处于系统最前台焦点的窗口进程名（例如 "cs2.exe", "code.exe"）',
-      helpUrl: ''
-    },
-    {
-      type: 'orch_event_triggered',
-      message0: '发生突发事件 %1 ?',
-      args0: [
-        {
-          type: 'field_dropdown',
-          name: 'EVENT',
-          options: EVENT_DROPDOWN_OPTIONS
-        }
-      ],
-      output: 'Boolean',
-      style: 'overlay_blocks',
-      tooltip: '检测指定 CS2 游戏突发事件当前是否被激活触发',
       helpUrl: ''
     },
     {

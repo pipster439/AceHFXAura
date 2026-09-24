@@ -1,6 +1,7 @@
 """Real web/daemon contracts and package smoke; no physical hardware or Steam writes."""
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -28,12 +29,16 @@ class TestGsiConfigurationContract(unittest.TestCase):
                 status, value, _ = request(port,"/api/gsi/cfg")
                 self.assertEqual(status,200); self.assertEqual(value["gsi_api_version"],1)
                 self.assertIsInstance(value["paths"],list)
+                template = value["content"]
+                for key, expected in {"timeout":"0.5", "buffer":"0.01", "throttle":"0.0", "heartbeat":"1.0"}.items():
+                    self.assertEqual(re.findall(r'"'+key+r'"\s+"([^"]+)"',template),[expected],key)
                 body = {"target_dir":str(target),"expected_cfg_revision":"missing"}
                 self.assertEqual(request(port,"/api/gsi/install-cfg","POST",body,{"Origin":"https://example.com"})[0],403)
                 self.assertEqual(request(port,"/api/gsi/install-cfg","POST",{"target_dir":str(denied)})[0],400)
                 self.assertEqual(request(port,"/api/gsi/install-cfg","POST",body)[0],200)
                 installed = target / "gamestate_integration_aura.cfg"
                 before = installed.read_bytes(); self.assertIn(b"127.0.0.1:19897",before)
+                self.assertEqual(before,template.encode("utf-8"),"Installer must write the exact served template")
                 self.assertEqual(request(port,"/api/gsi/install-cfg","POST",body)[0],409)
                 self.assertEqual(installed.read_bytes(),before)
                 # Replacement failure must preserve the previous file, not truncate it.

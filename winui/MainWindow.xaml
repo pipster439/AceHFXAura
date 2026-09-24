@@ -38,6 +38,7 @@
             x:Name="NavView"
             Grid.Row="1"
             PaneDisplayMode="Auto"
+            OpenPaneLength="220"
             ExpandedModeThresholdWidth="1008"
             CompactModeThresholdWidth="641"
             IsSettingsVisible="True"
@@ -46,7 +47,7 @@
             SelectionChanged="NavView_SelectionChanged">
             <NavigationView.MenuItems>
                 <NavigationViewItem
-                    Content="Home"
+                    Content="主页"
                     Tag="home"
                     IsSelected="True">
                     <NavigationViewItem.Icon>
@@ -54,7 +55,7 @@
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem
-                    Content="Lighting"
+                    Content="灯效"
                     Tag="lighting">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE790;" />
@@ -62,14 +63,14 @@
                 </NavigationViewItem>
 
                 <NavigationViewItem
-                    Content="Game Integration"
+                    Content="游戏集成"
                     Tag="gsi">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE7FC;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem
-                    Content="Studio"
+                    Content="工作室"
                     Tag="studio">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE943;" />

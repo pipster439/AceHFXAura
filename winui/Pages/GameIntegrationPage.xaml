@@ -4,15 +4,18 @@
  <ScrollViewer x:Name="PageScroll" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Visible" HorizontalContentAlignment="Stretch">
  <StackPanel x:Name="PageContent" Spacing="20" HorizontalAlignment="Left" MaxWidth="1200">
   <TextBlock Text="游戏联动" Style="{ThemeResource TitleTextBlockStyle}"/>
-  <TextBlock Text="连接 CS2，查看游戏数据。联动规则在 Studio 的 Automation 中设置。" TextWrapping="Wrap"/>
+  <TextBlock Text="连接 CS2，查看游戏数据。联动规则和模拟输入在工作室的自动化页面设置。" TextWrapping="Wrap"/>
   <Grid x:Name="StatusCards" ColumnSpacing="12" RowSpacing="12">
    <Border Style="{StaticResource Card}"><StackPanel Spacing="8"><TextBlock Text="连接状态" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/><TextBlock x:Name="ConnectionText" Text="正在连接核心…" TextWrapping="Wrap" FontWeight="SemiBold"/></StackPanel></Border>
    <Border Style="{StaticResource Card}"><StackPanel Spacing="8"><TextBlock Text="数据来源" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/><TextBlock x:Name="SourceText" Text="—" TextWrapping="Wrap" FontWeight="SemiBold"/></StackPanel></Border>
    <Border Style="{StaticResource Card}"><StackPanel Spacing="8"><TextBlock Text="最近更新" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/><TextBlock x:Name="LastUpdateText" Text="尚无数据" TextWrapping="Wrap" FontWeight="SemiBold"/></StackPanel></Border>
    <Border Style="{StaticResource Card}"><StackPanel Spacing="8"><TextBlock Text="游戏前台" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/><TextBlock x:Name="ForegroundStatusText" Text="—" TextWrapping="Wrap" FontWeight="SemiBold"/></StackPanel></Border>
   </Grid>
-  <InfoBar x:Name="SimulationBanner" Title="SIMULATION · 正在使用模拟数据" Message="真实 CS2 数据暂不参与联动。" IsOpen="False" IsClosable="False" Severity="Warning"><InfoBar.ActionButton><Button Content="返回真实数据" Click="ReturnReal_Click"/></InfoBar.ActionButton></InfoBar>
-  <Border Style="{StaticResource Card}"><StackPanel Spacing="16">
+  <InfoBar x:Name="SimulationBanner" Title="模拟 · 正在使用模拟数据" Message="真实 CS2 数据暂不参与联动。请在工作室的自动化页面编辑或退出模拟。" IsOpen="False" IsClosable="False" Severity="Warning"><InfoBar.ActionButton><Button Content="打开自动化工作室" Click="OpenStudio_Click"/></InfoBar.ActionButton></InfoBar>
+  <Grid x:Name="GameColumns" ColumnSpacing="16" RowSpacing="16">
+   <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="0"/></Grid.ColumnDefinitions>
+   <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+  <Border x:Name="TelemetryCard" Style="{StaticResource Card}"><StackPanel Spacing="16">
    <TextBlock Text="玩家与对局" Style="{ThemeResource SubtitleTextBlockStyle}"/>
    <TextBlock x:Name="EmptyStateText" Text="等待 CS2 数据。" TextWrapping="Wrap"/>
    <Grid x:Name="TelemetryGrid" ColumnSpacing="16" RowSpacing="16">
@@ -22,9 +25,9 @@
     <StackPanel Spacing="6"><TextBlock Text="炸弹状态" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/><TextBlock x:Name="BombText" Text="—" TextWrapping="Wrap" Style="{ThemeResource SubtitleTextBlockStyle}"/></StackPanel>
     <StackPanel Spacing="6"><TextBlock Text="回合阶段" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/><TextBlock x:Name="RoundText" Text="—" TextWrapping="Wrap" Style="{ThemeResource SubtitleTextBlockStyle}"/></StackPanel>
    </Grid>
-   <Button Content="前往 Studio 设置联动" Click="OpenStudio_Click"/>
+   <Button Content="打开自动化工作室" Click="OpenStudio_Click"/>
   </StackPanel></Border>
-  <Border Style="{StaticResource Card}"><StackPanel Spacing="12">
+  <Border x:Name="CfgCard" Style="{StaticResource Card}"><StackPanel Spacing="12">
    <TextBlock Text="CS2 连接设置" Style="{ThemeResource SubtitleTextBlockStyle}"/>
    <TextBlock x:Name="CfgStatusText" Text="正在检测 CS2…" TextWrapping="Wrap"/>
    <ComboBox x:Name="CfgPathsBox" Header="选择 CS2 安装位置" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Visibility="Collapsed" SelectionChanged="CfgPaths_SelectionChanged">
@@ -35,27 +38,14 @@
     <StackPanel Spacing="8"><TextBlock x:Name="CfgPathText" TextWrapping="Wrap" IsTextSelectionEnabled="True"/><TextBlock Text="配置文件：gamestate_integration_aura.cfg。安装位置不代表游戏已加载配置；安装后请启动或重启 CS2，再检查上方连接状态。" TextWrapping="Wrap"/></StackPanel>
    </Expander>
   </StackPanel></Border>
+  </Grid>
   <Expander x:Name="AdvancedExpander" Header="高级调试" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" IsExpanded="False">
    <StackPanel Spacing="14">
     <TextBlock Text="运行诊断" FontWeight="SemiBold"/>
     <TextBlock x:Name="FreshnessText" TextWrapping="Wrap"/>
     <TextBlock x:Name="ForegroundText" TextWrapping="Wrap"/>
     <TextBlock x:Name="QueueText" TextWrapping="Wrap"/>
-    <TextBlock Text="模拟游戏数据" Style="{ThemeResource SubtitleTextBlockStyle}"/>
-    <TextBlock Text="模拟数据会触发真实的 Automation 与灯效输出。启用期间真实 CS2 数据不参与联动；离开本页不会关闭模拟。" TextWrapping="Wrap"/>
-    <Button x:Name="SourceButton" Content="启用 SIMULATION" IsEnabled="False" Click="Source_Click"/>
-    <ContentControl x:Name="SimulationControls" IsEnabled="False" HorizontalContentAlignment="Stretch"><StackPanel Spacing="12">
-     <TextBox x:Name="ProcessBox" Header="模拟前台进程" Text="cs2.exe" MaxLength="260"/>
-     <Grid x:Name="SimulationFields" ColumnSpacing="16" RowSpacing="12">
-      <NumberBox x:Name="HealthBox" Header="生命值" Minimum="0" Maximum="100" Value="100" SpinButtonPlacementMode="Compact"/>
-      <NumberBox x:Name="ArmorBox" Header="护甲" Minimum="0" Maximum="100" Value="100" SpinButtonPlacementMode="Compact"/>
-      <NumberBox x:Name="KillsBox" Header="本回合击杀" Minimum="0" Maximum="1000000" Value="0" SpinButtonPlacementMode="Compact"/>
-      <ComboBox x:Name="BombBox" Header="炸弹状态" HorizontalAlignment="Stretch"/>
-      <ComboBox x:Name="PhaseBox" Header="回合阶段" HorizontalAlignment="Stretch"/>
-     </Grid>
-     <Grid x:Name="SimulationActions" ColumnSpacing="12" RowSpacing="8"><Button Content="应用模拟输入" Click="ApplySimulation_Click"/><Button Content="+1 击杀" Click="Kill_Click"/><Button x:Name="HeartbeatButton" Content="暂停自动心跳" Click="Heartbeat_Click"/></Grid>
-     <TextBlock Text="输入为本地草稿，应用后以核心回读为准。暂停心跳可测试数据过期。" TextWrapping="Wrap"/>
-    </StackPanel></ContentControl>
+    <Button Content="打开自动化工作室" Click="OpenStudio_Click"/>
    </StackPanel>
   </Expander>
  </StackPanel></ScrollViewer>

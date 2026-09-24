@@ -1,183 +1,84 @@
 <?xml version="1.0" encoding="utf-8"?>
-<Page
-    x:Class="Aura_WinUI.Pages.SettingsPage"
-    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    Background="Transparent"
-    mc:Ignorable="d">
-
+<Page x:Class="Aura_WinUI.Pages.SettingsPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:controls="using:CommunityToolkit.WinUI.Controls"
+      Background="Transparent">
     <ScrollViewer x:Name="PageScroll" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Visible" HorizontalContentAlignment="Stretch">
-        <StackPanel x:Name="PageContent" Spacing="20" MaxWidth="1200" HorizontalAlignment="Left">
-
+        <StackPanel x:Name="PageContent" Spacing="20" HorizontalAlignment="Left">
             <StackPanel Spacing="4">
-                <TextBlock Text="设置 (Settings)" Style="{ThemeResource TitleTextBlockStyle}" TextWrapping="Wrap" />
-                <TextBlock Text="配置客户端偏好、视窗行为与服务状态"
-                           Style="{ThemeResource BodyTextBlockStyle}"
-                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                           TextWrapping="Wrap" />
+                <TextBlock Text="设置" Style="{ThemeResource TitleTextBlockStyle}" />
+                <TextBlock Text="配置客户端偏好、窗口行为与服务状态" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
             </StackPanel>
-
-            <!-- 外观与主题 -->
-            <StackPanel Spacing="10">
-                <TextBlock Text="外观 (Appearance)" Style="{ThemeResource SubtitleTextBlockStyle}" />
-
-                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                        BorderThickness="1"
-                        CornerRadius="8"
-                        Padding="16">
-                    <Grid ColumnSpacing="16" RowSpacing="10">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
-                        <StackPanel Grid.Row="0" Grid.Column="0" Spacing="4">
-                            <TextBlock Text="应用主题" FontWeight="SemiBold" TextWrapping="Wrap" />
-                            <TextBlock Text="选择浅色、深色或跟随 Windows 系统设置"
-                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                       Style="{ThemeResource CaptionTextBlockStyle}"
-                                       TextWrapping="Wrap" />
-                        </StackPanel>
-                        <StackPanel x:Name="ThemeControlContainer" Grid.Row="0" Grid.Column="1" VerticalAlignment="Center">
-                            <ComboBox x:Name="ThemeComboBox"
-                                      Width="140"
-                                      SelectionChanged="ThemeComboBox_SelectionChanged">
-                                <ComboBoxItem Content="跟随系统" Tag="Default" />
-                                <ComboBoxItem Content="浅色 (Light)" Tag="Light" />
-                                <ComboBoxItem Content="深色 (Dark)" Tag="Dark" />
-                            </ComboBox>
-                        </StackPanel>
-                    </Grid>
-                </Border>
+            <Grid x:Name="SettingsColumns" ColumnSpacing="20">
+              <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="0"/></Grid.ColumnDefinitions>
+              <StackPanel x:Name="SettingsMain" Spacing="20" MaxWidth="900" HorizontalAlignment="Stretch">
+            <StackPanel Spacing="8">
+                <TextBlock Text="外观" Style="{ThemeResource SubtitleTextBlockStyle}" />
+                <controls:SettingsCard Header="应用主题" Description="选择浅色、深色或跟随系统" IsClickEnabled="False">
+                    <controls:SettingsCard.HeaderIcon><SymbolIcon Symbol="View" /></controls:SettingsCard.HeaderIcon>
+                    <ComboBox x:Name="ThemeComboBox" MinWidth="140" SelectionChanged="ThemeComboBox_SelectionChanged">
+                        <ComboBoxItem Content="跟随系统" Tag="Default" />
+                        <ComboBoxItem Content="浅色" Tag="Light" />
+                        <ComboBoxItem Content="深色" Tag="Dark" />
+                    </ComboBox>
+                </controls:SettingsCard>
             </StackPanel>
-
-            <!-- 视窗与生命周期行为 -->
-            <StackPanel Spacing="10">
-                <TextBlock Text="生命周期与托盘 (Lifecycle)" Style="{ThemeResource SubtitleTextBlockStyle}" />
-
-                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                        BorderThickness="1"
-                        CornerRadius="8"
-                        Padding="16">
-                    <Grid ColumnSpacing="16" RowSpacing="10">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
-                        <StackPanel Grid.Row="0" Grid.Column="0" Spacing="4">
-                            <TextBlock Text="关闭窗口时最小化至托盘" FontWeight="SemiBold" TextWrapping="Wrap" />
-                            <TextBlock Text="点击窗口右上角关闭按钮时保留后台常驻，不中断键盘灯效与前台感知"
-                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                       Style="{ThemeResource CaptionTextBlockStyle}"
-                                       TextWrapping="Wrap" />
-                        </StackPanel>
-                        <StackPanel x:Name="TrayControlContainer" Grid.Row="0" Grid.Column="1" VerticalAlignment="Center">
-                            <ToggleSwitch x:Name="MinimizeToTrayToggle"
-                                          IsOn="True"
-                                          Toggled="MinimizeToTrayToggle_Toggled"
-                                          OnContent="开"
-                                          OffContent="关" />
-                        </StackPanel>
-                    </Grid>
-                </Border>
+            <StackPanel Spacing="8">
+                <TextBlock Text="应用行为" Style="{ThemeResource SubtitleTextBlockStyle}" />
+                <controls:SettingsCard Header="关闭窗口时最小化至托盘" Description="保留后台服务，继续运行灯效与前台感知" IsClickEnabled="False">
+                    <controls:SettingsCard.HeaderIcon><SymbolIcon Symbol="DockBottom" /></controls:SettingsCard.HeaderIcon>
+                    <ToggleSwitch x:Name="MinimizeToTrayToggle" IsOn="True" OnContent="开" OffContent="关" Toggled="MinimizeToTrayToggle_Toggled" />
+                </controls:SettingsCard>
             </StackPanel>
-
-            <!-- 核心服务控制 -->
-            <StackPanel Spacing="10">
-                <TextBlock Text="后台核心服务 (Daemon)" Style="{ThemeResource SubtitleTextBlockStyle}" />
-
-                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                        BorderThickness="1"
-                        CornerRadius="8"
-                        Padding="16">
-                    <StackPanel Spacing="16">
-                        <Grid ColumnSpacing="16" RowSpacing="10">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                            </Grid.RowDefinitions>
-                            <StackPanel Grid.Row="0" Grid.Column="0" Spacing="4">
-                                <TextBlock Text="守护进程运行状态" FontWeight="SemiBold" TextWrapping="Wrap" />
-                                <TextBlock x:Name="DaemonStatusDetailText"
-                                           Text="正在检测..."
-                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                           Style="{ThemeResource CaptionTextBlockStyle}"
-                                           TextWrapping="Wrap" />
-                            </StackPanel>
-                            <StackPanel x:Name="DaemonControlContainer" Grid.Row="0" Grid.Column="1" VerticalAlignment="Center">
-                                <Button x:Name="RestartDaemonBtn"
-                                        Content="重新连接"
-                                        Click="RestartDaemonBtn_Click" />
-                            </StackPanel>
-                        </Grid>
-
-                        <TextBlock x:Name="StudioStatusText" Text="Studio：正在检测…" TextWrapping="Wrap"/>
-                        <Expander Header="运行时详细信息" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
-                            <TextBlock x:Name="RuntimeDetailsText" TextWrapping="Wrap" IsTextSelectionEnabled="True"/>
-                        </Expander>
-                        <MenuFlyoutSeparator />
-
-                        <Grid ColumnSpacing="16" RowSpacing="10">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                            </Grid.RowDefinitions>
-                            <StackPanel Grid.Row="0" Grid.Column="0" Spacing="4">
-                                <TextBlock Text="Studio 浏览器入口" FontWeight="SemiBold" TextWrapping="Wrap" />
-                                <TextBlock Text="在默认浏览器中打开本机 Studio"
-                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                           Style="{ThemeResource CaptionTextBlockStyle}"
-                                           TextWrapping="Wrap" />
-                            </StackPanel>
-                            <StackPanel x:Name="BrowserControlContainer" Grid.Row="0" Grid.Column="1" VerticalAlignment="Center">
-                                <Button x:Name="OpenBrowserBtn"
-                                        Content="在浏览器中打开"
-                                        Click="OpenBrowserBtn_Click" />
-                            </StackPanel>
-                        </Grid>
-                    </StackPanel>
-                </Border>
+            <StackPanel Spacing="8">
+                <TextBlock Text="核心服务" Style="{ThemeResource SubtitleTextBlockStyle}" />
+                <controls:SettingsExpander x:Name="CoreSettingsExpander" Header="服务状态" Description="查看连接状态和运行时信息" IsExpanded="False">
+                    <controls:SettingsExpander.HeaderIcon><SymbolIcon Symbol="World" /></controls:SettingsExpander.HeaderIcon>
+                    <TextBlock x:Name="DaemonStatusDetailText" Text="正在检测…" TextWrapping="Wrap" />
+                    <controls:SettingsExpander.Items>
+                        <controls:SettingsCard Header="工作室状态" Description="嵌入式编辑器服务" IsClickEnabled="False">
+                            <TextBlock x:Name="StudioStatusText" Text="工作室：正在检测…" TextWrapping="Wrap" />
+                        </controls:SettingsCard>
+                        <controls:SettingsCard Header="配置健康状态" Description="当前生效配置" IsClickEnabled="False">
+                            <TextBlock x:Name="ConfigHealthText" Text="正在检测…" TextWrapping="Wrap" />
+                        </controls:SettingsCard>
+                        <controls:SettingsCard Header="运行时详细信息" Description="核心版本、进程与配置路径" IsClickEnabled="False">
+                            <TextBlock x:Name="RuntimeDetailsText" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+                        </controls:SettingsCard>
+                        <controls:SettingsCard Header="浏览器入口" Description="在默认浏览器中打开本机工作室" IsClickEnabled="False">
+                            <Button x:Name="OpenBrowserBtn" Content="在浏览器中打开" Click="OpenBrowserBtn_Click" />
+                        </controls:SettingsCard>
+                    </controls:SettingsExpander.Items>
+                </controls:SettingsExpander>
+                <controls:SettingsCard Header="重新连接" Description="重新连接本机核心服务" IsClickEnabled="False">
+                    <Button x:Name="RestartDaemonBtn" Content="重新连接" Click="RestartDaemonBtn_Click" />
+                </controls:SettingsCard>
             </StackPanel>
-
-            <!-- 关于信息 -->
-            <StackPanel Spacing="10">
-                <TextBlock Text="关于 (About)" Style="{ThemeResource SubtitleTextBlockStyle}" />
-
-                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                        BorderThickness="1"
-                        CornerRadius="8"
-                        Padding="16">
-                    <StackPanel Spacing="8">
-                        <TextBlock Text="AceHFXAura WinUI 3 Desktop Client" FontWeight="SemiBold" TextWrapping="Wrap" />
-                        <TextBlock x:Name="VersionText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                        <TextBlock Text="专为 ASUS ROG Falchion Ace HFX 打造的原生桌面客户端与磁轴灯效生态"
-                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                   Style="{ThemeResource CaptionTextBlockStyle}"
-                                   TextWrapping="Wrap" />
-                    </StackPanel>
-                </Border>
+            <StackPanel Spacing="8">
+                <TextBlock Text="关于" Style="{ThemeResource SubtitleTextBlockStyle}" />
+                <controls:SettingsCard Header="Aura" Description="专为 ASUS ROG Falchion Ace HFX 打造的灯效与自动化客户端" IsClickEnabled="False">
+                    <controls:SettingsCard.HeaderIcon><SymbolIcon Symbol="Help" /></controls:SettingsCard.HeaderIcon>
+                    <TextBlock x:Name="VersionText" TextWrapping="Wrap" />
+                </controls:SettingsCard>
             </StackPanel>
+              </StackPanel>
+              <StackPanel x:Name="SettingsAside" Grid.Column="1" Spacing="12" Visibility="Collapsed">
+                <TextBlock Text="运行概览" Style="{ThemeResource SubtitleTextBlockStyle}" />
+                <controls:SettingsCard Header="核心服务" Description="当前连接">
+                  <TextBlock x:Name="AsideCoreText" Text="正在检测…" TextWrapping="Wrap" />
+                </controls:SettingsCard>
+                <controls:SettingsCard Header="工作室" Description="编辑器服务">
+                  <TextBlock x:Name="AsideStudioText" Text="正在检测…" TextWrapping="Wrap" />
+                </controls:SettingsCard>
+                <controls:SettingsCard Header="配置" Description="核心正在使用的配置路径">
+                  <StackPanel Spacing="4">
+                    <TextBlock x:Name="AsideConfigHealthText" Text="正在检测…" TextWrapping="Wrap" />
+                    <TextBlock x:Name="AsideConfigText" Text="尚未取得核心信息" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+                  </StackPanel>
+                </controls:SettingsCard>
+              </StackPanel>
+            </Grid>
         </StackPanel>
     </ScrollViewer>
 </Page>

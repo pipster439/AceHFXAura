@@ -133,7 +133,8 @@ void GsiState::UpdateFromPayloadImpl(const nlohmann::json& payload, std::optiona
     // 杜绝跨回合瞬态字段（如 round.bomb）残存导致的假阳性
     for (auto it = payload.begin(); it != payload.end(); ++it) {
         const std::string& top_key = it.key();
-        if (top_key == "previously" || top_key == "added" || top_key == "auth") {
+        if (top_key == "previously" || top_key == "added" || top_key == "auth" ||
+            top_key == "event" || top_key == "event_sequence") {
             continue; // 忽略差量跟踪与鉴权字段
         }
 
@@ -225,6 +226,9 @@ void GsiState::UpdateFromPayloadImpl(const nlohmann::json& payload, std::optiona
     collecting_occurrences_ = true;
     seeding_ = seed;
     DetectGameEvents(payload, now_ms);
+    const uint64_t kill_detected_at_ms =
+        std::find(packet_occurrences_.begin(), packet_occurrences_.end(), "event.kill") != packet_occurrences_.end()
+            ? AutomationMonotonicMs() : 0;
     seeding_ = false;
     collecting_occurrences_ = false;
     if (automation_latest_ && (received_at_ms < automation_received_ms_ ||
@@ -238,7 +242,7 @@ void GsiState::UpdateFromPayloadImpl(const nlohmann::json& payload, std::optiona
     telemetry->received_at_ms = received_at_ms;
     automation_received_ms_ = received_at_ms;
     for (const auto& [key, value] : flat_state_) {
-        // Pulse/sequence views remain legacy-only; occurrences come from detector calls.
+        // Event diagnostics are excluded; occurrences come from detector calls.
         if (key.rfind("event.", 0) == 0 || key.rfind("event_sequence.", 0) == 0) continue;
         switch (value.type) {
             case GsiValue::Type::Number: telemetry->fields[key] = value.num_val; break;
@@ -249,14 +253,13 @@ void GsiState::UpdateFromPayloadImpl(const nlohmann::json& payload, std::optiona
     }
     auto batch = std::make_shared<AutomationObservation>();
     batch->telemetry = telemetry; batch->occurrences = packet_occurrences_;
+    batch->detected_at_ms = kill_detected_at_ms;
     automation_latest_ = telemetry;
     if (automation_batches_.size() == 256) {
         automation_batches_.pop_front(); ++automation_dropped_; automation_overflow_ = true;
     }
     automation_batches_.push_back(std::move(batch));
 
-    // 将动态事件脉冲字段同步写入 flat_state_
-    SyncEventFieldsToFlatState(now_ms);
 }
 
 void GsiState::DetectGameEvents(const nlohmann::json& payload, uint64_t now_ms) {
@@ -340,8 +343,8 @@ void GsiState::DetectGameEvents(const nlohmann::json& payload, uint64_t now_ms) 
     }
 
     if (curr_round_kills == 5 && prev_round_kills_ < 5 && prev_round_kills_ >= 0) {
-        TriggerEvent("PlayerAce", "combat", "👑 五杀团灭 ACE", 
-                     "完成单回合五杀团灭全场 ACE!", {{"round_kills", 5}});
+        TriggerEvent("PlayerAce", "combat", "👑 单回合五杀（推定 ACE）",
+                     "Aura 根据 GSI 本回合击杀数达到 5 推定；不是 CS2 独立 ACE 事件。", {{"round_kills", 5}});
     }
 
     // 2. 玩家伤害与阵亡/复活事件
@@ -453,39 +456,14 @@ void GsiState::TriggerEvent(const std::string& name,
                             const nlohmann::json& details) {
     if (seeding_) return;
     uint64_t now_ms = GetCurrentEpochMs();
-    event_timestamps_[name] = now_ms;
     last_event_name_ = name;
     last_event_label_ = label;
-    last_event_sync_ms_ = 0;
-    static const std::unordered_map<std::string, std::string> aliases = {
-        {"PlayerGotKill", "event_sequence.event.kill"},
-        {"PlayerGotHeadshotKill", "event_sequence.event.headshot"},
-        {"PlayerAce", "event_sequence.event.ace"},
-        {"PlayerTookDamage", "event_sequence.event.damage"},
-        {"PlayerDied", "event_sequence.event.death"},
-        {"PlayerRespawned", "event_sequence.event.respawn"},
-        {"PlayerFlashed", "event_sequence.event.flashed"},
-        {"PlayerBurning", "event_sequence.event.burning"},
-        {"BombPlanting", "event_sequence.event.bomb_planting"},
-        {"BombPlanted", "event_sequence.event.bomb_planted"},
-        {"BombDefusing", "event_sequence.event.bomb_defusing"},
-        {"BombDefused", "event_sequence.event.bomb_defused"},
-        {"BombExploded", "event_sequence.event.bomb_exploded"},
-        {"BombDropped", "event_sequence.event.bomb_dropped"},
-        {"BombPickedup", "event_sequence.event.bomb_pickedup"},
-        {"FreezetimeStarted", "event_sequence.event.freezetime"},
-        {"RoundStarted", "event_sequence.event.round_started"},
-        {"TeamRoundVictory", "event_sequence.event.round_victory"},
-        {"TeamRoundLoss", "event_sequence.event.round_loss"},
-        {"WarmupStarted", "event_sequence.event.warmup"},
-        {"Gameover", "event_sequence.event.gameover"}
-    };
     if (collecting_occurrences_) {
         auto id = CanonicalAutomationEvent(name);
         if (!id.empty()) packet_occurrences_.push_back(std::move(id));
     }
-    auto alias = aliases.find(name);
-    if (alias != aliases.end()) flat_state_[alias->second] = GsiValue(static_cast<double>(++event_sequences_[name]));
+    flat_state_["event.last_event"] = GsiValue(last_event_name_);
+    flat_state_["event.last_label"] = GsiValue(last_event_label_);
 
     GameEventRecord rec;
     rec.name = name;
@@ -502,93 +480,6 @@ void GsiState::TriggerEvent(const std::string& name,
     }
 }
 
-void GsiState::SyncEventFieldsToFlatState(uint64_t now_ms) const {
-    // 节流：event.* 脉冲字段只是 (event_timestamps_, flat_state_ 中少量源字段, now_ms) 的纯函数，
-    // 同一毫秒内重复调用结果必然相同。主循环 25FPS × 多条绑定会对 flat_state_ 做大量重复全量写入，
-    // 故同毫秒直接跳过。最坏情况：同一毫秒内源字段二次变化时，event.* 滞后 1ms（脉冲窗口 1000~4000ms，可忽略）。
-    if (now_ms == last_event_sync_ms_) return;
-    last_event_sync_ms_ = now_ms;
-
-    auto is_active_pulse = [&](const std::string& ev, uint64_t duration_ms) -> bool {
-        auto it = event_timestamps_.find(ev);
-        if (it == event_timestamps_.end()) return false;
-        return (now_ms >= it->second && (now_ms - it->second) <= duration_ms);
-    };
-
-    flat_state_["event.last_event"] = GsiValue(last_event_name_);
-    flat_state_["event.last_label"] = GsiValue(last_event_label_);
-    flat_state_["event.kill"] = GsiValue(is_active_pulse("PlayerGotKill", 1500));
-    flat_state_["event.headshot"] = GsiValue(is_active_pulse("PlayerGotHeadshotKill", 1500));
-    flat_state_["event.ace"] = GsiValue(is_active_pulse("PlayerAce", 3000));
-    flat_state_["event.damage"] = GsiValue(is_active_pulse("PlayerTookDamage", 1000));
-
-    // 阵亡状态：血量为 0 时持续有效
-    int h = -1;
-    auto it_h = flat_state_.find("player_state.health");
-    if (it_h != flat_state_.end() && it_h->second.type == GsiValue::Type::Number) {
-        h = static_cast<int>(it_h->second.num_val);
-    }
-    flat_state_["event.death"] = GsiValue(h == 0);
-
-    flat_state_["event.respawn"] = GsiValue(is_active_pulse("PlayerRespawned", 1500));
-
-    // 炸弹状态
-    std::string b_state;
-    auto it_b = flat_state_.find("bomb.state");
-    if (it_b != flat_state_.end() && it_b->second.type == GsiValue::Type::String) {
-        b_state = it_b->second.str_val;
-    } else {
-        auto it_rb = flat_state_.find("round.bomb");
-        if (it_rb != flat_state_.end() && it_rb->second.type == GsiValue::Type::String) {
-            b_state = it_rb->second.str_val;
-        }
-    }
-    std::string r_phase;
-    auto it_rp = flat_state_.find("round.phase");
-    if (it_rp != flat_state_.end() && it_rp->second.type == GsiValue::Type::String) {
-        r_phase = it_rp->second.str_val;
-    }
-
-    flat_state_["event.bomb_planting"] = GsiValue(b_state == "planting");
-    flat_state_["event.bomb_planted"] = GsiValue(b_state == "planted" && r_phase != "over");
-    flat_state_["event.bomb_defusing"] = GsiValue(b_state == "defusing");
-    flat_state_["event.bomb_defused"] = GsiValue(is_active_pulse("BombDefused", 3000));
-    flat_state_["event.bomb_exploded"] = GsiValue(is_active_pulse("BombExploded", 3000));
-
-    flat_state_["event.round_started"] = GsiValue(is_active_pulse("RoundStarted", 2000));
-    flat_state_["event.freezetime"] = GsiValue(r_phase == "freezetime");
-    flat_state_["event.round_victory"] = GsiValue(is_active_pulse("TeamRoundVictory", 4000));
-    flat_state_["event.round_won"] = flat_state_["event.round_victory"];
-    flat_state_["event.round_mvp"] = flat_state_["event.round_victory"];
-    flat_state_["event.round_loss"] = GsiValue(is_active_pulse("TeamRoundLoss", 4000));
-    flat_state_["event.round_lost"] = flat_state_["event.round_loss"];
-    flat_state_["event.damage_taken"] = flat_state_["event.damage"];
-
-    std::string m_phase;
-    auto it_mp = flat_state_.find("map.phase");
-    if (it_mp != flat_state_.end() && it_mp->second.type == GsiValue::Type::String) {
-        m_phase = it_mp->second.str_val;
-    }
-    flat_state_["event.warmup"] = GsiValue(m_phase == "warmup");
-    flat_state_["event.gameover"] = GsiValue(m_phase == "gameover");
-
-    // 闪光与燃烧
-    int fl = 0;
-    auto it_fl = flat_state_.find("player_state.flashed");
-    if (it_fl != flat_state_.end() && it_fl->second.type == GsiValue::Type::Number) {
-        fl = static_cast<int>(it_fl->second.num_val);
-    }
-    flat_state_["event.flashed"] = GsiValue(fl > 50);
-    flat_state_["event.flash"] = flat_state_["event.flashed"];
-
-    int brn = 0;
-    auto it_brn = flat_state_.find("player_state.burning");
-    if (it_brn != flat_state_.end() && it_brn->second.type == GsiValue::Type::Number) {
-        brn = static_cast<int>(it_brn->second.num_val);
-    }
-    flat_state_["event.burning"] = GsiValue(brn > 0);
-}
-
 std::vector<GameEventRecord> GsiState::GetRecentEvents(size_t max_count) const {
     std::lock_guard<std::mutex> lock(mutex_);
     std::vector<GameEventRecord> result;
@@ -599,20 +490,10 @@ std::vector<GameEventRecord> GsiState::GetRecentEvents(size_t max_count) const {
     return result;
 }
 
-bool GsiState::IsEventActive(const std::string& event_name, uint64_t pulse_window_ms) const {
-    std::lock_guard<std::mutex> lock(mutex_);
-    auto it = event_timestamps_.find(event_name);
-    if (it == event_timestamps_.end()) return false;
-    uint64_t now_ms = GetCurrentEpochMs();
-    return (now_ms >= it->second && (now_ms - it->second) <= pulse_window_ms);
-}
-
 nlohmann::json GsiState::ToJson() const {
     std::lock_guard<std::mutex> lock(mutex_);
 
     uint64_t now_ms = GetCurrentEpochMs();
-    // 导出前先刷新事件脉冲时效（SyncEventFieldsToFlatState 为 const，不再需要 const_cast）
-    SyncEventFieldsToFlatState(now_ms);
 
     nlohmann::json j_data = nlohmann::json::object();
     for (const auto& [k, v] : flat_state_) {
@@ -700,14 +581,11 @@ void GsiState::Clear() {
     automation_overflow_ = false;
     flat_state_.clear();
     recent_events_.clear();
-    event_timestamps_.clear();
-    event_sequences_.clear();
     last_event_name_.clear();
     last_event_label_.clear();
     foreground_process_.clear();
     last_update_ms_ = 0;
     packet_count_ = 0;
-    last_event_sync_ms_ = 0;   // 复位事件脉冲节流，避免 Clear 后同毫秒内跳过首次刷新
 
     prev_health_ = -1;
     prev_armor_ = -1;
@@ -728,9 +606,6 @@ void GsiState::Clear() {
 double GsiState::GetNumber(const char* field, double def_val) const {
     if (!field || !*field) return def_val;
     std::lock_guard<std::mutex> lock(mutex_);
-    if (std::strncmp(field, "event.", 6) == 0) {
-        SyncEventFieldsToFlatState(GetCurrentEpochMs());
-    }
     auto it = flat_state_.find(field);
     if (it == flat_state_.end()) {
         std::string f(field);
@@ -752,10 +627,8 @@ double GsiState::GetNumber(const char* field, double def_val) const {
 
 bool GsiState::GetBool(const char* field, bool def_val) const {
     if (!field || !*field) return def_val;
+    if (std::strncmp(field, "event.", 6) == 0 || std::strncmp(field, "event_sequence.", 15) == 0) return def_val;
     std::lock_guard<std::mutex> lock(mutex_);
-    if (std::strncmp(field, "event.", 6) == 0) {
-        SyncEventFieldsToFlatState(GetCurrentEpochMs());
-    }
     auto it = flat_state_.find(field);
     if (it == flat_state_.end()) {
         std::string f(field);
@@ -780,9 +653,6 @@ const char* GsiState::GetString(const char* field, const char* def_val) const {
     // 契约保证：基于 thread_local static 缓冲，返回指针在同线程下一次 GetString 调用前有效；跨调用保存需立即深拷贝
     thread_local static std::string tl_buf;
     std::lock_guard<std::mutex> lock(mutex_);
-    if (std::strncmp(field, "event.", 6) == 0) {
-        SyncEventFieldsToFlatState(GetCurrentEpochMs());
-    }
     auto it = flat_state_.find(field);
     if (it == flat_state_.end()) {
         std::string f(field);

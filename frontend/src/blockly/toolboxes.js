@@ -8,7 +8,7 @@ export const EFFECT_STUDIO_TOOLBOX = {
   contents: [
     {
       kind: 'category',
-      name: '🎹 按键 (Keys)',
+      name: '🎹 按键',
       colour: '#7E57C2',
       contents: [
         {
@@ -56,7 +56,7 @@ export const EFFECT_STUDIO_TOOLBOX = {
     },
     {
       kind: 'category',
-      name: '🎨 颜色 (Color)',
+      name: '🎨 颜色',
       colour: '#E91E63',
       contents: [
         {
@@ -122,7 +122,7 @@ export const EFFECT_STUDIO_TOOLBOX = {
     },
     {
       kind: 'category',
-      name: '⏱️ 时间 (Time)',
+      name: '⏱️ 时间',
       colour: '#FFAB19',
       contents: [
         {
@@ -144,7 +144,7 @@ export const EFFECT_STUDIO_TOOLBOX = {
     },
     {
       kind: 'category',
-      name: '⚖️ 条件 (Conditions)',
+      name: '⚖️ 条件',
       colour: '#59C059',
       contents: [
         { kind: 'block', type: 'controls_if' },
@@ -163,7 +163,7 @@ export const EFFECT_STUDIO_TOOLBOX = {
     },
     {
       kind: 'category',
-      name: '🎮 游戏状态 (Game State)',
+      name: '🎮 游戏状态',
       colour: '#4CBFE6',
       contents: [
         { kind: 'block', type: 'gsi_player_health_condition' },
@@ -176,12 +176,12 @@ export const EFFECT_STUDIO_TOOLBOX = {
     { kind: 'sep' },
     {
       kind: 'category',
-      name: '⚙️ 高级 (Advanced)',
+      name: '⚙️ 高级',
       colour: '#607D8B',
       contents: [
         {
           kind: 'category',
-          name: '📐 几何与坐标 (Geometry)',
+          name: '📐 几何与坐标',
           colour: '#009688',
           contents: [
             { kind: 'block', type: 'geometry_coords' },
@@ -209,7 +209,7 @@ export const EFFECT_STUDIO_TOOLBOX = {
         },
         {
           kind: 'category',
-          name: '🧮 数学运算 (Math)',
+          name: '🧮 数学运算',
           colour: '#43A047',
           contents: [
             { kind: 'block', type: 'math_number' },
@@ -238,13 +238,13 @@ export const EFFECT_STUDIO_TOOLBOX = {
         },
         {
           kind: 'category',
-          name: '📦 变量 (Variables)',
+          name: '📦 变量',
           colour: '#FF8C1A',
           custom: 'VARIABLE'
         },
         {
           kind: 'category',
-          name: '🔄 复杂循环 (Loops & Flow)',
+          name: '🔄 复杂循环',
           colour: '#FB8C00',
           contents: [
             {
@@ -267,7 +267,7 @@ export const EFFECT_STUDIO_TOOLBOX = {
         },
         {
           kind: 'category',
-          name: '📡 原始传感 (Raw GSI)',
+          name: '📡 原始传感',
           colour: '#00ACC1',
           contents: [
             {

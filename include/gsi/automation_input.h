@@ -24,6 +24,8 @@ struct AutomationObservation {
     std::shared_ptr<const AutomationTelemetry> telemetry;
     // Vector index is the ordinal within this detector packet; canonical IDs.
     std::vector<std::string> occurrences;
+    // Diagnostic only: sampled after detector work, on the receipt clock.
+    uint64_t detected_at_ms{0};
 };
 struct AutomationInputDrain {
     std::shared_ptr<const AutomationTelemetry> latest;

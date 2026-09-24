@@ -6,20 +6,20 @@ namespace Aura_WinUI.Common;
 // Shared native-control sizing only; no custom layout/scrolling implementation.
 internal static class PageLayout
 {
-    internal static void Attach(Page page, ScrollViewer scroll, StackPanel content, Action<double>? reflow = null)
+    internal static void Attach(Page page, ScrollViewer scroll, StackPanel content, Action<double>? reflow = null, double maxWidth = 1700)
     {
         scroll.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
         scroll.HorizontalScrollMode = ScrollMode.Disabled;
         scroll.VerticalScrollBarVisibility = ScrollBarVisibility.Visible;
         scroll.HorizontalContentAlignment = HorizontalAlignment.Stretch;
         scroll.VerticalContentAlignment = VerticalAlignment.Top;
-        content.HorizontalAlignment = HorizontalAlignment.Left;
-        content.MaxWidth = 1200;
+        content.HorizontalAlignment = HorizontalAlignment.Center;
+        content.MaxWidth = maxWidth;
         void Resize()
         {
             var viewport = scroll.ViewportWidth;
             if (viewport <= 0) return;
-            var width = Math.Min(1200, viewport);
+            var width = Math.Min(maxWidth, viewport);
             var padding = width < 720 ? 16 : 24;
             content.Width = width;
             content.Padding = new Thickness(padding);
