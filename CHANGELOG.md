@@ -1,4 +1,4 @@
-## 0.1.0-alpha.4 candidate — WinUI desktop productization (unreleased)
+## [0.1.0-alpha.4] — WinUI desktop productization
 
 - Alpha breaking cleanup：移除 Effect Studio 的 `event.*` 持续布尔脉冲与 `event_sequence.*` 旧视图。旧 `gsi_get_boolean(event.*)` / `orch_event_triggered` 工作区加载时给出迁移诊断；请改用 Automation v2 事件规则。Automation occurrence、近期事件诊断和旧插件 one-shot Host compatibility envelope 保留。
 - 光效新建与编辑均显式显示持续/单次生命周期及序列结束后淡出；Automation 选择光效时显示实际发布生命周期或兼容播放摘要。常用 GSI 字段和离散事件提供中文分类、说明及 canonical key 保留。`event.ace` 明确为本回合击杀数达到五次的推定。
@@ -7,7 +7,12 @@
 - Separate core/Studio readiness, private owned-daemon shutdown, external-daemon attachment without shutdown authority, explicit dev/portable layouts.
 - Native Game Integration manages CS2 cfg installation and displays real GSI/daemon-backed simulation; Automation authoring stays in Studio.
 - User config/plugins and WebView2 data remain outside replaceable runtime assets. No new hardware commands, Automation semantics or Plugin ABI changes.
-- Candidate automated validation and physical Windows/HFX/CS2 acceptance are recorded separately; this entry does not claim a public release.
+- 自动化测试与物理 Windows 11 / Falchion Ace HFX / CS2 实机验收已完成。
+
+### 已知问题与说明
+
+- 响应式按键灯效中，按下 Copilot 键时偶尔会同时点亮左 Win 键；计划后续修复。
+- 发行包采用 WinUI 自包含目录结构，必须完整解压 ZIP 后运行内部的 `Aura.exe`；不可单独提取单个 EXE 执行。
 
 ## 0.1.0-alpha.3 candidate — breaking Automation cleanup (historical)
 
@@ -104,4 +109,7 @@ Earlier entries below are historical descriptions of their respective revisions.
 - 自动化基础方案使用 first-match 规则顺序；更高层的 Scene 容器尚未实现。
 - 已发布插件的历史 DLL 尚不会自动清理。
 
+[0.1.0-alpha.4]: https://github.com/pipster439/AceHFXAura/releases/tag/v0.1.0-alpha.4
+[0.1.0-alpha.3]: https://github.com/pipster439/AceHFXAura/releases/tag/v0.1.0-alpha.3
+[0.1.0-alpha.2]: https://github.com/pipster439/AceHFXAura/releases/tag/v0.1.0-alpha.2
 [0.1.0-alpha.1]: https://github.com/pipster439/AceHFXAura/releases/tag/v0.1.0-alpha.1
