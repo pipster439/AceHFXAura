@@ -175,6 +175,55 @@ std::future<bool> M605Runtime::ResetAllPerKeyDeadzoneOverrides(
     return Enqueue(std::move(job));
 }
 
+std::future<bool> M605Runtime::SetSpeedTapPair(
+    uint16_t logical_key_1, uint16_t logical_key_2) {
+    return EnqueueSpeedTapPair(logical_key_1, logical_key_2, true);
+}
+
+std::future<bool> M605Runtime::DisableSpeedTapPair(
+    uint16_t logical_key_1, uint16_t logical_key_2) {
+    return EnqueueSpeedTapPair(logical_key_1, logical_key_2, false);
+}
+
+std::future<bool> M605Runtime::EnqueueSpeedTapPair(
+    uint16_t logical_key_1, uint16_t logical_key_2, bool enabled) {
+    auto report = m605::BuildSpeedTapPair(logical_key_1, logical_key_2, enabled ? 1 : 0);
+    if (!report) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (health_ == M605RuntimeHealth::Clean ||
+            health_ == M605RuntimeHealth::TransactionInProgress) {
+            last_error_ = "SpeedTap pair requires two distinct verified logical keys";
+        }
+        return RejectedOperation();
+    }
+    Job job{};
+    job.stages[0] = *report;
+    job.stage_count = 1;
+    job.kind = Kind::SpeedTapPair;
+    job.logical_key_id = logical_key_1;
+    job.other_key_id = logical_key_2;
+    job.value = enabled ? 1 : 0;
+    return Enqueue(std::move(job));
+}
+
+std::future<bool> M605Runtime::SetSpeedTapMaster(bool enabled) {
+    auto report = m605::BuildSpeedTapMaster(enabled ? 1 : 0);
+    Job job{};
+    job.stages[0] = *report;
+    job.stage_count = 1;
+    job.kind = Kind::SpeedTapMaster;
+    job.value = enabled ? 1 : 0;
+    return Enqueue(std::move(job));
+}
+
+std::future<bool> M605Runtime::ResetSpeedTapRuntimeToProfile() {
+    Job job{};
+    job.stages[0] = m605::BuildResetSpeedTapRuntimeToProfile();
+    job.stage_count = 1;
+    job.kind = Kind::SpeedTapProfileReset;
+    return Enqueue(std::move(job));
+}
+
 std::future<bool> M605Runtime::Enqueue(Job job) {
     auto future = job.completion.get_future();
     bool queued = false;
@@ -285,6 +334,15 @@ bool M605Runtime::Execute(const Job& job) {
                 job.stages[0][8], job.stages[0][7]};
         } else if (job.kind == Kind::ResetAllDeadzone) {
             applied_state_.per_key_deadzone.clear();
+        } else if (job.kind == Kind::SpeedTapPair) {
+            applied_state_.speedtap_pair_submissions[
+                {job.logical_key_id, job.other_key_id}] = job.value != 0;
+        } else if (job.kind == Kind::SpeedTapMaster) {
+            applied_state_.speedtap_master = job.value != 0;
+        } else if (job.kind == Kind::SpeedTapProfileReset) {
+            applied_state_.speedtap_pair_submissions.clear();
+            applied_state_.speedtap_pair_knowledge =
+                M605AppliedRuntimeState::SpeedTapPairKnowledge::ProfileBaselineUnknown;
         }
         last_error_.clear();
     }

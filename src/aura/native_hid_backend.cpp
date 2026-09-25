@@ -50,6 +50,20 @@ bool ValidateOpenedEndpoint(HANDLE handle, const std::wstring& path) {
     return valid;
 }
 
+bool IsVerifiedSpeedTapWireId(uint16_t wire_id) {
+    switch (wire_id) {
+    case 0x0012: // W
+    case 0x001f: // A
+    case 0x0020: // S
+    case 0x0021: // D
+    case 0x0030: // C, already in the M605 mapping table
+    case 0x0031: // V, already in the M605 mapping table
+        return true;
+    default:
+        return false;
+    }
+}
+
 bool IsAllowedOutputReport(const std::array<uint8_t, HID_REPORT_SIZE>& report) {
     if (report[0] != 0) return false;
     if (report[1] == 0xc0 && report[2] == 0x81) {
@@ -93,6 +107,21 @@ bool IsAllowedOutputReport(const std::array<uint8_t, HID_REPORT_SIZE>& report) {
         return report[3] == 0x04 && report[4] == 0 &&
             report[5] <= 5 && report[6] == 0 && report[7] <= 5 &&
             std::all_of(report.begin() + 8, report.end(), [](uint8_t b) { return b == 0; });
+    }
+    if (report[1] == 0x51 && report[2] == 0x55) {
+        const uint16_t first = static_cast<uint16_t>(report[5] | (report[6] << 8));
+        const uint16_t second = static_cast<uint16_t>(report[7] | (report[8] << 8));
+        return report[3] == 0 && report[4] == 0 &&
+            IsVerifiedSpeedTapWireId(first) && IsVerifiedSpeedTapWireId(second) &&
+            first != second && report[9] <= 1 &&
+            std::all_of(report.begin() + 10, report.end(), [](uint8_t b) { return b == 0; });
+    }
+    if (report[1] == 0x51 && report[2] == 0x56) {
+        return std::all_of(report.begin() + 3, report.end(), [](uint8_t b) { return b == 0; });
+    }
+    if (report[1] == 0x51 && report[2] == 0x57) {
+        return report[3] == 0 && report[4] == 0 && report[5] <= 1 &&
+            std::all_of(report.begin() + 6, report.end(), [](uint8_t b) { return b == 0; });
     }
     return false;
 }

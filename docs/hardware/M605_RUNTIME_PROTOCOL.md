@@ -1,4 +1,4 @@
-# M605 已验证运行时协议（alpha.5 Phase 1）
+# M605 已验证运行时协议（alpha.5 Phase 1–3）
 
 目标为 ROG Falchion Ace HFX、固件 1.00.59。仅使用 VID `0x0B05`、PID `0x1B7E`、`MI_01`、UsagePage `0xFF00`、Usage `0x0001`，输入与输出报文均为 65 字节，Report ID 为 `0x00`。
 
@@ -42,7 +42,24 @@ Phase 2 的所有事务仍遵守完整生产时序：连续发送全部 stage �
 
 **Phase 2 后端验收：PASS（补充生产路径 0.1/0.1 mm RT 诊断后接受）。** 原脚本的 V RT Press 0.8 / Release 0.6 mm 报文和 API 成功，但操作者未能明确感到 RT 效果，故原脚本实体标记未通过。用户随后明确授权用同一生产 API 设置 Press/Release 0.1/0.1 mm，操作者清晰确认 RT 效果，之后又确认禁用并恢复继承值。单键 Deadzone 的 Bottom/Top 报文及效果、Top=0 的 reset-all 报文及继承恢复也获得实体确认。额外诊断使实际 HID 输出报文总数为 **16**，不能表述为原定恰好 10 份的严格脚本通过。未来需要易于实体辨别的 RT smoke 向量时，优先考虑本次已确认的较小 RT 距离，并如实记录具体设置和写入总数。完整时间线与哈希保存在 `audit_artifacts/alpha5-phase2-production-smoke/PHASE2_PRODUCTION_SMOKE_REPORT.md`。
 
-目前没有安全的公开单键 Deadzone 删除 API。未来选择性删除必须先持有权威的完整目标覆盖集，再作为一个序列化事务 reset-all 并重放保留项。All-Key RT/Deadzone、SpeedTap、DKS、Hall 遥测、持久化与 UI/HTTP 不在本阶段。
+目前没有安全的公开单键 Deadzone 删除 API。未来选择性删除必须先持有权威的完整目标覆盖集，再作为一个序列化事务 reset-all 并重放保留项。All-Key RT/Deadzone、DKS、Hall 遥测、持久化与 UI/HTTP 不在本阶段。
+
+## Phase 3：已验证的 SpeedTap 运行时操作
+
+SpeedTap 继续使用同一 MI_01 端点、65 字节报文、共享写锁及完整的 **stage → 210 ms → 一次 Apply → 400 ms** 事务时序。下列每个 API 调用各自是一笔事务；没有证据允许把两个不同语义操作合并为一次 Apply。
+
+| 操作 | 精确 stage 前缀 | 语义 |
+|---|---|---|
+| `SetSpeedTapPair(key1, key2)` | `00 51 55 00 00 [Wire1低] [Wire1高] [Wire2低] [Wire2高] 01 00...` | 启用指定有序键对 |
+| `DisableSpeedTapPair(key1, key2)` | 同上，Byte 9 为 `00` | 只禁用该指定键对，不重置其他键对 |
+| `SetSpeedTapMaster(true/false)` | `00 51 57 00 00 [01/00] 00...` | 独立开启／关闭 SpeedTap 引擎；Master OFF 不代表删除键对 |
+| `ResetSpeedTapRuntimeToProfile()` | `00 51 56 00 00 00...` | 将运行时键对状态恢复到活动配置基线；**不是清空全部键对** |
+
+SpeedTap 映射仅增加经过实体验证的 A：逻辑 `1538 / 0x0602` → Wire `0x001F`，D：`769 / 0x0301` → `0x0021`，W：`1793 / 0x0701` → `0x0012`，S：`1794 / 0x0702` → `0x0020`；既有 V/C 映射也可使用。SpeedTap 专用映射查找不扩大 Phase 1/2 单键设置的允许范围。相同键的配对、未知映射、非 0/1 标志和非零保留字节均被拒绝。官方 UI 不允许一个键同时参与多个键对，但尚不能据此宣称固件普遍禁止重叠键对；本后端暂不增加推测性的冲突判定。
+
+Stage 6B 在 Master ON 且 A+D 为活动配置基线、W+S 为运行时新增键对时，单独发送 `0x51 0x56` 并 Apply 后观察到 **W+S 停用、A+D 仍有效**。因此较早把 `0x56` 称作“无条件清空到空表”的解释已被推翻。本实现不提供 `ClearAllSpeedTapPairs()`。若未来需要“保持 Master ON 但删除所有键对”，必须另行取得权威当前键对集合并定向禁用，不能借用 `0x56` 的名字或效果。
+
+官方 Reset UI 的观察序列是 `0x56` + Apply，**然后** `0x57` Master OFF + Apply。本后端保留两笔独立、串行的事务。运行时影子仅记录 AceHFXAura 提交过的键对启停和独立的 Master 状态；reset-to-profile 成功后清除这些运行时提交记录，并把键对知识标记为 `ProfileBaselineUnknown`，绝不把空 map 当成设备空表。没有完整键对读回、活动配置存储介质或断电持久性结论。Stage 6B 观察到匹配的设备 echo；`0xFFAA` 与 echo 均不在此处被称为经证明的 MCU ACK。
 
 `WriteFile` 成功仅表示主机传输提交成功，不等于 MCU ACK、设备状态读取或物理生效确认。400 ms 是保守等待策略，不是 ACK 解析。未来若加入经验证的 RX 确认，应据此加强完成策略，而不能把当前等待说成设备确认。
 
@@ -63,4 +80,4 @@ Phase 2 的所有事务仍遵守完整生产时序：连续发送全部 stage �
 
 已知后续问题：`IndeterminateStagedState` 目前只在本运行时对象生命周期内有效。未来集成阶段必须定义 daemon 重启／运行时重建后的恢复或持久隔离语义；本阶段不增加配置文件或持久标记。
 
-已测试的运行时 USB 协议未发现连续逐键 Hall 行程值；不要提供伪造的 `GetTravelMm`、`GetHallDepth` 或 `RawHallValue` API。Rapid Trigger、Deadzone、SpeedTap、DKS、固件操作和持久化写入均不属于本阶段。
+已测试的运行时 USB 协议未发现连续逐键 Hall 行程值；不要提供伪造的 `GetTravelMm`、`GetHallDepth` 或 `RawHallValue` API。DKS、固件操作和持久化写入均不属于已实现的 Phase 1–3 范围。

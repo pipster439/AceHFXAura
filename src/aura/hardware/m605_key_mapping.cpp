@@ -27,4 +27,14 @@ std::optional<uint16_t> WireIdForLogicalKey(uint16_t logical_key_id) {
     return wire_id;
 }
 
+std::optional<uint16_t> SpeedTapWireIdForLogicalKey(uint16_t logical_key_id) {
+    switch (logical_key_id) {
+    case 0x0602: return 0x001f; // A: logical 1538
+    case 0x0301: return 0x0021; // D: logical 769
+    case 0x0701: return 0x0012; // W: logical 1793
+    case 0x0702: return 0x0020; // S: logical 1794
+    default: return WireIdForLogicalKey(logical_key_id); // existing V/C mappings
+    }
+}
+
 } // namespace aura::m605

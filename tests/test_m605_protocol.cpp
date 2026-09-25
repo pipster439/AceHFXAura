@@ -38,6 +38,9 @@ public:
         else if (report[2] == 0x54 && report[3] == 2) Record("stage-rt-release");
         else if (report[2] == 0x59) Record("stage-deadzone");
         else if (report[2] == 0x52) Record("stage-reset-all-deadzone");
+        else if (report[2] == 0x55) Record(report[9] ? "stage-speedtap-pair-on" : "stage-speedtap-pair-off");
+        else if (report[2] == 0x56) Record("stage-speedtap-profile-reset");
+        else if (report[2] == 0x57) Record(report[5] ? "stage-speedtap-master-on" : "stage-speedtap-master-off");
         else if (report[5] == 0x31) Record("stage-v");
         else Record("stage-c");
         std::unique_lock<std::mutex> lock(stage_mutex_);
@@ -366,7 +369,10 @@ bool TestInvalidInputsDoNotTouchTransport() {
         !fixture.runtime->SetPerKeyDeadzone(0x0402, 0.2, -0.1).get() &&
         !fixture.runtime->ResetAllPerKeyDeadzoneOverrides(6, 0).get() &&
         !fixture.runtime->ResetAllPerKeyDeadzoneOverrides(1, 6).get() &&
-        !fixture.runtime->ResetAllPerKeyDeadzoneOverrides(1, 0, 1).get();
+        !fixture.runtime->ResetAllPerKeyDeadzoneOverrides(1, 0, 1).get() &&
+        !fixture.runtime->SetSpeedTapPair(0x0602, 0x0602).get() &&
+        !fixture.runtime->SetSpeedTapPair(0x0602, 0x0703).get() &&
+        !fixture.runtime->DisableSpeedTapPair(0x0703, 0x0301).get();
     return rejected && fixture.io->Events().empty() && fixture.wait->BeforeCount() == 0 &&
         fixture.wait->AfterCount() == 0 &&
         fixture.runtime->GetHealth() == aura::M605RuntimeHealth::Clean;
@@ -513,6 +519,155 @@ bool TestStopDuringRapidTriggerPostWait() {
         fixture.io->Events() == std::vector<std::string>{
             "connect", "stage-rt-press", "stage-rt-release", "pre-wait", "apply", "post-wait"};
 }
+
+bool TestSpeedTapPairPostSettleAndTargetedDisable() {
+    auto fixture = MakeFixture(BlockPhase::AfterApply);
+    auto first = fixture.runtime->SetSpeedTapPair(0x0602, 0x0301); // A+D
+    const bool entered = fixture.wait->AwaitAfter(1);
+    const bool pending = entered &&
+        fixture.runtime->GetAppliedRuntimeState().speedtap_pair_submissions.empty() &&
+        first.wait_for(std::chrono::milliseconds(0)) == std::future_status::timeout &&
+        fixture.io->Events() == std::vector<std::string>{
+            "connect", "stage-speedtap-pair-on", "pre-wait", "apply", "post-wait"};
+    fixture.wait->Release();
+    if (!pending || !first.get()) return false;
+    if (!fixture.runtime->SetSpeedTapPair(0x0701, 0x0702).get() ||
+        !fixture.runtime->DisableSpeedTapPair(0x0701, 0x0702).get()) return false;
+    const auto state = fixture.runtime->GetAppliedRuntimeState();
+    return state.speedtap_pair_submissions.size() == 2 &&
+        state.speedtap_pair_submissions.at({0x0602, 0x0301}) &&
+        !state.speedtap_pair_submissions.at({0x0701, 0x0702}) &&
+        !state.speedtap_master.has_value() &&
+        state.speedtap_pair_knowledge ==
+            aura::M605AppliedRuntimeState::SpeedTapPairKnowledge::Unknown &&
+        fixture.wait->BeforeCount() == 3 && fixture.wait->AfterCount() == 3 &&
+        fixture.io->Events() == std::vector<std::string>{
+            "connect", "stage-speedtap-pair-on", "pre-wait", "apply", "post-wait",
+            "stage-speedtap-pair-on", "pre-wait", "apply", "post-wait",
+            "stage-speedtap-pair-off", "pre-wait", "apply", "post-wait"};
+}
+
+bool TestSpeedTapProfileResetPreservesMasterKnowledge() {
+    auto fixture = MakeFixture();
+    if (!fixture.runtime->SetSpeedTapPair(0x0602, 0x0301).get() ||
+        !fixture.runtime->SetSpeedTapPair(0x0701, 0x0702).get() ||
+        !fixture.runtime->SetSpeedTapMaster(true).get()) return false;
+    fixture.wait->BlockOn(BlockPhase::AfterApply);
+    auto reset = fixture.runtime->ResetSpeedTapRuntimeToProfile();
+    const bool during = fixture.wait->AwaitAfter(4) &&
+        fixture.runtime->GetAppliedRuntimeState().speedtap_pair_submissions.size() == 2 &&
+        fixture.runtime->GetAppliedRuntimeState().speedtap_master == true &&
+        reset.wait_for(std::chrono::milliseconds(0)) == std::future_status::timeout;
+    fixture.wait->Release();
+    if (!during || !reset.get()) return false;
+    const auto after_reset = fixture.runtime->GetAppliedRuntimeState();
+    if (!after_reset.speedtap_pair_submissions.empty() ||
+        after_reset.speedtap_pair_knowledge !=
+            aura::M605AppliedRuntimeState::SpeedTapPairKnowledge::ProfileBaselineUnknown ||
+        after_reset.speedtap_master != true) return false;
+    if (!fixture.runtime->SetSpeedTapMaster(false).get()) return false;
+    const auto final = fixture.runtime->GetAppliedRuntimeState();
+    return final.speedtap_pair_submissions.empty() && final.speedtap_master == false &&
+        final.speedtap_pair_knowledge ==
+            aura::M605AppliedRuntimeState::SpeedTapPairKnowledge::ProfileBaselineUnknown &&
+        fixture.wait->BeforeCount() == 5 && fixture.wait->AfterCount() == 5 &&
+        fixture.io->Events() == std::vector<std::string>{
+            "connect", "stage-speedtap-pair-on", "pre-wait", "apply", "post-wait",
+            "stage-speedtap-pair-on", "pre-wait", "apply", "post-wait",
+            "stage-speedtap-master-on", "pre-wait", "apply", "post-wait",
+            "stage-speedtap-profile-reset", "pre-wait", "apply", "post-wait",
+            "stage-speedtap-master-off", "pre-wait", "apply", "post-wait"};
+}
+
+bool TestSpeedTapMasterPostSettleBoundary() {
+    auto fixture = MakeFixture(BlockPhase::AfterApply);
+    auto master = fixture.runtime->SetSpeedTapMaster(true);
+    const bool entered = fixture.wait->AwaitAfter(1);
+    const auto during = fixture.runtime->GetAppliedRuntimeState();
+    const bool pending = entered && !during.speedtap_master.has_value() &&
+        during.speedtap_pair_submissions.empty() &&
+        master.wait_for(std::chrono::milliseconds(0)) == std::future_status::timeout &&
+        fixture.io->Events() == std::vector<std::string>{
+            "connect", "stage-speedtap-master-on", "pre-wait", "apply", "post-wait"};
+    fixture.wait->Release();
+    if (!pending || !master.get()) return false;
+    const auto after = fixture.runtime->GetAppliedRuntimeState();
+    return after.speedtap_master == true && after.speedtap_pair_submissions.empty() &&
+        fixture.wait->BeforeCount() == 1 && fixture.wait->AfterCount() == 1;
+}
+
+bool TestSpeedTapStageAndApplyFailures() {
+    {
+        auto fixture = MakeFixture();
+        fixture.io->stage_succeeds = false;
+        const bool success = fixture.runtime->SetSpeedTapPair(0x0602, 0x0301).get();
+        if (success || fixture.wait->BeforeCount() != 0 || fixture.wait->AfterCount() != 0 ||
+            fixture.runtime->GetHealth() != aura::M605RuntimeHealth::IndeterminateStagedState ||
+            fixture.io->Events() != std::vector<std::string>{
+                "connect", "stage-speedtap-pair-on", "disconnect"} ||
+            fixture.runtime->SetSpeedTapMaster(true).get()) return false;
+    }
+    {
+        auto fixture = MakeFixture();
+        if (!fixture.runtime->SetSpeedTapPair(0x0602, 0x0301).get()) return false;
+        fixture.io->apply_succeeds = false;
+        const bool success = fixture.runtime->ResetSpeedTapRuntimeToProfile().get();
+        const auto state = fixture.runtime->GetAppliedRuntimeState();
+        if (success || !state.speedtap_pair_submissions.empty() ||
+            state.speedtap_pair_knowledge !=
+                aura::M605AppliedRuntimeState::SpeedTapPairKnowledge::Unknown ||
+            state.speedtap_master.has_value() ||
+            fixture.wait->BeforeCount() != 2 || fixture.wait->AfterCount() != 1 ||
+            fixture.runtime->GetHealth() != aura::M605RuntimeHealth::IndeterminateStagedState ||
+            fixture.runtime->SetSpeedTapPair(0x0701, 0x0702).get()) return false;
+    }
+    return true;
+}
+
+bool TestSpeedTapFifoAndStop() {
+    auto fixture = MakeFixture(BlockPhase::AfterApply);
+    auto in_flight = fixture.runtime->SetSpeedTapPair(0x0602, 0x0301);
+    const bool entered = fixture.wait->AwaitAfter(1);
+    auto queued_master = fixture.runtime->SetSpeedTapMaster(true);
+    auto queued_reset = fixture.runtime->ResetSpeedTapRuntimeToProfile();
+    std::thread stopper([&] { fixture.runtime->Stop(); });
+    const bool cancelled =
+        queued_master.wait_for(std::chrono::seconds(3)) == std::future_status::ready &&
+        queued_reset.wait_for(std::chrono::seconds(3)) == std::future_status::ready &&
+        !queued_master.get() && !queued_reset.get();
+    const bool still_in_flight =
+        in_flight.wait_for(std::chrono::milliseconds(0)) == std::future_status::timeout &&
+        fixture.io->Events() == std::vector<std::string>{
+            "connect", "stage-speedtap-pair-on", "pre-wait", "apply", "post-wait"};
+    fixture.wait->Release();
+    stopper.join();
+    return entered && cancelled && still_in_flight && in_flight.get() &&
+        fixture.runtime->GetHealth() == aura::M605RuntimeHealth::Stopped &&
+        fixture.io->Events() == std::vector<std::string>{
+            "connect", "stage-speedtap-pair-on", "pre-wait", "apply", "post-wait"};
+}
+
+bool TestSpeedTapFifo() {
+    auto fixture = MakeFixture(BlockPhase::BeforeApply);
+    auto first = fixture.runtime->SetSpeedTapPair(0x0602, 0x0301);
+    const bool entered = fixture.wait->AwaitBefore(1);
+    auto second = fixture.runtime->SetSpeedTapMaster(true);
+    auto third = fixture.runtime->ResetSpeedTapRuntimeToProfile();
+    const bool only_first_staged = fixture.io->Events() == std::vector<std::string>{
+        "connect", "stage-speedtap-pair-on", "pre-wait"};
+    fixture.wait->Release();
+    const bool succeeded = first.get() && second.get() && third.get();
+    const auto state = fixture.runtime->GetAppliedRuntimeState();
+    return entered && only_first_staged && succeeded &&
+        fixture.wait->BeforeCount() == 3 && fixture.wait->AfterCount() == 3 &&
+        state.speedtap_pair_submissions.empty() && state.speedtap_master == true &&
+        state.speedtap_pair_knowledge ==
+            aura::M605AppliedRuntimeState::SpeedTapPairKnowledge::ProfileBaselineUnknown &&
+        fixture.io->Events() == std::vector<std::string>{
+            "connect", "stage-speedtap-pair-on", "pre-wait", "apply", "post-wait",
+            "stage-speedtap-master-on", "pre-wait", "apply", "post-wait",
+            "stage-speedtap-profile-reset", "pre-wait", "apply", "post-wait"};
+}
 }
 
 int main() {
@@ -520,8 +675,16 @@ int main() {
     static_assert(std::tuple_size<Report>::value == 65);
     if (WireIdForLogicalKey(0x0402) != 0x0031 ||
         WireIdForLogicalKey(0x0501) != 0x0030 ||
+        WireIdForLogicalKey(0x0602).has_value() || // Phase 1/2 scope stays frozen.
         WireIdForLogicalKey(0x0401).has_value() ||
         WireIdForLogicalKey(0xffff).has_value()) return 1;
+    if (SpeedTapWireIdForLogicalKey(0x0602) != 0x001f ||
+        SpeedTapWireIdForLogicalKey(0x0301) != 0x0021 ||
+        SpeedTapWireIdForLogicalKey(0x0701) != 0x0012 ||
+        SpeedTapWireIdForLogicalKey(0x0702) != 0x0020 ||
+        SpeedTapWireIdForLogicalKey(0x0402) != 0x0031 ||
+        SpeedTapWireIdForLogicalKey(0x0501) != 0x0030 ||
+        SpeedTapWireIdForLogicalKey(0x0703).has_value()) return 1;
 
     Report v4{};
     v4[1] = 0x51; v4[2] = 0x4f; v4[5] = 0x31; v4[7] = 0x28;
@@ -593,6 +756,39 @@ int main() {
     if (!zero_top_reset || !Check(*zero_top_reset, reset_all,
                                   "RESET ALL DZ Bottom 1 Top 0")) return 1;
 
+    Report speedtap_ad_on{};
+    speedtap_ad_on[1] = 0x51; speedtap_ad_on[2] = 0x55;
+    speedtap_ad_on[5] = 0x1f; speedtap_ad_on[7] = 0x21; speedtap_ad_on[9] = 1;
+    auto ad_on = BuildSpeedTapPair(0x0602, 0x0301, 1);
+    if (!ad_on || !Check(*ad_on, speedtap_ad_on, "SpeedTap A+D ON") ||
+        !aura::NativeHidBackend::IsSupportedOutputReport(*ad_on)) return 1;
+    Report speedtap_ad_off = speedtap_ad_on;
+    speedtap_ad_off[9] = 0;
+    auto ad_off = BuildSpeedTapPair(0x0602, 0x0301, 0);
+    if (!ad_off || !Check(*ad_off, speedtap_ad_off, "SpeedTap A+D OFF") ||
+        !aura::NativeHidBackend::IsSupportedOutputReport(*ad_off)) return 1;
+    Report speedtap_ws_on = speedtap_ad_on;
+    speedtap_ws_on[5] = 0x12; speedtap_ws_on[7] = 0x20;
+    auto ws_on = BuildSpeedTapPair(0x0701, 0x0702, 1);
+    if (!ws_on || !Check(*ws_on, speedtap_ws_on, "SpeedTap W+S ON") ||
+        !aura::NativeHidBackend::IsSupportedOutputReport(*ws_on)) return 1;
+    Report speedtap_profile_reset{};
+    speedtap_profile_reset[1] = 0x51; speedtap_profile_reset[2] = 0x56;
+    if (!Check(BuildResetSpeedTapRuntimeToProfile(), speedtap_profile_reset,
+               "SpeedTap profile-baseline reset") ||
+        !aura::NativeHidBackend::IsSupportedOutputReport(speedtap_profile_reset)) return 1;
+    Report speedtap_master_on{};
+    speedtap_master_on[1] = 0x51; speedtap_master_on[2] = 0x57;
+    speedtap_master_on[5] = 1;
+    auto master_on = BuildSpeedTapMaster(1);
+    if (!master_on || !Check(*master_on, speedtap_master_on, "SpeedTap master ON") ||
+        !aura::NativeHidBackend::IsSupportedOutputReport(*master_on)) return 1;
+    Report speedtap_master_off = speedtap_master_on;
+    speedtap_master_off[5] = 0;
+    auto master_off = BuildSpeedTapMaster(0);
+    if (!master_off || !Check(*master_off, speedtap_master_off, "SpeedTap master OFF") ||
+        !aura::NativeHidBackend::IsSupportedOutputReport(*master_off)) return 1;
+
     Report rejected = v4;
     rejected[2] = 0x50; // unknown opcode
     if (aura::NativeHidBackend::IsSupportedOutputReport(rejected)) return 1;
@@ -638,6 +834,39 @@ int main() {
     rejected = reset_all;
     rejected[7] = 6; // invalid global Top
     if (aura::NativeHidBackend::IsSupportedOutputReport(rejected)) return 1;
+    rejected = speedtap_ad_on;
+    rejected[3] = 1; // reserved pair byte
+    if (aura::NativeHidBackend::IsSupportedOutputReport(rejected)) return 1;
+    rejected = speedtap_ad_on;
+    rejected[5] = 0x22; // unverified first Wire ID
+    if (aura::NativeHidBackend::IsSupportedOutputReport(rejected)) return 1;
+    rejected = speedtap_ad_on;
+    rejected[7] = 0x22; // unverified second Wire ID
+    if (aura::NativeHidBackend::IsSupportedOutputReport(rejected)) return 1;
+    rejected = speedtap_ad_on;
+    rejected[7] = 0x1f; // same key twice
+    if (aura::NativeHidBackend::IsSupportedOutputReport(rejected)) return 1;
+    rejected = speedtap_ad_on;
+    rejected[9] = 2; // invalid pair flag
+    if (aura::NativeHidBackend::IsSupportedOutputReport(rejected)) return 1;
+    rejected = speedtap_ad_on;
+    rejected[10] = 1; // reserved pair payload
+    if (aura::NativeHidBackend::IsSupportedOutputReport(rejected)) return 1;
+    rejected = speedtap_profile_reset;
+    rejected[5] = 1; // reset is exact fixed packet
+    if (aura::NativeHidBackend::IsSupportedOutputReport(rejected)) return 1;
+    rejected = speedtap_profile_reset;
+    rejected[64] = 1; // tail of fixed reset packet
+    if (aura::NativeHidBackend::IsSupportedOutputReport(rejected)) return 1;
+    rejected = speedtap_master_on;
+    rejected[5] = 2; // invalid master status
+    if (aura::NativeHidBackend::IsSupportedOutputReport(rejected)) return 1;
+    rejected = speedtap_master_on;
+    rejected[6] = 1; // reserved master payload
+    if (aura::NativeHidBackend::IsSupportedOutputReport(rejected)) return 1;
+    rejected = speedtap_master_on;
+    rejected[64] = 1; // reserved master tail
+    if (aura::NativeHidBackend::IsSupportedOutputReport(rejected)) return 1;
     Report rgb{};
     rgb[1] = 0xc0; rgb[2] = 0x81; rgb[3] = 15;
     if (!aura::NativeHidBackend::IsSupportedOutputReport(rgb)) return 1;
@@ -652,7 +881,11 @@ int main() {
         BuildPerKeyRapidTriggerStages(0x0401, 0.8, 0.6, true) ||
         BuildPerKeyRapidTriggerStages(0x0402, 2.6, 0.6, true) ||
         BuildPerKeyDeadzone(0x0402, 0.6, 0.3) ||
-        BuildResetAllPerKeyDeadzoneOverrides(1, 0, 1)) return 1;
+        BuildResetAllPerKeyDeadzoneOverrides(1, 0, 1) ||
+        BuildSpeedTapPair(0x0602, 0x0602, 1) ||
+        BuildSpeedTapPair(0x0602, 0x0703, 1) ||
+        BuildSpeedTapPair(0x0602, 0x0301, 2) ||
+        BuildSpeedTapMaster(2)) return 1;
 
     if (!TestSuccessfulTransactionAndShadow() || !TestPostApplyBoundaryAndRgbSerialization() ||
         !TestPriorShadowUnchangedUntilPostSettleFinishes() ||
@@ -667,7 +900,12 @@ int main() {
         !TestRapidTriggerApplyFailureInvalidatesShadow() ||
         !TestResetAllDeadzoneShadowBoundary() ||
         !TestResetAllDeadzoneFailureInvalidatesShadow() ||
-        !TestStopDuringRapidTriggerPostWait()) {
+        !TestStopDuringRapidTriggerPostWait() ||
+        !TestSpeedTapPairPostSettleAndTargetedDisable() ||
+        !TestSpeedTapProfileResetPreservesMasterKnowledge() ||
+        !TestSpeedTapMasterPostSettleBoundary() ||
+        !TestSpeedTapStageAndApplyFailures() || !TestSpeedTapFifoAndStop() ||
+        !TestSpeedTapFifo()) {
         std::cerr << "FAIL: M605 runtime state machine\n";
         return 1;
     }

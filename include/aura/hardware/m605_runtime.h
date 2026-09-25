@@ -12,6 +12,7 @@
 #include <queue>
 #include <string>
 #include <thread>
+#include <utility>
 
 namespace aura {
 
@@ -62,6 +63,11 @@ struct M605AppliedRuntimeState {
     };
     std::map<uint16_t, RapidTrigger> per_key_rapid_trigger; // logical IDs
     std::map<uint16_t, Deadzone> per_key_deadzone; // runtime-known overrides only
+    enum class SpeedTapPairKnowledge { Unknown, ProfileBaselineUnknown };
+    // Only AceHFXAura submissions, not the complete device/profile pair table.
+    std::map<std::pair<uint16_t, uint16_t>, bool> speedtap_pair_submissions;
+    SpeedTapPairKnowledge speedtap_pair_knowledge = SpeedTapPairKnowledge::Unknown;
+    std::optional<bool> speedtap_master;
 };
 
 class M605Runtime {
@@ -89,6 +95,14 @@ public:
     // caller supplies authoritative global raw values; only layer 0 is valid.
     std::future<bool> ResetAllPerKeyDeadzoneOverrides(
         uint8_t global_bottom_raw, uint8_t global_top_raw, uint8_t layer = 0);
+    std::future<bool> SetSpeedTapPair(uint16_t logical_key_1, uint16_t logical_key_2);
+    // Targeted disable of this ordered pair; does not reset other pairs.
+    std::future<bool> DisableSpeedTapPair(uint16_t logical_key_1, uint16_t logical_key_2);
+    // Independent master switch; OFF suspends behavior without deleting pairs.
+    std::future<bool> SetSpeedTapMaster(bool enabled);
+    // Restores runtime pair state toward the active-profile baseline. Baseline
+    // pairs may remain active; this is not an empty-table or master-OFF API.
+    std::future<bool> ResetSpeedTapRuntimeToProfile();
 
     // Cancels queued work and waits for the current transaction to finish.
     // No pending job may start a hardware write after Stop begins.
@@ -102,18 +116,24 @@ private:
     friend struct M605RuntimeTestAccess;
     M605Runtime(std::unique_ptr<m605::detail::Transport> transport,
                 std::unique_ptr<m605::detail::SettleWait> settle_wait);
-    enum class Kind { Actuation, Analog, RapidTrigger, Deadzone, ResetAllDeadzone };
+    enum class Kind {
+        Actuation, Analog, RapidTrigger, Deadzone, ResetAllDeadzone,
+        SpeedTapPair, SpeedTapMaster, SpeedTapProfileReset
+    };
     struct Job {
         std::array<m605::Report, 2> stages{};
         uint8_t stage_count = 0;
         Kind kind;
         uint16_t logical_key_id = 0;
+        uint16_t other_key_id = 0;
         uint8_t value = 0;
         std::promise<bool> completion;
     };
 
     std::future<bool> EnqueueRapidTrigger(
         uint16_t logical_key_id, double press_mm, double release_mm, bool enabled);
+    std::future<bool> EnqueueSpeedTapPair(
+        uint16_t logical_key_1, uint16_t logical_key_2, bool enabled);
     std::future<bool> Enqueue(Job job);
     void WorkerLoop();
     bool Execute(const Job& job); // called with DeviceWriteMutex held

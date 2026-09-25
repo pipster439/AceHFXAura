@@ -103,4 +103,38 @@ std::optional<Report> BuildResetAllPerKeyDeadzoneOverrides(
     return report;
 }
 
+std::optional<Report> BuildSpeedTapPair(
+    uint16_t logical_key_1, uint16_t logical_key_2, uint8_t enabled) {
+    if (logical_key_1 == logical_key_2 || enabled > 1) return std::nullopt;
+    const auto wire_1 = SpeedTapWireIdForLogicalKey(logical_key_1);
+    const auto wire_2 = SpeedTapWireIdForLogicalKey(logical_key_2);
+    if (!wire_1 || !wire_2 || *wire_1 == *wire_2) return std::nullopt;
+
+    Report report{};
+    report[1] = 0x51;
+    report[2] = 0x55;
+    report[5] = static_cast<uint8_t>(*wire_1 & 0xff);
+    report[6] = static_cast<uint8_t>(*wire_1 >> 8);
+    report[7] = static_cast<uint8_t>(*wire_2 & 0xff);
+    report[8] = static_cast<uint8_t>(*wire_2 >> 8);
+    report[9] = enabled;
+    return report;
+}
+
+std::optional<Report> BuildSpeedTapMaster(uint8_t enabled) {
+    if (enabled > 1) return std::nullopt;
+    Report report{};
+    report[1] = 0x51;
+    report[2] = 0x57;
+    report[5] = enabled;
+    return report;
+}
+
+Report BuildResetSpeedTapRuntimeToProfile() {
+    Report report{};
+    report[1] = 0x51;
+    report[2] = 0x56;
+    return report;
+}
+
 } // namespace aura::m605
