@@ -16,6 +16,72 @@ std::optional<uint8_t> ScaleMillimeters(double millimeters, double min_mm,
 }
 } // namespace
 
+std::optional<uint8_t> EncodeDksTriggerMask(const DksSlot& slot) {
+    const auto down_start = static_cast<uint8_t>(slot.down_start);
+    const auto down_end = static_cast<uint8_t>(slot.down_end);
+    const auto up_start = static_cast<uint8_t>(slot.up_start);
+    const auto up_end = static_cast<uint8_t>(slot.up_end);
+    if (down_start > 3 || down_end > 3 || up_start > 3 || up_end > 3) {
+        return std::nullopt;
+    }
+    return static_cast<uint8_t>((down_start << 6) | (down_end << 4) |
+                                (up_start << 2) | up_end);
+}
+
+std::optional<Report> BuildPerKeyDksSlot(const DksConfig& config, uint8_t slot_index) {
+    if (slot_index < 1 || slot_index > config.slots.size()) return std::nullopt;
+    const auto source = WireIdForLogicalKey(config.source_logical_key_id);
+    const auto start = ScaleMillimeters(config.start_mm, 0.1, 4.0, 1, 40);
+    const auto end = ScaleMillimeters(config.end_mm, 0.1, 4.0, 1, 40);
+    if (!source || !start || !end || *start > *end || config.start_mm > config.end_mm) {
+        return std::nullopt;
+    }
+    const auto& slot = config.slots[slot_index - 1];
+    const auto mask = EncodeDksTriggerMask(slot);
+    if (!mask) return std::nullopt;
+    uint16_t target = 0;
+    if (slot.target.kind == DksTarget::Kind::DefaultSentinel) {
+        if (slot.target.logical_key_id != 0) return std::nullopt;
+        target = 0x00ff;
+    } else if (slot.target.kind == DksTarget::Kind::LogicalKey) {
+        const auto mapped = WireIdForLogicalKey(slot.target.logical_key_id);
+        if (!mapped) return std::nullopt;
+        target = *mapped;
+    } else {
+        return std::nullopt;
+    }
+    Report report{};
+    report[1] = 0x51; report[2] = 0x23;
+    report[3] = static_cast<uint8_t>(*source & 0xff);
+    report[4] = static_cast<uint8_t>(*source >> 8);
+    report[5] = *start; report[6] = *end;
+    report[7] = static_cast<uint8_t>(target & 0xff);
+    report[8] = static_cast<uint8_t>(target >> 8);
+    report[9] = *mask; report[10] = slot_index;
+    return report;
+}
+
+std::optional<std::array<Report, 4>> BuildPerKeyDksStages(const DksConfig& config) {
+    std::array<Report, 4> stages{};
+    for (uint8_t index = 1; index <= stages.size(); ++index) {
+        const auto report = BuildPerKeyDksSlot(config, index);
+        if (!report) return std::nullopt;
+        stages[index - 1] = *report;
+    }
+    return stages;
+}
+
+DksConfig StandardDksConfiguration(uint16_t source_logical_key_id) {
+    DksConfig config{};
+    config.source_logical_key_id = source_logical_key_id;
+    config.start_mm = 1.0;
+    config.end_mm = 3.6;
+    config.slots[0].down_start = DksTriggerState::Hold;
+    config.slots[0].down_end = DksTriggerState::Hold;
+    config.slots[0].up_start = DksTriggerState::Release;
+    return config;
+}
+
 std::optional<Report> BuildPerKeyActuation(uint16_t logical_key_id, double millimeters) {
     const auto wire_id = WireIdForLogicalKey(logical_key_id);
     if (!wire_id || !std::isfinite(millimeters) || millimeters < 0.1 || millimeters > 4.0) {

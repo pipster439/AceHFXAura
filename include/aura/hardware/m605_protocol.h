@@ -8,6 +8,39 @@ namespace aura::m605 {
 
 using Report = std::array<uint8_t, 65>;
 
+enum class DksTriggerState : uint8_t {
+    Inactive = 0, Tap = 1, Release = 2, Hold = 3
+};
+
+struct DksTarget {
+    enum class Kind : uint8_t { LogicalKey, DefaultSentinel };
+    Kind kind = Kind::DefaultSentinel;
+    uint16_t logical_key_id = 0;
+    static DksTarget LogicalKey(uint16_t id) { return {Kind::LogicalKey, id}; }
+    static DksTarget DefaultSentinel() { return {Kind::DefaultSentinel, 0}; }
+};
+
+struct DksSlot {
+    DksTarget target;
+    DksTriggerState down_start = DksTriggerState::Inactive;
+    DksTriggerState down_end = DksTriggerState::Inactive;
+    DksTriggerState up_start = DksTriggerState::Inactive;
+    DksTriggerState up_end = DksTriggerState::Inactive;
+};
+
+struct DksConfig {
+    uint16_t source_logical_key_id = 0;
+    double start_mm = 0;
+    double end_mm = 0;
+    std::array<DksSlot, 4> slots{};
+};
+
+std::optional<uint8_t> EncodeDksTriggerMask(const DksSlot& slot);
+std::optional<Report> BuildPerKeyDksSlot(const DksConfig& config, uint8_t slot_index);
+std::optional<std::array<Report, 4>> BuildPerKeyDksStages(const DksConfig& config);
+// Exact four-slot ASUS-style rewrite physically verified in Stage 8B.
+DksConfig StandardDksConfiguration(uint16_t source_logical_key_id);
+
 // Builders accept logical identities only. Invalid or unverified inputs
 // produce no report, so callers cannot fall back to a guessed Wire ID.
 std::optional<Report> BuildPerKeyActuation(uint16_t logical_key_id, double millimeters);

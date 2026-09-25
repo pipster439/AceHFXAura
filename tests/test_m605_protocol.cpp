@@ -102,6 +102,7 @@ public:
         else if (report[2] == 0x55) Record(report[9] ? "stage-speedtap-pair-on" : "stage-speedtap-pair-off");
         else if (report[2] == 0x56) Record("stage-speedtap-profile-reset");
         else if (report[2] == 0x57) Record(report[5] ? "stage-speedtap-master-on" : "stage-speedtap-master-off");
+        else if (report[2] == 0x23) Record("stage-dks-" + std::to_string(report[10]));
         else if (report[5] == 0x31) Record("stage-v");
         else Record("stage-c");
         std::unique_lock<std::mutex> lock(stage_mutex_);
@@ -112,7 +113,10 @@ public:
         });
         return stage_succeeds && this_call != fail_stage_call;
     }
-    bool WriteApply() override { Record("apply"); return apply_succeeds; }
+    bool WriteApply(const aura::m605::Report& report) override {
+        if (report != aura::m605::BuildRuntimeApply()) return false;
+        Record("apply"); return apply_succeeds;
+    }
     void Disconnect() override { connected_ = false; Record("disconnect"); }
     std::string GetLastError() const override { return "simulated write failure"; }
     std::vector<std::string> Events() const {
@@ -156,13 +160,16 @@ private:
     bool stage_released_ = false;
 };
 
-enum class BlockPhase { None, BeforeApply, AfterApply };
+enum class BlockPhase { None, BetweenDksStages, BeforeApply, AfterApply };
 
 class FakeWait final : public aura::m605::detail::SettleWait {
 public:
     FakeWait(FakeTransport* io, BlockPhase block) : io_(io), block_(block) {}
+    void WaitBetweenDksStages() override { WaitAt(BlockPhase::BetweenDksStages); }
     void WaitBeforeApply() override { WaitAt(BlockPhase::BeforeApply); }
     void WaitAfterApply() override { WaitAt(BlockPhase::AfterApply); }
+    bool AwaitBetween(int count) { return Await(count, BlockPhase::BetweenDksStages); }
+    int BetweenCount() const { return Count(BlockPhase::BetweenDksStages); }
     bool AwaitBefore(int count) { return Await(count, BlockPhase::BeforeApply); }
     bool AwaitAfter(int count) { return Await(count, BlockPhase::AfterApply); }
     int BeforeCount() const { return Count(BlockPhase::BeforeApply); }
@@ -180,9 +187,11 @@ public:
 
 private:
     void WaitAt(BlockPhase phase) {
-        io_->RecordTiming(phase == BlockPhase::BeforeApply ? "pre-wait" : "post-wait");
+        io_->RecordTiming(phase == BlockPhase::BetweenDksStages ? "dks-wait" :
+                          phase == BlockPhase::BeforeApply ? "pre-wait" : "post-wait");
         std::unique_lock<std::mutex> lock(mutex_);
-        if (phase == BlockPhase::BeforeApply) ++before_count_;
+        if (phase == BlockPhase::BetweenDksStages) ++between_count_;
+        else if (phase == BlockPhase::BeforeApply) ++before_count_;
         else ++after_count_;
         cv_.notify_all();
         cv_.wait(lock, [this, phase] { return block_ != phase || released_; });
@@ -190,12 +199,14 @@ private:
     bool Await(int count, BlockPhase phase) {
         std::unique_lock<std::mutex> lock(mutex_);
         return cv_.wait_for(lock, std::chrono::seconds(3), [this, count, phase] {
-            return (phase == BlockPhase::BeforeApply ? before_count_ : after_count_) >= count;
+            return (phase == BlockPhase::BetweenDksStages ? between_count_ :
+                    phase == BlockPhase::BeforeApply ? before_count_ : after_count_) >= count;
         });
     }
     int Count(BlockPhase phase) const {
         std::lock_guard<std::mutex> lock(mutex_);
-        return phase == BlockPhase::BeforeApply ? before_count_ : after_count_;
+        return phase == BlockPhase::BetweenDksStages ? between_count_ :
+               phase == BlockPhase::BeforeApply ? before_count_ : after_count_;
     }
 
     FakeTransport* io_;
@@ -203,6 +214,7 @@ private:
     bool released_ = false;
     mutable std::mutex mutex_;
     std::condition_variable cv_;
+    int between_count_ = 0;
     int before_count_ = 0;
     int after_count_ = 0;
 };
@@ -817,6 +829,236 @@ bool TestImportedKeyProtocolAndRuntime() {
         reports[7] == arrow_pair_off &&
         fixture.wait->BeforeCount() == 6 && fixture.wait->AfterCount() == 6;
 }
+
+aura::m605::DksConfig MakeDksConfig() {
+    using namespace aura::m605;
+    DksConfig config = StandardDksConfiguration(0x0402);
+    config.slots[1].target = DksTarget::LogicalKey(0x0600);
+    config.slots[1].down_start = DksTriggerState::Tap;
+    config.slots[2].target = DksTarget::LogicalKey(0x0700);
+    config.slots[2].down_end = DksTriggerState::Tap;
+    return config;
+}
+
+bool TestDksExactPacketsAndAllowlist() {
+    using namespace aura::m605;
+    const auto config = MakeDksConfig();
+    const auto stages = BuildPerKeyDksStages(config);
+    if (!stages) return false;
+    const std::array<uint8_t, 4> targets{{0xff, 0x02, 0x03, 0xff}};
+    const std::array<uint8_t, 4> masks{{0xf8, 0x40, 0x10, 0x00}};
+    for (size_t i = 0; i < 4; ++i) {
+        Report expected{};
+        expected[1] = 0x51; expected[2] = 0x23;
+        expected[3] = 0x31; expected[5] = 0x0a; expected[6] = 0x24;
+        expected[7] = targets[i]; expected[9] = masks[i];
+        expected[10] = static_cast<uint8_t>(i + 1);
+        if (!Check((*stages)[i], expected, "DKS exact 65-byte stage") ||
+            !aura::NativeHidBackend::IsSupportedOutputReport((*stages)[i])) return false;
+    }
+    const auto standard = BuildPerKeyDksStages(StandardDksConfiguration(0x0402));
+    if (!standard) return false;
+    for (size_t i = 0; i < 4; ++i) {
+        Report expected = (*stages)[i];
+        expected[7] = 0xff;
+        expected[9] = i == 0 ? 0xf8 : 0;
+        if (!Check((*standard)[i], expected, "DKS standard rewrite")) return false;
+    }
+    const auto fn_source = BuildPerKeyDksStages(StandardDksConfiguration(0x0508));
+    if (!fn_source || (*fn_source)[0][3] != 0x9f || (*fn_source)[0][4] != 0) return false;
+
+    Report rejected = (*stages)[0];
+    rejected[3] = 0x9e; // unknown source
+    if (aura::NativeHidBackend::IsSupportedOutputReport(rejected)) return false;
+    rejected = (*stages)[0]; rejected[7] = 0x9e; // unknown target
+    if (aura::NativeHidBackend::IsSupportedOutputReport(rejected)) return false;
+    rejected = (*stages)[0]; rejected[5] = 0; // start below range
+    if (aura::NativeHidBackend::IsSupportedOutputReport(rejected)) return false;
+    rejected = (*stages)[0]; rejected[6] = 41; // end above range
+    if (aura::NativeHidBackend::IsSupportedOutputReport(rejected)) return false;
+    rejected = (*stages)[0]; rejected[5] = 37; // inverted thresholds
+    if (aura::NativeHidBackend::IsSupportedOutputReport(rejected)) return false;
+    rejected = (*stages)[0]; rejected[10] = 0;
+    if (aura::NativeHidBackend::IsSupportedOutputReport(rejected)) return false;
+    rejected[10] = 5;
+    if (aura::NativeHidBackend::IsSupportedOutputReport(rejected)) return false;
+    rejected = (*stages)[0]; rejected[11] = 1; // reserved
+    if (aura::NativeHidBackend::IsSupportedOutputReport(rejected)) return false;
+    rejected = (*stages)[0]; rejected[64] = 1;
+    if (aura::NativeHidBackend::IsSupportedOutputReport(rejected)) return false;
+    return true;
+}
+
+bool TestDksBuilderValidation() {
+    using namespace aura::m605;
+    const auto base = MakeDksConfig();
+    if (BuildPerKeyDksSlot(base, 0) || BuildPerKeyDksSlot(base, 5)) return false;
+    auto config = base;
+    config.start_mm = 0.1; config.end_mm = 4.0;
+    auto bounds = BuildPerKeyDksStages(config);
+    if (!bounds || (*bounds)[0][5] != 1 || (*bounds)[0][6] != 40) return false;
+    config = base; config.start_mm = 0.0;
+    if (BuildPerKeyDksStages(config)) return false;
+    config = base; config.end_mm = 4.1;
+    if (BuildPerKeyDksStages(config)) return false;
+    config = base; config.start_mm = 3.7;
+    if (BuildPerKeyDksStages(config)) return false;
+    config = base; config.source_logical_key_id = 0xffff;
+    if (BuildPerKeyDksStages(config)) return false;
+    config = base; config.slots[2].target = DksTarget::LogicalKey(0xffff);
+    if (BuildPerKeyDksStages(config)) return false;
+    config = base; config.slots[3].target = DksTarget::LogicalKey(0x00ff);
+    if (BuildPerKeyDksStages(config)) return false; // sentinel is typed, never a logical key
+    config = base; config.slots[3].target = {DksTarget::Kind::DefaultSentinel, 1};
+    if (BuildPerKeyDksStages(config)) return false;
+    config = base; config.slots[3].up_end = static_cast<DksTriggerState>(4);
+    if (BuildPerKeyDksStages(config)) return false;
+    DksSlot slot{};
+    slot.down_start = DksTriggerState::Hold;
+    slot.down_end = DksTriggerState::Hold;
+    slot.up_start = DksTriggerState::Release;
+    if (EncodeDksTriggerMask(slot) != 0xf8) return false;
+    slot = {}; slot.up_start = DksTriggerState::Tap;
+    if (EncodeDksTriggerMask(slot) != 0x04) return false;
+    slot = {}; slot.up_end = DksTriggerState::Tap;
+    return EncodeDksTriggerMask(slot) == 0x01;
+}
+
+bool TestDksPreflightZeroActivity() {
+    using namespace aura::m605;
+    auto fixture = MakeFixture();
+    const auto base = MakeDksConfig();
+    auto invalid = base; invalid.slots[3].target = DksTarget::LogicalKey(0xffff);
+    if (fixture.runtime->SetPerKeyDks(invalid).get()) return false;
+    invalid = base; invalid.slots[2].target = DksTarget::LogicalKey(0xffff);
+    if (fixture.runtime->SetPerKeyDks(invalid).get()) return false;
+    invalid = base; invalid.source_logical_key_id = 0xffff;
+    if (fixture.runtime->SetPerKeyDks(invalid).get()) return false;
+    invalid = base; invalid.start_mm = 3.7;
+    if (fixture.runtime->SetPerKeyDks(invalid).get()) return false;
+    invalid = base; invalid.slots[3].up_end = static_cast<DksTriggerState>(4);
+    if (fixture.runtime->SetPerKeyDks(invalid).get()) return false;
+    return fixture.io->Events().empty() && fixture.io->StageReports().empty() &&
+        fixture.wait->BetweenCount() == 0 && fixture.wait->BeforeCount() == 0 &&
+        fixture.runtime->GetHealth() == aura::M605RuntimeHealth::Clean &&
+        fixture.runtime->GetAppliedRuntimeState().per_key_dks.empty();
+}
+
+bool TestDksTransactionBoundaryAndFifo() {
+    auto fixture = MakeFixture(BlockPhase::AfterApply);
+    auto dks = fixture.runtime->SetPerKeyDks(MakeDksConfig());
+    const bool entered = fixture.wait->AwaitAfter(1);
+    auto next = fixture.runtime->SetPerKeyActuation(0x0402, 1.0);
+    aura::NativeHidBackend disconnected_lighting;
+    aura::FrameBuffer frame;
+    std::promise<void> push_started;
+    auto started = push_started.get_future();
+    std::promise<bool> push_done;
+    auto pushed = push_done.get_future();
+    std::thread lighting([&] {
+        push_started.set_value();
+        push_done.set_value(disconnected_lighting.PushFrame(frame, {1}));
+    });
+    started.wait();
+    const bool rgb_blocked = pushed.wait_for(std::chrono::milliseconds(30)) ==
+        std::future_status::timeout;
+    const bool pending = entered && rgb_blocked && fixture.io->StageReports().size() == 4 &&
+        fixture.runtime->GetAppliedRuntimeState().per_key_dks.empty() &&
+        dks.wait_for(std::chrono::milliseconds(0)) == std::future_status::timeout &&
+        next.wait_for(std::chrono::milliseconds(0)) == std::future_status::timeout;
+    fixture.wait->Release();
+    const bool success = dks.get() && next.get();
+    lighting.join();
+    const auto state = fixture.runtime->GetAppliedRuntimeState();
+    const auto events = fixture.io->Events();
+    const auto reports = fixture.io->StageReports();
+    bool only_dks_then_actuation = reports.size() == 5;
+    if (only_dks_then_actuation) {
+        for (size_t i = 0; i < 4; ++i) {
+            only_dks_then_actuation &= reports[i][1] == 0x51 && reports[i][2] == 0x23;
+        }
+        only_dks_then_actuation &= reports[4][2] == 0x4f;
+    }
+    return pending && success && !pushed.get() && fixture.wait->BetweenCount() == 3 &&
+        only_dks_then_actuation &&
+        fixture.wait->BeforeCount() == 2 && fixture.wait->AfterCount() == 2 &&
+        events == std::vector<std::string>{
+            "connect", "stage-dks-1", "dks-wait", "stage-dks-2", "dks-wait",
+            "stage-dks-3", "dks-wait", "stage-dks-4", "pre-wait", "apply",
+            "post-wait", "stage-v", "pre-wait", "apply", "post-wait"} &&
+        state.per_key_dks.at(0x0402).start_raw == 10 &&
+        state.per_key_dks.at(0x0402).end_raw == 36 &&
+        !state.per_key_dks.at(0x0402).standard_runtime_configuration &&
+        fixture.runtime->GetHealth() == aura::M605RuntimeHealth::Clean;
+}
+
+bool TestDksShadowUnchangedThroughEveryStage() {
+    for (int stage = 1; stage <= 4; ++stage) {
+        auto fixture = MakeFixture();
+        fixture.io->BlockAfterStageCall(stage);
+        auto future = fixture.runtime->SetPerKeyDks(MakeDksConfig());
+        const bool staged = fixture.io->AwaitStageCall(stage) &&
+            fixture.io->StageReports().size() == static_cast<size_t>(stage) &&
+            fixture.runtime->GetAppliedRuntimeState().per_key_dks.empty() &&
+            fixture.runtime->GetHealth() == aura::M605RuntimeHealth::TransactionInProgress &&
+            future.wait_for(std::chrono::milliseconds(0)) == std::future_status::timeout;
+        fixture.io->ReleaseStages();
+        if (!staged || !future.get() ||
+            fixture.runtime->GetAppliedRuntimeState().per_key_dks.count(0x0402) != 1) return false;
+    }
+    return true;
+}
+
+bool TestDksStageAndApplyFailures() {
+    for (int failed_stage : {1, 2, 3, 4}) {
+        auto fixture = MakeFixture();
+        fixture.io->fail_stage_call = failed_stage;
+        auto queued = fixture.runtime->SetPerKeyDks(MakeDksConfig());
+        if (queued.get() || fixture.io->StageReports().size() != static_cast<size_t>(failed_stage) ||
+            fixture.wait->BetweenCount() != failed_stage - 1 ||
+            fixture.wait->BeforeCount() != 0 || fixture.wait->AfterCount() != 0 ||
+            fixture.runtime->GetHealth() != aura::M605RuntimeHealth::IndeterminateStagedState ||
+            !fixture.runtime->GetAppliedRuntimeState().per_key_dks.empty() ||
+            fixture.runtime->SetPerKeyActuation(0x0402, 1.0).get()) return false;
+    }
+    auto fixture = MakeFixture();
+    fixture.io->apply_succeeds = false;
+    const bool success = fixture.runtime->SetPerKeyDks(MakeDksConfig()).get();
+    const auto events = fixture.io->Events();
+    return !success && fixture.wait->BetweenCount() == 3 &&
+        fixture.wait->BeforeCount() == 1 && fixture.wait->AfterCount() == 0 &&
+        fixture.runtime->GetHealth() == aura::M605RuntimeHealth::IndeterminateStagedState &&
+        fixture.runtime->GetAppliedRuntimeState().per_key_dks.empty() &&
+        events.size() == 11 && events[9] == "apply" && events[10] == "disconnect";
+}
+
+bool TestDksFailureInvalidatesPriorShadow() {
+    auto fixture = MakeFixture();
+    if (!fixture.runtime->SetPerKeyDks(MakeDksConfig()).get()) return false;
+    if (fixture.runtime->GetAppliedRuntimeState().per_key_dks.count(0x0402) != 1) return false;
+    fixture.io->apply_succeeds = false;
+    const bool result = fixture.runtime->RestorePerKeyDksToStandard(0x0402).get();
+    return !result && fixture.runtime->GetAppliedRuntimeState().per_key_dks.empty() &&
+        fixture.runtime->GetHealth() == aura::M605RuntimeHealth::IndeterminateStagedState;
+}
+
+bool TestDksStandardRestoreAndStop() {
+    auto fixture = MakeFixture(BlockPhase::AfterApply);
+    auto restore = fixture.runtime->RestorePerKeyDksToStandard(0x0402);
+    if (!fixture.wait->AwaitAfter(1)) return false;
+    auto queued = fixture.runtime->SetPerKeyDks(MakeDksConfig());
+    std::thread stopper([&] { fixture.runtime->Stop(); });
+    const bool cancelled = queued.wait_for(std::chrono::seconds(3)) == std::future_status::ready &&
+        !queued.get() && fixture.io->StageReports().size() == 4 &&
+        restore.wait_for(std::chrono::milliseconds(0)) == std::future_status::timeout;
+    fixture.wait->Release();
+    stopper.join();
+    const auto state = fixture.runtime->GetAppliedRuntimeState();
+    return cancelled && restore.get() &&
+        state.per_key_dks.at(0x0402).standard_runtime_configuration &&
+        fixture.runtime->GetHealth() == aura::M605RuntimeHealth::Stopped &&
+        fixture.io->StageReports().size() == 4 && fixture.wait->BetweenCount() == 3;
+}
 }
 
 int main() {
@@ -1055,7 +1297,12 @@ int main() {
         !TestSpeedTapProfileResetPreservesMasterKnowledge() ||
         !TestSpeedTapMasterPostSettleBoundary() ||
         !TestSpeedTapStageAndApplyFailures() || !TestSpeedTapFifoAndStop() ||
-        !TestSpeedTapFifo() || !TestImportedKeyProtocolAndRuntime()) {
+        !TestSpeedTapFifo() || !TestImportedKeyProtocolAndRuntime() ||
+        !TestDksExactPacketsAndAllowlist() || !TestDksBuilderValidation() ||
+        !TestDksPreflightZeroActivity() || !TestDksTransactionBoundaryAndFifo() ||
+        !TestDksShadowUnchangedThroughEveryStage() ||
+        !TestDksStageAndApplyFailures() || !TestDksFailureInvalidatesPriorShadow() ||
+        !TestDksStandardRestoreAndStop()) {
         std::cerr << "FAIL: M605 runtime state machine\n";
         return 1;
     }

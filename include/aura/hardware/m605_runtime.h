@@ -25,7 +25,7 @@ public:
     virtual bool IsConnected() const = 0;
     virtual bool Connect() = 0;
     virtual bool WriteStage(const Report& report) = 0;
-    virtual bool WriteApply() = 0;
+    virtual bool WriteApply(const Report& report) = 0;
     virtual void Disconnect() = 0;
     virtual std::string GetLastError() const = 0;
 };
@@ -33,6 +33,7 @@ public:
 class SettleWait {
 public:
     virtual ~SettleWait() = default;
+    virtual void WaitBetweenDksStages() = 0;
     virtual void WaitBeforeApply() = 0;
     virtual void WaitAfterApply() = 0;
 };
@@ -68,6 +69,13 @@ struct M605AppliedRuntimeState {
     std::map<std::pair<uint16_t, uint16_t>, bool> speedtap_pair_submissions;
     SpeedTapPairKnowledge speedtap_pair_knowledge = SpeedTapPairKnowledge::Unknown;
     std::optional<bool> speedtap_master;
+    struct Dks {
+        uint8_t start_raw = 0;
+        uint8_t end_raw = 0;
+        std::array<m605::DksSlot, 4> slots{}; // logical targets, not device readback
+        bool standard_runtime_configuration = false;
+    };
+    std::map<uint16_t, Dks> per_key_dks;
 };
 
 class M605Runtime {
@@ -78,7 +86,8 @@ public:
     M605Runtime& operator=(const M605Runtime&) = delete;
 
     // A call is one hardware transaction with 210 ms before apply and 400 ms
-    // after apply. Its future resolves only after the post-apply interval.
+    // after apply. DKS also has three 30 ms inter-stage waits. Its future
+    // resolves only after the post-apply interval.
     // Do not call on every slider mouse-move. Await futures off the UI thread.
     std::future<bool> SetPerKeyActuation(uint16_t logical_key_id, double millimeters);
     std::future<bool> SetAnalogEffect(uint8_t effect_id, bool enabled);
@@ -103,6 +112,10 @@ public:
     // Restores runtime pair state toward the active-profile baseline. Baseline
     // pairs may remain active; this is not an empty-table or master-OFF API.
     std::future<bool> ResetSpeedTapRuntimeToProfile();
+    // One fully preflighted four-stage transaction. Does not change RT state.
+    std::future<bool> SetPerKeyDks(const m605::DksConfig& config);
+    // Exact Stage 8B standard rewrite, not a factory/profile/default restore.
+    std::future<bool> RestorePerKeyDksToStandard(uint16_t logical_key_id);
 
     // Cancels queued work and waits for the current transaction to finish.
     // No pending job may start a hardware write after Stop begins.
@@ -118,15 +131,18 @@ private:
                 std::unique_ptr<m605::detail::SettleWait> settle_wait);
     enum class Kind {
         Actuation, Analog, RapidTrigger, Deadzone, ResetAllDeadzone,
-        SpeedTapPair, SpeedTapMaster, SpeedTapProfileReset
+        SpeedTapPair, SpeedTapMaster, SpeedTapProfileReset, Dks
     };
     struct Job {
-        std::array<m605::Report, 2> stages{};
+        std::array<m605::Report, 4> stages{};
+        m605::Report apply = m605::BuildRuntimeApply();
         uint8_t stage_count = 0;
         Kind kind;
         uint16_t logical_key_id = 0;
         uint16_t other_key_id = 0;
         uint8_t value = 0;
+        std::optional<m605::DksConfig> dks_config;
+        bool standard_dks_rewrite = false;
         std::promise<bool> completion;
     };
 
@@ -134,6 +150,7 @@ private:
         uint16_t logical_key_id, double press_mm, double release_mm, bool enabled);
     std::future<bool> EnqueueSpeedTapPair(
         uint16_t logical_key_1, uint16_t logical_key_2, bool enabled);
+    std::future<bool> EnqueueDks(const m605::DksConfig& config, bool standard_rewrite);
     std::future<bool> Enqueue(Job job);
     void WorkerLoop();
     bool Execute(const Job& job); // called with DeviceWriteMutex held

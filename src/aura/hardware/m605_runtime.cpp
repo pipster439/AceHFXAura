@@ -11,7 +11,7 @@ public:
     bool IsConnected() const override { return backend_.IsConnected(); }
     bool Connect() override { return backend_.Connect(); }
     bool WriteStage(const m605::Report& report) override { return backend_.SendReport(report); }
-    bool WriteApply() override { return backend_.SendReport(m605::BuildRuntimeApply()); }
+    bool WriteApply(const m605::Report& report) override { return backend_.SendReport(report); }
     void Disconnect() override { backend_.Disconnect(); }
     std::string GetLastError() const override { return backend_.GetLastError(); }
 
@@ -22,6 +22,7 @@ private:
 namespace {
 class VendorSettleWait final : public m605::detail::SettleWait {
 public:
+    void WaitBetweenDksStages() override { std::this_thread::sleep_for(std::chrono::milliseconds(30)); }
     void WaitBeforeApply() override { std::this_thread::sleep_for(std::chrono::milliseconds(210)); }
     void WaitAfterApply() override { std::this_thread::sleep_for(std::chrono::milliseconds(400)); }
 };
@@ -130,7 +131,8 @@ std::future<bool> M605Runtime::EnqueueRapidTrigger(
         return RejectedOperation();
     }
     Job job{};
-    job.stages = *reports;
+    job.stages[0] = (*reports)[0];
+    job.stages[1] = (*reports)[1];
     job.stage_count = 2;
     job.kind = Kind::RapidTrigger;
     job.logical_key_id = logical_key_id;
@@ -224,6 +226,45 @@ std::future<bool> M605Runtime::ResetSpeedTapRuntimeToProfile() {
     return Enqueue(std::move(job));
 }
 
+std::future<bool> M605Runtime::SetPerKeyDks(const m605::DksConfig& config) {
+    return EnqueueDks(config, false);
+}
+
+std::future<bool> M605Runtime::RestorePerKeyDksToStandard(uint16_t logical_key_id) {
+    return EnqueueDks(m605::StandardDksConfiguration(logical_key_id), true);
+}
+
+std::future<bool> M605Runtime::EnqueueDks(const m605::DksConfig& config,
+                                          bool standard_rewrite) {
+    // Build and validate the whole transaction before queueing or opening HID.
+    const auto stages = m605::BuildPerKeyDksStages(config);
+    const auto apply = m605::BuildRuntimeApply();
+    bool valid = stages.has_value() &&
+        NativeHidBackend::IsSupportedOutputReport(apply);
+    if (valid) {
+        for (const auto& stage : *stages) {
+            if (!NativeHidBackend::IsSupportedOutputReport(stage)) valid = false;
+        }
+    }
+    if (!valid) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (health_ == M605RuntimeHealth::Clean ||
+            health_ == M605RuntimeHealth::TransactionInProgress) {
+            last_error_ = "Invalid DKS source, target, threshold, trigger state or slot";
+        }
+        return RejectedOperation();
+    }
+    Job job{};
+    job.stages = *stages;
+    job.apply = apply;
+    job.stage_count = 4;
+    job.kind = Kind::Dks;
+    job.logical_key_id = config.source_logical_key_id;
+    job.dks_config = config;
+    job.standard_dks_rewrite = standard_rewrite;
+    return Enqueue(std::move(job));
+}
+
 std::future<bool> M605Runtime::Enqueue(Job job) {
     auto future = job.completion.get_future();
     bool queued = false;
@@ -307,11 +348,15 @@ bool M605Runtime::Execute(const Job& job) {
                               " write did not complete: " + error);
             return false;
         }
+        if (job.kind == Kind::Dks && i + 1 < job.stage_count) {
+            settle_wait_->WaitBetweenDksStages();
+        }
     }
-    // All verified stage reports are consecutive; the vendor settle interval
-    // begins only after the last stage. The shared device lock remains held.
+    // RT stages are consecutive; DKS has three explicit inter-stage waits.
+    // The pre-apply interval begins after the final stage, with the shared
+    // device lock held throughout.
     settle_wait_->WaitBeforeApply();
-    if (!transport_->WriteApply()) {
+    if (!transport_->WriteApply(job.apply)) {
         const std::string error = transport_->GetLastError();
         transport_->Disconnect();
         MarkIndeterminate("apply write did not complete after a successful stage: " + error);
@@ -343,6 +388,10 @@ bool M605Runtime::Execute(const Job& job) {
             applied_state_.speedtap_pair_submissions.clear();
             applied_state_.speedtap_pair_knowledge =
                 M605AppliedRuntimeState::SpeedTapPairKnowledge::ProfileBaselineUnknown;
+        } else if (job.kind == Kind::Dks) {
+            applied_state_.per_key_dks[job.logical_key_id] = {
+                job.stages[0][5], job.stages[0][6], job.dks_config->slots,
+                job.standard_dks_rewrite};
         }
         last_error_.clear();
     }

@@ -1,4 +1,4 @@
-# M605 已验证运行时协议（alpha.5 Phase 1–3 与 Stage 7A 键位映射）
+# M605 已验证运行时协议（alpha.5 Phase 1–4 与 Stage 7A 键位映射）
 
 目标为 ROG Falchion Ace HFX、固件 1.00.59。仅使用 VID `0x0B05`、PID `0x1B7E`、`MI_01`、UsagePage `0xFF00`、Usage `0x0001`，输入与输出报文均为 65 字节，Report ID 为 `0x00`。
 
@@ -69,6 +69,18 @@ Actuation、单键 RT、单键 Deadzone 和 SpeedTap 的协议构建器现在共
 
 Fn 是有效特例：逻辑 `0x0508` → Wire `0x009F`，因此不能用 Wire ID 数值上界（例如 `<= 0x59`）代替精确成员检验。`0x050A` → `0x0040` 表示 RightCtrl/Copilot 的实体磁轴键身份，不推断操作系统层面的 Copilot 或 R-Ctrl 行为。既有 C `0x0501` → `0x0030`、V `0x0402` → `0x0031` 与 A/D/W/S 映射保持不变。Stage 7A 是只读映射审计；此前的生产实体 smoke 只覆盖特定键与命令，不宣称 68 键均逐键完成实体 smoke。
 
+## Phase 4：DKS 四槽运行时写入
+
+Stage 8A 官方被动捕获、Stage 8B 受控重放和实体确认，以及 F1R 静态核对共同支持 `51 23` 为 DKS 配置；`51 2D` 仍是 Analog Effect。DKS 有两个源键行程阈值 Start/End，均按 0.1 mm 编码，支持 0.1–4.0 mm（raw 1–40），且 Start 不得大于 End。源键与普通目标键都从显式 68 键 Logical ID → Wire ID 表解析；特殊目标 `0x00FF` 是独立的 sentinel，不等同普通逻辑键，也不普遍称为“自身”。
+
+每个官方可见 DKS 配置恰有四个槽。**64 字节 vendor payload** 的布局为 `51 23 [源Wire低] [源Wire高] [Start_raw] [End_raw] [目标Wire低或FF] [目标Wire高或00] [mask] [槽号1..4] 00...`；完整的 **65 字节 HID 报文**在前面加 Report ID `00`。`mask = (DownStart << 6) | (DownEnd << 4) | (UpStart << 2) | UpEnd`。每个里程碑状态是两位：`0` 无动作、`1` 单次触发、`2` 释放边界、`3` 持续按住。例：`3320` 编码 `F8`。目标 Wire ID 只按精确映射成员校验，不按数值区间推测；Fn `0x009F` 作为源键可编码，但未单独证实它作为 DKS 动作目标的行为。
+
+一笔 DKS 更新先**完整构造并校验**四份 stage 与 Apply；非法第 3/4 槽同样在首份 HID 写入前拒绝。单个队列任务在共享 `DeviceWriteMutex` 下执行：Stage 1 → 等 30 ms → Stage 2 → 等 30 ms → Stage 3 → 等 30 ms → Stage 4 → 等 210 ms → **一次** `50 55` Apply → 等 400 ms。30/210/400 ms 是已通过重放的保守生产时序，不宣称为 MCU 最小要求或持久化证据。锁贯穿全部等待，灯光帧可能因此延后约 **700 ms**，再加传输及锁竞争。影子只在完整序列成功后记录本会话提交值；任一不确定 stage/Apply 写入失败沿用 `IndeterminateStagedState`、断开和队列取消策略，不做自动恢复。
+
+`RestorePerKeyDksToStandard(logical_key)` 只重写 Stage 8B 验证过的固定标准形态：Start `0A`（1.0 mm）、End `24`（3.6 mm），四个目标都是 `FF 00` sentinel；槽 1 的 mask 为 `F8`，槽 2–4 为 `00`。它同样是四份 stage、三次 30 ms 间隔和一次 Apply，不代表工厂默认、原 profile 或设备读回。正常 DKS 设置和这项标准重写均**不发送 `51 51`**；该命令属于审计过的官方主机通知/配置路径，不是已验证 DKS 运行时激活与恢复的必需步骤。
+
+低层 `SetPerKeyDks` 不暗中禁用 RT。官方 UI 的 RT/DKS 互斥属于拥有继承值和配置状态的上层产品策略。已审计 HAL/SDK GetFunction 路径没有 DKS 配置读回；这不等于断言固件绝无其他读取命令。`51 0C` 不是磁轴 profile dump，本阶段没有引入读取、持久化或固件接口。阶段 8B 的 DEVICE_RX 回显也不被称为 MCU ACK。
+
 `WriteFile` 成功仅表示主机传输提交成功，不等于 MCU ACK、设备状态读取或物理生效确认。400 ms 是保守等待策略，不是 ACK 解析。未来若加入经验证的 RX 确认，应据此加强完成策略，而不能把当前等待说成设备确认。
 
 `SetPerKeyActuation` 是一次完整的硬件事务，至少包含约 210 ms 的 Apply 前等待和 400 ms 的 Apply 后等待。未来滑杆不能在每次鼠标移动时调用它；接入 UI 时须在上层设计 debounce／合并策略，本阶段不实现。
@@ -88,4 +100,4 @@ Fn 是有效特例：逻辑 `0x0508` → Wire `0x009F`，因此不能用 Wire ID
 
 已知后续问题：`IndeterminateStagedState` 目前只在本运行时对象生命周期内有效。未来集成阶段必须定义 daemon 重启／运行时重建后的恢复或持久隔离语义；本阶段不增加配置文件或持久标记。
 
-已测试的运行时 USB 协议未发现连续逐键 Hall 行程值；不要提供伪造的 `GetTravelMm`、`GetHallDepth` 或 `RawHallValue` API。DKS、固件操作和持久化写入均不属于已实现的 Phase 1–3 范围。
+已测试的运行时 USB 协议未发现连续逐键 Hall 行程值；不要提供伪造的 `GetTravelMm`、`GetHallDepth` 或 `RawHallValue` API。DKS 仅包含上述 Phase 4 受验证写入；固件操作和持久化写入仍未实现。

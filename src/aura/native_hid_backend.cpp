@@ -72,6 +72,19 @@ bool IsAllowedOutputReport(const std::array<uint8_t, HID_REPORT_SIZE>& report) {
             m605::IsVerifiedM605WireId(wire) && report[7] >= 1 && report[7] <= 40 &&
             std::all_of(report.begin() + 8, report.end(), [](uint8_t b) { return b == 0; });
     }
+    if (report[1] == 0x51 && report[2] == 0x23) {
+        // Four 2-bit states occupy every bit of Byte 9, so every byte value
+        // is structurally encodable. The typed builder validates each state.
+        const uint16_t source = static_cast<uint16_t>(report[3] | (report[4] << 8));
+        const uint16_t target = static_cast<uint16_t>(report[7] | (report[8] << 8));
+        return m605::IsVerifiedM605WireId(source) &&
+            report[5] >= 1 && report[5] <= 40 &&
+            report[6] >= 1 && report[6] <= 40 && report[5] <= report[6] &&
+            (target == 0x00ff || m605::IsVerifiedM605WireId(target)) &&
+            report[10] >= 1 && report[10] <= 4 &&
+            std::all_of(report.begin() + 11, report.end(),
+                        [](uint8_t b) { return b == 0; });
+    }
     if (report[1] == 0x51 && report[2] == 0x2d) {
         return report[3] == 0 && report[4] == 0 && report[5] == 0 && report[6] <= 1 &&
             std::all_of(report.begin() + 7, report.end(), [](uint8_t b) { return b == 0; });
