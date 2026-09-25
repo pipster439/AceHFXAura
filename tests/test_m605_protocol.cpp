@@ -10,8 +10,10 @@
 #include <limits>
 #include <memory>
 #include <mutex>
+#include <set>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace aura {
@@ -25,6 +27,61 @@ struct M605RuntimeTestAccess {
 }
 
 namespace {
+// Independent Stage 7A expectations. Do not derive this list from the
+// production mapping table or the HAL's 600-slot index formula.
+constexpr std::array<std::pair<uint16_t, uint16_t>, 68> kExpectedPhysicalKeys{{
+    {0x0100, 0x0001}, {0x0600, 0x0002}, {0x0700, 0x0003},
+    {0x0101, 0x0004}, {0x0102, 0x0005}, {0x0103, 0x0006},
+    {0x0104, 0x0007}, {0x0105, 0x0008}, {0x0106, 0x0009},
+    {0x0107, 0x000a}, {0x0108, 0x000b}, {0x0109, 0x000c},
+    {0x010a, 0x000d}, {0x0706, 0x000f}, {0x0608, 0x004b},
+    {0x0200, 0x0010}, {0x0601, 0x0011}, {0x0701, 0x0012},
+    {0x0201, 0x0013}, {0x0202, 0x0014}, {0x0203, 0x0015},
+    {0x0204, 0x0016}, {0x0205, 0x0017}, {0x0206, 0x0018},
+    {0x0207, 0x0019}, {0x0208, 0x001a}, {0x0209, 0x001b},
+    {0x020a, 0x001c}, {0x0607, 0x001d}, {0x0708, 0x004c},
+    {0x0300, 0x001e}, {0x0602, 0x001f}, {0x0702, 0x0020},
+    {0x0301, 0x0021}, {0x0302, 0x0022}, {0x0303, 0x0023},
+    {0x0304, 0x0024}, {0x0305, 0x0025}, {0x0306, 0x0026},
+    {0x0307, 0x0027}, {0x0308, 0x0028}, {0x0309, 0x0029},
+    {0x0707, 0x002b}, {0x060b, 0x0055},
+    {0x0400, 0x002c}, {0x0703, 0x002e}, {0x0401, 0x002f},
+    {0x0501, 0x0030}, {0x0402, 0x0031}, {0x0403, 0x0032},
+    {0x0404, 0x0033}, {0x0405, 0x0034}, {0x0406, 0x0035},
+    {0x0407, 0x0036}, {0x0408, 0x0037}, {0x040a, 0x0039},
+    {0x070a, 0x0053}, {0x070b, 0x0056},
+    {0x0500, 0x003a}, {0x0604, 0x003b}, {0x0704, 0x003c},
+    {0x0503, 0x003d}, {0x0507, 0x003e}, {0x0508, 0x009f},
+    {0x050a, 0x0040}, {0x060a, 0x004f}, {0x050b, 0x0054},
+    {0x040b, 0x0059},
+}};
+
+bool TestExhaustiveVerifiedMapping() {
+    if (kExpectedPhysicalKeys.size() != 68 ||
+        aura::m605::VerifiedM605PhysicalKeyCount() != 68) return false;
+    std::set<uint16_t> logical_ids;
+    std::set<uint16_t> wire_ids;
+    for (const auto& [logical, wire] : kExpectedPhysicalKeys) {
+        if (!logical_ids.insert(logical).second || !wire_ids.insert(wire).second ||
+            aura::m605::WireIdForLogicalKey(logical) != wire ||
+            aura::m605::SpeedTapWireIdForLogicalKey(logical) != wire ||
+            !aura::m605::IsVerifiedM605WireId(wire)) return false;
+    }
+    if (logical_ids.size() != 68 || wire_ids.size() != 68) return false;
+    for (const uint16_t unknown :
+         std::array<uint16_t, 8>{0x0000, 0xffff, 0x0001, 0x010b,
+                                 0x0409, 0x0509, 0x0609, 0x0705}) {
+        if (aura::m605::WireIdForLogicalKey(unknown) ||
+            aura::m605::SpeedTapWireIdForLogicalKey(unknown)) return false;
+    }
+    for (const uint16_t unknown_wire :
+         std::array<uint16_t, 4>{0x0000, 0x000e, 0x009e, 0x00ff}) {
+        if (aura::m605::IsVerifiedM605WireId(unknown_wire)) return false;
+    }
+    return aura::m605::WireIdForLogicalKey(0x0508) == 0x009f &&
+           aura::m605::WireIdForLogicalKey(0x050a) == 0x0040;
+}
+
 class FakeTransport final : public aura::m605::detail::Transport {
 public:
     bool stage_succeeds = true;
@@ -33,6 +90,10 @@ public:
     bool IsConnected() const override { return connected_; }
     bool Connect() override { Record("connect"); connected_ = true; return true; }
     bool WriteStage(const aura::m605::Report& report) override {
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            stage_reports_.push_back(report);
+        }
         if (report[2] == 0x2d) Record("stage-analog");
         else if (report[2] == 0x54 && report[3] == 1) Record("stage-rt-press");
         else if (report[2] == 0x54 && report[3] == 2) Record("stage-rt-release");
@@ -57,6 +118,10 @@ public:
     std::vector<std::string> Events() const {
         std::lock_guard<std::mutex> lock(mutex_);
         return events_;
+    }
+    std::vector<aura::m605::Report> StageReports() const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return stage_reports_;
     }
     void RecordTiming(const char* event) { Record(event); }
     void BlockAfterStageCall(int count) {
@@ -83,6 +148,7 @@ private:
     bool connected_ = false; // accessed only by the runtime worker
     mutable std::mutex mutex_;
     std::vector<std::string> events_;
+    std::vector<aura::m605::Report> stage_reports_;
     std::mutex stage_mutex_;
     std::condition_variable stage_cv_;
     int stage_calls_ = 0;
@@ -357,22 +423,22 @@ bool TestDestructorCancelsQueuedWork() {
 
 bool TestInvalidInputsDoNotTouchTransport() {
     auto fixture = MakeFixture();
-    const bool rejected = !fixture.runtime->SetPerKeyActuation(0x0401, 1.0).get() &&
+    const bool rejected = !fixture.runtime->SetPerKeyActuation(0x0409, 1.0).get() &&
         !fixture.runtime->SetPerKeyActuation(0x0402, 4.1).get() &&
         !fixture.runtime->SetAnalogEffect(1, true).get() &&
-        !fixture.runtime->SetPerKeyRapidTrigger(0x0401, 0.8, 0.6).get() &&
+        !fixture.runtime->SetPerKeyRapidTrigger(0x0409, 0.8, 0.6).get() &&
         !fixture.runtime->SetPerKeyRapidTrigger(0x0402, 0.0, 0.6).get() &&
         !fixture.runtime->SetPerKeyRapidTrigger(0x0402, 0.8, 2.6).get() &&
         !fixture.runtime->DisablePerKeyRapidTrigger(0x0402, 0.4, 0.0).get() &&
-        !fixture.runtime->SetPerKeyDeadzone(0x0401, 0.2, 0.3).get() &&
+        !fixture.runtime->SetPerKeyDeadzone(0x0409, 0.2, 0.3).get() &&
         !fixture.runtime->SetPerKeyDeadzone(0x0402, 0.6, 0.3).get() &&
         !fixture.runtime->SetPerKeyDeadzone(0x0402, 0.2, -0.1).get() &&
         !fixture.runtime->ResetAllPerKeyDeadzoneOverrides(6, 0).get() &&
         !fixture.runtime->ResetAllPerKeyDeadzoneOverrides(1, 6).get() &&
         !fixture.runtime->ResetAllPerKeyDeadzoneOverrides(1, 0, 1).get() &&
         !fixture.runtime->SetSpeedTapPair(0x0602, 0x0602).get() &&
-        !fixture.runtime->SetSpeedTapPair(0x0602, 0x0703).get() &&
-        !fixture.runtime->DisableSpeedTapPair(0x0703, 0x0301).get();
+        !fixture.runtime->SetSpeedTapPair(0x0602, 0x0705).get() &&
+        !fixture.runtime->DisableSpeedTapPair(0x0705, 0x0301).get();
     return rejected && fixture.io->Events().empty() && fixture.wait->BeforeCount() == 0 &&
         fixture.wait->AfterCount() == 0 &&
         fixture.runtime->GetHealth() == aura::M605RuntimeHealth::Clean;
@@ -668,15 +734,99 @@ bool TestSpeedTapFifo() {
             "stage-speedtap-master-on", "pre-wait", "apply", "post-wait",
             "stage-speedtap-profile-reset", "pre-wait", "apply", "post-wait"};
 }
+
+bool TestImportedKeyProtocolAndRuntime() {
+    using aura::m605::Report;
+    using namespace aura::m605;
+
+    Report esc_actuation{};
+    esc_actuation[1] = 0x51; esc_actuation[2] = 0x4f;
+    esc_actuation[5] = 0x01; esc_actuation[7] = 10;
+    const auto esc = BuildPerKeyActuation(0x0100, 1.0);
+    if (!esc || !Check(*esc, esc_actuation, "Esc actuation") ||
+        !aura::NativeHidBackend::IsSupportedOutputReport(*esc)) return false;
+
+    Report fn_actuation = esc_actuation;
+    fn_actuation[5] = 0x9f;
+    const auto fn = BuildPerKeyActuation(0x0508, 1.0);
+    if (!fn || !Check(*fn, fn_actuation, "Fn actuation") ||
+        !aura::NativeHidBackend::IsSupportedOutputReport(*fn)) return false;
+
+    Report enter_press{};
+    enter_press[1] = 0x51; enter_press[2] = 0x54;
+    enter_press[3] = 1; enter_press[5] = 0x2b;
+    enter_press[7] = 8; enter_press[9] = 1;
+    Report enter_release = enter_press;
+    enter_release[3] = 2; enter_release[7] = 6;
+    const auto enter_rt = BuildPerKeyRapidTriggerStages(0x0707, 0.8, 0.6, true);
+    if (!enter_rt || !Check((*enter_rt)[0], enter_press, "Enter RT press") ||
+        !Check((*enter_rt)[1], enter_release, "Enter RT release") ||
+        !aura::NativeHidBackend::IsSupportedOutputReport((*enter_rt)[0]) ||
+        !aura::NativeHidBackend::IsSupportedOutputReport((*enter_rt)[1])) return false;
+    const auto right_shift_rt = BuildPerKeyRapidTriggerStages(0x040a, 0.8, 0.6, true);
+    if (!right_shift_rt || (*right_shift_rt)[0][5] != 0x39 ||
+        !aura::NativeHidBackend::IsSupportedOutputReport((*right_shift_rt)[0])) return false;
+
+    Report fn_deadzone{};
+    fn_deadzone[1] = 0x51; fn_deadzone[2] = 0x59;
+    fn_deadzone[5] = 0x9f; fn_deadzone[7] = 3; fn_deadzone[8] = 2;
+    const auto fn_dz = BuildPerKeyDeadzone(0x0508, 0.2, 0.3);
+    if (!fn_dz || !Check(*fn_dz, fn_deadzone, "Fn deadzone") ||
+        !aura::NativeHidBackend::IsSupportedOutputReport(*fn_dz)) return false;
+    const auto page_down_dz = BuildPerKeyDeadzone(0x070b, 0.2, 0.3);
+    if (!page_down_dz || (*page_down_dz)[5] != 0x56 ||
+        !aura::NativeHidBackend::IsSupportedOutputReport(*page_down_dz)) return false;
+
+    Report arrow_pair{};
+    arrow_pair[1] = 0x51; arrow_pair[2] = 0x55;
+    arrow_pair[5] = 0x4f; arrow_pair[7] = 0x56; arrow_pair[9] = 1;
+    const auto arrows = BuildSpeedTapPair(0x060a, 0x070b, 1);
+    if (!arrows || !Check(*arrows, arrow_pair, "LeftArrow+PageDown SpeedTap") ||
+        !aura::NativeHidBackend::IsSupportedOutputReport(*arrows)) return false;
+
+    Report rejected = fn_actuation;
+    rejected[5] = 0x9e;
+    if (aura::NativeHidBackend::IsSupportedOutputReport(rejected)) return false;
+    rejected[5] = 0xff;
+    if (aura::NativeHidBackend::IsSupportedOutputReport(rejected)) return false;
+    rejected = enter_press; rejected[5] = 0x9e;
+    if (aura::NativeHidBackend::IsSupportedOutputReport(rejected)) return false;
+    rejected = fn_deadzone; rejected[5] = 0xff;
+    if (aura::NativeHidBackend::IsSupportedOutputReport(rejected)) return false;
+    rejected = arrow_pair; rejected[7] = 0x9e;
+    if (aura::NativeHidBackend::IsSupportedOutputReport(rejected)) return false;
+
+    auto fixture = MakeFixture();
+    if (!fixture.runtime->SetPerKeyActuation(0x0100, 1.0).get() ||
+        !fixture.runtime->SetPerKeyRapidTrigger(0x0707, 0.8, 0.6).get() ||
+        !fixture.runtime->DisablePerKeyRapidTrigger(0x0707, 0.4, 0.2).get() ||
+        !fixture.runtime->SetPerKeyDeadzone(0x0508, 0.2, 0.3).get() ||
+        !fixture.runtime->SetSpeedTapPair(0x060a, 0x070b).get() ||
+        !fixture.runtime->DisableSpeedTapPair(0x060a, 0x070b).get()) return false;
+    const auto reports = fixture.io->StageReports();
+    Report inherited_press = enter_press;
+    inherited_press[7] = 4; inherited_press[9] = 0;
+    Report inherited_release = enter_release;
+    inherited_release[7] = 2; inherited_release[9] = 0;
+    Report arrow_pair_off = arrow_pair;
+    arrow_pair_off[9] = 0;
+    return reports.size() == 8 && reports[0] == esc_actuation &&
+        reports[1] == enter_press && reports[2] == enter_release &&
+        reports[3] == inherited_press && reports[4] == inherited_release &&
+        reports[5] == fn_deadzone && reports[6] == arrow_pair &&
+        reports[7] == arrow_pair_off &&
+        fixture.wait->BeforeCount() == 6 && fixture.wait->AfterCount() == 6;
+}
 }
 
 int main() {
     using namespace aura::m605;
     static_assert(std::tuple_size<Report>::value == 65);
+    if (!TestExhaustiveVerifiedMapping()) return 1;
     if (WireIdForLogicalKey(0x0402) != 0x0031 ||
         WireIdForLogicalKey(0x0501) != 0x0030 ||
-        WireIdForLogicalKey(0x0602).has_value() || // Phase 1/2 scope stays frozen.
-        WireIdForLogicalKey(0x0401).has_value() ||
+        WireIdForLogicalKey(0x0602) != 0x001f ||
+        WireIdForLogicalKey(0x0409).has_value() ||
         WireIdForLogicalKey(0xffff).has_value()) return 1;
     if (SpeedTapWireIdForLogicalKey(0x0602) != 0x001f ||
         SpeedTapWireIdForLogicalKey(0x0301) != 0x0021 ||
@@ -684,7 +834,7 @@ int main() {
         SpeedTapWireIdForLogicalKey(0x0702) != 0x0020 ||
         SpeedTapWireIdForLogicalKey(0x0402) != 0x0031 ||
         SpeedTapWireIdForLogicalKey(0x0501) != 0x0030 ||
-        SpeedTapWireIdForLogicalKey(0x0703).has_value()) return 1;
+        SpeedTapWireIdForLogicalKey(0x0705).has_value()) return 1;
 
     Report v4{};
     v4[1] = 0x51; v4[2] = 0x4f; v4[5] = 0x31; v4[7] = 0x28;
@@ -793,7 +943,7 @@ int main() {
     rejected[2] = 0x50; // unknown opcode
     if (aura::NativeHidBackend::IsSupportedOutputReport(rejected)) return 1;
     rejected = v4;
-    rejected[5] = 0x32; // unverified Wire ID
+    rejected[5] = 0x9e; // unknown Wire ID
     if (aura::NativeHidBackend::IsSupportedOutputReport(rejected)) return 1;
     rejected = analog_on;
     rejected[6] = 2; // invalid Analog flag
@@ -814,7 +964,7 @@ int main() {
     rejected[9] = 2; // invalid RT flag
     if (aura::NativeHidBackend::IsSupportedOutputReport(rejected)) return 1;
     rejected = rt_press_on;
-    rejected[5] = 0x32; // unknown Wire ID
+    rejected[5] = 0x9e; // unknown Wire ID
     if (aura::NativeHidBackend::IsSupportedOutputReport(rejected)) return 1;
     rejected = deadzone;
     rejected[7] = 6; // invalid Bottom
@@ -838,10 +988,10 @@ int main() {
     rejected[3] = 1; // reserved pair byte
     if (aura::NativeHidBackend::IsSupportedOutputReport(rejected)) return 1;
     rejected = speedtap_ad_on;
-    rejected[5] = 0x22; // unverified first Wire ID
+    rejected[5] = 0x9e; // unknown first Wire ID
     if (aura::NativeHidBackend::IsSupportedOutputReport(rejected)) return 1;
     rejected = speedtap_ad_on;
-    rejected[7] = 0x22; // unverified second Wire ID
+    rejected[7] = 0x9e; // unknown second Wire ID
     if (aura::NativeHidBackend::IsSupportedOutputReport(rejected)) return 1;
     rejected = speedtap_ad_on;
     rejected[7] = 0x1f; // same key twice
@@ -873,17 +1023,17 @@ int main() {
     rgb[3] = 16; // would require an iterator beyond byte 64
     if (aura::NativeHidBackend::IsSupportedOutputReport(rgb)) return 1;
 
-    if (BuildPerKeyActuation(0x0401, 1.0) ||
+    if (BuildPerKeyActuation(0x0409, 1.0) ||
         BuildPerKeyActuation(0x0402, 0.0) ||
         BuildPerKeyActuation(0x0402, 4.1) ||
         BuildPerKeyActuation(0x0402, std::numeric_limits<double>::quiet_NaN()) ||
         BuildAnalogEffect(1, 1) || BuildAnalogEffect(0, 2) ||
-        BuildPerKeyRapidTriggerStages(0x0401, 0.8, 0.6, true) ||
+        BuildPerKeyRapidTriggerStages(0x0409, 0.8, 0.6, true) ||
         BuildPerKeyRapidTriggerStages(0x0402, 2.6, 0.6, true) ||
         BuildPerKeyDeadzone(0x0402, 0.6, 0.3) ||
         BuildResetAllPerKeyDeadzoneOverrides(1, 0, 1) ||
         BuildSpeedTapPair(0x0602, 0x0602, 1) ||
-        BuildSpeedTapPair(0x0602, 0x0703, 1) ||
+        BuildSpeedTapPair(0x0602, 0x0705, 1) ||
         BuildSpeedTapPair(0x0602, 0x0301, 2) ||
         BuildSpeedTapMaster(2)) return 1;
 
@@ -905,7 +1055,7 @@ int main() {
         !TestSpeedTapProfileResetPreservesMasterKnowledge() ||
         !TestSpeedTapMasterPostSettleBoundary() ||
         !TestSpeedTapStageAndApplyFailures() || !TestSpeedTapFifoAndStop() ||
-        !TestSpeedTapFifo()) {
+        !TestSpeedTapFifo() || !TestImportedKeyProtocolAndRuntime()) {
         std::cerr << "FAIL: M605 runtime state machine\n";
         return 1;
     }

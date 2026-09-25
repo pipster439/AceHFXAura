@@ -1,4 +1,5 @@
 #include "aura/native_hid_backend.h"
+#include "aura/hardware/m605_key_mapping.h"
 #include "utils/logger.h"
 #include <setupapi.h>
 #include <initguid.h>
@@ -50,20 +51,6 @@ bool ValidateOpenedEndpoint(HANDLE handle, const std::wstring& path) {
     return valid;
 }
 
-bool IsVerifiedSpeedTapWireId(uint16_t wire_id) {
-    switch (wire_id) {
-    case 0x0012: // W
-    case 0x001f: // A
-    case 0x0020: // S
-    case 0x0021: // D
-    case 0x0030: // C, already in the M605 mapping table
-    case 0x0031: // V, already in the M605 mapping table
-        return true;
-    default:
-        return false;
-    }
-}
-
 bool IsAllowedOutputReport(const std::array<uint8_t, HID_REPORT_SIZE>& report) {
     if (report[0] != 0) return false;
     if (report[1] == 0xc0 && report[2] == 0x81) {
@@ -82,7 +69,7 @@ bool IsAllowedOutputReport(const std::array<uint8_t, HID_REPORT_SIZE>& report) {
     if (report[1] == 0x51 && report[2] == 0x4f) {
         const uint16_t wire = static_cast<uint16_t>(report[5] | (report[6] << 8));
         return report[3] == 0 && report[4] == 0 &&
-            (wire == 0x0030 || wire == 0x0031) && report[7] >= 1 && report[7] <= 40 &&
+            m605::IsVerifiedM605WireId(wire) && report[7] >= 1 && report[7] <= 40 &&
             std::all_of(report.begin() + 8, report.end(), [](uint8_t b) { return b == 0; });
     }
     if (report[1] == 0x51 && report[2] == 0x2d) {
@@ -92,14 +79,14 @@ bool IsAllowedOutputReport(const std::array<uint8_t, HID_REPORT_SIZE>& report) {
     if (report[1] == 0x51 && report[2] == 0x54) {
         const uint16_t wire = static_cast<uint16_t>(report[5] | (report[6] << 8));
         return (report[3] == 1 || report[3] == 2) && report[4] == 0 &&
-            (wire == 0x0030 || wire == 0x0031) &&
+            m605::IsVerifiedM605WireId(wire) &&
             report[7] >= 1 && report[7] <= 25 && report[8] == 0 && report[9] <= 1 &&
             std::all_of(report.begin() + 10, report.end(), [](uint8_t b) { return b == 0; });
     }
     if (report[1] == 0x51 && report[2] == 0x59) {
         const uint16_t wire = static_cast<uint16_t>(report[5] | (report[6] << 8));
         return report[3] == 0 && report[4] == 0 &&
-            (wire == 0x0030 || wire == 0x0031) &&
+            m605::IsVerifiedM605WireId(wire) &&
             report[7] <= 5 && report[8] <= 5 &&
             std::all_of(report.begin() + 9, report.end(), [](uint8_t b) { return b == 0; });
     }
@@ -112,7 +99,7 @@ bool IsAllowedOutputReport(const std::array<uint8_t, HID_REPORT_SIZE>& report) {
         const uint16_t first = static_cast<uint16_t>(report[5] | (report[6] << 8));
         const uint16_t second = static_cast<uint16_t>(report[7] | (report[8] << 8));
         return report[3] == 0 && report[4] == 0 &&
-            IsVerifiedSpeedTapWireId(first) && IsVerifiedSpeedTapWireId(second) &&
+            m605::IsVerifiedM605WireId(first) && m605::IsVerifiedM605WireId(second) &&
             first != second && report[9] <= 1 &&
             std::all_of(report.begin() + 10, report.end(), [](uint8_t b) { return b == 0; });
     }

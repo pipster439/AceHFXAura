@@ -1,17 +1,17 @@
-# M605 已验证运行时协议（alpha.5 Phase 1–3）
+# M605 已验证运行时协议（alpha.5 Phase 1–3 与 Stage 7A 键位映射）
 
 目标为 ROG Falchion Ace HFX、固件 1.00.59。仅使用 VID `0x0B05`、PID `0x1B7E`、`MI_01`、UsagePage `0xFF00`、Usage `0x0001`，输入与输出报文均为 65 字节，Report ID 为 `0x00`。
 
 ## 身份与映射
 
-逻辑键 ID、磁轴 Wire ID、灯光 LED ID、HID Usage 是不同身份。逻辑 ID 的高字节为 row、低字节为 col；M605 表索引为 `row + col * 8`。当前运行时白名单只含：
+逻辑键 ID、磁轴 Wire ID、灯光 LED ID、HID Usage 是不同身份。逻辑 ID 的高字节为 row、低字节为 col；HAL 表索引为 `row + col * 8`。Phase 1 最初只实现了下列两个锚点；Stage 7A 的完整 68 键生产白名单见下文：
 
 | 物理键 | 逻辑 ID | 表索引 | Wire ID |
 |---|---:|---:|---:|
 | V | `1026 / 0x0402` | 20 | `49 / 0x0031` |
 | C | `1281 / 0x0501` | 13 | `48 / 0x0030` |
 
-曾将 V 写作逻辑 `1281`、Wire `0x30` 的记录是错误的；该身份属于 C。其他表项在 Phase 1 中保持 UNKNOWN，不从 LED ID 或 HID Usage 推算。
+曾将 V 写作逻辑 `1281`、Wire `0x30` 的记录是错误的；该身份属于 C。其余 66 个实体键在 Phase 1 中尚未实现，其中 62 个在 Phase 3 前也未实现；Stage 7A 已从 HAL 表审计并纳入完整的 68 键显式映射，不从 LED ID 或 HID Usage 推算。
 
 ## 已验证写入
 
@@ -40,7 +40,7 @@
 
 Phase 2 的所有事务仍遵守完整生产时序：连续发送全部 stage → **最后一份 stage 后**等待 210 ms → 恰好一次 Apply → 等待 400 ms → 更新应用侧影子状态并完成 future。共享设备写锁覆盖全程；任一 stage 或 Apply 传输失败都进入 `IndeterminateStagedState`。影子状态新增单键 RT 启用位及 Press/Release raw、单键 Deadzone Top/Bottom raw；reset-all 成功后才清空运行时已知 Deadzone 覆盖表。以上仍不是设备 readback。
 
-**Phase 2 后端验收：PASS（补充生产路径 0.1/0.1 mm RT 诊断后接受）。** 原脚本的 V RT Press 0.8 / Release 0.6 mm 报文和 API 成功，但操作者未能明确感到 RT 效果，故原脚本实体标记未通过。用户随后明确授权用同一生产 API 设置 Press/Release 0.1/0.1 mm，操作者清晰确认 RT 效果，之后又确认禁用并恢复继承值。单键 Deadzone 的 Bottom/Top 报文及效果、Top=0 的 reset-all 报文及继承恢复也获得实体确认。额外诊断使实际 HID 输出报文总数为 **16**，不能表述为原定恰好 10 份的严格脚本通过。未来需要易于实体辨别的 RT smoke 向量时，优先考虑本次已确认的较小 RT 距离，并如实记录具体设置和写入总数。完整时间线与哈希保存在 `audit_artifacts/alpha5-phase2-production-smoke/PHASE2_PRODUCTION_SMOKE_REPORT.md`。
+**Phase 2 后端验收：PASS（补充生产路径 0.1/0.1 mm RT 诊断后接受）。** 原脚本的 V RT Press 0.8 / Release 0.6 mm 报文和 API 成功，但操作者未能明确感到 RT 效果，故原脚本实体标记未通过。用户随后明确授权用同一生产 API 设置 Press/Release 0.1/0.1 mm，操作者清晰确认 RT 效果，之后又确认禁用并恢复继承值。单键 Deadzone 的 Bottom/Top 报文及效果、Top=0 的 reset-all 报文及继承恢复也获得实体确认。额外诊断使实际 HID 输出报文总数为 **16**，不能表述为原定恰好 10 份的严格脚本通过。未来需要易于实体辨别的 RT smoke 向量时，优先考虑本次已确认的较小 RT 距离，并如实记录具体设置和写入总数。完整时间线与哈希保存在未提交的 Phase 2 本地 smoke 审计记录中。
 
 目前没有安全的公开单键 Deadzone 删除 API。未来选择性删除必须先持有权威的完整目标覆盖集，再作为一个序列化事务 reset-all 并重放保留项。All-Key RT/Deadzone、DKS、Hall 遥测、持久化与 UI/HTTP 不在本阶段。
 
@@ -55,11 +55,19 @@ SpeedTap 继续使用同一 MI_01 端点、65 字节报文、共享写锁及完�
 | `SetSpeedTapMaster(true/false)` | `00 51 57 00 00 [01/00] 00...` | 独立开启／关闭 SpeedTap 引擎；Master OFF 不代表删除键对 |
 | `ResetSpeedTapRuntimeToProfile()` | `00 51 56 00 00 00...` | 将运行时键对状态恢复到活动配置基线；**不是清空全部键对** |
 
-SpeedTap 映射仅增加经过实体验证的 A：逻辑 `1538 / 0x0602` → Wire `0x001F`，D：`769 / 0x0301` → `0x0021`，W：`1793 / 0x0701` → `0x0012`，S：`1794 / 0x0702` → `0x0020`；既有 V/C 映射也可使用。SpeedTap 专用映射查找不扩大 Phase 1/2 单键设置的允许范围。相同键的配对、未知映射、非 0/1 标志和非零保留字节均被拒绝。官方 UI 不允许一个键同时参与多个键对，但尚不能据此宣称固件普遍禁止重叠键对；本后端暂不增加推测性的冲突判定。
+Phase 3 生产路径 smoke 使用经过实体验证的 A：逻辑 `1538 / 0x0602` → Wire `0x001F`，D：`769 / 0x0301` → `0x0021`，W：`1793 / 0x0701` → `0x0012`，S：`1794 / 0x0702` → `0x0020`。相同键的配对、未知映射、非 0/1 标志和非零保留字节均被拒绝。官方 UI 不允许一个键同时参与多个键对，但尚不能据此宣称固件普遍禁止重叠键对；本后端暂不增加推测性的冲突判定。
 
 Stage 6B 在 Master ON 且 A+D 为活动配置基线、W+S 为运行时新增键对时，单独发送 `0x51 0x56` 并 Apply 后观察到 **W+S 停用、A+D 仍有效**。因此较早把 `0x56` 称作“无条件清空到空表”的解释已被推翻。本实现不提供 `ClearAllSpeedTapPairs()`。若未来需要“保持 Master ON 但删除所有键对”，必须另行取得权威当前键对集合并定向禁用，不能借用 `0x56` 的名字或效果。
 
 官方 Reset UI 的观察序列是 `0x56` + Apply，**然后** `0x57` Master OFF + Apply。本后端保留两笔独立、串行的事务。运行时影子仅记录 AceHFXAura 提交过的键对启停和独立的 Master 状态；reset-to-profile 成功后清除这些运行时提交记录，并把键对知识标记为 `ProfileBaselineUnknown`，绝不把空 map 当成设备空表。没有完整键对读回、活动配置存储介质或断电持久性结论。Stage 6B 观察到匹配的设备 echo；`0xFFAA` 与 echo 均不在此处被称为经证明的 MCU ACK。
+
+## Stage 7A：68/68 实体磁轴键映射已纳入生产
+
+Stage 7A 的本地审计报告与 JSON 证据未提交到仓库。该只读审计从 `AacKbHal_x64.dll` v1.3.46.0（SHA-256 `52d575bf942b7551b3f120c446bf0d853e36f9225c6b9a17407a80e0b1829f04`）的翻译表 `DAT_1801caef0`（RVA `0x1caef0`）确定映射。HAL 使用 `row = logical_id >> 8`、`col = logical_id & 0xff`、`index = row + col * 8`；生产代码**不**对任意 Logical ID 套用这个 600 槽公式，而是只查显式审计过的 68 个实体键。68 个 Logical ID 与 68 个 Wire ID 各自唯一；此前未纳入生产的 62 项同样由 HAL 表证实，不应称为“未证实”。
+
+Actuation、单键 RT、单键 Deadzone 和 SpeedTap 的协议构建器现在共用这份 Logical/XML ID → Hardware Wire ID 表，HID 输出白名单按同一表的 Wire ID 精确成员判断。Logical ID、Wire ID、HID Usage、LED ID 与键帽标识属于不同命名空间；绝不从 LED、HID Usage 或键位排列推导 Wire ID。未知 Logical ID 和未知 Wire ID 均被拒绝，即使某个 Logical ID 计算出的 HAL 索引落在 600 槽范围内也不例外。
+
+Fn 是有效特例：逻辑 `0x0508` → Wire `0x009F`，因此不能用 Wire ID 数值上界（例如 `<= 0x59`）代替精确成员检验。`0x050A` → `0x0040` 表示 RightCtrl/Copilot 的实体磁轴键身份，不推断操作系统层面的 Copilot 或 R-Ctrl 行为。既有 C `0x0501` → `0x0030`、V `0x0402` → `0x0031` 与 A/D/W/S 映射保持不变。Stage 7A 是只读映射审计；此前的生产实体 smoke 只覆盖特定键与命令，不宣称 68 键均逐键完成实体 smoke。
 
 `WriteFile` 成功仅表示主机传输提交成功，不等于 MCU ACK、设备状态读取或物理生效确认。400 ms 是保守等待策略，不是 ACK 解析。未来若加入经验证的 RX 确认，应据此加强完成策略，而不能把当前等待说成设备确认。
 

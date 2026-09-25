@@ -106,8 +106,8 @@ std::optional<Report> BuildResetAllPerKeyDeadzoneOverrides(
 std::optional<Report> BuildSpeedTapPair(
     uint16_t logical_key_1, uint16_t logical_key_2, uint8_t enabled) {
     if (logical_key_1 == logical_key_2 || enabled > 1) return std::nullopt;
-    const auto wire_1 = SpeedTapWireIdForLogicalKey(logical_key_1);
-    const auto wire_2 = SpeedTapWireIdForLogicalKey(logical_key_2);
+    const auto wire_1 = WireIdForLogicalKey(logical_key_1);
+    const auto wire_2 = WireIdForLogicalKey(logical_key_2);
     if (!wire_1 || !wire_2 || *wire_1 == *wire_2) return std::nullopt;
 
     Report report{};
