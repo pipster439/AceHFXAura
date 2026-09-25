@@ -21,6 +21,29 @@
 
 上述 stage 写入完成后先等待约 210 ms，再发送**一次**运行时 Apply Gate：`00 50 55 00...`；Apply 写入成功后，再保留 400 ms 的保守、兼容厂商行为的生效后 settle 时间，事务才结束。这不是已验证的 flash commit、持久化保存或 NVM 写入。断电后是否保留尚未测试。
 
+## Phase 2：已验证的单键 RT 与 Deadzone
+
+单键 Rapid Trigger 对同一已验证 Wire ID 连续发送 Press 与 Release 两份 stage，**两份 stage 之间没有等待或 Apply**：
+
+| stage | 报文前缀 | 数值 | 启用位 |
+|---|---|---|---|
+| Press | `00 51 54 01 00 [Wire低] [Wire高] [press_raw] 00 [flag]` | `round(press_mm * 10)` | Byte 9 |
+| Release | `00 51 54 02 00 [Wire低] [Wire高] [release_raw] 00 [flag]` | `round(release_mm * 10)` | Byte 9 |
+
+两值只允许 0.1–2.5 mm（raw 1–25）。`flag=1` 表示启用；禁用使用**相同的两份报文**并令 `flag=0`。禁用 API 必须显式收到来自权威应用配置的继承 Press/Release 值，不把 V 上已验证的 0.4/0.2 mm 当成通用默认值，也不假称从设备读取到继承值。V 的已验证启用例为 Press `... 31 00 08 00 01`、Release `... 31 00 06 00 01`；禁用例为 `... 31 00 04 00 00` 与 `... 31 00 02 00 00`。
+
+单键 Deadzone 覆盖使用 `00 51 59 00 00 [Wire低] [Wire高] [Bottom_raw] [Top_raw] 00...`，两值均为 0.0–0.5 mm（raw 0–5）。**Byte 7 是 Bottom；Byte 8 是 Top。** 旧资料中相反的次序已被受控 A/B 和 HAL 字段偏移证据推翻。V 的 Top 0.2 / Bottom 0.3 mm 必须为 `00 51 59 00 00 31 00 03 02 ...`。
+
+`ResetAllPerKeyDeadzoneOverrides` 是**清空全部单键 Deadzone 覆盖表**的破坏性操作，绝非删除指定键。唯一允许的 resetType 是 `0x04`，Falchion Ace HFX 仅支持 dual-deadzone 的 layer 0：`00 51 52 04 00 [全局Bottom_raw] 00 [全局Top_raw] 00...`。调用者显式提供权威应用配置中的全局值（raw 0–5）；后端不读取设备或自动导入 ASUS XML。Bottom 4 / Top 3 的官方 A/B 报文是 `00 51 52 04 00 04 00 03 ...`。若权威值为 Bottom 1 / Top 0，builder 产生 `00 51 52 04 00 01 00 00 ...`；此精确 Top=0 报文已在生产路径实体 smoke 中发送，操作者确认恢复全局继承行为。
+
+较早观察到的 `00 51 52 04 00 01 00 02 ...` 实际编码 Top=2。ASUS 前端的 `deadZoneTop = O || W` 在 `O=0` 时错误回退到默认 `W=2`；本实现不复制这个前端行为。早期把 Byte 7 称为 Deadzone Mode 的说法也不适用。匹配的设备 echo 已被观察到，但不能据此宣称存在独立的 MCU ACK 确认协议。
+
+Phase 2 的所有事务仍遵守完整生产时序：连续发送全部 stage → **最后一份 stage 后**等待 210 ms → 恰好一次 Apply → 等待 400 ms → 更新应用侧影子状态并完成 future。共享设备写锁覆盖全程；任一 stage 或 Apply 传输失败都进入 `IndeterminateStagedState`。影子状态新增单键 RT 启用位及 Press/Release raw、单键 Deadzone Top/Bottom raw；reset-all 成功后才清空运行时已知 Deadzone 覆盖表。以上仍不是设备 readback。
+
+**Phase 2 后端验收：PASS（补充生产路径 0.1/0.1 mm RT 诊断后接受）。** 原脚本的 V RT Press 0.8 / Release 0.6 mm 报文和 API 成功，但操作者未能明确感到 RT 效果，故原脚本实体标记未通过。用户随后明确授权用同一生产 API 设置 Press/Release 0.1/0.1 mm，操作者清晰确认 RT 效果，之后又确认禁用并恢复继承值。单键 Deadzone 的 Bottom/Top 报文及效果、Top=0 的 reset-all 报文及继承恢复也获得实体确认。额外诊断使实际 HID 输出报文总数为 **16**，不能表述为原定恰好 10 份的严格脚本通过。未来需要易于实体辨别的 RT smoke 向量时，优先考虑本次已确认的较小 RT 距离，并如实记录具体设置和写入总数。完整时间线与哈希保存在 `audit_artifacts/alpha5-phase2-production-smoke/PHASE2_PRODUCTION_SMOKE_REPORT.md`。
+
+目前没有安全的公开单键 Deadzone 删除 API。未来选择性删除必须先持有权威的完整目标覆盖集，再作为一个序列化事务 reset-all 并重放保留项。All-Key RT/Deadzone、SpeedTap、DKS、Hall 遥测、持久化与 UI/HTTP 不在本阶段。
+
 `WriteFile` 成功仅表示主机传输提交成功，不等于 MCU ACK、设备状态读取或物理生效确认。400 ms 是保守等待策略，不是 ACK 解析。未来若加入经验证的 RX 确认，应据此加强完成策略，而不能把当前等待说成设备确认。
 
 `SetPerKeyActuation` 是一次完整的硬件事务，至少包含约 210 ms 的 Apply 前等待和 400 ms 的 Apply 后等待。未来滑杆不能在每次鼠标移动时调用它；接入 UI 时须在上层设计 debounce／合并策略，本阶段不实现。

@@ -81,7 +81,8 @@ std::future<bool> M605Runtime::SetPerKeyActuation(uint16_t logical_key_id, doubl
         return RejectedOperation();
     }
     Job job{};
-    job.stage = *report;
+    job.stages[0] = *report;
+    job.stage_count = 1;
     job.kind = Kind::Actuation;
     job.logical_key_id = logical_key_id;
     job.value = (*report)[7];
@@ -99,9 +100,78 @@ std::future<bool> M605Runtime::SetAnalogEffect(uint8_t effect_id, bool enabled) 
         return RejectedOperation();
     }
     Job job{};
-    job.stage = *report;
+    job.stages[0] = *report;
+    job.stage_count = 1;
     job.kind = Kind::Analog;
     job.value = enabled ? 1 : 0;
+    return Enqueue(std::move(job));
+}
+
+std::future<bool> M605Runtime::SetPerKeyRapidTrigger(
+    uint16_t logical_key_id, double press_mm, double release_mm) {
+    return EnqueueRapidTrigger(logical_key_id, press_mm, release_mm, true);
+}
+
+std::future<bool> M605Runtime::DisablePerKeyRapidTrigger(
+    uint16_t logical_key_id, double inherited_press_mm, double inherited_release_mm) {
+    return EnqueueRapidTrigger(logical_key_id, inherited_press_mm, inherited_release_mm, false);
+}
+
+std::future<bool> M605Runtime::EnqueueRapidTrigger(
+    uint16_t logical_key_id, double press_mm, double release_mm, bool enabled) {
+    auto reports = m605::BuildPerKeyRapidTriggerStages(
+        logical_key_id, press_mm, release_mm, enabled);
+    if (!reports) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (health_ == M605RuntimeHealth::Clean ||
+            health_ == M605RuntimeHealth::TransactionInProgress) {
+            last_error_ = "Unverified key or Rapid Trigger value outside 0.1..2.5 mm";
+        }
+        return RejectedOperation();
+    }
+    Job job{};
+    job.stages = *reports;
+    job.stage_count = 2;
+    job.kind = Kind::RapidTrigger;
+    job.logical_key_id = logical_key_id;
+    return Enqueue(std::move(job));
+}
+
+std::future<bool> M605Runtime::SetPerKeyDeadzone(
+    uint16_t logical_key_id, double top_mm, double bottom_mm) {
+    auto report = m605::BuildPerKeyDeadzone(logical_key_id, top_mm, bottom_mm);
+    if (!report) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (health_ == M605RuntimeHealth::Clean ||
+            health_ == M605RuntimeHealth::TransactionInProgress) {
+            last_error_ = "Unverified key or Deadzone value outside 0.0..0.5 mm";
+        }
+        return RejectedOperation();
+    }
+    Job job{};
+    job.stages[0] = *report;
+    job.stage_count = 1;
+    job.kind = Kind::Deadzone;
+    job.logical_key_id = logical_key_id;
+    return Enqueue(std::move(job));
+}
+
+std::future<bool> M605Runtime::ResetAllPerKeyDeadzoneOverrides(
+    uint8_t global_bottom_raw, uint8_t global_top_raw, uint8_t layer) {
+    auto report = m605::BuildResetAllPerKeyDeadzoneOverrides(
+        global_bottom_raw, global_top_raw, layer);
+    if (!report) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (health_ == M605RuntimeHealth::Clean ||
+            health_ == M605RuntimeHealth::TransactionInProgress) {
+            last_error_ = "Reset ALL per-key Deadzone overrides requires global raw 0..5 and layer 0";
+        }
+        return RejectedOperation();
+    }
+    Job job{};
+    job.stages[0] = *report;
+    job.stage_count = 1;
+    job.kind = Kind::ResetAllDeadzone;
     return Enqueue(std::move(job));
 }
 
@@ -164,6 +234,11 @@ void M605Runtime::WorkerLoop() {
 }
 
 bool M605Runtime::Execute(const Job& job) {
+    if (job.stage_count == 0 || job.stage_count > job.stages.size()) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        last_error_ = "Invalid internal M605 stage count";
+        return false; // Fail closed before opening a handle or writing a report.
+    }
     if (!transport_->IsConnected()) {
         {
             std::lock_guard<std::mutex> lock(mutex_);
@@ -175,12 +250,17 @@ bool M605Runtime::Execute(const Job& job) {
             return false; // No stage attempted; a later request may retry.
         }
     }
-    if (!transport_->WriteStage(job.stage)) {
-        const std::string error = transport_->GetLastError();
-        transport_->Disconnect();
-        MarkIndeterminate("stage write did not complete: " + error);
-        return false;
+    for (uint8_t i = 0; i < job.stage_count; ++i) {
+        if (!transport_->WriteStage(job.stages[i])) {
+            const std::string error = transport_->GetLastError();
+            transport_->Disconnect();
+            MarkIndeterminate("stage " + std::to_string(i + 1) +
+                              " write did not complete: " + error);
+            return false;
+        }
     }
+    // All verified stage reports are consecutive; the vendor settle interval
+    // begins only after the last stage. The shared device lock remains held.
     settle_wait_->WaitBeforeApply();
     if (!transport_->WriteApply()) {
         const std::string error = transport_->GetLastError();
@@ -195,8 +275,16 @@ bool M605Runtime::Execute(const Job& job) {
         std::lock_guard<std::mutex> lock(mutex_);
         if (job.kind == Kind::Actuation) {
             applied_state_.per_key_actuation_raw[job.logical_key_id] = job.value;
-        } else {
+        } else if (job.kind == Kind::Analog) {
             applied_state_.static_analog_effect = job.value != 0;
+        } else if (job.kind == Kind::RapidTrigger) {
+            applied_state_.per_key_rapid_trigger[job.logical_key_id] = {
+                job.stages[0][9] != 0, job.stages[0][7], job.stages[1][7]};
+        } else if (job.kind == Kind::Deadzone) {
+            applied_state_.per_key_deadzone[job.logical_key_id] = {
+                job.stages[0][8], job.stages[0][7]};
+        } else if (job.kind == Kind::ResetAllDeadzone) {
+            applied_state_.per_key_deadzone.clear();
         }
         last_error_.clear();
     }

@@ -75,6 +75,25 @@ bool IsAllowedOutputReport(const std::array<uint8_t, HID_REPORT_SIZE>& report) {
         return report[3] == 0 && report[4] == 0 && report[5] == 0 && report[6] <= 1 &&
             std::all_of(report.begin() + 7, report.end(), [](uint8_t b) { return b == 0; });
     }
+    if (report[1] == 0x51 && report[2] == 0x54) {
+        const uint16_t wire = static_cast<uint16_t>(report[5] | (report[6] << 8));
+        return (report[3] == 1 || report[3] == 2) && report[4] == 0 &&
+            (wire == 0x0030 || wire == 0x0031) &&
+            report[7] >= 1 && report[7] <= 25 && report[8] == 0 && report[9] <= 1 &&
+            std::all_of(report.begin() + 10, report.end(), [](uint8_t b) { return b == 0; });
+    }
+    if (report[1] == 0x51 && report[2] == 0x59) {
+        const uint16_t wire = static_cast<uint16_t>(report[5] | (report[6] << 8));
+        return report[3] == 0 && report[4] == 0 &&
+            (wire == 0x0030 || wire == 0x0031) &&
+            report[7] <= 5 && report[8] <= 5 &&
+            std::all_of(report.begin() + 9, report.end(), [](uint8_t b) { return b == 0; });
+    }
+    if (report[1] == 0x51 && report[2] == 0x52) {
+        return report[3] == 0x04 && report[4] == 0 &&
+            report[5] <= 5 && report[6] == 0 && report[7] <= 5 &&
+            std::all_of(report.begin() + 8, report.end(), [](uint8_t b) { return b == 0; });
+    }
     return false;
 }
 
