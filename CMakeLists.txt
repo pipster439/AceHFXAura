@@ -53,6 +53,9 @@ set(DAEMON_SOURCES
     src/main.cpp
     src/aura/aura_adapter.cpp
     src/aura/native_hid_backend.cpp
+    src/aura/hardware/m605_key_mapping.cpp
+    src/aura/hardware/m605_protocol.cpp
+    src/aura/hardware/m605_runtime.cpp
     src/aura/hal_compat.cpp
     src/aura/keymap.cpp
     src/monitor/foreground_monitor.cpp
@@ -73,6 +76,9 @@ set(DAEMON_SOURCES
 set(DAEMON_HEADERS
     include/aura/aura_adapter.h
     include/aura/native_hid_backend.h
+    include/aura/hardware/m605_key_mapping.h
+    include/aura/hardware/m605_protocol.h
+    include/aura/hardware/m605_runtime.h
     include/aura/aura_types.h
     include/aura/hal_compat.h
     include/aura/keymap.h
@@ -199,6 +205,15 @@ target_link_libraries(test_native_hid PRIVATE
     version
 )
 
+add_executable(test_m605_protocol
+    tests/test_m605_protocol.cpp
+    src/aura/hardware/m605_key_mapping.cpp
+    src/aura/hardware/m605_protocol.cpp
+    src/aura/hardware/m605_runtime.cpp
+    src/aura/native_hid_backend.cpp
+)
+target_link_libraries(test_m605_protocol PRIVATE setupapi hid user32)
+
 # 5. 诊断测试: test_diag_hook (手动交互式诊断工具，不注册到 CTest)
 add_executable(test_diag_hook tests/test_diag_hook.cpp)
 target_link_libraries(test_diag_hook PRIVATE user32)
@@ -257,6 +272,7 @@ target_link_libraries(test_lighting_service PRIVATE
 
 # 6. CTest 测试体系集成
 enable_testing()
+add_test(NAME m605_protocol COMMAND test_m605_protocol)
 add_library(plugin_fixture_v1 SHARED tests/fixtures/plugin_reload_fixture.cpp)
 target_compile_definitions(plugin_fixture_v1 PRIVATE FIXTURE_VALUE=17)
 add_library(plugin_fixture_v2 SHARED tests/fixtures/plugin_reload_fixture.cpp)

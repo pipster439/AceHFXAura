@@ -35,6 +35,49 @@ std::wstring ToLowerW(const std::wstring& s) {
     return result;
 }
 
+bool ValidateOpenedEndpoint(HANDLE handle, const std::wstring& path) {
+    HIDD_ATTRIBUTES attributes{};
+    attributes.Size = sizeof(attributes);
+    if (!HidD_GetAttributes(handle, &attributes)) return false;
+    PHIDP_PREPARSED_DATA preparsed = nullptr;
+    if (!HidD_GetPreparsedData(handle, &preparsed)) return false;
+    HIDP_CAPS caps{};
+    const bool valid = HidP_GetCaps(preparsed, &caps) == HIDP_STATUS_SUCCESS &&
+        caps.InputReportByteLength == HID_REPORT_SIZE &&
+        NativeHidBackend::IsTargetLightingEndpoint(attributes.VendorID, attributes.ProductID,
+            caps.UsagePage, caps.Usage, caps.OutputReportByteLength, path);
+    HidD_FreePreparsedData(preparsed);
+    return valid;
+}
+
+bool IsAllowedOutputReport(const std::array<uint8_t, HID_REPORT_SIZE>& report) {
+    if (report[0] != 0) return false;
+    if (report[1] == 0xc0 && report[2] == 0x81) {
+        const uint16_t count = static_cast<uint16_t>(report[3] | (report[4] << 8));
+        constexpr size_t kHeaderBytes = 5;
+        constexpr size_t kEntryBytes = 4;
+        if (count == 0 || count > MAX_LEDS_PER_HID_PACKET ||
+            count > (report.size() - kHeaderBytes) / kEntryBytes) return false;
+        const size_t used_bytes = kHeaderBytes + static_cast<size_t>(count) * kEntryBytes;
+        return std::all_of(report.begin() + used_bytes, report.end(),
+                [](uint8_t b) { return b == 0; });
+    }
+    if (report[1] == 0x50 && report[2] == 0x55) {
+        return std::all_of(report.begin() + 3, report.end(), [](uint8_t b) { return b == 0; });
+    }
+    if (report[1] == 0x51 && report[2] == 0x4f) {
+        const uint16_t wire = static_cast<uint16_t>(report[5] | (report[6] << 8));
+        return report[3] == 0 && report[4] == 0 &&
+            (wire == 0x0030 || wire == 0x0031) && report[7] >= 1 && report[7] <= 40 &&
+            std::all_of(report.begin() + 8, report.end(), [](uint8_t b) { return b == 0; });
+    }
+    if (report[1] == 0x51 && report[2] == 0x2d) {
+        return report[3] == 0 && report[4] == 0 && report[5] == 0 && report[6] <= 1 &&
+            std::all_of(report.begin() + 7, report.end(), [](uint8_t b) { return b == 0; });
+    }
+    return false;
+}
+
 } // namespace
 
 NativeHidBackend::NativeHidBackend()
@@ -46,10 +89,16 @@ NativeHidBackend::~NativeHidBackend() {
 }
 
 bool NativeHidBackend::IsConnected() const {
-    return hDevice_ != INVALID_HANDLE_VALUE;
+    return validated_target_ && hDevice_ != INVALID_HANDLE_VALUE && hEvent_ != nullptr;
+}
+
+std::mutex& NativeHidBackend::DeviceWriteMutex() {
+    static std::mutex mutex;
+    return mutex;
 }
 
 void NativeHidBackend::Disconnect() {
+    validated_target_ = false;
     if (hDevice_ != INVALID_HANDLE_VALUE) {
         CloseHandle(hDevice_);
         hDevice_ = INVALID_HANDLE_VALUE;
@@ -77,7 +126,8 @@ bool NativeHidBackend::IsTargetLightingEndpoint(
         return false;
     }
     std::wstring lowerPath = ToLowerW(devPath);
-    if (lowerPath.find(L"mi_01") == std::wstring::npos) {
+    if (lowerPath.find(L"&mi_01#") == std::wstring::npos &&
+        lowerPath.find(L"&mi_01&") == std::wstring::npos) {
         return false;
     }
     return true;
@@ -115,6 +165,10 @@ std::array<uint8_t, HID_REPORT_SIZE> NativeHidBackend::BuildReport(
     }
 
     return report;
+}
+
+bool NativeHidBackend::IsSupportedOutputReport(const std::array<uint8_t, HID_REPORT_SIZE>& report) {
+    return IsAllowedOutputReport(report);
 }
 
 bool NativeHidBackend::Connect() {
@@ -187,7 +241,8 @@ bool NativeHidBackend::Connect() {
                 if (HidD_GetPreparsedData(hQuery, &preparsed)) {
                     HIDP_CAPS caps{};
                     if (HidP_GetCaps(preparsed, &caps) == HIDP_STATUS_SUCCESS) {
-                        if (IsTargetLightingEndpoint(attrib.VendorID, attrib.ProductID,
+                        if (caps.InputReportByteLength == HID_REPORT_SIZE &&
+                            IsTargetLightingEndpoint(attrib.VendorID, attrib.ProductID,
                                                      caps.UsagePage, caps.Usage,
                                                      caps.OutputReportByteLength, devPath)) {
                             matchedPath = devPath;
@@ -236,6 +291,14 @@ bool NativeHidBackend::Connect() {
         return false;
     }
 
+    if (!ValidateOpenedEndpoint(hDevice_, matchedPath)) {
+        CloseHandle(hDevice_);
+        hDevice_ = INVALID_HANDLE_VALUE;
+        last_error_ = "已打开的 HID 端点未通过 VID/PID、MI_01、Usage 或 65 字节双向报文复核";
+        LOG_ERROR(last_error_);
+        return false;
+    }
+
     hEvent_ = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!hEvent_) {
         DWORD err = ::GetLastError();
@@ -247,12 +310,17 @@ bool NativeHidBackend::Connect() {
     }
 
     device_path_ = matchedPath;
+    validated_target_ = true;
     LOG_INFO("[+] Native HID backend connected (VID=0x0B05, PID=0x1B7E, UsagePage=0xFF00, Usage=0x0001, Endpoint=MI_01, backend=native_hid)");
     return true;
 }
 
 bool NativeHidBackend::SendReport(const std::array<uint8_t, HID_REPORT_SIZE>& report) {
-    if (hDevice_ == INVALID_HANDLE_VALUE || !hEvent_) {
+    if (!IsSupportedOutputReport(report)) {
+        last_error_ = "拒绝未验证的 HID 报文或参数";
+        return false;
+    }
+    if (hDevice_ == INVALID_HANDLE_VALUE || !hEvent_ || !validated_target_) {
         last_error_ = "设备未打开或事件句柄无效";
         return false;
     }
@@ -336,6 +404,7 @@ bool NativeHidBackend::SendReport(const std::array<uint8_t, HID_REPORT_SIZE>& re
 }
 
 bool NativeHidBackend::PushFrame(const FrameBuffer& frame, const std::vector<uint8_t>& padded_table) {
+    std::lock_guard<std::mutex> write_lock(DeviceWriteMutex());
     if (!IsConnected()) {
         return false;
     }

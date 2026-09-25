@@ -1,0 +1,12 @@
+#pragma once
+
+#include <cstdint>
+#include <optional>
+
+namespace aura::m605 {
+
+// Logical IDs encode (row << 8) | col. Unknown table entries fail closed.
+// This table is for magnetic switch Wire IDs, never lighting LEDs or HID usages.
+std::optional<uint16_t> WireIdForLogicalKey(uint16_t logical_key_id);
+
+} // namespace aura::m605

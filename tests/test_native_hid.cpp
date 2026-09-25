@@ -77,6 +77,11 @@ bool TestEndpointMatching() {
         L"\\\\?\\hid#vid_0b05&pid_1b7e&mi_04#..."
     ), "MI_04 must be rejected");
 
+    TEST_ASSERT(!aura::NativeHidBackend::IsTargetLightingEndpoint(
+        0x0B05, 0x1B7E, 0xFF00, 0x0001, 65,
+        L"\\\\?\\hid#vid_0b05&pid_1b7e&mi_01_fake#..."
+    ), "MI_01 substring must be rejected");
+
     std::cout << "  [PASS] Endpoint matching verified." << std::endl;
     return true;
 }
