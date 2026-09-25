@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page x:Class="Aura_WinUI.Pages.MagneticSwitchPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:controls="using:CommunityToolkit.WinUI.Controls"
+      Background="Transparent">
+    <ScrollViewer x:Name="PageScroll" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Visible"
+                  HorizontalContentAlignment="Stretch">
+        <Grid x:Name="PageHost">
+        <StackPanel x:Name="PageContent" Spacing="18" HorizontalAlignment="Center"
+                    VerticalAlignment="Center" MaxWidth="1500">
+            <StackPanel Spacing="4">
+                <TextBlock Text="磁轴设置" Style="{ThemeResource TitleTextBlockStyle}" />
+                <TextBlock Text="选择实体按键，编辑本地草稿，然后逐项应用。设备当前配置未读取。"
+                           TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            </StackPanel>
+            <InfoBar x:Name="HealthBar" IsOpen="True" Severity="Informational" Title="正在读取运行状态"
+                     Message="尚未读取设备状态。" IsClosable="False" />
+            <Grid x:Name="ContentColumns" ColumnSpacing="20" RowSpacing="20">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="0" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <StackPanel x:Name="KeyboardPanel" Spacing="12">
+                    <StackPanel Orientation="Horizontal" Spacing="12">
+                        <TextBlock Text="Falchion Ace HFX · 68 键" Style="{ThemeResource SubtitleTextBlockStyle}" />
+                        <Button x:Name="RefreshButton" Content="刷新运行状态" Click="RefreshButton_Click"
+                                AutomationProperties.AutomationId="MagneticRefresh" />
+                    </StackPanel>
+                    <TextBlock Text="点击按键仅切换选择，不会写入键盘。窄窗口可横向滚动键盘。"
+                               TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <Border Padding="12" CornerRadius="8" BorderThickness="1"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                        <ScrollViewer x:Name="KeyboardViewport" HorizontalScrollBarVisibility="Auto"
+                                      HorizontalScrollMode="Enabled" VerticalScrollBarVisibility="Disabled">
+                            <StackPanel x:Name="KeyboardRows" Spacing="5" HorizontalAlignment="Left" />
+                        </ScrollViewer>
+                    </Border>
+                    <TextBlock x:Name="SelectedKeyText" Text="已选按键：无" Style="{ThemeResource SubtitleTextBlockStyle}" />
+                </StackPanel>
+                <StackPanel x:Name="DetailsPanel" Grid.Column="1" Spacing="12" MinWidth="310">
+                    <controls:SettingsCard Header="触发行程" Description="0.1–4.0 mm；移动滑杆只编辑草稿" IsClickEnabled="False">
+                        <StackPanel Spacing="5" MinWidth="255">
+                            <TextBlock x:Name="ActuationDraftText" Text="草稿：未指定" />
+                            <Slider x:Name="ActuationSlider" Minimum="0.1" Maximum="4.0" StepFrequency="0.1"
+                                    ValueChanged="ActuationSlider_ValueChanged" AutomationProperties.Name="触发行程草稿" />
+                            <TextBlock x:Name="ActuationAppliedText" Text="本次会话已应用：未知" />
+                            <Button x:Name="ActuationApplyButton" Content="应用触发行程" Click="ActuationApplyButton_Click"
+                                    AutomationProperties.AutomationId="MagneticActuationApply" />
+                        </StackPanel>
+                    </controls:SettingsCard>
+                    <controls:SettingsCard Header="快速触发" Description="启用需设置按下和抬起灵敏度" IsClickEnabled="False">
+                        <StackPanel Spacing="5" MinWidth="255">
+                            <TextBlock Text="开关是本地操作意图，不代表当前设备状态。" TextWrapping="Wrap"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <ToggleSwitch x:Name="RapidTriggerToggle" Header="启用单键 RT" OnContent="启用" OffContent="禁用"
+                                          Toggled="RapidTriggerToggle_Toggled" />
+                            <TextBlock x:Name="PressDraftText" Text="按下草稿：未指定" />
+                            <Slider x:Name="PressSlider" Minimum="0.1" Maximum="2.5" StepFrequency="0.1"
+                                    ValueChanged="PressSlider_ValueChanged" AutomationProperties.Name="RT 按下灵敏度草稿" />
+                            <TextBlock x:Name="ReleaseDraftText" Text="抬起草稿：未指定" />
+                            <Slider x:Name="ReleaseSlider" Minimum="0.1" Maximum="2.5" StepFrequency="0.1"
+                                    ValueChanged="ReleaseSlider_ValueChanged" AutomationProperties.Name="RT 抬起灵敏度草稿" />
+                            <TextBlock x:Name="RapidTriggerAppliedText" Text="本次会话已应用：未知" TextWrapping="Wrap" />
+                            <TextBlock Text="禁用单键 RT 需要可信活动配置中的全局按下/抬起值；缺少时不可操作。"
+                                       TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <Button x:Name="RapidTriggerApplyButton" Content="应用单键 RT" Click="RapidTriggerApplyButton_Click"
+                                    AutomationProperties.AutomationId="MagneticRapidTriggerApply" />
+                        </StackPanel>
+                    </controls:SettingsCard>
+                    <controls:SettingsCard Header="死区" Description="顶部与底部各 0.0–0.5 mm" IsClickEnabled="False">
+                        <StackPanel Spacing="5" MinWidth="255">
+                            <TextBlock x:Name="TopDraftText" Text="顶部草稿：未指定" />
+                            <Slider x:Name="TopSlider" Minimum="0" Maximum="0.5" StepFrequency="0.1"
+                                    ValueChanged="TopSlider_ValueChanged" AutomationProperties.Name="顶部死区草稿" />
+                            <TextBlock x:Name="BottomDraftText" Text="底部草稿：未指定" />
+                            <Slider x:Name="BottomSlider" Minimum="0" Maximum="0.5" StepFrequency="0.1"
+                                    ValueChanged="BottomSlider_ValueChanged" AutomationProperties.Name="底部死区草稿" />
+                            <TextBlock x:Name="DeadzoneAppliedText" Text="本次会话已应用：未知" TextWrapping="Wrap" />
+                            <Button x:Name="DeadzoneApplyButton" Content="应用单键死区" Click="DeadzoneApplyButton_Click"
+                                    AutomationProperties.AutomationId="MagneticDeadzoneApply" />
+                        </StackPanel>
+                    </controls:SettingsCard>
+                    <controls:SettingsCard Header="DKS 四段动作" Description="仅在明确应用后提交；启用可能关闭该键逐键快速触发" IsClickEnabled="False">
+                        <StackPanel Spacing="7" MinWidth="255">
+                            <TextBlock x:Name="DksDraftText" Text="起止行程：未指定" TextWrapping="Wrap" />
+                            <TextBlock Text="起点 0.1–4.0 mm" />
+                            <Slider x:Name="DksStartSlider" Minimum="0.1" Maximum="4.0" StepFrequency="0.1"
+                                    ValueChanged="DksStartSlider_ValueChanged" AutomationProperties.AutomationId="MagneticDksStart" />
+                            <TextBlock Text="终点 0.1–4.0 mm；不得小于起点" />
+                            <Slider x:Name="DksEndSlider" Minimum="0.1" Maximum="4.0" StepFrequency="0.1"
+                                    ValueChanged="DksEndSlider_ValueChanged" AutomationProperties.AutomationId="MagneticDksEnd" />
+                            <StackPanel x:Name="DksSlotsHost" Spacing="8" />
+                            <TextBlock x:Name="DksAppliedText" Text="当前来源：未知" TextWrapping="Wrap" />
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button x:Name="DksApplyButton" Content="应用 DKS" Click="DksApplyButton_Click" AutomationProperties.AutomationId="MagneticDksApply" />
+                                <Button x:Name="DksStandardButton" Content="恢复标准按键行为" Click="DksStandardButton_Click" AutomationProperties.AutomationId="MagneticDksStandard" />
+                            </StackPanel>
+                        </StackPanel>
+                    </controls:SettingsCard>
+                </StackPanel>
+            </Grid>
+            <controls:SettingsCard Header="全部按键死区覆盖" Description="清除全部逐键覆盖并使用活动配置保存的全局顶部/底部值；不会只重置当前按键" IsClickEnabled="False">
+                <StackPanel Spacing="6">
+                    <TextBlock x:Name="GlobalDeadzoneText" Text="活动配置全局值：未知" />
+                    <Button x:Name="ResetAllDeadzoneButton" Content="重置全部逐键死区覆盖…" Click="ResetAllDeadzoneButton_Click" AutomationProperties.AutomationId="MagneticDeadzoneResetAll" />
+                </StackPanel>
+            </controls:SettingsCard>
+            <controls:SettingsCard Header="SpeedTap 键对" Description="键对、Master 开关及配置基线重置是独立操作" IsClickEnabled="False">
+                <StackPanel Spacing="7">
+                    <TextBlock x:Name="SpeedTapStateText" Text="键对与 Master 来源：未知" TextWrapping="Wrap" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <ComboBox x:Name="SpeedTapKey1" Header="键 1" Width="145" SelectionChanged="SpeedTapPair_SelectionChanged" AutomationProperties.AutomationId="MagneticSpeedTapKey1" />
+                        <ComboBox x:Name="SpeedTapKey2" Header="键 2" Width="145" SelectionChanged="SpeedTapPair_SelectionChanged" AutomationProperties.AutomationId="MagneticSpeedTapKey2" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button x:Name="SpeedTapPairOnButton" Content="启用键对" Click="SpeedTapPairOnButton_Click" AutomationProperties.AutomationId="MagneticSpeedTapPairOn" />
+                        <Button x:Name="SpeedTapPairOffButton" Content="定向禁用键对" Click="SpeedTapPairOffButton_Click" AutomationProperties.AutomationId="MagneticSpeedTapPairOff" />
+                    </StackPanel>
+                    <ToggleSwitch x:Name="SpeedTapMasterToggle" Header="Master 草稿" Toggled="SpeedTapMasterToggle_Toggled" AutomationProperties.AutomationId="MagneticSpeedTapMaster" />
+                    <Button x:Name="SpeedTapMasterApplyButton" Content="应用 Master" Click="SpeedTapMasterApplyButton_Click" AutomationProperties.AutomationId="MagneticSpeedTapMasterApply" />
+                    <Button x:Name="SpeedTapProfileResetButton" Content="恢复活动配置键对基线…" Click="SpeedTapProfileResetButton_Click" AutomationProperties.AutomationId="MagneticSpeedTapProfileReset" />
+                </StackPanel>
+            </controls:SettingsCard>
+            <controls:SettingsCard Header="静态灯光深度响应" Description="仅支持已验证的 Static Analog Effect" IsClickEnabled="False">
+                <StackPanel Spacing="7">
+                    <TextBlock x:Name="AnalogStateText" Text="当前来源：未知" />
+                    <ToggleSwitch x:Name="AnalogToggle" Header="深度响应草稿" Toggled="AnalogToggle_Toggled" AutomationProperties.AutomationId="MagneticAnalogEffect" />
+                    <Button x:Name="AnalogApplyButton" Content="应用灯光深度响应" Click="AnalogApplyButton_Click" AutomationProperties.AutomationId="MagneticAnalogApply" />
+                </StackPanel>
+            </controls:SettingsCard>
+        </StackPanel>
+        </Grid>
+    </ScrollViewer>
+</Page>

@@ -61,6 +61,9 @@
                         <FontIcon Glyph="&#xE790;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
+                <NavigationViewItem Content="磁轴设置" Tag="magnetic">
+                    <NavigationViewItem.Icon><SymbolIcon Symbol="Keyboard" /></NavigationViewItem.Icon>
+                </NavigationViewItem>
 
                 <NavigationViewItem
                     Content="游戏集成"

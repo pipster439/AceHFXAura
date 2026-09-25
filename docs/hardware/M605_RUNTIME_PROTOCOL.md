@@ -73,7 +73,7 @@ Fn 是有效特例：逻辑 `0x0508` → Wire `0x009F`，因此不能用 Wire ID
 
 Stage 8A 官方被动捕获、Stage 8B 受控重放和实体确认，以及 F1R 静态核对共同支持 `51 23` 为 DKS 配置；`51 2D` 仍是 Analog Effect。DKS 有两个源键行程阈值 Start/End，均按 0.1 mm 编码，支持 0.1–4.0 mm（raw 1–40），且 Start 不得大于 End。源键与普通目标键都从显式 68 键 Logical ID → Wire ID 表解析；特殊目标 `0x00FF` 是独立的 sentinel，不等同普通逻辑键，也不普遍称为“自身”。
 
-每个官方可见 DKS 配置恰有四个槽。**64 字节 vendor payload** 的布局为 `51 23 [源Wire低] [源Wire高] [Start_raw] [End_raw] [目标Wire低或FF] [目标Wire高或00] [mask] [槽号1..4] 00...`；完整的 **65 字节 HID 报文**在前面加 Report ID `00`。`mask = (DownStart << 6) | (DownEnd << 4) | (UpStart << 2) | UpEnd`。每个里程碑状态是两位：`0` 无动作、`1` 单次触发、`2` 释放边界、`3` 持续按住。例：`3320` 编码 `F8`。目标 Wire ID 只按精确映射成员校验，不按数值区间推测；Fn `0x009F` 作为源键可编码，但未单独证实它作为 DKS 动作目标的行为。
+每个官方可见 DKS 配置恰有四个槽。**64 字节 vendor payload** 的布局为 `51 23 [源Wire低] [源Wire高] [Start_raw] [End_raw] [目标Wire低或FF] [目标Wire高或00] [mask] [槽号1..4] 00...`；完整的 **65 字节 HID 报文**在前面加 Report ID `00`。`mask = (DownStart << 6) | (DownEnd << 4) | (UpStart << 2) | UpEnd`。每个里程碑状态是两位：`0` 无动作、`1` 单次触发、`2` 释放边界、`3` 持续按住。例：`3320` 编码 `F8`。目标 Wire ID 只按精确映射成员校验，不按数值区间推测；Fn `0x009F`（Logical `0x0508`）作为源键可编码，但未单独证实它作为 DKS 动作目标的行为。上层服务与 WinUI 对 DKS 动作目标严格禁止 Fn（422 拒绝），确保不将未证实的低层协议能力暴露为产品特性。
 
 一笔 DKS 更新先**完整构造并校验**四份 stage 与 Apply；非法第 3/4 槽同样在首份 HID 写入前拒绝。单个队列任务在共享 `DeviceWriteMutex` 下执行：Stage 1 → 等 30 ms → Stage 2 → 等 30 ms → Stage 3 → 等 30 ms → Stage 4 → 等 210 ms → **一次** `50 55` Apply → 等 400 ms。30/210/400 ms 是已通过重放的保守生产时序，不宣称为 MCU 最小要求或持久化证据。锁贯穿全部等待，灯光帧可能因此延后约 **700 ms**，再加传输及锁竞争。影子只在完整序列成功后记录本会话提交值；任一不确定 stage/Apply 写入失败沿用 `IndeterminateStagedState`、断开和队列取消策略，不做自动恢复。
 
@@ -89,15 +89,16 @@ Stage 8A 官方被动捕获、Stage 8B 受控重放和实体确认，以及 F1R 
 
 - `Clean`：可接受配置请求。新连接会清空应用侧影子状态，因为连接并不是设备读取。
 - `TransactionInProgress`：后台 worker 已取得设备写锁；stage、210 ms Apply 前等待、apply、400 ms Apply 后等待均与灯光帧互斥。灯光 `PushFrame` 因此可能延迟约 610 ms，再加上实际 HID 写入时间及锁竞争时间。
-- `IndeterminateStagedState`：stage 已成功但 apply 传输提交失败，或 stage 写入本身无法确认。MCU staging RAM 可能留有待生效设置。立即清空影子状态，取消等待队列，并拒绝此运行时对象的后续配置与 apply；重连不会自动恢复。需在外部完成设备状态重新同步后，才能创建新的运行时对象。本阶段没有推测性的恢复写入协议，也不假设 USB 重插会清除 staging RAM。
+- `IndeterminateStagedState`：stage 已成功但 apply 传输提交失败，或 stage 写入本身无法确认。MCU staging RAM 可能留有待生效设置。立即清空影子状态，取消等待队列，保留本地安全锁存，并拒绝后续配置与 apply；重连不会自动恢复。本阶段没有推测性的恢复写入协议，也不假设 USB 重插会清除 staging RAM。
+- `PersistentSafetyQuarantine`：新运行时启动时发现 AceHFXAura 本地未清除的 M605 事务锁存，所有 setter 在接触 HID 前被拒绝。锁存不是设备读回或设备故障诊断。
 - `Stopped`：停止接收新任务，未开始的任务以 `false` 完成；已开始的事务允许完整结束。析构调用相同的停止路径。
 
-设备尚未开始 stage 时的连接失败不会产生本对象的 staged 状态，允许后续请求重试。所有状态均不代表断电持久性结论。
+设备尚未开始 stage 时的连接失败或持久安全锁存建立失败（Arm 失败）不会进行任何 HID 写入；若锁存建立失败，此时没有发生未确定的硬件变动，运行时不会进入 `IndeterminateStagedState`，保留既有 SessionApplied 影子，事务直接返回 false，工作线程健康状态恢复 `Clean`，`last_error` 明确记录持久安全锁存无法建立且未尝试任何设备写入，后续锁存可用时可正常重试。每笔硬件变更在首份 stage 可能提交前创建并刷写 `%LOCALAPPDATA%\Aura\m605-mutation-in-progress.latch`，在所有 stage、Apply 和 Apply 后等待成功结束后才删除。正常执行中临时 armed 的锁存不向产品/UI 报告为持久安全隔离状态（`persistent_safety_quarantine` 仅在未清除残留锁存或重启隔离时有效）。进程在这段时间崩溃会留下锁存。仅开发者／操作员确认设备已通过**外部**方式恢复到已知良好状态后，方可调用 `AcknowledgeExternalResynchronization()`；该调用只清理安全记录，不发 HID，也不在普通 WinUI 暴露。所有状态均不代表断电持久性结论。
 
 ## 状态边界
 
 设备完整配置读取路径尚未验证。代码中的 **AceHFXAura Applied Runtime State** 只记录本进程成功提交 stage、完成 Apply 前等待、成功提交 apply、完成 Apply 后等待的设置；它不是 **Known Device Readback State** 或 MCU ACK。写入失败或重新连接时清除该影子状态。ASUS XML 不能充当设备实时读取。
 
-已知后续问题：`IndeterminateStagedState` 目前只在本运行时对象生命周期内有效。未来集成阶段必须定义 daemon 重启／运行时重建后的恢复或持久隔离语义；本阶段不增加配置文件或持久标记。
+产品层来源、只读主机配置和 IPC 的边界见 [磁轴产品状态与服务](M605_MAGNETIC_PRODUCT_STATE.md)。
 
 已测试的运行时 USB 协议未发现连续逐键 Hall 行程值；不要提供伪造的 `GetTravelMm`、`GetHallDepth` 或 `RawHallValue` API。DKS 仅包含上述 Phase 4 受验证写入；固件操作和持久化写入仍未实现。

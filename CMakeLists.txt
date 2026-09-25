@@ -70,6 +70,8 @@ set(DAEMON_SOURCES
     src/config/lighting_service.cpp
     src/config/automation_service.cpp
     src/config/automation_authoring.cpp
+    src/config/magnetic_control_service.cpp
+    src/config/magnetic_host_profile.cpp
     src/config/config_writer_util.cpp
 )
 
@@ -86,6 +88,7 @@ set(DAEMON_HEADERS
     include/config/rule_engine.h
     include/config/lighting_service.h
     include/config/automation_service.h
+    include/config/magnetic_control_service.h
     include/config/config_writer_util.h
     include/engine/effect.h
     include/engine/builtin_effects.h
@@ -214,6 +217,18 @@ add_executable(test_m605_protocol
 )
 target_link_libraries(test_m605_protocol PRIVATE setupapi hid user32)
 
+add_executable(test_magnetic_control
+    tests/test_magnetic_control.cpp
+    src/config/magnetic_control_service.cpp
+    src/config/magnetic_host_profile.cpp
+    src/config/config_writer_util.cpp
+    src/aura/hardware/m605_key_mapping.cpp
+    src/aura/hardware/m605_protocol.cpp
+    src/aura/hardware/m605_runtime.cpp
+    src/aura/native_hid_backend.cpp
+)
+target_link_libraries(test_magnetic_control PRIVATE setupapi hid user32 ws2_32)
+
 # 5. 诊断测试: test_diag_hook (手动交互式诊断工具，不注册到 CTest)
 add_executable(test_diag_hook tests/test_diag_hook.cpp)
 target_link_libraries(test_diag_hook PRIVATE user32)
@@ -273,6 +288,7 @@ target_link_libraries(test_lighting_service PRIVATE
 # 6. CTest 测试体系集成
 enable_testing()
 add_test(NAME m605_protocol COMMAND test_m605_protocol)
+add_test(NAME magnetic_control COMMAND test_magnetic_control)
 add_library(plugin_fixture_v1 SHARED tests/fixtures/plugin_reload_fixture.cpp)
 target_compile_definitions(plugin_fixture_v1 PRIVATE FIXTURE_VALUE=17)
 add_library(plugin_fixture_v2 SHARED tests/fixtures/plugin_reload_fixture.cpp)

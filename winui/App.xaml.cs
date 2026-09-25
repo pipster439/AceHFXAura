@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.Windows.AppLifecycle;
 using Aura_WinUI.Services;
+using Aura_WinUI.Validation;
 
 namespace Aura_WinUI;
 
@@ -50,7 +51,9 @@ public partial class App : Application
         if (IsShuttingDown) return;
         if (_window is MainWindow existing) { existing.ShowAndBringToFront(); return; }
         // 1. 启动后台守护进程探测与自动拉起 (异步非阻塞，内部通过共享 Task 实现串行化)
-        _ = DaemonSupervisor.Instance.EnsureStartedAsync();
+        if (!MagneticLayoutValidation.Requested &&
+            Environment.GetEnvironmentVariable("AURA_MAGNETIC_VALIDATION_OFFLINE") != "1")
+            _ = DaemonSupervisor.Instance.EnsureStartedAsync();
 
         // 2. 创建并激活主窗口
         var mainWindow = new MainWindow();
@@ -58,6 +61,7 @@ public partial class App : Application
         mainWindow.Activate();
         if (Validation.LayoutValidation.Requested) _ = Validation.LayoutValidation.RunAsync(mainWindow);
         else if (Validation.StudioValidation.Requested) _ = Validation.StudioValidation.RunAsync(mainWindow);
+        else if (MagneticLayoutValidation.Requested) _ = MagneticLayoutValidation.RunAsync(mainWindow);
 
         // 3. 检查并处理窗口创建前可能已到达的激活事件
         lock (_activationLock)

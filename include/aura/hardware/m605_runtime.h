@@ -37,6 +37,16 @@ public:
     virtual void WaitBeforeApply() = 0;
     virtual void WaitAfterApply() = 0;
 };
+
+// Armed before a transaction can submit its first stage. An uncleared latch
+// quarantines a newly created runtime; it is not device state or readback.
+class SafetyLatch {
+public:
+    virtual ~SafetyLatch() = default;
+    virtual bool IsQuarantined() const = 0;
+    virtual bool Arm() = 0;
+    virtual bool Clear() = 0;
+};
 } // namespace m605::detail
 
 struct M605RuntimeTestAccess;
@@ -45,6 +55,7 @@ enum class M605RuntimeHealth {
     Clean,
     TransactionInProgress,
     IndeterminateStagedState,
+    PersistentSafetyQuarantine,
     Stopped
 };
 
@@ -121,6 +132,10 @@ public:
     // No pending job may start a hardware write after Stop begins.
     void Stop();
     M605RuntimeHealth GetHealth() const;
+    bool IsPersistentSafetyQuarantined() const;
+    // Developer/operator assertion that the physical device was externally
+    // returned to a known-good state. This performs no device operation.
+    bool AcknowledgeExternalResynchronization();
 
     M605AppliedRuntimeState GetAppliedRuntimeState() const;
     std::string GetLastError() const;
@@ -129,6 +144,9 @@ private:
     friend struct M605RuntimeTestAccess;
     M605Runtime(std::unique_ptr<m605::detail::Transport> transport,
                 std::unique_ptr<m605::detail::SettleWait> settle_wait);
+    M605Runtime(std::unique_ptr<m605::detail::Transport> transport,
+                std::unique_ptr<m605::detail::SettleWait> settle_wait,
+                std::unique_ptr<m605::detail::SafetyLatch> safety_latch);
     enum class Kind {
         Actuation, Analog, RapidTrigger, Deadzone, ResetAllDeadzone,
         SpeedTapPair, SpeedTapMaster, SpeedTapProfileReset, Dks
@@ -159,6 +177,7 @@ private:
 
     std::unique_ptr<m605::detail::Transport> transport_;
     std::unique_ptr<m605::detail::SettleWait> settle_wait_;
+    std::unique_ptr<m605::detail::SafetyLatch> safety_latch_;
     mutable std::mutex mutex_;
     std::mutex stop_mutex_;
     std::condition_variable queue_cv_;

@@ -1,6 +1,7 @@
 #include "aura/hardware/m605_runtime.h"
 #include <chrono>
 #include <utility>
+#include <windows.h>
 
 namespace aura {
 
@@ -20,6 +21,55 @@ private:
 };
 
 namespace {
+class FileSafetyLatch final : public m605::detail::SafetyLatch {
+public:
+    FileSafetyLatch() {
+        wchar_t buffer[32768]{};
+        const DWORD length = GetEnvironmentVariableW(L"LOCALAPPDATA", buffer, 32768);
+        if (length == 0 || length >= 32768) return; // fail closed
+        directory_ = std::wstring(buffer, length) + L"\\Aura";
+        path_ = directory_ + L"\\m605-mutation-in-progress.latch";
+        valid_ = true;
+    }
+    bool IsQuarantined() const override {
+        if (!valid_) return true;
+        const DWORD attributes = GetFileAttributesW(path_.c_str());
+        if (attributes != INVALID_FILE_ATTRIBUTES) return true;
+        const DWORD error = GetLastError();
+        return error != ERROR_FILE_NOT_FOUND && error != ERROR_PATH_NOT_FOUND;
+    }
+    bool Arm() override {
+        if (!valid_) return false;
+        if (!CreateDirectoryW(directory_.c_str(), nullptr) && GetLastError() != ERROR_ALREADY_EXISTS)
+            return false;
+        HANDLE file = CreateFileW(path_.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW,
+                                  FILE_ATTRIBUTE_NORMAL | FILE_FLAG_WRITE_THROUGH, nullptr);
+        if (file == INVALID_HANDLE_VALUE) return false;
+        constexpr char marker[] = "M605 mutation in progress; external resynchronization required\n";
+        DWORD written = 0;
+        const bool complete = WriteFile(file, marker, sizeof(marker) - 1, &written, nullptr) &&
+            written == sizeof(marker) - 1 && FlushFileBuffers(file);
+        CloseHandle(file);
+        // If creation succeeded but durability failed, leave the file unsafe.
+        return complete;
+    }
+    bool Clear() override { return valid_ && DeleteFileW(path_.c_str()); }
+private:
+    bool valid_ = false;
+    std::wstring directory_;
+    std::wstring path_;
+};
+
+// Private two-argument constructor is used by deterministic transport tests.
+class MemorySafetyLatch final : public m605::detail::SafetyLatch {
+public:
+    bool IsQuarantined() const override { return armed_; }
+    bool Arm() override { if (armed_) return false; armed_ = true; return true; }
+    bool Clear() override { if (!armed_) return false; armed_ = false; return true; }
+private:
+    bool armed_ = false;
+};
+
 class VendorSettleWait final : public m605::detail::SettleWait {
 public:
     void WaitBetweenDksStages() override { std::this_thread::sleep_for(std::chrono::milliseconds(30)); }
@@ -36,18 +86,31 @@ std::future<bool> RejectedOperation() {
 
 constexpr const char* kUnknownStateError =
     "M605 device configuration state is unknown after an incomplete transaction; "
-    "external re-synchronization is required before creating a new runtime";
+    "explicit external resynchronization acknowledgment is required before more writes";
 }
 
 M605Runtime::M605Runtime()
     : M605Runtime(std::make_unique<M605NativeTransport>(),
-                  std::make_unique<VendorSettleWait>()) {}
+                  std::make_unique<VendorSettleWait>(),
+                  std::make_unique<FileSafetyLatch>()) {}
 
 M605Runtime::M605Runtime(std::unique_ptr<m605::detail::Transport> transport,
                          std::unique_ptr<m605::detail::SettleWait> settle_wait)
+    : M605Runtime(std::move(transport), std::move(settle_wait),
+                  std::make_unique<MemorySafetyLatch>()) {}
+
+M605Runtime::M605Runtime(std::unique_ptr<m605::detail::Transport> transport,
+                         std::unique_ptr<m605::detail::SettleWait> settle_wait,
+                         std::unique_ptr<m605::detail::SafetyLatch> safety_latch)
     : transport_(std::move(transport)),
       settle_wait_(std::move(settle_wait)),
-      worker_(&M605Runtime::WorkerLoop, this) {}
+      safety_latch_(std::move(safety_latch)) {
+    if (safety_latch_->IsQuarantined()) {
+        health_ = M605RuntimeHealth::PersistentSafetyQuarantine;
+        last_error_ = "Persistent M605 safety quarantine: external device resynchronization must be acknowledged";
+    }
+    worker_ = std::thread(&M605Runtime::WorkerLoop, this);
+}
 
 M605Runtime::~M605Runtime() { Stop(); }
 
@@ -272,7 +335,8 @@ std::future<bool> M605Runtime::Enqueue(Job job) {
         std::lock_guard<std::mutex> lock(mutex_);
         if (stopping_) {
             last_error_ = "M605 runtime is stopped";
-        } else if (health_ == M605RuntimeHealth::IndeterminateStagedState) {
+        } else if (health_ == M605RuntimeHealth::IndeterminateStagedState ||
+                   health_ == M605RuntimeHealth::PersistentSafetyQuarantine) {
             last_error_ = kUnknownStateError;
         } else {
             queue_.push(std::move(job));
@@ -303,7 +367,8 @@ void M605Runtime::WorkerLoop() {
         std::lock_guard<std::mutex> device_lock(NativeHidBackend::DeviceWriteMutex());
         {
             std::lock_guard<std::mutex> lock(mutex_);
-            if (stopping_ || health_ == M605RuntimeHealth::IndeterminateStagedState) {
+            if (stopping_ || health_ == M605RuntimeHealth::IndeterminateStagedState ||
+                health_ == M605RuntimeHealth::PersistentSafetyQuarantine) {
                 job.completion.set_value(false);
                 continue;
             }
@@ -340,6 +405,13 @@ bool M605Runtime::Execute(const Job& job) {
             return false; // No stage attempted; a later request may retry.
         }
     }
+    // From this point a stage may be submitted. A crash after Arm remains
+    // quarantined on the next daemon start, even before the first WriteFile.
+    if (!safety_latch_->Arm()) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        last_error_ = "Durable safety latch could not be established; no device write was attempted";
+        return false;
+    }
     for (uint8_t i = 0; i < job.stage_count; ++i) {
         if (!transport_->WriteStage(job.stages[i])) {
             const std::string error = transport_->GetLastError();
@@ -365,6 +437,10 @@ bool M605Runtime::Execute(const Job& job) {
     // WriteFile success establishes host submission only. Keep the shared
     // device lock and transaction health until vendor-compatible settling ends.
     settle_wait_->WaitAfterApply();
+    if (!safety_latch_->Clear()) {
+        MarkIndeterminate("M605 sequence submitted but safety latch could not be cleared");
+        return false;
+    }
     {
         std::lock_guard<std::mutex> lock(mutex_);
         if (job.kind == Kind::Actuation) {
@@ -420,6 +496,26 @@ void M605Runtime::ResolveCancelled(std::queue<Job>& cancelled) {
 M605RuntimeHealth M605Runtime::GetHealth() const {
     std::lock_guard<std::mutex> lock(mutex_);
     return health_;
+}
+
+bool M605Runtime::IsPersistentSafetyQuarantined() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!safety_latch_ || !safety_latch_->IsQuarantined()) {
+        return false;
+    }
+    return health_ != M605RuntimeHealth::TransactionInProgress;
+}
+
+bool M605Runtime::AcknowledgeExternalResynchronization() {
+    std::lock_guard<std::mutex> stop_lock(stop_mutex_);
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (stopping_ || health_ == M605RuntimeHealth::TransactionInProgress || !queue_.empty())
+        return false;
+    if (!safety_latch_->IsQuarantined() || !safety_latch_->Clear()) return false;
+    applied_state_ = {};
+    health_ = M605RuntimeHealth::Clean;
+    last_error_.clear();
+    return true;
 }
 
 M605AppliedRuntimeState M605Runtime::GetAppliedRuntimeState() const {

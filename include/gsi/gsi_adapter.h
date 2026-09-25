@@ -195,6 +195,9 @@ public:
     void SetAutomationService(std::shared_ptr<AutomationControlService> service) {
         automation_service_ = std::move(service);
     }
+    void SetMagneticRouteRegistrar(std::function<void(httplib::Server&)> registrar) {
+        magnetic_route_registrar_ = std::move(registrar);
+    }
 
 private:
     void SetupRoutes();
@@ -204,6 +207,7 @@ private:
     std::shared_ptr<const RuntimeStatusStore> status_store_;
     std::shared_ptr<LightingControlService> lighting_service_;
     std::shared_ptr<AutomationControlService> automation_service_;
+    std::function<void(httplib::Server&)> magnetic_route_registrar_;
 
     int port_{19897};
     std::unique_ptr<httplib::Server> svr_;

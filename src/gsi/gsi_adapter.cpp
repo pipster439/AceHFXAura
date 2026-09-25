@@ -903,6 +903,9 @@ void GsiAdapter::SetupRoutes() {
     if (automation_service_) {
         automation_service_->RegisterRoutes(*svr_);
     }
+    if (magnetic_route_registrar_) {
+        magnetic_route_registrar_(*svr_);
+    }
 }
 
 bool GsiAdapter::Start(int port) {

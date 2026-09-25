@@ -6,6 +6,7 @@
 #include <cmath>
 #include <condition_variable>
 #include <cstdint>
+#include <functional>
 #include <iostream>
 #include <limits>
 #include <memory>
@@ -22,6 +23,13 @@ struct M605RuntimeTestAccess {
         std::unique_ptr<m605::detail::Transport> transport,
         std::unique_ptr<m605::detail::SettleWait> wait) {
         return std::unique_ptr<M605Runtime>(new M605Runtime(std::move(transport), std::move(wait)));
+    }
+    static std::unique_ptr<M605Runtime> Create(
+        std::unique_ptr<m605::detail::Transport> transport,
+        std::unique_ptr<m605::detail::SettleWait> wait,
+        std::unique_ptr<m605::detail::SafetyLatch> latch) {
+        return std::unique_ptr<M605Runtime>(new M605Runtime(
+            std::move(transport), std::move(wait), std::move(latch)));
     }
 };
 }
@@ -87,9 +95,11 @@ public:
     bool stage_succeeds = true;
     bool apply_succeeds = true;
     int fail_stage_call = 0;
+    std::function<bool()> stage_precondition;
     bool IsConnected() const override { return connected_; }
     bool Connect() override { Record("connect"); connected_ = true; return true; }
     bool WriteStage(const aura::m605::Report& report) override {
+        if (stage_precondition && !stage_precondition()) return false;
         {
             std::lock_guard<std::mutex> lock(mutex_);
             stage_reports_.push_back(report);
@@ -219,6 +229,27 @@ private:
     int after_count_ = 0;
 };
 
+struct LatchState { bool armed = false; int arms = 0; int clears = 0; };
+class FakeLatch final : public aura::m605::detail::SafetyLatch {
+public:
+    explicit FakeLatch(std::shared_ptr<LatchState> state) : state_(std::move(state)) {}
+    bool IsQuarantined() const override { return state_->armed; }
+    bool Arm() override {
+        if (state_->armed) return false;
+        state_->armed = true;
+        ++state_->arms;
+        return true;
+    }
+    bool Clear() override {
+        if (!state_->armed) return false;
+        state_->armed = false;
+        ++state_->clears;
+        return true;
+    }
+private:
+    std::shared_ptr<LatchState> state_;
+};
+
 struct Fixture {
     FakeTransport* io;
     FakeWait* wait;
@@ -231,6 +262,139 @@ Fixture MakeFixture(BlockPhase block = BlockPhase::None) {
     auto* io_ptr = io.get();
     auto* wait_ptr = wait.get();
     return {io_ptr, wait_ptr, aura::M605RuntimeTestAccess::Create(std::move(io), std::move(wait))};
+}
+
+bool TestPersistentSafetyLatch() {
+    const auto state = std::make_shared<LatchState>();
+    auto make = [&](BlockPhase block) {
+        auto io = std::make_unique<FakeTransport>();
+        io->stage_precondition = [state] { return state->armed; };
+        auto wait = std::make_unique<FakeWait>(io.get(), block);
+        auto* io_ptr = io.get();
+        auto* wait_ptr = wait.get();
+        return Fixture{io_ptr, wait_ptr, aura::M605RuntimeTestAccess::Create(
+            std::move(io), std::move(wait), std::make_unique<FakeLatch>(state))};
+    };
+    {
+        auto fixture = make(BlockPhase::AfterApply);
+        if (fixture.runtime->SetPerKeyActuation(0xffff, 1.0).get() || state->arms != 0)
+            return false; // preflight never arms
+        auto result = fixture.runtime->SetPerKeyActuation(0x0402, 1.0);
+        if (!fixture.wait->AwaitAfter(1) || !state->armed || state->arms != 1 ||
+            state->clears != 0 || !fixture.runtime->GetAppliedRuntimeState().per_key_actuation_raw.empty())
+            return false;
+        if (fixture.runtime->GetHealth() != aura::M605RuntimeHealth::TransactionInProgress ||
+            fixture.runtime->IsPersistentSafetyQuarantined())
+            return false;
+        fixture.wait->Release();
+        if (!result.get() || state->armed || state->clears != 1 ||
+            fixture.runtime->GetHealth() != aura::M605RuntimeHealth::Clean ||
+            fixture.runtime->IsPersistentSafetyQuarantined()) return false;
+    }
+    {
+        auto fixture = make(BlockPhase::None);
+        fixture.io->stage_succeeds = false;
+        if (fixture.runtime->SetPerKeyActuation(0x0402, 1.0).get() ||
+            !state->armed || state->arms != 2 || state->clears != 1 ||
+            fixture.runtime->GetHealth() != aura::M605RuntimeHealth::IndeterminateStagedState ||
+            !fixture.runtime->IsPersistentSafetyQuarantined())
+            return false;
+    }
+    {
+        auto fixture = make(BlockPhase::None); // simulated daemon restart
+        if (fixture.runtime->GetHealth() != aura::M605RuntimeHealth::PersistentSafetyQuarantine ||
+            !fixture.runtime->IsPersistentSafetyQuarantined() ||
+            fixture.runtime->SetAnalogEffect(0, true).get() || !fixture.io->Events().empty() ||
+            !fixture.runtime->AcknowledgeExternalResynchronization() || state->armed ||
+            fixture.runtime->GetHealth() != aura::M605RuntimeHealth::Clean ||
+            fixture.runtime->IsPersistentSafetyQuarantined())
+            return false;
+        fixture.io->apply_succeeds = false;
+        if (fixture.runtime->SetAnalogEffect(0, true).get() || !state->armed ||
+            fixture.runtime->GetHealth() != aura::M605RuntimeHealth::IndeterminateStagedState ||
+            !fixture.runtime->IsPersistentSafetyQuarantined())
+            return false;
+    }
+    return true;
+}
+
+struct ArmControlLatch final : public aura::m605::detail::SafetyLatch {
+    bool allow_arm = false;
+    bool armed = false;
+    int arms = 0;
+    int arm_attempts = 0;
+    bool IsQuarantined() const override { return armed; }
+    bool Arm() override {
+        ++arm_attempts;
+        if (!allow_arm || armed) return false;
+        armed = true;
+        ++arms;
+        return true;
+    }
+    bool Clear() override {
+        if (!armed) return false;
+        armed = false;
+        return true;
+    }
+};
+
+bool TestSafetyLatchArmFailure() {
+    auto io = std::make_unique<FakeTransport>();
+    auto* io_ptr = io.get();
+    auto wait = std::make_unique<FakeWait>(io_ptr, BlockPhase::None);
+    auto latch = std::make_unique<ArmControlLatch>();
+    auto* latch_ptr = latch.get();
+
+    latch_ptr->allow_arm = true;
+    auto runtime = aura::M605RuntimeTestAccess::Create(
+        std::move(io), std::move(wait), std::move(latch));
+
+    // 1. Establish prior known shadow with working latch
+    if (!runtime->SetPerKeyActuation(0x0402, 1.0).get()) return false;
+    const auto shadow_before = runtime->GetAppliedRuntimeState();
+    if (shadow_before.per_key_actuation_raw.count(0x0402) == 0 ||
+        shadow_before.per_key_actuation_raw.at(0x0402) != 10 ||
+        runtime->GetHealth() != aura::M605RuntimeHealth::Clean ||
+        runtime->IsPersistentSafetyQuarantined())
+        return false;
+
+    const size_t stages_before = io_ptr->StageReports().size();
+    const size_t events_before = io_ptr->Events().size();
+
+    // 2. Disallow arm to simulate latch arm failure
+    latch_ptr->allow_arm = false;
+    auto failed_future = runtime->SetPerKeyActuation(0x0501, 2.0);
+    const bool result = failed_future.get();
+    if (result != false) return false; // future == false
+
+    // Verify:
+    // - WriteStage count == 0
+    if (io_ptr->StageReports().size() != stages_before) return false;
+    // - Apply count == 0 (no new event at all)
+    if (io_ptr->Events().size() != events_before) return false;
+    // - health ends Clean
+    if (runtime->GetHealth() != aura::M605RuntimeHealth::Clean) return false;
+    // - persistent safety quarantine is false
+    if (runtime->IsPersistentSafetyQuarantined()) return false;
+    // - prior known shadow remains intact
+    const auto shadow_after = runtime->GetAppliedRuntimeState();
+    if (shadow_after.per_key_actuation_raw != shadow_before.per_key_actuation_raw) return false;
+    // - last_error explicitly states that the durable safety latch could not be established and NO device write was attempted
+    const auto last_err = runtime->GetLastError();
+    if (last_err.find("Durable safety latch could not be established; no device write was attempted") == std::string::npos)
+        return false;
+
+    // 3. Subsequent transaction may retry if latch later becomes available
+    latch_ptr->allow_arm = true;
+    auto retry_future = runtime->SetPerKeyActuation(0x0501, 2.0);
+    if (!retry_future.get()) return false;
+    if (runtime->GetHealth() != aura::M605RuntimeHealth::Clean) return false;
+    const auto shadow_retry = runtime->GetAppliedRuntimeState();
+    if (shadow_retry.per_key_actuation_raw.count(0x0501) == 0 ||
+        shadow_retry.per_key_actuation_raw.at(0x0501) != 20)
+        return false;
+
+    return true;
 }
 
 bool Check(const aura::m605::Report& actual, const aura::m605::Report& expected,
@@ -1302,7 +1466,8 @@ int main() {
         !TestDksPreflightZeroActivity() || !TestDksTransactionBoundaryAndFifo() ||
         !TestDksShadowUnchangedThroughEveryStage() ||
         !TestDksStageAndApplyFailures() || !TestDksFailureInvalidatesPriorShadow() ||
-        !TestDksStandardRestoreAndStop()) {
+        !TestDksStandardRestoreAndStop() || !TestPersistentSafetyLatch() ||
+        !TestSafetyLatchArmFailure()) {
         std::cerr << "FAIL: M605 runtime state machine\n";
         return 1;
     }

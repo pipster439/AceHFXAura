@@ -10,6 +10,7 @@
 #include "gsi/gsi_adapter.h"
 #include "config/lighting_service.h"
 #include "config/automation_service.h"
+#include "config/magnetic_control_service.h"
 #include "aura/runtime_status.h"
 #include "aura_version.h"
 #include "utils/logger.h"
@@ -593,11 +594,15 @@ int main(int argc, char* argv[]) {
     auto status_store = std::make_shared<aura::RuntimeStatusStore>();
     auto lighting_service = std::make_shared<aura::LightingControlService>(std::filesystem::path(config_path));
     auto automation_service = std::make_shared<aura::AutomationControlService>(std::filesystem::path(config_path));
+    aura::MagneticControlService magnetic_service(status_store);
     aura::GsiAdapter gsi_adapter;
     gsi_adapter.SetInstanceId(instance_id);
     gsi_adapter.SetStatusStore(status_store);
     gsi_adapter.SetLightingService(lighting_service);
     gsi_adapter.SetAutomationService(automation_service);
+    gsi_adapter.SetMagneticRouteRegistrar([&magnetic_service](httplib::Server& server) {
+        magnetic_service.RegisterRoutes(server);
+    });
     if (!gsi_adapter.Start(19897)) {
         LOG_WARN("CS2 GSI 适配器监听 127.0.0.1:19897 失败 (可能端口已被占用)");
     } else {
@@ -928,6 +933,7 @@ int main(int argc, char* argv[]) {
 
     LOG_INFO("正在停止 CS2 GSI 接收服务...");
     gsi_adapter.Stop();
+    magnetic_service.Stop();
 
     LOG_INFO("正在停止前台监控线程...");
     monitor.Stop();
