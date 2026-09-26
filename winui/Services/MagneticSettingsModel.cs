@@ -291,12 +291,35 @@ public sealed class MagneticSettingsModel
     {
         if (!CanWriteGlobal || GlobalDraft.PressMm is not double press || GlobalDraft.ReleaseMm is not double release)
             return Task.FromResult(false);
-        double top = GlobalDraft.TopMm ?? (Status?.GlobalDeadzone.Known == true ? Status.GlobalDeadzone.TopRaw / 10.0 :
-            Status?.HostProfile.GlobalDeadzoneTop.Known == true ? Status.HostProfile.GlobalDeadzoneTop.Raw / 10.0 : 0.0);
-        double bottom = GlobalDraft.BottomMm ?? (Status?.GlobalDeadzone.Known == true ? Status.GlobalDeadzone.BottomRaw / 10.0 :
-            Status?.HostProfile.GlobalDeadzoneBottom.Known == true ? Status.HostProfile.GlobalDeadzoneBottom.Raw / 10.0 : 0.1);
+
+        double top;
+        double bottom;
+        if (Status?.GlobalDeadzone.Known == true)
+        {
+            top = Status.GlobalDeadzone.TopRaw / 10.0;
+            bottom = Status.GlobalDeadzone.BottomRaw / 10.0;
+        }
+        else if (Status?.HostProfile.GlobalDeadzoneTop.Known == true &&
+                 Status?.HostProfile.GlobalDeadzoneBottom.Known == true)
+        {
+            top = Status.HostProfile.GlobalDeadzoneTop.Raw / 10.0;
+            bottom = Status.HostProfile.GlobalDeadzoneBottom.Raw / 10.0;
+        }
+        else
+        {
+            LastMessage = "无法确认当前全局死区，无法安全应用快速触发设置。";
+            return Task.FromResult(false);
+        }
+
         bool separate = GlobalDraft.SeparateMode ?? (Status?.GlobalRapidTrigger.Known == true && Status.GlobalRapidTrigger.SeparateMode.HasValue ?
             Status.GlobalRapidTrigger.SeparateMode.Value : Math.Abs(press - release) > 1e-4);
+
+        if (!separate && Math.Abs(press - release) > 1e-4)
+        {
+            LastMessage = "联动灵敏度模式下，按下与释放行程必须相同。";
+            return Task.FromResult(false);
+        }
+
         return SubmitAsync(() => _client.SetGlobalRapidTriggerAsync(press, release, top, bottom, separate),
             () => { GlobalDraft.PressMm = null; GlobalDraft.ReleaseMm = null; GlobalDraft.SeparateMode = null; });
     }

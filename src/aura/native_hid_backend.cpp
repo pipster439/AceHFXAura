@@ -135,6 +135,7 @@ bool IsAllowedOutputReport(const std::array<uint8_t, HID_REPORT_SIZE>& report) {
     }
     if (report[1] == 0x51 && report[2] == 0x53) {
         return (report[3] == 0 || report[3] == 1) && report[4] == 0 &&
+            (report[3] == 1 || report[5] == report[6]) &&
             report[5] >= 1 && report[5] <= 25 &&
             report[6] >= 1 && report[6] <= 25 &&
             report[7] <= 5 && report[8] <= 5 &&

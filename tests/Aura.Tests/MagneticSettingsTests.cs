@@ -480,19 +480,20 @@ public sealed class MagneticSettingsTests
 
         Assert.IsTrue(await model.ApplyGlobalRapidTriggerAsync());
         Assert.IsNull(model.GlobalDraft?.PressMm);
-        Assert.AreEqual("global-rt:0.5:0.6:0.1:0.2:True", fake.Calls.Last());
+        // Preserves currently applied global deadzone 0.3 / 0.4, NOT the unapplied draft 0.1 / 0.2
+        Assert.AreEqual("global-rt:0.5:0.6:0.3:0.4:True", fake.Calls.Last());
     }
 
     [TestMethod]
     public async Task GlobalRapidTriggerSeparateModeToggleBehavior()
     {
         var fake = new Fake();
+        fake.Status.GlobalDeadzone = new MagneticGlobalDeadzoneState { Known = true, TopRaw = 1, BottomRaw = 1, Source = "SessionApplied" };
         var model = new MagneticSettingsModel(fake);
         await model.RefreshAsync();
         model.SelectGlobal();
 
         // Linked sensitivity (separateMode = false): release follows press
-        model.EditGlobalDeadzone(0.1, 0.1);
         model.EditGlobalRapidTrigger(0.4, 0.4, false);
         Assert.IsFalse(model.GlobalDraft?.SeparateMode);
         Assert.AreEqual(0.4, model.GlobalDraft?.PressMm);
@@ -501,13 +502,68 @@ public sealed class MagneticSettingsTests
         Assert.AreEqual("global-rt:0.4:0.4:0.1:0.1:False", fake.Calls.Last());
 
         // Separate sensitivity (separateMode = true)
-        model.EditGlobalDeadzone(0.1, 0.1);
         model.EditGlobalRapidTrigger(0.2, 0.8, true);
         Assert.IsTrue(model.GlobalDraft?.SeparateMode);
         Assert.AreEqual(0.2, model.GlobalDraft?.PressMm);
         Assert.AreEqual(0.8, model.GlobalDraft?.ReleaseMm);
         Assert.IsTrue(await model.ApplyGlobalRapidTriggerAsync());
         Assert.AreEqual("global-rt:0.2:0.8:0.1:0.1:True", fake.Calls.Last());
+    }
+
+    [TestMethod]
+    public async Task GlobalRapidTriggerApplyPreservesKnownDeadzoneAndIgnoresDeadzoneDraft()
+    {
+        var fake = new Fake();
+        fake.Status.GlobalDeadzone = new MagneticGlobalDeadzoneState
+        {
+            Known = true,
+            TopRaw = 1,
+            BottomRaw = 2,
+            Source = "SessionApplied"
+        };
+        var model = new MagneticSettingsModel(fake);
+        await model.RefreshAsync();
+        model.SelectGlobal();
+
+        // Edit unapplied Global Deadzone draft to 0.3 / 0.4
+        model.EditGlobalDeadzone(0.3, 0.4);
+        Assert.AreEqual(0.3, model.GlobalDraft?.TopMm);
+        Assert.AreEqual(0.4, model.GlobalDraft?.BottomMm);
+
+        // Edit and Apply Global RT
+        model.EditGlobalRapidTrigger(0.5, 0.6, true);
+        Assert.IsTrue(await model.ApplyGlobalRapidTriggerAsync());
+
+        // Expected: RT packet uses currently applied/known global deadzone (0.1 / 0.2), NOT 0.3 / 0.4!
+        Assert.AreEqual("global-rt:0.5:0.6:0.1:0.2:True", fake.Calls.Last());
+
+        // Deadzone draft remains unapplied
+        Assert.AreEqual(0.3, model.GlobalDraft?.TopMm);
+        Assert.AreEqual(0.4, model.GlobalDraft?.BottomMm);
+    }
+
+    [TestMethod]
+    public async Task GlobalRapidTriggerApplyFailsClosedWhenDeadzoneIsUnknown()
+    {
+        var fake = new Fake();
+        fake.Status.GlobalDeadzone = new MagneticGlobalDeadzoneState { Known = false };
+        fake.Status.HostProfile.GlobalDeadzoneTop = new MagneticKnownRaw { Known = false };
+        fake.Status.HostProfile.GlobalDeadzoneBottom = new MagneticKnownRaw { Known = false };
+
+        var model = new MagneticSettingsModel(fake);
+        await model.RefreshAsync();
+        model.SelectGlobal();
+
+        // Edit Global RT draft
+        model.EditGlobalRapidTrigger(0.4, 0.4, false);
+        fake.Calls.Clear();
+
+        // Apply Global RT -> fails closed, zero client mutation
+        Assert.IsFalse(await model.ApplyGlobalRapidTriggerAsync());
+        Assert.IsEmpty(fake.Calls);
+        Assert.AreEqual(0.4, model.GlobalDraft?.PressMm);
+        Assert.AreEqual(0.4, model.GlobalDraft?.ReleaseMm);
+        Assert.AreEqual("无法确认当前全局死区，无法安全应用快速触发设置。", model.LastMessage);
     }
 
     [TestMethod]
@@ -572,7 +628,17 @@ public sealed class MagneticSettingsTests
         public Task<MagneticStatus> SetDeadzoneAsync(ushort id, double top, double bottom) => Record($"deadzone:{id}:{top:F1}:{bottom:F1}");
         public Task<MagneticStatus> ResetAllDeadzoneAsync() => Record("deadzone-reset-all");
         public Task<MagneticStatus> SetGlobalActuationAsync(double mm) => Record($"global-actuation:{mm:F1}");
-        public Task<MagneticStatus> SetGlobalDeadzoneAsync(double top, double bottom) => Record($"global-deadzone:{top:F1}:{bottom:F1}");
+        public Task<MagneticStatus> SetGlobalDeadzoneAsync(double top, double bottom)
+        {
+            Status.GlobalDeadzone = new MagneticGlobalDeadzoneState
+            {
+                Known = true,
+                TopRaw = (byte)(top * 10),
+                BottomRaw = (byte)(bottom * 10),
+                Source = "SessionApplied"
+            };
+            return Record($"global-deadzone:{top:F1}:{bottom:F1}");
+        }
         public Task<MagneticStatus> SetGlobalRapidTriggerAsync(double press, double release, double top, double bottom, bool separate) =>
             Record($"global-rt:{press:F1}:{release:F1}:{top:F1}:{bottom:F1}:{separate}");
         public Task<MagneticStatus> SetDksAsync(ushort id, double start, double end, IReadOnlyList<MagneticDksSlot> slots, bool resolve) =>

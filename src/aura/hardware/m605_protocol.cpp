@@ -230,11 +230,13 @@ std::optional<Report> BuildGlobalDeadzone(double top_mm, double bottom_mm) {
 
 std::optional<Report> BuildGlobalRapidTrigger(
     double press_mm, double release_mm, double top_mm, double bottom_mm, bool separate_mode) {
+    if (!separate_mode && std::abs(press_mm - release_mm) > 1e-4) return std::nullopt;
     const auto press = ScaleMillimeters(press_mm, 0.1, 2.5, 1, 25);
     const auto release = ScaleMillimeters(release_mm, 0.1, 2.5, 1, 25);
     const auto top = ScaleMillimeters(top_mm, 0.0, 0.5, 0, 5);
     const auto bottom = ScaleMillimeters(bottom_mm, 0.0, 0.5, 0, 5);
     if (!press || !release || !top || !bottom) return std::nullopt;
+    if (!separate_mode && *press != *release) return std::nullopt;
 
     Report report{};
     report[1] = 0x51;

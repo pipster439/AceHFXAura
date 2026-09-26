@@ -303,13 +303,9 @@ void MagneticControlService::RegisterRoutes(httplib::Server& server) {
                         Millimeters(body, "release_mm", 1, 25, second) &&
                         Millimeters(body, "top_mm", 0, 5, third) &&
                         Millimeters(body, "bottom_mm", 0, 5, fourth);
-                } else if (sep_key && ExactFields(body, {sep_key, "press_mm", "release_mm"})) {
-                    const auto host = host_profile_();
-                    third = host.global_deadzone_top_raw.value_or(0) / 10.0;
-                    fourth = host.global_deadzone_bottom_raw.value_or(1) / 10.0;
-                    valid = Boolean(body, sep_key, flag) &&
-                        Millimeters(body, "press_mm", 1, 25, first) &&
-                        Millimeters(body, "release_mm", 1, 25, second);
+                    if (valid && !flag && std::abs(first - second) > 1e-4) {
+                        valid = false;
+                    }
                 }
                 break;
             }

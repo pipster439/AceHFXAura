@@ -1279,9 +1279,11 @@ bool TestGlobalSettings() {
     if (!rt || !Check(*rt, expected_rt, "Global RT P0.4 R0.2 Top0.0 Bot0.1 SeparateMode=1") ||
         !aura::NativeHidBackend::IsSupportedOutputReport(*rt)) return false;
 
-    auto rt_off = BuildGlobalRapidTrigger(0.4, 0.2, 0.0, 0.1, false);
-    if (!rt_off || (*rt_off)[3] != 0 ||
-        !aura::NativeHidBackend::IsSupportedOutputReport(*rt_off)) return false;
+    auto rt_linked = BuildGlobalRapidTrigger(0.4, 0.4, 0.0, 0.1, false);
+    if (!rt_linked || (*rt_linked)[3] != 0 ||
+        !aura::NativeHidBackend::IsSupportedOutputReport(*rt_linked)) return false;
+
+    if (BuildGlobalRapidTrigger(0.4, 0.2, 0.0, 0.1, false).has_value()) return false;
 
     if (BuildGlobalRapidTrigger(0.0, 0.2, 0.0, 0.1, true) ||
         BuildGlobalRapidTrigger(2.6, 0.2, 0.0, 0.1, true) ||
@@ -1303,6 +1305,7 @@ bool TestGlobalSettings() {
     rej = *rt; rej[8] = 6; if (aura::NativeHidBackend::IsSupportedOutputReport(rej)) return false;
     rej = *rt; rej[9] = 1; if (aura::NativeHidBackend::IsSupportedOutputReport(rej)) return false;
     rej = *rt; rej[64] = 1; if (aura::NativeHidBackend::IsSupportedOutputReport(rej)) return false;
+    rej = *rt_linked; rej[5] = 4; rej[6] = 2; if (aura::NativeHidBackend::IsSupportedOutputReport(rej)) return false;
 
     // 4. Runtime lifecycle and shadow state
     const auto state = std::make_shared<LatchState>();
@@ -1351,6 +1354,7 @@ bool TestGlobalSettings() {
     if (runtime->SetGlobalActuation(0.0).get()) return false;
     if (runtime->SetGlobalDeadzone(0.6, 0.1).get()) return false;
     if (runtime->SetGlobalRapidTrigger(0.0, 0.2, 0.0, 0.1, true).get()) return false;
+    if (runtime->SetGlobalRapidTrigger(0.4, 0.2, 0.0, 0.1, false).get()) return false;
     if (io_ptr->StageReports().size() != stage_count_before) return false;
 
     // Stage failure locks runtime

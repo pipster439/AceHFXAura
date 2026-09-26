@@ -254,36 +254,54 @@ bool TestService() {
         body.at("global_deadzone").at("top_raw") != 2 ||
         body.at("global_deadzone").at("bottom_raw") != 3) return finish(false);
 
-    // Global Rapid Trigger route (5 fields)
+    // Global Rapid Trigger route (5 fields required)
     const auto bad_global_rt = post("/api/magnetic/global/rapid-trigger",
         R"({"separate_mode":true,"press_mm":3.0,"release_mm":0.2,"top_mm":0.0,"bottom_mm":0.1})");
     if (!bad_global_rt || bad_global_rt->status != 422) return finish(false);
-    const auto global_rt_5 = post("/api/magnetic/global/rapid-trigger",
-        R"({"separate_mode":true,"press_mm":0.5,"release_mm":0.3,"top_mm":0.0,"bottom_mm":0.1})");
-    if (!global_rt_5 || global_rt_5->status != 200 ||
-        io_ptr->reports[io_ptr->reports.size() - 2][2] != 0x53 ||
-        io_ptr->reports[io_ptr->reports.size() - 2][3] != 1 ||
-        io_ptr->reports[io_ptr->reports.size() - 2][5] != 5 ||
-        io_ptr->reports[io_ptr->reports.size() - 2][6] != 3 ||
-        io_ptr->reports[io_ptr->reports.size() - 2][7] != 0 ||
-        io_ptr->reports[io_ptr->reports.size() - 2][8] != 1) return finish(false);
-    body = Json::parse(global_rt_5->body);
-    if (body.at("global_rapid_trigger").at("source") != "SessionApplied" ||
-        body.at("global_rapid_trigger").at("separate_mode") != true ||
-        body.at("global_rapid_trigger").at("press_raw") != 5 ||
-        body.at("global_rapid_trigger").at("release_raw") != 3) return finish(false);
 
-    // Global Rapid Trigger route (3 fields, inherits deadzones)
-    const auto global_rt_3 = post("/api/magnetic/global/rapid-trigger",
-        R"({"separate_mode":false,"press_mm":0.4,"release_mm":0.2})");
-    if (!global_rt_3 || global_rt_3->status != 200 ||
+    // Missing deadzones (3 fields): rejected with 422 because exact 5 fields are required
+    const auto missing_dz = post("/api/magnetic/global/rapid-trigger",
+        R"({"separate_mode":true,"press_mm":0.5,"release_mm":0.3})");
+    if (!missing_dz || missing_dz->status != 422) return finish(false);
+
+    // Requirement 4.C: separate_mode=false, press=0.4, release=0.2 -> 422 and zero HID reports
+    const auto count_before_c = io_ptr->reports.size();
+    const auto contradictory_rt = post("/api/magnetic/global/rapid-trigger",
+        R"({"separate_mode":false,"press_mm":0.4,"release_mm":0.2,"top_mm":0.0,"bottom_mm":0.1})");
+    if (!contradictory_rt || contradictory_rt->status != 422 ||
+        io_ptr->reports.size() != count_before_c) return finish(false);
+
+    // Requirement 4.D: separate_mode=false, press=release=0.4 -> accepted (200)
+    const auto global_rt_linked = post("/api/magnetic/global/rapid-trigger",
+        R"({"separate_mode":false,"press_mm":0.4,"release_mm":0.4,"top_mm":0.0,"bottom_mm":0.1})");
+    if (!global_rt_linked || global_rt_linked->status != 200 ||
         io_ptr->reports[io_ptr->reports.size() - 2][2] != 0x53 ||
         io_ptr->reports[io_ptr->reports.size() - 2][3] != 0 ||
         io_ptr->reports[io_ptr->reports.size() - 2][5] != 4 ||
-        io_ptr->reports[io_ptr->reports.size() - 2][6] != 2) return finish(false);
-    body = Json::parse(global_rt_3->body);
+        io_ptr->reports[io_ptr->reports.size() - 2][6] != 4 ||
+        io_ptr->reports[io_ptr->reports.size() - 2][7] != 0 ||
+        io_ptr->reports[io_ptr->reports.size() - 2][8] != 1) return finish(false);
+    body = Json::parse(global_rt_linked->body);
     if (body.at("global_rapid_trigger").at("source") != "SessionApplied" ||
-        body.at("global_rapid_trigger").at("separate_mode") != false) return finish(false);
+        body.at("global_rapid_trigger").at("separate_mode") != false ||
+        body.at("global_rapid_trigger").at("press_raw") != 4 ||
+        body.at("global_rapid_trigger").at("release_raw") != 4) return finish(false);
+
+    // Requirement 4.E: separate_mode=true, press=0.4, release=0.2 -> accepted (200)
+    const auto global_rt_sep = post("/api/magnetic/global/rapid-trigger",
+        R"({"separate_mode":true,"press_mm":0.4,"release_mm":0.2,"top_mm":0.0,"bottom_mm":0.1})");
+    if (!global_rt_sep || global_rt_sep->status != 200 ||
+        io_ptr->reports[io_ptr->reports.size() - 2][2] != 0x53 ||
+        io_ptr->reports[io_ptr->reports.size() - 2][3] != 1 ||
+        io_ptr->reports[io_ptr->reports.size() - 2][5] != 4 ||
+        io_ptr->reports[io_ptr->reports.size() - 2][6] != 2 ||
+        io_ptr->reports[io_ptr->reports.size() - 2][7] != 0 ||
+        io_ptr->reports[io_ptr->reports.size() - 2][8] != 1) return finish(false);
+    body = Json::parse(global_rt_sep->body);
+    if (body.at("global_rapid_trigger").at("source") != "SessionApplied" ||
+        body.at("global_rapid_trigger").at("separate_mode") != true ||
+        body.at("global_rapid_trigger").at("press_raw") != 4 ||
+        body.at("global_rapid_trigger").at("release_raw") != 2) return finish(false);
 
     wait_ptr->Block();
     std::atomic<bool> first_ok = false;
