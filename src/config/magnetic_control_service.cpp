@@ -235,6 +235,7 @@ void MagneticControlService::WriteStatus(httplib::Response& response, bool resul
         host.static_analog_effect ?
         Json{{"known", true}, {"value", *host.static_analog_effect}, {"source", "HostProfile"}} :
         Json{{"known", false}, {"source", "Unknown"}};
+    body["rapid_trigger_master"] = Json{{"known", false}, {"source", "Unknown"}};
     response.status = status_code;
     response.set_header("Cache-Control", "no-store");
     response.set_content(body.dump(), "application/json; charset=utf-8");
@@ -245,6 +246,30 @@ void MagneticControlService::RegisterRoutes(httplib::Server& server) {
         if (!IsAllowedLoopbackHost(request.get_header_value("Host"))) { response.status = 403; return; }
         WriteStatus(response, true, 200);
     });
+
+    server.Post("/api/magnetic/safety/acknowledge-external-resynchronization",
+        [this](const httplib::Request& request, httplib::Response& response) {
+            if (!ValidRequest(request, response)) return;
+            const Json body = Json::parse(request.body, nullptr, false);
+            bool confirm = false;
+            if (!ExactFields(body, {"confirm_external_resynchronization"}) ||
+                !Boolean(body, "confirm_external_resynchronization", confirm) || !confirm) {
+                WriteStatus(response, false, 422, "Explicit confirmation of external resynchronization is required");
+                return;
+            }
+            std::unique_lock<std::mutex> write_lock(write_mutex_, std::try_to_lock);
+            if (!write_lock.owns_lock() ||
+                runtime_->GetHealth() == M605RuntimeHealth::TransactionInProgress ||
+                runtime_->HasQueuedWork()) {
+                WriteStatus(response, false, 409, "Cannot acknowledge external resynchronization while transaction or work is pending");
+                return;
+            }
+            if (!runtime_->AcknowledgeExternalResynchronization()) {
+                WriteStatus(response, false, 409, "Persistent safety quarantine acknowledgment failed or runtime not quarantined");
+                return;
+            }
+            WriteStatus(response, true, 200);
+        });
 
     const auto write = [this, &server](const char* route, Mutation kind) {
         server.Post(route, [this, kind](const httplib::Request& request, httplib::Response& response) {

@@ -567,6 +567,11 @@ bool M605Runtime::IsPersistentSafetyQuarantined() const {
     return health_ != M605RuntimeHealth::TransactionInProgress;
 }
 
+bool M605Runtime::HasQueuedWork() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return !queue_.empty();
+}
+
 bool M605Runtime::AcknowledgeExternalResynchronization() {
     std::lock_guard<std::mutex> stop_lock(stop_mutex_);
     std::lock_guard<std::mutex> lock(mutex_);

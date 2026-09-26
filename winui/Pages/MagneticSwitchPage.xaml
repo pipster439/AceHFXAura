@@ -232,7 +232,22 @@
                                 <FontIcon Glyph="&#xE945;" />
                             </controls:SettingsCard.HeaderIcon>
                             <StackPanel Spacing="6" MinWidth="260">
-                                <ToggleSwitch x:Name="RapidTriggerToggle" OnContent="开启" OffContent="关闭"
+                                <Border x:Name="RapidTriggerMasterBanner"
+                                        Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                        CornerRadius="4" Padding="8,6" Margin="0,0,0,4">
+                                    <StackPanel Spacing="2">
+                                        <TextBlock x:Name="RapidTriggerMasterStatusText"
+                                                   Text="硬件总开关：未知"
+                                                   Style="{ThemeResource CaptionTextBlockStyle}"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        <TextBlock x:Name="RapidTriggerMasterExplanationText"
+                                                   Text="快速触发总开关由键盘物理开关控制。"
+                                                   Style="{ThemeResource CaptionTextBlockStyle}"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    </StackPanel>
+                                </Border>
+                                <ToggleSwitch x:Name="RapidTriggerToggle" OnContent="此键使用快速触发" OffContent="关闭"
                                               Toggled="RapidTriggerToggle_Toggled" AutomationProperties.AutomationId="MagneticRapidTriggerToggle" />
                                 <ToggleSwitch x:Name="SeparateModeToggle" Header="灵敏度模式" OnContent="独立按下/抬起灵敏度" OffContent="同步按下/抬起灵敏度"
                                               Toggled="SeparateModeToggle_Toggled" AutomationProperties.AutomationId="MagneticGlobalSeparateModeToggle"

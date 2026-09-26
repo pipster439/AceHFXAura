@@ -600,6 +600,102 @@ public sealed class MagneticSettingsTests
         Assert.IsFalse(handler.Body!.Contains("opcode", StringComparison.OrdinalIgnoreCase));
     }
 
+    [TestMethod]
+    public async Task ServiceRouteRequiresExplicitConfirmationAndEmitsZeroVendorOpcode()
+    {
+        var handler = new CaptureHandler();
+        var client = new MagneticControlClient(new HttpClient(handler));
+
+        var result = await client.AcknowledgeExternalResynchronizationAsync();
+        Assert.IsTrue(result.Succeeded);
+        Assert.AreEqual("/api/magnetic/safety/acknowledge-external-resynchronization", handler.Path);
+        Assert.IsNotNull(handler.Body);
+        using var doc = JsonDocument.Parse(handler.Body);
+        Assert.IsTrue(doc.RootElement.GetProperty("confirm_external_resynchronization").GetBoolean());
+        Assert.IsFalse(handler.Body.Contains("opcode", StringComparison.OrdinalIgnoreCase));
+        Assert.IsFalse(handler.Body.Contains("hid", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [TestMethod]
+    public async Task QuarantinedModelRecoveryFlowAndSessionAppliedClearing()
+    {
+        var fake = new Fake();
+        fake.Status.PersistentSafetyQuarantine = true;
+        fake.Status.Health = "PersistentSafetyQuarantine";
+        fake.Status.Actuation.Add(new MagneticActuationValue { LogicalId = 0x0402, Raw = 20, Source = "SessionApplied" });
+        fake.Status.RapidTrigger.Add(new MagneticRapidTriggerValue { LogicalId = 0x0402, Enabled = true, PressRaw = 4, ReleaseRaw = 4, Source = "SessionApplied" });
+        fake.Status.Deadzone.Add(new MagneticDeadzoneValue { LogicalId = 0x0402, TopRaw = 1, BottomRaw = 2, Source = "SessionApplied" });
+
+        var model = new MagneticSettingsModel(fake);
+        await model.RefreshAsync();
+
+        Assert.IsTrue(model.Quarantined);
+        Assert.IsFalse(model.CanWrite);
+        Assert.IsFalse(model.CanWriteSelected);
+
+        // App restart / refresh alone does not acknowledge:
+        await model.RefreshAsync();
+        Assert.IsTrue(model.Quarantined);
+        Assert.IsFalse(fake.Calls.Contains("ack-external-resync"));
+
+        // Normal operations fail closed while quarantined:
+        model.Select(0x0402);
+        model.EditActuation(1.0);
+        Assert.IsFalse(await model.ApplyActuationAsync());
+
+        // Confirmed recovery invokes AcknowledgeExternalResynchronization:
+        Assert.IsTrue(await model.AcknowledgeExternalResynchronizationAsync());
+        Assert.IsTrue(fake.Calls.Contains("ack-external-resync"));
+        Assert.IsFalse(model.Quarantined);
+        Assert.IsTrue(model.CanWrite);
+        Assert.AreEqual("Clean", model.Status!.Health);
+        Assert.IsFalse(model.Status.PersistentSafetyQuarantine);
+
+        // SessionApplied state is cleared:
+        Assert.AreEqual(0, model.Status.Actuation.Count);
+        Assert.AreEqual(0, model.Status.RapidTrigger.Count);
+        Assert.AreEqual(0, model.Status.Deadzone.Count);
+    }
+
+    [TestMethod]
+    public async Task UiDoesNotExposeRtMasterMutationAndSeparatesHardwareMasterDisplay()
+    {
+        var fake = new Fake();
+        var model = new MagneticSettingsModel(fake);
+        await model.RefreshAsync();
+
+        // 1. Model & Client do not expose any RT master mutation API:
+        Assert.IsNull(typeof(MagneticSettingsModel).GetMethod("SetRapidTriggerMaster"));
+        Assert.IsNull(typeof(MagneticSettingsModel).GetMethod("EditRapidTriggerMaster"));
+        Assert.IsNull(typeof(MagneticSettingsModel).GetMethod("ApplyRapidTriggerMasterAsync"));
+        Assert.IsNull(typeof(IMagneticControlClient).GetMethod("SetRapidTriggerMasterAsync"));
+
+        // 2. RapidTriggerMaster displays read-only hardware switch state:
+        fake.Status.RapidTriggerMaster = new MagneticKnownBool { Known = false };
+        Assert.AreEqual("硬件总开关：未知", model.RapidTriggerMasterText);
+
+        fake.Status.RapidTriggerMaster = new MagneticKnownBool { Known = true, Value = true };
+        Assert.AreEqual("硬件总开关：开启", model.RapidTriggerMasterText);
+
+        fake.Status.RapidTriggerMaster = new MagneticKnownBool { Known = true, Value = false };
+        Assert.AreEqual("硬件总开关：关闭", model.RapidTriggerMasterText);
+
+        Assert.AreEqual("快速触发总开关由键盘物理开关控制。", MagneticSettingsModel.RapidTriggerMasterExplanation);
+
+        // 3. Single-key RT toggle modifies per-key RT (51 54), NOT master:
+        model.Select(0x0402);
+        model.EditRapidTrigger(true, 0.4, 0.4);
+        Assert.IsTrue(await model.ApplyRapidTriggerAsync(resolveDks: true));
+        Assert.AreEqual("rt-on:1026:0.4:0.4:True", fake.Calls.Last());
+
+        // 4. Global RT modifies separate_mode / press / release (51 53), NOT master enable:
+        fake.Status.GlobalDeadzone = new MagneticGlobalDeadzoneState { Known = true, TopRaw = 0, BottomRaw = 1, Source = "SessionApplied" };
+        model.SelectGlobal();
+        model.EditGlobalRapidTrigger(0.5, 0.5, false);
+        Assert.IsTrue(await model.ApplyGlobalRapidTriggerAsync());
+        Assert.AreEqual("global-rt:0.5:0.5:0.0:0.1:False", fake.Calls.Last());
+    }
+
     private sealed class CaptureHandler : HttpMessageHandler
     {
         public string? Path { get; private set; }
@@ -649,5 +745,18 @@ public sealed class MagneticSettingsTests
         public Task<MagneticStatus> SetSpeedTapMasterAsync(bool enabled) => Record($"master:{enabled}");
         public Task<MagneticStatus> ResetSpeedTapToProfileAsync() => Record("profile-reset");
         public Task<MagneticStatus> SetStaticAnalogEffectAsync(bool enabled) => Record($"analog:{enabled}");
+        public Task<MagneticStatus> AcknowledgeExternalResynchronizationAsync()
+        {
+            Status.PersistentSafetyQuarantine = false;
+            Status.Health = "Clean";
+            Status.Actuation.Clear();
+            Status.RapidTrigger.RemoveAll(v => v.Source == "SessionApplied");
+            Status.Deadzone.Clear();
+            Status.Dks.Clear();
+            Status.GlobalActuation = new MagneticGlobalActuationState { Known = false, Source = "Unknown" };
+            Status.GlobalRapidTrigger = new MagneticGlobalRapidTriggerState { Known = false, Source = "Unknown" };
+            Status.GlobalDeadzone = new MagneticGlobalDeadzoneState { Known = false, Source = "Unknown" };
+            return Record("ack-external-resync");
+        }
     }
 }

@@ -326,9 +326,12 @@ bool TestService() {
     const auto count_during = io_ptr->reports.size();
     const auto busy = post("/api/magnetic/actuation", R"({"logical_id":1026,"mm":3.0})");
     const bool blocked_busy = busy && busy->status == 409 && io_ptr->reports.size() == count_during;
+    const auto busy_ack = post("/api/magnetic/safety/acknowledge-external-resynchronization",
+        R"({"confirm_external_resynchronization":true})");
+    const bool blocked_busy_ack = busy_ack && busy_ack->status == 409;
     wait_ptr->Release();
     in_flight.join();
-    if (!blocked_busy || !first_ok) return finish(false);
+    if (!blocked_busy || !blocked_busy_ack || !first_ok) return finish(false);
 
     // After completion, status is Clean and quarantine is false:
     const auto clean_status = client.Get("/api/magnetic/status");
@@ -352,6 +355,40 @@ bool TestService() {
     const auto blocked = post("/api/magnetic/actuation", R"({"logical_id":1026,"mm":1.0})");
     if (!blocked || blocked->status != 409 || io_ptr->reports.size() != count)
         return finish(false);
+
+    // Endpoint validation: explicit confirmation required (no extra fields, must be true)
+    const auto missing_field = post("/api/magnetic/safety/acknowledge-external-resynchronization", "{}");
+    if (!missing_field || missing_field->status != 422) return finish(false);
+
+    const auto confirm_false = post("/api/magnetic/safety/acknowledge-external-resynchronization",
+        R"({"confirm_external_resynchronization":false})");
+    if (!confirm_false || confirm_false->status != 422) return finish(false);
+
+    const auto extra_field = post("/api/magnetic/safety/acknowledge-external-resynchronization",
+        R"({"confirm_external_resynchronization":true,"extra":1})");
+    if (!extra_field || extra_field->status != 422) return finish(false);
+
+    // Confirmed acknowledgment: latch cleared, health Clean, SessionApplied cleared, ZERO HID reports
+    const auto count_before_ack = io_ptr->reports.size();
+    const auto ack = post("/api/magnetic/safety/acknowledge-external-resynchronization",
+        R"({"confirm_external_resynchronization":true})");
+    if (!ack || ack->status != 200 || io_ptr->reports.size() != count_before_ack || latch->armed)
+        return finish(false);
+
+    body = Json::parse(ack->body);
+    if (body.at("health") != "Clean" ||
+        body.at("persistent_safety_quarantine") != false ||
+        !body.at("actuation").empty() ||
+        !body.at("deadzone").empty() ||
+        !body.at("dks").empty() ||
+        body.at("rapid_trigger_master").at("known") != false)
+        return finish(false);
+
+    // Calling again when already Clean/unquarantined rejects with 409
+    const auto redundant_ack = post("/api/magnetic/safety/acknowledge-external-resynchronization",
+        R"({"confirm_external_resynchronization":true})");
+    if (!redundant_ack || redundant_ack->status != 409) return finish(false);
+
     return finish(true);
 }
 }

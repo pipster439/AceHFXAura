@@ -1,0 +1,896 @@
+{
+  "target_device": "ASUS ROG Falchion Ace HFX",
+  "firmware_image": "M605_V01_00_58.bin",
+  "firmware_version": "1.00.58",
+  "mcu_architecture": "Sonix SNC7320 (Dual Cortex-M3)",
+  "memory_layout": {
+    "bootloader_flash_base": "0x60001000",
+    "core1_flash_base": "0x60011000",
+    "core2_flash_mirror": "0x60021000",
+    "core2_psram_base": "0x18000000",
+    "core2_bss_base": "0x18020000",
+    "key_record_array_base": "0x180202ac",
+    "raw_adc_buffer_base": "0x18026560"
+  },
+  "command_dispatchers": {
+    "core2_main_dispatcher": {
+      "address": "0x18001fbe",
+      "description": "Primary USB HID command router evaluating report buffer 0x1802337C opcode at byte +0"
+    },
+    "core2_magnetic_dispatcher": {
+      "address": "0x1800248e",
+      "description": "Magnetic switch subsystem router for command 0x51 and subcommands"
+    },
+    "core2_factory_hall_dispatcher": {
+      "address": "0x1800f448",
+      "description": "Factory manufacturing and analog Hall diagnostic dispatcher (FA_HA_CMD, opcode 0x04)"
+    },
+    "vendor_report_emitter": {
+      "formatter_address": "0x18000a1a",
+      "dual_buffer_sender_address": "0x18000a70",
+      "ack_sender_address": "0x18000ad8",
+      "usb_transport_address": "0x18018baa",
+      "description": "Formats 64-byte vendor USB HID responses and emits via usbd_hid_send_report"
+    }
+  },
+  "protocol_handlers": [
+    {
+      "command": "0x51",
+      "subcommand": "0x4F",
+      "name": "SET_PER_KEY_ACTUATION",
+      "handler_address": "0x18002b62",
+      "category": "Magnetic Switch Actuation",
+      "description": "Configures per-key actuation depth in increments of 0.1 mm (10 to 40 = 1.0mm to 4.0mm).",
+      "parameters": {
+        "key_index": {
+          "offset": 4,
+          "type": "uint8",
+          "description": "Physical switch index (0x00 - 0x4A, max 75 keys)"
+        },
+        "actuation_depth": {
+          "offset": 5,
+          "type": "uint8",
+          "description": "Actuation threshold (10..40 corresponding to 1.0mm..4.0mm)"
+        }
+      },
+      "internal_state_impact": {
+        "key_record_offset": "+0x1C",
+        "record_stride": 32,
+        "format": "uint8 0.1mm units"
+      },
+      "ack_response": {
+        "opcode": "0x51",
+        "subcommand": "0x4F",
+        "payload_len": 60
+      },
+      "request": "0x51 0x4F",
+      "response": "0x51 0x4F",
+      "handler_offset": "0x18002b62",
+      "state": "+0x1C ()",
+      "evidence": [
+        "FIRMWARE_STATIC"
+      ],
+      "confidence": "HIGH"
+    },
+    {
+      "command": "0x51",
+      "subcommand": "0x50",
+      "name": "SET_GLOBAL_ACTUATION",
+      "handler_address": "0x18002be4",
+      "category": "Magnetic Switch Actuation",
+      "description": "Configures global actuation depth applied to all magnetic keys across the keyboard.",
+      "parameters": {
+        "actuation_depth": {
+          "offset": 4,
+          "type": "uint8",
+          "description": "Global actuation threshold in 0.1mm units (10..40)"
+        }
+      },
+      "internal_state_impact": {
+        "key_record_offset": "+0x1C",
+        "iteration": "All 68/75 keys updated sequentially",
+        "format": "uint8 0.1mm units"
+      },
+      "ack_response": {
+        "opcode": "0x51",
+        "subcommand": "0x50",
+        "payload_len": 60
+      },
+      "request": "0x51 0x50",
+      "response": "0x51 0x50",
+      "handler_offset": "0x18002be4",
+      "state": "+0x1C ()",
+      "evidence": [
+        "FIRMWARE_STATIC"
+      ],
+      "confidence": "HIGH"
+    },
+    {
+      "command": "0x51",
+      "subcommand": "0x53",
+      "name": "SET_GLOBAL_RAPID_TRIGGER",
+      "handler_address": "0x18002ee6",
+      "category": "Rapid Trigger",
+      "description": "Sets global Rapid Trigger press and release sensitivities for all active keys.",
+      "parameters": {
+        "rt_mode": {
+          "offset": 7,
+          "type": "uint8",
+          "description": "0 = RT Disabled, 1 = Continuous RT Enabled"
+        },
+        "press_sensitivity": {
+          "offset": 4,
+          "type": "uint8",
+          "description": "Press stroke sensitivity (0.1mm..4.0mm in 0.1mm units)"
+        },
+        "release_sensitivity": {
+          "offset": 5,
+          "type": "uint8",
+          "description": "Release stroke sensitivity (0.1mm..4.0mm in 0.1mm units)"
+        }
+      },
+      "internal_state_impact": {
+        "key_record_offset": "+0x07 (mode), +0x0A (sensitivities)",
+        "bitfield": "bfi r2, r3, #0, #7 (press); bfi r2, r3, #7, #7 (release)"
+      },
+      "ack_response": {
+        "opcode": "0x51",
+        "subcommand": "0x53",
+        "payload_len": 60
+      },
+      "request": "0x51 0x53",
+      "response": "0x51 0x53",
+      "handler_offset": "0x18002ee6",
+      "state": "+0x07 (mode), +0x0A (sensitivities) ()",
+      "evidence": [
+        "FIRMWARE_STATIC"
+      ],
+      "confidence": "HIGH"
+    },
+    {
+      "command": "0x51",
+      "subcommand": "0x54",
+      "name": "SET_PER_KEY_RAPID_TRIGGER",
+      "handler_address": "0x18002ee4",
+      "category": "Rapid Trigger",
+      "description": "Sets per-key Rapid Trigger enable state and press/release sensitivities for an individual switch.",
+      "parameters": {
+        "key_index": {
+          "offset": 4,
+          "type": "uint8",
+          "description": "Target key index"
+        },
+        "rt_flags": {
+          "offset": 5,
+          "type": "uint8",
+          "description": "Bit 0: Enable RT on key"
+        },
+        "press_sensitivity": {
+          "offset": 6,
+          "type": "uint8",
+          "description": "Press stroke sensitivity (0.1mm steps)"
+        },
+        "release_sensitivity": {
+          "offset": 7,
+          "type": "uint8",
+          "description": "Release stroke sensitivity (0.1mm steps)"
+        }
+      },
+      "internal_state_impact": {
+        "key_record_offset": "+0x07 (flags), +0x0A (packed uint16 bitfield)",
+        "record_stride": 32
+      },
+      "ack_response": {
+        "opcode": "0x51",
+        "subcommand": "0x54",
+        "payload_len": 60
+      },
+      "request": "0x51 0x54",
+      "response": "0x51 0x54",
+      "handler_offset": "0x18002ee4",
+      "state": "+0x07 (flags), +0x0A (packed uint16 bitfield) ()",
+      "evidence": [
+        "FIRMWARE_STATIC"
+      ],
+      "confidence": "HIGH"
+    },
+    {
+      "command": "0x51",
+      "subcommand": "0x58",
+      "name": "SET_GLOBAL_DEADZONE",
+      "handler_address": "0x18003332",
+      "category": "Deadzone",
+      "description": "Sets global top-of-travel deadzone threshold across all magnetic switches.",
+      "parameters": {
+        "deadzone_value": {
+          "offset": 4,
+          "type": "uint8",
+          "description": "Deadzone threshold (0 to 10 in 0.1mm increments, e.g. 0.0mm to 1.0mm)"
+        }
+      },
+      "internal_state_impact": {
+        "key_record_offset": "+0x08",
+        "bitfield": "bfi r2, r3, #0, #7"
+      },
+      "ack_response": {
+        "opcode": "0x51",
+        "subcommand": "0x58",
+        "payload_len": 60
+      },
+      "request": "0x51 0x58",
+      "response": "0x51 0x58",
+      "handler_offset": "0x18003332",
+      "state": "+0x08 ()",
+      "evidence": [
+        "FIRMWARE_STATIC"
+      ],
+      "confidence": "HIGH"
+    },
+    {
+      "command": "0x51",
+      "subcommand": "0x59",
+      "name": "SET_PER_KEY_DEADZONE",
+      "handler_address": "0x18003364",
+      "category": "Deadzone",
+      "description": "Sets per-key top deadzone threshold for an individual switch.",
+      "parameters": {
+        "key_index": {
+          "offset": 4,
+          "type": "uint8",
+          "description": "Target key matrix index"
+        },
+        "deadzone_value": {
+          "offset": 5,
+          "type": "uint8",
+          "description": "Deadzone threshold in 0.1mm units"
+        }
+      },
+      "internal_state_impact": {
+        "key_record_offset": "+0x08",
+        "record_stride": 32,
+        "bitfield": "bfi r2, r3, #0, #7"
+      },
+      "ack_response": {
+        "opcode": "0x51",
+        "subcommand": "0x59",
+        "payload_len": 60
+      },
+      "request": "0x51 0x59",
+      "response": "0x51 0x59",
+      "handler_offset": "0x18003364",
+      "state": "+0x08 ()",
+      "evidence": [
+        "FIRMWARE_STATIC"
+      ],
+      "confidence": "HIGH"
+    },
+    {
+      "command": "0x51",
+      "subcommand": "0x52",
+      "name": "RESET_DEADZONE",
+      "handler_address": "0x18002c1a",
+      "category": "Deadzone",
+      "description": "Resets deadzone configurations back to default factory baseline values.",
+      "parameters": {},
+      "internal_state_impact": {
+        "key_record_offset": "+0x08",
+        "action": "Restores baseline deadzone (0.1mm default)"
+      },
+      "ack_response": {
+        "opcode": "0x51",
+        "subcommand": "0x52",
+        "payload_len": 60
+      },
+      "request": "0x51 0x52",
+      "response": "0x51 0x52",
+      "handler_offset": "0x18002c1a",
+      "state": "+0x08 ()",
+      "evidence": [
+        "FIRMWARE_STATIC"
+      ],
+      "confidence": "HIGH"
+    },
+    {
+      "command": "0x51",
+      "subcommand": "0x55",
+      "name": "SET_SPEEDTAP_PAIR",
+      "handler_address": "0x180030d2",
+      "category": "SpeedTap (SOCD)",
+      "description": "Binds a pair of mutually exclusive keys (e.g. A and D) for hardware SOCD resolution.",
+      "parameters": {
+        "pair_slot": {
+          "offset": 4,
+          "type": "uint8",
+          "description": "SpeedTap pairing slot index (0..4)"
+        },
+        "key_a": {
+          "offset": 5,
+          "type": "uint8",
+          "description": "Primary key index"
+        },
+        "key_b": {
+          "offset": 6,
+          "type": "uint8",
+          "description": "Secondary key index"
+        },
+        "priority_mode": {
+          "offset": 7,
+          "type": "uint8",
+          "description": "0 = Last Input Priority, 1 = Neutral, 2 = Key A Priority"
+        }
+      },
+      "internal_state_impact": {
+        "table_offset": "SpeedTap pairing table at 0x18007820 runtime state",
+        "slots": "Overrides runtime slots [r3], [r3+1], [r3+2]"
+      },
+      "ack_response": {
+        "opcode": "0x51",
+        "subcommand": "0x55",
+        "payload_len": 60
+      },
+      "request": "0x51 0x55",
+      "response": "0x51 0x55",
+      "handler_offset": "0x180030d2",
+      "state": "Internal PSRAM buffer",
+      "evidence": [
+        "FIRMWARE_STATIC"
+      ],
+      "confidence": "HIGH"
+    },
+    {
+      "command": "0x51",
+      "subcommand": "0x56",
+      "name": "RESET_SPEEDTAP",
+      "handler_address": "0x180031bc",
+      "category": "SpeedTap (SOCD)",
+      "description": "Resets active SpeedTap runtime tracking states while preserving stored profile pairs.",
+      "parameters": {},
+      "internal_state_impact": {
+        "runtime_cleanup": "Calls 0x180005c6: clears 0x3dc runtime tracking buffer",
+        "profile_preservation": "Non-volatile profile tables (+0x05, +0x06) remain untouched"
+      },
+      "ack_response": {
+        "opcode": "0x51",
+        "subcommand": "0x56",
+        "payload_len": 60
+      },
+      "request": "0x51 0x56",
+      "response": "0x51 0x56",
+      "handler_offset": "0x180031bc",
+      "state": "Internal PSRAM buffer",
+      "evidence": [
+        "FIRMWARE_STATIC"
+      ],
+      "confidence": "HIGH"
+    },
+    {
+      "command": "0x51",
+      "subcommand": "0x57",
+      "name": "SET_SPEEDTAP_MASTER",
+      "handler_address": "0x180031e6",
+      "category": "SpeedTap (SOCD)",
+      "description": "Master toggle and global configuration for SpeedTap / SOCD processing engine.",
+      "parameters": {
+        "master_enable": {
+          "offset": 4,
+          "type": "uint8",
+          "description": "0 = Disabled, 1 = Enabled"
+        }
+      },
+      "internal_state_impact": {
+        "master_flag": "Bit 16 in control word at [r6 + r0*4]"
+      },
+      "ack_response": {
+        "opcode": "0x51",
+        "subcommand": "0x57",
+        "payload_len": 60
+      },
+      "request": "0x51 0x57",
+      "response": "0x51 0x57",
+      "handler_offset": "0x180031e6",
+      "state": "Internal PSRAM buffer",
+      "evidence": [
+        "FIRMWARE_STATIC"
+      ],
+      "confidence": "HIGH"
+    },
+    {
+      "command": "0x51",
+      "subcommand": "0x2D",
+      "name": "CONFIGURE_DKS",
+      "handler_address": "0x18002aca",
+      "category": "Dynamic Key Stroke (DKS)",
+      "description": "Configures 4-point Dynamic Key Stroke actuation points and assigned key codes.",
+      "parameters": {
+        "key_index": {
+          "offset": 4,
+          "type": "uint8",
+          "description": "Target key index"
+        },
+        "dks_step": {
+          "offset": 5,
+          "type": "uint8",
+          "description": "DKS step (0 = Down 1, 1 = Down 2, 2 = Up 1, 3 = Up 2)"
+        },
+        "actuation_travel": {
+          "offset": 6,
+          "type": "uint8",
+          "description": "Travel threshold in 0.1mm"
+        },
+        "bound_keycode": {
+          "offset": 7,
+          "type": "uint16",
+          "description": "HID key code to emit at this point"
+        }
+      },
+      "internal_state_impact": {
+        "key_record_offset": "+0x0E..+0x13 (actions), +0x14..+0x1B (travels)",
+        "preparer_call": "Invokes state preparer at 0x1800075a"
+      },
+      "ack_response": {
+        "opcode": "0x51",
+        "subcommand": "0x2D",
+        "payload_len": 60
+      },
+      "request": "0x51 0x2D",
+      "response": "0x51 0x2D",
+      "handler_offset": "0x18002aca",
+      "state": "+0x0E..+0x13 (actions), +0x14..+0x1B (travels) ()",
+      "evidence": [
+        "FIRMWARE_STATIC"
+      ],
+      "confidence": "HIGH"
+    },
+    {
+      "command": "0x51",
+      "subcommand": "0x00",
+      "name": "SELECT_PROFILE",
+      "handler_address": "0x18002514",
+      "category": "Profile Management",
+      "description": "Switches active hardware profile index (Profiles 1..5).",
+      "parameters": {
+        "profile_index": {
+          "offset": 4,
+          "type": "uint8",
+          "description": "Hardware profile index (0 to 5)"
+        }
+      },
+      "internal_state_impact": {
+        "active_profile": "Updates hardware profile bank pointer in Core 2 PSRAM"
+      },
+      "ack_response": {
+        "opcode": "0x51",
+        "subcommand": "0x00",
+        "payload_len": 60
+      },
+      "request": "0x51 0x00",
+      "response": "0x51 0x00",
+      "handler_offset": "0x18002514",
+      "state": "Internal PSRAM buffer",
+      "evidence": [
+        "FIRMWARE_STATIC"
+      ],
+      "confidence": "HIGH"
+    },
+    {
+      "command": "0x51",
+      "subcommand": "0x20",
+      "name": "SET_KEY_REMAP",
+      "handler_address": "0x1800253e",
+      "category": "Key Remap",
+      "description": "Remaps physical matrix key switch index to a specified standard or media HID keycode.",
+      "parameters": {
+        "source_key": {
+          "offset": 2,
+          "type": "uint8",
+          "description": "Physical switch index"
+        },
+        "layer": {
+          "offset": 3,
+          "type": "uint8",
+          "description": "Target layer (0 = Default, 0x9F = FN Layer)"
+        },
+        "target_keycode": {
+          "offset": 4,
+          "type": "uint16",
+          "description": "Assigned HID keycode"
+        }
+      },
+      "internal_state_impact": {
+        "remap_table": "Updates per-layer remap array at [r0 + 0x64]"
+      },
+      "ack_response": {
+        "opcode": "0x51",
+        "subcommand": "0x20",
+        "payload_len": 60
+      },
+      "request": "0x51 0x20",
+      "response": "0x51 0x20",
+      "handler_offset": "0x1800253e",
+      "state": "Internal PSRAM buffer",
+      "evidence": [
+        "FIRMWARE_STATIC"
+      ],
+      "confidence": "HIGH"
+    },
+    {
+      "command": "0x25",
+      "subcommand": "0x00",
+      "name": "QUERY_RT_TELEMETRY",
+      "handler_address": "0x180022be",
+      "category": "Telemetry & Status",
+      "description": "Queries full Rapid Trigger status matrix and per-key RT configurations.",
+      "parameters": {},
+      "internal_state_impact": {},
+      "ack_response": {
+        "opcode": "0x25",
+        "subcommand": "0x00",
+        "payload_len": 60
+      },
+      "request": "0x25 0x00",
+      "response": "0x25 0x00",
+      "handler_offset": "0x180022be",
+      "state": "Internal PSRAM buffer",
+      "evidence": [
+        "FIRMWARE_STATIC"
+      ],
+      "confidence": "HIGH"
+    },
+    {
+      "command": "0x25",
+      "subcommand": "0x01",
+      "name": "QUERY_SPEEDTAP_TELEMETRY",
+      "handler_address": "0x180022be",
+      "category": "Telemetry & Status",
+      "description": "Queries SpeedTap configuration table and real-time state flags.",
+      "parameters": {},
+      "internal_state_impact": {},
+      "ack_response": {
+        "opcode": "0x25",
+        "subcommand": "0x01",
+        "payload_len": 60
+      },
+      "request": "0x25 0x01",
+      "response": "0x25 0x01",
+      "handler_offset": "0x180022be",
+      "state": "Internal PSRAM buffer",
+      "evidence": [
+        "FIRMWARE_STATIC"
+      ],
+      "confidence": "HIGH"
+    },
+    {
+      "command": "0x43",
+      "subcommand": "0x80",
+      "name": "QUERY_KEY_HIT_STATS",
+      "handler_address": "0x180020e8",
+      "category": "Telemetry & Diagnostics",
+      "description": "Returns hardware keystroke counters and hit statistics for maintenance tracking.",
+      "parameters": {},
+      "internal_state_impact": {},
+      "ack_response": {
+        "opcode": "0x43",
+        "subcommand": "0x80",
+        "payload_len": 60
+      },
+      "request": "0x43 0x80",
+      "response": "0x43 0x80",
+      "handler_offset": "0x180020e8",
+      "state": "Internal PSRAM buffer",
+      "evidence": [
+        "FIRMWARE_STATIC"
+      ],
+      "confidence": "HIGH"
+    },
+    {
+      "command": "0xC0",
+      "subcommand": "0x82",
+      "name": "DISCRETE_BITMAP_STATE",
+      "handler_address": "0x18002116",
+      "category": "Matrix Status",
+      "description": "Reports instantaneous bitmask state of discrete tactile switches (caps lock, FN, toggle).",
+      "parameters": {},
+      "internal_state_impact": {},
+      "ack_response": {
+        "opcode": "0xC0",
+        "subcommand": "0x82",
+        "payload_len": 60
+      },
+      "request": "0xC0 0x82",
+      "response": "0xC0 0x82",
+      "handler_offset": "0x18002116",
+      "state": "Internal PSRAM buffer",
+      "evidence": [
+        "FIRMWARE_STATIC"
+      ],
+      "confidence": "HIGH"
+    },
+    {
+      "command": "0x04",
+      "subcommand": "0x04",
+      "name": "FA_HA_DUMP_CALIBRATION",
+      "handler_address": "0x1800f468",
+      "category": "Factory Hall Diagnostics",
+      "description": "Dumps raw factory Hall sensor calibration offsets key-by-key over HID interrupt packets.",
+      "parameters": {
+        "key_index": {
+          "offset": 2,
+          "type": "uint8",
+          "description": "Target key index to dump"
+        }
+      },
+      "internal_state_impact": {
+        "routine": "0x1800ee1c"
+      },
+      "ack_response": {
+        "opcode": "0x04",
+        "subcommand": "0x04",
+        "payload_len": 60
+      },
+      "request": "0x04 0x04",
+      "response": "0x04 0x04",
+      "handler_offset": "0x1800f468",
+      "state": "Internal PSRAM buffer",
+      "evidence": [
+        "FIRMWARE_STATIC"
+      ],
+      "confidence": "HIGH"
+    },
+    {
+      "command": "0x04",
+      "subcommand": "0x05",
+      "name": "FA_HA_RESET_BASELINE",
+      "handler_address": "0x1800f476",
+      "category": "Factory Hall Diagnostics",
+      "description": "Recalibrates resting baseline for all Hall effect sensors and resets zero-offset drifts.",
+      "parameters": {},
+      "internal_state_impact": {
+        "routine": "0x1800ee3c, 0x1800ebfc, 0x1800ed80"
+      },
+      "ack_response": {
+        "opcode": "0x04",
+        "subcommand": "0x05",
+        "payload_len": 60
+      },
+      "request": "0x04 0x05",
+      "response": "0x04 0x05",
+      "handler_offset": "0x1800f476",
+      "state": "Internal PSRAM buffer",
+      "evidence": [
+        "FIRMWARE_STATIC"
+      ],
+      "confidence": "HIGH"
+    },
+    {
+      "command": "0x04",
+      "subcommand": "0x10",
+      "name": "FA_HA_STREAM_TRAVEL",
+      "handler_address": "0x1800f498",
+      "category": "Factory Hall Diagnostics",
+      "description": "Triggers continuous streaming of real-time 16-bit Hall sensor displacement across all 68 keys via 0x1800f316.",
+      "parameters": {},
+      "internal_state_impact": {
+        "streaming_engine": "0x1800f316 loops through 68 keys emitting raw ADC and travel displacement into 64-byte USB packets"
+      },
+      "ack_response": {
+        "opcode": "0x04",
+        "subcommand": "0x20",
+        "payload_len": 60
+      },
+      "request": "0x04 0x10",
+      "response": "0x04 0x20",
+      "handler_offset": "0x1800f498",
+      "state": "Internal PSRAM buffer",
+      "evidence": [
+        "FIRMWARE_STATIC"
+      ],
+      "confidence": "HIGH"
+    },
+    {
+      "command": "0x04",
+      "subcommand": "0x17",
+      "name": "FA_HA_MATRIX_TEST",
+      "handler_address": "0x1800f4a6",
+      "category": "Factory Hall Diagnostics",
+      "description": "Initiates manufacturing electrical matrix test and verification routine.",
+      "parameters": {
+        "test_mode": {
+          "offset": 10,
+          "type": "uint8",
+          "description": "Test sub-mode identifier"
+        }
+      },
+      "internal_state_impact": {
+        "routine": "0x1800ee32"
+      },
+      "ack_response": {
+        "opcode": "0x04",
+        "subcommand": "0x17",
+        "payload_len": 60
+      },
+      "request": "0x04 0x17",
+      "response": "0x04 0x17",
+      "handler_offset": "0x1800f4a6",
+      "state": "Internal PSRAM buffer",
+      "evidence": [
+        "FIRMWARE_STATIC"
+      ],
+      "confidence": "HIGH"
+    },
+    {
+      "command": "0xFD",
+      "subcommand": "0xA3",
+      "name": "ENTER_BOOTLOADER",
+      "handler_address": "0x180040a4",
+      "category": "DFU Bootloader",
+      "description": "Commands the MCU to soft-reset and enter Sonix DFU bootloader mode (PID 0x1B7F).",
+      "parameters": {
+        "auth_flag": {
+          "offset": 2,
+          "type": "uint8",
+          "description": "Vendor authorization flag"
+        }
+      },
+      "internal_state_impact": {
+        "action": "Invokes SCB->AIRCR vector reset or branches to SNC7320A bootloader at 0x60001000"
+      },
+      "ack_response": {
+        "opcode": "0xFD",
+        "subcommand": "0xA3",
+        "payload_len": 60
+      },
+      "request": "0xFD 0xA3",
+      "response": "0xFD 0xA3",
+      "handler_offset": "0x180040a4",
+      "state": "Internal PSRAM buffer",
+      "evidence": [
+        "FIRMWARE_STATIC"
+      ],
+      "confidence": "HIGH"
+    },
+    {
+      "command": "0x41",
+      "subcommand": null,
+      "name": "QUERY_MATRIX_DISCRETE_STATE",
+      "handler_address": "0x18003568",
+      "category": "Matrix & Switch Diagnostics",
+      "description": "Queries discrete matrix state and unmapped channel states directly from switch coordinate buffers.",
+      "parameters": {},
+      "internal_state_impact": {
+        "description": "Reads physical switch status array directly"
+      },
+      "ack_response": {
+        "opcode": "0x41",
+        "payload_len": 60
+      },
+      "request": "0x41",
+      "response": "0x41",
+      "handler_offset": "0x18003568",
+      "state": "PSRAM matrix status buffers",
+      "evidence": [
+        "FIRMWARE_STATIC"
+      ],
+      "confidence": "HIGH"
+    },
+    {
+      "command": "0x52",
+      "subcommand": null,
+      "name": "MAGNETIC_BASELINE_READBACK",
+      "handler_address": "0x180033d4",
+      "category": "Magnetic Baseline / Calibration",
+      "description": "Reads or recalculates magnetic sensor baseline zero-offsets across all 75 channels.",
+      "parameters": {},
+      "internal_state_impact": {
+        "description": "Interacts with ADC calibration table at 0x18026560"
+      },
+      "ack_response": {
+        "opcode": "0x52",
+        "payload_len": 60
+      },
+      "request": "0x52",
+      "response": "0x52",
+      "handler_offset": "0x180033d4",
+      "state": "PSRAM 0x18026560 (ADC calibration baseline)",
+      "evidence": [
+        "FIRMWARE_STATIC"
+      ],
+      "confidence": "HIGH"
+    },
+    {
+      "command": "0x53",
+      "subcommand": null,
+      "name": "DIRECT_RAPID_TRIGGER_OVERRIDE",
+      "handler_address": "0x180035b0",
+      "category": "Rapid Trigger Direct Override",
+      "description": "Direct opcode-level rapid trigger execution/testing path bypassing 0x51 subsystem dispatch.",
+      "parameters": {},
+      "internal_state_impact": {
+        "description": "Manipulates rapid trigger dynamic threshold latch"
+      },
+      "ack_response": {
+        "opcode": "0x53",
+        "payload_len": 60
+      },
+      "request": "0x53",
+      "response": "0x53",
+      "handler_offset": "0x180035b0",
+      "state": "Key record +0x0A (Packed RT sensitivity)",
+      "evidence": [
+        "FIRMWARE_STATIC"
+      ],
+      "confidence": "HIGH"
+    },
+    {
+      "command": "0x54",
+      "subcommand": null,
+      "name": "DIRECT_KEY_MODIFIER_OVERRIDE",
+      "handler_address": "0x18003698",
+      "category": "Matrix Override",
+      "description": "Direct opcode-level key state override and actuation trigger evaluation.",
+      "parameters": {},
+      "internal_state_impact": {
+        "description": "Directly forces key actuation flag (+0x03)"
+      },
+      "ack_response": {
+        "opcode": "0x54",
+        "payload_len": 60
+      },
+      "request": "0x54",
+      "response": "0x54",
+      "handler_offset": "0x18003698",
+      "state": "Key record +0x03 (Switch state bitmask)",
+      "evidence": [
+        "FIRMWARE_STATIC"
+      ],
+      "confidence": "HIGH"
+    },
+    {
+      "command": "0x71",
+      "subcommand": null,
+      "name": "DEVICE_MODE_SELECTOR",
+      "handler_address": "0x18003954",
+      "category": "Operating Mode Management",
+      "description": "Switches between standard PC mode, macOS layout mode, and hardware profile modes.",
+      "parameters": {},
+      "internal_state_impact": {
+        "description": "Updates global system mode word in PSRAM"
+      },
+      "ack_response": {
+        "opcode": "0x71",
+        "payload_len": 60
+      },
+      "request": "0x71",
+      "response": "0x71",
+      "handler_offset": "0x18003954",
+      "state": "PSRAM global operating mode flags",
+      "evidence": [
+        "FIRMWARE_STATIC"
+      ],
+      "confidence": "HIGH"
+    },
+    {
+      "command": "0x73",
+      "subcommand": null,
+      "name": "WINLOCK_GAME_MODE_TOGGLE",
+      "handler_address": "0x18003a2e",
+      "category": "Operating Mode Management",
+      "description": "Toggles Windows key lock and gaming mode suppression of OS shortcut combinations.",
+      "parameters": {},
+      "internal_state_impact": {
+        "description": "Toggles WinLock bitmask in global HID filter table"
+      },
+      "ack_response": {
+        "opcode": "0x73",
+        "payload_len": 60
+      },
+      "request": "0x73",
+      "response": "0x73",
+      "handler_offset": "0x18003a2e",
+      "state": "PSRAM global lock bitmask",
+      "evidence": [
+        "FIRMWARE_STATIC"
+      ],
+      "confidence": "HIGH"
+    }
+  ]
+}

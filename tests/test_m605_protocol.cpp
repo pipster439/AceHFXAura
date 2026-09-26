@@ -318,6 +318,151 @@ bool TestPersistentSafetyLatch() {
     return true;
 }
 
+bool TestSafetyQuarantineRecoverySemantics() {
+    const auto state = std::make_shared<LatchState>();
+    auto make = [&](BlockPhase block) {
+        auto io = std::make_unique<FakeTransport>();
+        io->stage_precondition = [state] { return state->armed; };
+        auto wait = std::make_unique<FakeWait>(io.get(), block);
+        auto* io_ptr = io.get();
+        auto* wait_ptr = wait.get();
+        return Fixture{io_ptr, wait_ptr, aura::M605RuntimeTestAccess::Create(
+            std::move(io), std::move(wait), std::make_unique<FakeLatch>(state))};
+    };
+
+    // 1. Arm latch to simulate leftover/stale latch from previous aborted transaction
+    state->armed = true;
+    state->arms = 1;
+
+    // Test 1A: Stale latch survives runtime recreation
+    {
+        auto fixture1 = make(BlockPhase::None);
+        if (fixture1.runtime->GetHealth() != aura::M605RuntimeHealth::PersistentSafetyQuarantine ||
+            !fixture1.runtime->IsPersistentSafetyQuarantined() ||
+            !state->armed) {
+            return false;
+        }
+    } // fixture1 destroyed (simulated app restart)
+
+    // Test 1B: App restart alone does not acknowledge
+    {
+        auto fixture2 = make(BlockPhase::None);
+        if (fixture2.runtime->GetHealth() != aura::M605RuntimeHealth::PersistentSafetyQuarantine ||
+            !fixture2.runtime->IsPersistentSafetyQuarantined() ||
+            !state->armed) {
+            return false;
+        }
+
+        // Test 1C: Device reconnect alone does not acknowledge
+        fixture2.io->Disconnect();
+        if (fixture2.runtime->GetHealth() != aura::M605RuntimeHealth::PersistentSafetyQuarantine ||
+            !fixture2.runtime->IsPersistentSafetyQuarantined() ||
+            !state->armed) {
+            return false;
+        }
+        if (!fixture2.io->Connect() ||
+            fixture2.runtime->GetHealth() != aura::M605RuntimeHealth::PersistentSafetyQuarantine ||
+            !fixture2.runtime->IsPersistentSafetyQuarantined() ||
+            !state->armed) {
+            return false;
+        }
+    }
+
+    // Test 2: Acknowledge while transaction active => rejected
+    {
+        state->armed = false; // start clean for normal transaction
+        auto fixture = make(BlockPhase::BeforeApply);
+        auto in_flight = fixture.runtime->SetPerKeyActuation(0x0402, 2.0);
+        if (!fixture.wait->AwaitBefore(1) ||
+            fixture.runtime->GetHealth() != aura::M605RuntimeHealth::TransactionInProgress) {
+            fixture.wait->Release();
+            return false;
+        }
+        // Active transaction in progress: acknowledge must be rejected
+        if (fixture.runtime->AcknowledgeExternalResynchronization()) {
+            fixture.wait->Release();
+            return false;
+        }
+
+        // Test 3: Acknowledge with queued work => rejected
+        auto queued = fixture.runtime->SetAnalogEffect(0, true);
+        if (!fixture.runtime->HasQueuedWork() ||
+            fixture.runtime->AcknowledgeExternalResynchronization()) {
+            fixture.wait->Release();
+            return false;
+        }
+
+        fixture.wait->Release();
+        if (!in_flight.get() || !queued.get()) return false;
+        if (fixture.runtime->GetHealth() != aura::M605RuntimeHealth::Clean) return false;
+    }
+
+    // Test 4: Confirmed acknowledgement => latch cleared, SessionApplied cleared, ZERO HID reports
+    {
+        auto fixture = make(BlockPhase::None);
+        // Establish known SessionApplied state first
+        if (!fixture.runtime->SetPerKeyActuation(0x0402, 1.0).get()) return false;
+        if (fixture.runtime->GetAppliedRuntimeState().per_key_actuation_raw.empty()) return false;
+
+        // Force a failure that leaves latch armed and quarantined
+        fixture.io->stage_succeeds = false;
+        if (fixture.runtime->SetPerKeyActuation(0x0501, 2.0).get()) return false;
+        if (!state->armed ||
+            fixture.runtime->GetHealth() != aura::M605RuntimeHealth::IndeterminateStagedState ||
+            !fixture.runtime->IsPersistentSafetyQuarantined()) {
+            return false;
+        }
+
+        const size_t stage_reports_before = fixture.io->StageReports().size();
+        const size_t events_before = fixture.io->Events().size();
+
+        // Perform confirmed acknowledgement
+        if (!fixture.runtime->AcknowledgeExternalResynchronization()) return false;
+
+        // Verify:
+        // - Latch cleared
+        if (state->armed || fixture.runtime->IsPersistentSafetyQuarantined() ||
+            fixture.runtime->GetHealth() != aura::M605RuntimeHealth::Clean) {
+            return false;
+        }
+        // - SessionApplied state cleared
+        const auto cleared_shadow = fixture.runtime->GetAppliedRuntimeState();
+        if (!cleared_shadow.per_key_actuation_raw.empty() ||
+            !cleared_shadow.per_key_rapid_trigger.empty() ||
+            !cleared_shadow.per_key_deadzone.empty() ||
+            !cleared_shadow.per_key_dks.empty() ||
+            cleared_shadow.global_actuation_raw.has_value() ||
+            cleared_shadow.global_rapid_trigger.has_value() ||
+            cleared_shadow.global_deadzone.has_value()) {
+            return false;
+        }
+        // - Emits ZERO HID reports
+        if (fixture.io->StageReports().size() != stage_reports_before ||
+            fixture.io->Events().size() != events_before) {
+            return false;
+        }
+    }
+
+    // Test 5: 51 53 remains separate_mode semantics
+    {
+        // Byte 3 is separate_mode (0 = linked, 1 = separate)
+        const auto rt_linked = aura::m605::BuildGlobalRapidTrigger(0.4, 0.4, 0.1, 0.2, false);
+        if (!rt_linked || (*rt_linked)[1] != 0x51 || (*rt_linked)[2] != 0x53 || (*rt_linked)[3] != 0) {
+            return false;
+        }
+        const auto rt_separate = aura::m605::BuildGlobalRapidTrigger(0.4, 0.8, 0.1, 0.2, true);
+        if (!rt_separate || (*rt_separate)[1] != 0x51 || (*rt_separate)[2] != 0x53 || (*rt_separate)[3] != 1) {
+            return false;
+        }
+        // Contradictory values (linked mode with different press/release) must be rejected
+        if (aura::m605::BuildGlobalRapidTrigger(0.4, 0.8, 0.1, 0.2, false).has_value()) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 struct ArmControlLatch final : public aura::m605::detail::SafetyLatch {
     bool allow_arm = false;
     bool armed = false;
@@ -1612,6 +1757,7 @@ int main() {
         !TestDksShadowUnchangedThroughEveryStage() ||
         !TestDksStageAndApplyFailures() || !TestDksFailureInvalidatesPriorShadow() ||
         !TestDksStandardRestoreAndStop() || !TestPersistentSafetyLatch() ||
+        !TestSafetyQuarantineRecoverySemantics() ||
         !TestSafetyLatchArmFailure() || !TestGlobalSettings()) {
         std::cerr << "FAIL: M605 runtime state machine\n";
         return 1;

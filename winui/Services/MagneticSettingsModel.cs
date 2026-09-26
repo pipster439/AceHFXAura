@@ -54,6 +54,11 @@ public sealed class MagneticSettingsModel
     public bool CanWriteSelected => CanWrite && !IsGlobalMode && SelectedKey != null;
     public bool CanWriteGlobal => CanWrite && IsGlobalMode;
     public bool CanDisableRapidTrigger => SelectedLogicalId is ushort id && InheritedRt(id) is not null;
+    public string RapidTriggerMasterText =>
+        Status?.RapidTriggerMaster is { Known: true } master ?
+            (master.Value ? "硬件总开关：开启" : "硬件总开关：关闭") :
+            "硬件总开关：未知";
+    public const string RapidTriggerMasterExplanation = "快速触发总开关由键盘物理开关控制。";
     public bool CanResetAllDeadzone => CanWrite && Status?.HostProfile is { GlobalDeadzoneTop.Known: true,
         GlobalDeadzoneBottom.Known: true };
     public bool DksConflictPossible
@@ -187,10 +192,10 @@ public sealed class MagneticSettingsModel
                 if (!draft.DksDirty) HydrateDks(id, draft);
             LastMessage = Status.Health switch
             {
-                "PersistentSafetyQuarantine" => "存在跨重启安全隔离：上次磁轴事务未确认完成。请由开发人员完成外部重新同步；此页面不能解除隔离。",
+                "PersistentSafetyQuarantine" => "存在跨重启安全隔离：上次磁轴事务未确认完成。请在外部完成重新同步后执行恢复。",
                 "IndeterminateStagedState" => "磁轴配置状态未知，本次会话已停止写入；需要外部重新同步。",
                 "Stopped" => "磁轴运行时已停止，无法继续修改。",
-                _ when Status.PersistentSafetyQuarantine => "跨重启安全隔离中；禁止继续写入。",
+                _ when Status.PersistentSafetyQuarantine => "跨重启安全隔离中；禁止继续写入。请在外部完成重新同步后执行恢复。",
                 _ when Status.ApiVersion != 1 => "磁轴服务状态无法验证，禁止写入。",
                 _ when !Status.Available => "原生 HID 设备当前不可用，或核心正在模拟/使用其他后端。",
                 _ => "配置文件保存值与本次会话已应用值均不是设备读回。"
@@ -344,6 +349,35 @@ public sealed class MagneticSettingsModel
     public Task<bool> ApplyStaticAnalogAsync() => CanWrite && StaticAnalogDraft is bool enabled ?
         SubmitAsync(() => _client.SetStaticAnalogEffectAsync(enabled), () => StaticAnalogDraft = null) :
         Task.FromResult(false);
+
+    public async Task<bool> AcknowledgeExternalResynchronizationAsync()
+    {
+        if (Busy || Refreshing) return false;
+        Busy = true;
+        try
+        {
+            var response = await _client.AcknowledgeExternalResynchronizationAsync();
+            Status = response;
+            if (response.Succeeded)
+            {
+                _drafts.Clear();
+                LastMessage = "已确认外部重新同步；安全隔离已清除。";
+            }
+            else
+            {
+                LastMessage = string.IsNullOrWhiteSpace(response.LastError) ?
+                    "确认外部重新同步失败。" : response.LastError;
+            }
+            return response.Succeeded;
+        }
+        catch (Exception ex)
+        {
+            Status = null;
+            LastMessage = $"无法确认外部重新同步：{ex.Message}";
+            return false;
+        }
+        finally { Busy = false; }
+    }
 
     private async Task<bool> SubmitAsync(Func<Task<MagneticStatus>> submit, Action? clearDraft = null)
     {

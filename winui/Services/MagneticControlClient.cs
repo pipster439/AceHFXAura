@@ -140,6 +140,7 @@ public sealed class MagneticStatus
     [JsonPropertyName("host_profile")] public MagneticHostProfileState HostProfile { get; set; } = new();
     [JsonPropertyName("speedtap")] public MagneticSpeedTapState SpeedTap { get; set; } = new();
     [JsonPropertyName("static_analog_effect")] public MagneticKnownBool StaticAnalogEffect { get; set; } = new();
+    [JsonPropertyName("rapid_trigger_master")] public MagneticKnownBool RapidTriggerMaster { get; set; } = new();
     public bool Succeeded => Status == "ok";
 }
 
@@ -161,6 +162,7 @@ public interface IMagneticControlClient
     Task<MagneticStatus> SetGlobalActuationAsync(double mm);
     Task<MagneticStatus> SetGlobalDeadzoneAsync(double topMm, double bottomMm);
     Task<MagneticStatus> SetGlobalRapidTriggerAsync(double pressMm, double releaseMm, double topMm, double bottomMm, bool separateMode);
+    Task<MagneticStatus> AcknowledgeExternalResynchronizationAsync();
 }
 
 public sealed class MagneticControlClient(HttpClient? http = null) : IMagneticControlClient
@@ -203,6 +205,8 @@ public sealed class MagneticControlClient(HttpClient? http = null) : IMagneticCo
         SendAsync("global/deadzone", new { top_mm = topMm, bottom_mm = bottomMm });
     public Task<MagneticStatus> SetGlobalRapidTriggerAsync(double pressMm, double releaseMm, double topMm, double bottomMm, bool separateMode) =>
         SendAsync("global/rapid-trigger", new { press_mm = pressMm, release_mm = releaseMm, top_mm = topMm, bottom_mm = bottomMm, separate_mode = separateMode });
+    public Task<MagneticStatus> AcknowledgeExternalResynchronizationAsync() =>
+        SendAsync("safety/acknowledge-external-resynchronization", new { confirm_external_resynchronization = true });
 
     private async Task<MagneticStatus> SendAsync(string path, object? body)
     {

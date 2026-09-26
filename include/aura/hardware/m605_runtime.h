@@ -155,6 +155,7 @@ public:
     void Stop();
     M605RuntimeHealth GetHealth() const;
     bool IsPersistentSafetyQuarantined() const;
+    bool HasQueuedWork() const;
     // Developer/operator assertion that the physical device was externally
     // returned to a known-good state. This performs no device operation.
     bool AcknowledgeExternalResynchronization();

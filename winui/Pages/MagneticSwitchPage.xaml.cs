@@ -15,6 +15,11 @@ public sealed partial class MagneticSwitchPage : Page
     private readonly List<Canvas> _keyboardCanvases = [];
     private readonly List<(ComboBox Target, ComboBox DownStart, ComboBox DownEnd,
         ComboBox UpStart, ComboBox UpEnd)> _dksControls = [];
+    private readonly Button _quarantineRecoveryButton = new()
+    {
+        Content = "我已完成外部重新同步…",
+        Visibility = Visibility.Collapsed
+    };
     private bool _rendering;
 
     public MagneticSettingsModel Model => _model;
@@ -27,6 +32,9 @@ public sealed partial class MagneticSwitchPage : Page
     {
         _model = model;
         InitializeComponent();
+        AutomationProperties.SetAutomationId(_quarantineRecoveryButton, "MagneticQuarantineRecoveryButton");
+        _quarantineRecoveryButton.Click += QuarantineRecoveryButton_Click;
+        HealthBar.ActionButton = _quarantineRecoveryButton;
         NavigationCacheMode = Microsoft.UI.Xaml.Navigation.NavigationCacheMode.Required;
         BuildKeyboard();
         BuildDksEditor();
@@ -255,6 +263,9 @@ public sealed partial class MagneticSwitchPage : Page
                 foreach (var (_, button) in _keyButtons) button.Style = null;
             }
 
+            RapidTriggerMasterStatusText.Text = _model.RapidTriggerMasterText;
+            RapidTriggerMasterExplanationText.Text = MagneticSettingsModel.RapidTriggerMasterExplanation;
+
             if (_model.IsGlobalMode)
             {
                 // Card headers & descriptions
@@ -431,8 +442,8 @@ public sealed partial class MagneticSwitchPage : Page
                 status?.HostProfile.PerKeyRtListKnown == true ?
                 "已保存配置逐键 RT 列表未包含此键；设备状态未知" : "逐键 RT：未知" :
                 rt.Source == "SessionApplied" ?
-                $"本次会话：{(rt.Enabled ? "开启" : "关闭")}；按下 {rt.PressRaw / 10.0:F1} mm，抬起 {rt.ReleaseRaw / 10.0:F1} mm" :
-                "已保存配置：开启（灵敏度未知）";
+                $"本次会话：{(rt.Enabled ? "此键使用快速触发" : "关闭")}；按下 {rt.PressRaw / 10.0:F1} mm，抬起 {rt.ReleaseRaw / 10.0:F1} mm" :
+                "已保存配置：此键使用快速触发（灵敏度未知）";
             DeadzoneAppliedText.Text = deadzone == null ? "此键逐键死区：未知（可参考下方已保存全局值）" :
                 $"{SourceLabel(deadzone.Source)}：顶部 {deadzone.TopRaw / 10.0:F1} mm，底部 {deadzone.BottomRaw / 10.0:F1} mm";
             DksAppliedText.Text = dks == null ? "当前来源：未知" :
@@ -507,6 +518,7 @@ public sealed partial class MagneticSwitchPage : Page
                 HealthStatusText.Text = "正在提交硬件事务…";
                 HealthStatusDot.Fill = (Brush)Application.Current.Resources["SystemFillColorAttentionBrush"];
                 HealthBar.IsOpen = false;
+                _quarantineRecoveryButton.Visibility = Visibility.Collapsed;
             }
             else if (_model.Quarantined)
             {
@@ -515,7 +527,9 @@ public sealed partial class MagneticSwitchPage : Page
                 HealthBar.IsOpen = true;
                 HealthBar.Severity = InfoBarSeverity.Error;
                 HealthBar.Title = "跨重启安全隔离中";
-                HealthBar.Message = "检测到上次磁轴事务未确认完成。为避免继续写入造成设备状态进一步不确定，磁轴写入已停止。请由专业人员完成外部重新同步；此界面无法解除隔离。";
+                HealthBar.Message = "检测到上次磁轴事务未确认完成。为避免继续写入造成设备状态进一步不确定，磁轴写入已停止。请在外部完成重新同步后执行恢复。";
+                _quarantineRecoveryButton.Visibility = (_model.Status?.PersistentSafetyQuarantine == true) ?
+                    Visibility.Visible : Visibility.Collapsed;
             }
             else if (status != null && !status.Available)
             {
@@ -525,6 +539,7 @@ public sealed partial class MagneticSwitchPage : Page
                 HealthBar.Severity = InfoBarSeverity.Warning;
                 HealthBar.Title = "设备未连接";
                 HealthBar.Message = "原生 HID 设备当前不可用，或核心正在模拟/使用其他后端。";
+                _quarantineRecoveryButton.Visibility = Visibility.Collapsed;
             }
             else if (status?.Health == "IndeterminateStagedState")
             {
@@ -534,18 +549,21 @@ public sealed partial class MagneticSwitchPage : Page
                 HealthBar.Severity = InfoBarSeverity.Error;
                 HealthBar.Title = "配置状态不确定";
                 HealthBar.Message = "磁轴配置状态不确定，本次会话已停止写入；需要外部重新同步。";
+                _quarantineRecoveryButton.Visibility = Visibility.Collapsed;
             }
             else if (status is { Succeeded: true, Available: true, Health: "Clean" })
             {
                 HealthStatusText.Text = "设备已连接 · 状态正常";
                 HealthStatusDot.Fill = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 16, 124, 65));
                 HealthBar.IsOpen = false;
+                _quarantineRecoveryButton.Visibility = Visibility.Collapsed;
             }
             else
             {
                 HealthStatusText.Text = "运行状态：就绪";
                 HealthStatusDot.Fill = (Brush)Application.Current.Resources["SystemFillColorNeutralBrush"];
                 HealthBar.IsOpen = false;
+                _quarantineRecoveryButton.Visibility = Visibility.Collapsed;
             }
         }
         finally { _rendering = false; }
@@ -752,6 +770,23 @@ public sealed partial class MagneticSwitchPage : Page
     }
     private async void AnalogApplyButton_Click(object sender, RoutedEventArgs e) =>
         await ApplyAsync(_model.ApplyStaticAnalogAsync);
+
+    private async void QuarantineRecoveryButton_Click(object sender, RoutedEventArgs e)
+    {
+        const string title = "外部重新同步确认";
+        const string message =
+            "在继续之前，请确认以下安全事项：\n\n" +
+            "• AceHFXAura 当前并不知道键盘的实际磁轴硬件配置。\n" +
+            "• 此操作不会向键盘恢复或更改任何设置（0 次硬件写入）。\n" +
+            "• 您必须先通过外部方式（例如华硕官方 Armoury Crate 软件）将键盘恢复或验证至已知良好状态。\n" +
+            "• 继续操作仅会清除 AceHFXAura 的持久安全隔离状态，并清空本次会话已应用记录（SessionApplied）。\n\n" +
+            "确认已在外部完成重新同步并清除安全隔离？";
+
+        if (!await ConfirmAsync(title, message, "确认已完成重新同步", "取消"))
+            return;
+
+        await ApplyAsync(_model.AcknowledgeExternalResynchronizationAsync);
+    }
 
     private async Task<bool> ConfirmAsync(string title, string message, string primaryText = "继续", string closeText = "取消")
     {

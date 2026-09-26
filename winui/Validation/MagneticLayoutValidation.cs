@@ -87,6 +87,7 @@ internal static class MagneticLayoutValidation
         public Task<MagneticStatus> SetGlobalActuationAsync(double mm) => Task.FromResult(CurrentStatus);
         public Task<MagneticStatus> SetGlobalDeadzoneAsync(double topMm, double bottomMm) => Task.FromResult(CurrentStatus);
         public Task<MagneticStatus> SetGlobalRapidTriggerAsync(double pressMm, double releaseMm, double topMm, double bottomMm, bool separateMode) => Task.FromResult(CurrentStatus);
+        public Task<MagneticStatus> AcknowledgeExternalResynchronizationAsync() => Task.FromResult(CurrentStatus);
     }
 
     internal static async Task RunAsync(MainWindow window)

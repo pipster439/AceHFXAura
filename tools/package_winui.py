@@ -138,7 +138,7 @@ No automatic migration from the current working directory, and no automatic Auto
 WebView2 Evergreen Runtime is needed for Studio: https://developer.microsoft.com/microsoft-edge/webview2/
 Studio native publishing also needs MSVC x64 C++ Build Tools and the Windows SDK; viewing/saving drafts does not.
 .NET and Windows App SDK are bundled; Node/CMake/.NET SDK and a source checkout are not needed to run this package.
-Native HID is preferred. ASUS proprietary DLLs are not included. Independent Light Bar and advanced Hall controls are not implemented.
+Native HID is preferred. ASUS proprietary DLLs are not included. Independent Light Bar control is not implemented.
 This is an unsigned alpha candidate. SHA-256 verifies download integrity; it does not replace code signing or establish SmartScreen reputation.
 Physical keyboard and live CS2 acceptance must be recorded separately before release.
 

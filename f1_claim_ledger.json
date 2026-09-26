@@ -1,0 +1,172 @@
+[
+  {
+    "claim": "Binary Provenance & Hash Discrepancy",
+    "binary_sha256": "6d410ee0a54f640b4ab016cdb973f08e3d3d0ab7a716c7368167e562e0e19f1d",
+    "address": "N/A",
+    "status": "CONFIRMED",
+    "evidence": [
+      "Original ZIP C:\\Users\\ROG\\Downloads\\ROG_FALCHION_ACE_HFX.zip (238,446,426 bytes, SHA256: a3e895dd4389e6725b15b0c0af6d6644a470a8359c4086a206490b74e9e9d7b9)",
+      "Direct entry ROG_FALCHION_ACE_HFX/Firmware/Bin/Firmware/7038/FW/M605_V01_00_58.bin has CRC 0xb7eb4b5f and SHA256 6d410ee0a54f640b4ab016cdb973f08e3d3d0ab7a716c7368167e562e0e19f1d",
+      "All extracted and installed disk copies are byte-for-byte identical (length 507,904, SHA256 6d410ee...)",
+      "Earlier hash 6e6fcbe9... was an unverified markdown transcription error in stage2_5 EVIDENCE_RECONCILIATION.md; raw stage2_5 JSON artifact firmware_search_results.json correctly recorded 6d410ee..."
+    ],
+    "verifier_result": "CONFIRMED (Single canonical 1.00.58 binary image exists)",
+    "notes": "No alternate 1.00.58 official package exists; variant naming not required as image is singular."
+  },
+  {
+    "claim": "Processor Architecture: Cortex-M3 vs Cortex-M4F",
+    "binary_sha256": "6d410ee0a54f640b4ab016cdb973f08e3d3d0ab7a716c7368167e562e0e19f1d",
+    "address": "0x00000000..0x0007C000",
+    "status": "CONFIRMED",
+    "evidence": [
+      "Container signature SNC7320A at offset 0x0000 and string SN7320_Series Composite Device at offset 0x0454",
+      "Zero VFP/FPU instructions and zero DSP instructions across entire 507,904 bytes",
+      "Zero references to Coprocessor Access Control Register CPACR (0xE000ED88)",
+      "Exception fault handler cortex_fault_e at file offset 0x123A9 dumps only standard 8-word integer register frame (R0..R3, R12, LR, PC, xPSR)",
+      "Official Sonix SNC7320 specifications document dual-core ARM Cortex-M3 architecture up to 198 MHz"
+    ],
+    "verifier_result": "CONFIRMED (Dual-Core ARMv7-M Thumb-2 Cortex-M3 Sonix SNC7320)",
+    "notes": "Earlier Cortex-M4F claim was an unverified assumption refuted by opcode and register scans."
+  },
+  {
+    "claim": "51 23 Opcode Semantics: LAYER_CFG vs DKS_CONFIG",
+    "binary_sha256": "6d410ee0a54f640b4ab016cdb973f08e3d3d0ab7a716c7368167e562e0e19f1d",
+    "address": "0x180027D6",
+    "status": "REVISED",
+    "evidence": [
+      "Dispatcher at 0x18002498 (cmp r2, #0x23; beq 0x1800258e -> 0x180027d6)",
+      "Reads packet offsets +0x02 (key scancode), +0x03 (layer flag), +0x04..+0x07 (actions), +0x08..+0x09",
+      "Writes directly into 32-byte key record at +0x04 (DKS enable flag), +0x0E (Action 1), +0x0F (Action 2), +0x12 (DKS mode flags)",
+      "Calls 0x18004A1C which invokes DKS struct populator 0x180006B4 (+0x0E..+0x1A)",
+      "Corroborates Stage 8A passive and physical ground truth (AacKbHal_x64.dll FUN_180021bf0 ChangeKey_DKS transmits 51 23)"
+    ],
+    "verifier_result": "CONFIRMED (51 23 is DKS Configuration; F1 LAYER_CFG was erroneous)",
+    "notes": "F1 mistook profile/FN layer selection check (+0x03) for generic layer configuration."
+  },
+  {
+    "claim": "51 2D Opcode Semantics: DKS_CONFIG vs ANALOG_LIGHTING",
+    "binary_sha256": "6d410ee0a54f640b4ab016cdb973f08e3d3d0ab7a716c7368167e562e0e19f1d",
+    "address": "0x18002ACA",
+    "status": "CONTRADICTED",
+    "evidence": [
+      "Dispatcher at 0x180024BE (cmp r2, #0x2d; beq 0x18002592 -> 0x18002aca)",
+      "Reads packet +0x04 as EffectID (0=Static, 2, 4) and +0x05 as Enable flag (0/1)",
+      "Writes to PSRAM lighting control block at 0x18021DB4 and effects table at 0x1801E6DC",
+      "Calls lighting functions 0x1800075A and 0x1800C188",
+      "Matches physical hardware Stage 4A replay packets (00 51 2D 00 00 [EffectID] [Enable] 00...)"
+    ],
+    "verifier_result": "CONFIRMED (51 2D is Analog Lighting Effect; F1 DKS_CONFIG was erroneous)",
+    "notes": "51 2D has zero relationship to DKS key actions; F1 swapped 51 23 and 51 2D."
+  },
+  {
+    "claim": "51 52 Reset Semantics: Fixed 1.0mm vs resetType 4 Per-Key Table Reset",
+    "binary_sha256": "6d410ee0a54f640b4ab016cdb973f08e3d3d0ab7a716c7368167e562e0e19f1d",
+    "address": "0x18002C1A",
+    "status": "REVISED",
+    "evidence": [
+      "Dispatcher at 0x18002C1A indexes resetType 0..4 via TBB at 0x18002C20",
+      "resetType 4 (0x18002C60) reads Byte 4 (global Bottom), Byte 5 (layer: 0, 1, 2), Byte 6 (global Top)",
+      "Loop at 0x18002CA0 clears override bit 15 on +0x08 and override bit 7 on +0x06/+0x07 for all 75 keys across specified layer(s)",
+      "Writes global Bottom and Top deadzone values to every key in scope, restoring global inheritance",
+      "Corroborates Stage 5A/5B physical hardware replay"
+    ],
+    "verifier_result": "CONFIRMED (resetType 4 clears per-key deadzone overrides and applies global Bottom/Top)",
+    "notes": "F1 oversimplified 51 52 as a fixed 1.0mm reset; resetType 4 dynamically takes Bottom, Layer, and Top."
+  },
+  {
+    "claim": "51 0C CONFIG_QUERY Profile Dump",
+    "binary_sha256": "6d410ee0a54f640b4ab016cdb973f08e3d3d0ab7a716c7368167e562e0e19f1d",
+    "address": "0x180033B2",
+    "status": "CONTRADICTED",
+    "evidence": [
+      "Handler at 0x180033B2 reads packet halfword +0x02 and byte +0x04",
+      "Writes literal 1000 (0x3E8) to 0x1801E69C and status bytes to 0x18025A74",
+      "Calls 0x18000A70 passing payload length 0 (str r6, [sp] where r6=0)",
+      "Emits 64-byte echo response with 0 profile data bytes",
+      "Zero serialization of Actuation, RT, Deadzone, SpeedTap, DKS, or Analog Effect"
+    ],
+    "verifier_result": "CONFIRMED (51 0C does NOT dump profiles; F1 Profile Dump claim is contradicted)",
+    "notes": "Corroborates Stage 2.5 finding: firmware exposes no bulk profile readback over 51 0C."
+  },
+  {
+    "claim": "0x04 Factory Hall Telemetry: 16-bit 0.01mm Normalized Displacement Stream",
+    "binary_sha256": "6d410ee0a54f640b4ab016cdb973f08e3d3d0ab7a716c7368167e562e0e19f1d",
+    "address": "0x1800F448",
+    "status": "REVISED",
+    "evidence": [
+      "Trampoline at 0x18002052 strictly gates 0x04 behind flag at 0x1801E9B1 (drops packet if 0)",
+      "Subcommand 04 10 at 0x1800F3B4 dispatches diagnostic streams via 0x1800F4C6, 0x1800F546, 0x1800F630",
+      "Format 2 (0x1800F546) emits 3-byte stride [KeyIndex, LowByte, HighByte] from buffer 0x18026560",
+      "Producer at 0x1800F0B8 writes raw calibration/ADC constants (0x8E, 0x9D, 0x1F, 0x00)",
+      "Zero math or scaling converting ADC counts to 0.01mm normalized displacement"
+    ],
+    "verifier_result": "CONFIRMED (Format 2 streams raw ADC / calibration units, NOT 0.01mm displacement)",
+    "notes": "F1 inferred 0.01mm resolution without mathematical code backing; data units are raw ADC."
+  },
+  {
+    "claim": "Per-Key 32-Byte Record: +0x06 and +0x07 Semantics",
+    "binary_sha256": "6d410ee0a54f640b4ab016cdb973f08e3d3d0ab7a716c7368167e562e0e19f1d",
+    "address": "0x1800F968",
+    "status": "REVISED",
+    "evidence": [
+      "Deadzone setter at 0x1800F91C writes bits 0..2 to +0x06 and +0x07 with bit 7 as override flag",
+      "51 52 resetType 4 clears bit 7 on +0x06 and +0x07 and writes global deadzone values",
+      "Not actuation mode (Standard/RT/DKS) or RT flags as claimed in F1"
+    ],
+    "verifier_result": "CONFIRMED (+0x06 is Bottom Deadzone Override, +0x07 is Top Deadzone Override)",
+    "notes": "F1 semantic labels for +0x06 and +0x07 were contradicted by data flow in 0x1800F91C."
+  },
+  {
+    "claim": "Per-Key 32-Byte Record: +0x0C Normalized Travel Position (0.01mm resolution)",
+    "binary_sha256": "6d410ee0a54f640b4ab016cdb973f08e3d3d0ab7a716c7368167e562e0e19f1d",
+    "address": "0x18000710",
+    "status": "CONTRADICTED",
+    "evidence": [
+      "All accesses to +0x0C across Core 2 are 8-bit ldrb/strb (e.g. 0x18000220, 0x180005B4, 0x18000710, 0x180007DA)",
+      "Zero 16-bit halfword (ldrh/strh) accesses exist for +0x0C",
+      "Zero 0.01mm mathematical conversion logic exists"
+    ],
+    "verifier_result": "CONFIRMED (+0x0C is uint8 state byte, NOT uint16 0.01mm displacement)",
+    "notes": "F1 claim of uint16 normalized travel position is completely refuted by instruction operand sizes."
+  },
+  {
+    "claim": "51 31 Persistence: Commits 6 Profiles to SPI Flash",
+    "binary_sha256": "6d410ee0a54f640b4ab016cdb973f08e3d3d0ab7a716c7368167e562e0e19f1d",
+    "address": "0x18002B2E",
+    "status": "CONTRADICTED",
+    "evidence": [
+      "Handler at 0x18002B2E only modifies RAM halfword at [r2, #0x4F8] and RAM byte at [r1]",
+      "Calls debug print routine 0x1801BD4C with string literal",
+      "Calls standard response sender 0x180030C4",
+      "Zero SPI flash controller access (0x60000000), zero flash erase, zero flash program primitives"
+    ],
+    "verifier_result": "CONFIRMED (51 31 performs volatile RAM synchronization only, zero flash persistence)",
+    "notes": "F1 persistence claim was unverified speculation."
+  },
+  {
+    "claim": "51 56 SpeedTap Reset: Restores Pairs from Non-Volatile Storage",
+    "binary_sha256": "6d410ee0a54f640b4ab016cdb973f08e3d3d0ab7a716c7368167e562e0e19f1d",
+    "address": "0x180031BC",
+    "status": "REVISED",
+    "evidence": [
+      "Handler at 0x180031BC calls 0x180005C6 (zeroes volatile tracking buffer 0x1801FED0)",
+      "Calls 0x1800AAB0 which iterates active profile RAM table in PSRAM (0x180202AC)",
+      "Zero non-volatile/flash controller interaction occurs"
+    ],
+    "verifier_result": "CONFIRMED (Restores from profile baseline in RAM, not non-volatile flash)",
+    "notes": "Distinction between volatile tracking buffer and profile baseline RAM is confirmed."
+  },
+  {
+    "claim": "Firmware Integrity & Security Model Wording",
+    "binary_sha256": "6d410ee0a54f640b4ab016cdb973f08e3d3d0ab7a716c7368167e562e0e19f1d",
+    "address": "N/A",
+    "status": "REVISED",
+    "evidence": [
+      "F0 claimed integrity 'relies entirely' on CRC/unlock strings and stated absolute absence of signatures",
+      "Audited path confirms static absence of RSA/ECDSA public keys in updater PE and container headers",
+      "Proper rigorous cryptographic wording adopted: NO EVIDENCE OF ASYMMETRIC SIGNATURE VALIDATION"
+    ],
+    "verifier_result": "CONFIRMED (Wording updated to standard conservative security terminology)",
+    "notes": "Absence of obvious constants cannot formally prove non-existence of proprietary authentication in mask ROM."
+  }
+]
