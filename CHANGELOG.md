@@ -1,3 +1,36 @@
+## [0.1.0-alpha.5] — Magnetic switch controls
+
+- **Native magnetic-switch control for ROG Falchion Ace HFX**: Direct MI_01 Win32 HID native control without proprietary HAL dependency.
+- **Full 68-key logical mapping**: Explicit 68-key Logical ID to hardware Wire ID mapping audited from HAL tables; no speculative range derivation; full support including Fn (`0x0508` -> `0x009F`).
+- **Per-key Actuation**: Independent travel distance configuration across all 68 physical keys (0.1–4.0 mm in 0.1 mm increments, opcode `51 4F`).
+- **Global Actuation**: Unified global actuation travel setting (0.1–4.0 mm, opcode `51 50`).
+- **Per-key Rapid Trigger**: Independent press and release sensitivity adjustment (0.1–2.5 mm, opcode `51 54 01` / `51 54 02`); disable falls back to trusted active profile global press/release inherited baseline.
+- **Global Rapid Trigger**: Opcode `51 53` for global Rapid Trigger configuration. *Semantic clarification*: Global RT `51 53` Byte3 is separate sensitivity mode, NOT RT master enable.
+- **Per-key Deadzone**: Independent top and bottom deadzone configuration (0.0–0.5 mm, opcode `51 59`, Byte 7 Bottom, Byte 8 Top).
+- **Global Deadzone**: Opcode `51 58` sets global top and bottom deadzones; Global Deadzone uses `51 58` and does NOT clear per-key Deadzone overrides.
+- **Reset-all Deadzone**: Explicit destructive operation (opcode `51 52 04`, layer 0) to clear all per-key Deadzone overrides and restore active profile global baseline.
+- **DKS four-slot configuration**: Dynamic Key Stroke 4-slot milestone progression (`51 23`, slots 1–4, 30 ms staging delays, single `50 55` Apply gate) with start/end travel thresholds (0.1–4.0 mm) and milestone states (none, press, release boundary, hold). Strict action target validation allows DefaultSentinel and verified standard keys, but strictly excludes Fn as an action target (IPC 422 rejection). Standard restoration (`RestorePerKeyDksToStandard`) resets to verified baseline without sending non-essential `51 51`.
+- **SpeedTap pair management**: Directional dual-key priority configuration (opcode `51 55`), independent Master engine toggle (opcode `51 57`), and runtime reset to active profile baseline (opcode `51 56`). Master OFF does not delete pairs; baseline reset marks knowledge as `ProfileBaselineUnknown`, not an empty map.
+- **Static Analog Effect**: Pressure/depth-reactive static lighting mode (opcode `51 2D`, EffectID 0) driven directly by keyboard MCU Hall depth telemetry without continuous host RGB streaming.
+- **Provenance model (HostProfile / SessionApplied / Unknown)**: UI state strictly tracks data provenance. Successful session writes record `SessionApplied`; ASUS profile inspection yields `HostProfile`; unverified or missing data remains `Unknown`. No claim of complete DeviceReadback.
+- **Canonical limitation**: "The tested direct MI_01 path on firmware 1.00.59 does not provide complete effective per-key Actuation / Rapid Trigger / Deadzone readback. UI state therefore distinguishes SessionApplied, HostProfile and Unknown sources."
+- **Persistent mutation safety latch / quarantine**: Every write transaction arms and flushes a filesystem latch (`%LOCALAPPDATA%\Aura\m605-mutation-in-progress.latch`) prior to the first HID stage; deleted only after all stages, Apply (`50 55`), and post-apply settle succeed. Failure to arm cleanly aborts without hardware changes; crashed or partial transactions trigger `PersistentSafetyQuarantine` on subsequent startup, locking hardware mutations until explicit operator acknowledgment (`AcknowledgeExternalResynchronization`).
+- **Responsive WinUI magnetic settings page**: Dedicated Magnetic Switch page with full 68-key interactive layout, draft-then-apply workflow, conflict detection between DKS and per-key RT, and clear state provenance indications.
+- **Explicit Global / PhysicalKey editing contexts**: Clear operational separation between full-keyboard global defaults and individual physical switch overrides.
+
+### 目标验证环境 / Target Environment
+
+- Windows 11 x64
+- ASUS ROG Falchion Ace HFX
+- Firmware 1.00.59
+
+### 已知问题与说明 / Known Issues
+
+- 响应式按键灯效中，按下 Copilot 键时偶尔会同时点亮左 Win 键；计划后续修复。
+- 原生 C++ 插件运行于同一进程，尚不提供独立的崩溃与挂起沙箱隔离。
+- Windows 10 未经正式验证。
+- 发行包采用 WinUI 自包含目录结构，必须完整解压 ZIP 后运行内部的 `Aura.exe`；不可单独提取单个 EXE 执行。
+
 ## [0.1.0-alpha.4] — WinUI desktop productization
 
 - Alpha breaking cleanup：移除 Effect Studio 的 `event.*` 持续布尔脉冲与 `event_sequence.*` 旧视图。旧 `gsi_get_boolean(event.*)` / `orch_event_triggered` 工作区加载时给出迁移诊断；请改用 Automation v2 事件规则。Automation occurrence、近期事件诊断和旧插件 one-shot Host compatibility envelope 保留。
@@ -109,6 +142,7 @@ Earlier entries below are historical descriptions of their respective revisions.
 - 自动化基础方案使用 first-match 规则顺序；更高层的 Scene 容器尚未实现。
 - 已发布插件的历史 DLL 尚不会自动清理。
 
+[0.1.0-alpha.5]: https://github.com/pipster439/AceHFXAura/releases/tag/v0.1.0-alpha.5
 [0.1.0-alpha.4]: https://github.com/pipster439/AceHFXAura/releases/tag/v0.1.0-alpha.4
 [0.1.0-alpha.3]: https://github.com/pipster439/AceHFXAura/releases/tag/v0.1.0-alpha.3
 [0.1.0-alpha.2]: https://github.com/pipster439/AceHFXAura/releases/tag/v0.1.0-alpha.2
