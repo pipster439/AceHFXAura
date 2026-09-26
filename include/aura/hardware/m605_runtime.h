@@ -87,6 +87,22 @@ struct M605AppliedRuntimeState {
         bool standard_runtime_configuration = false;
     };
     std::map<uint16_t, Dks> per_key_dks;
+
+    // Phase 6.1A Global Magnetic Settings SessionApplied fields:
+    std::optional<uint8_t> global_actuation_raw;
+    struct GlobalDeadzone {
+        uint8_t top_raw = 0;
+        uint8_t bottom_raw = 0;
+    };
+    std::optional<GlobalDeadzone> global_deadzone;
+    struct GlobalRapidTrigger {
+        bool separate_mode = false;
+        uint8_t press_raw = 0;
+        uint8_t release_raw = 0;
+        uint8_t top_raw = 0;
+        uint8_t bottom_raw = 0;
+    };
+    std::optional<GlobalRapidTrigger> global_rapid_trigger;
 };
 
 class M605Runtime {
@@ -128,6 +144,12 @@ public:
     // Exact Stage 8B standard rewrite, not a factory/profile/default restore.
     std::future<bool> RestorePerKeyDksToStandard(uint16_t logical_key_id);
 
+    // Phase 6.1A Global Magnetic Settings:
+    std::future<bool> SetGlobalActuation(double millimeters);
+    std::future<bool> SetGlobalDeadzone(double top_mm, double bottom_mm);
+    std::future<bool> SetGlobalRapidTrigger(
+        double press_mm, double release_mm, double top_mm, double bottom_mm, bool separate_mode);
+
     // Cancels queued work and waits for the current transaction to finish.
     // No pending job may start a hardware write after Stop begins.
     void Stop();
@@ -149,7 +171,8 @@ private:
                 std::unique_ptr<m605::detail::SafetyLatch> safety_latch);
     enum class Kind {
         Actuation, Analog, RapidTrigger, Deadzone, ResetAllDeadzone,
-        SpeedTapPair, SpeedTapMaster, SpeedTapProfileReset, Dks
+        SpeedTapPair, SpeedTapMaster, SpeedTapProfileReset, Dks,
+        GlobalActuation, GlobalDeadzone, GlobalRapidTrigger
     };
     struct Job {
         std::array<m605::Report, 4> stages{};

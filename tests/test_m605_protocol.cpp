@@ -1223,6 +1223,147 @@ bool TestDksStandardRestoreAndStop() {
         fixture.runtime->GetHealth() == aura::M605RuntimeHealth::Stopped &&
         fixture.io->StageReports().size() == 4 && fixture.wait->BetweenCount() == 3;
 }
+
+bool TestGlobalSettings() {
+    using namespace aura::m605;
+    // 1. Packet structure and NativeHid allowlist checks
+    Report expected_actuation{};
+    expected_actuation[1] = 0x51; expected_actuation[2] = 0x50; expected_actuation[5] = 10;
+    auto act = BuildGlobalActuation(1.0);
+    if (!act || !Check(*act, expected_actuation, "Global Actuation 1.0mm") ||
+        !aura::NativeHidBackend::IsSupportedOutputReport(*act)) return false;
+
+    // Range checks
+    if (BuildGlobalActuation(0.0) || BuildGlobalActuation(4.1) ||
+        BuildGlobalActuation(-0.1) || BuildGlobalActuation(std::numeric_limits<double>::quiet_NaN()) ||
+        BuildGlobalActuation(std::numeric_limits<double>::infinity()) ||
+        BuildGlobalActuation(1.05)) return false;
+
+    // Allowlist rejection checks
+    Report rej = *act;
+    rej[5] = 0; if (aura::NativeHidBackend::IsSupportedOutputReport(rej)) return false;
+    rej[5] = 41; if (aura::NativeHidBackend::IsSupportedOutputReport(rej)) return false;
+    rej = *act; rej[3] = 1; if (aura::NativeHidBackend::IsSupportedOutputReport(rej)) return false;
+    rej = *act; rej[4] = 1; if (aura::NativeHidBackend::IsSupportedOutputReport(rej)) return false;
+    rej = *act; rej[6] = 1; if (aura::NativeHidBackend::IsSupportedOutputReport(rej)) return false;
+    rej = *act; rej[64] = 1; if (aura::NativeHidBackend::IsSupportedOutputReport(rej)) return false;
+
+    // 2. Global Deadzone: Byte 5 = Top, Byte 6 = Bottom
+    Report expected_dz{};
+    expected_dz[1] = 0x51; expected_dz[2] = 0x58; expected_dz[5] = 0; expected_dz[6] = 1;
+    auto dz = BuildGlobalDeadzone(0.0, 0.1);
+    if (!dz || !Check(*dz, expected_dz, "Global Deadzone Top 0.0 Bottom 0.1") ||
+        !aura::NativeHidBackend::IsSupportedOutputReport(*dz)) return false;
+
+    auto dz_max = BuildGlobalDeadzone(0.5, 0.5);
+    if (!dz_max || (*dz_max)[5] != 5 || (*dz_max)[6] != 5 ||
+        !aura::NativeHidBackend::IsSupportedOutputReport(*dz_max)) return false;
+
+    if (BuildGlobalDeadzone(-0.1, 0.1) || BuildGlobalDeadzone(0.0, -0.1) ||
+        BuildGlobalDeadzone(0.6, 0.1) || BuildGlobalDeadzone(0.0, 0.6) ||
+        BuildGlobalDeadzone(std::numeric_limits<double>::quiet_NaN(), 0.1) ||
+        BuildGlobalDeadzone(0.1, std::numeric_limits<double>::infinity()) ||
+        BuildGlobalDeadzone(0.15, 0.2)) return false;
+
+    rej = *dz; rej[5] = 6; if (aura::NativeHidBackend::IsSupportedOutputReport(rej)) return false;
+    rej = *dz; rej[6] = 6; if (aura::NativeHidBackend::IsSupportedOutputReport(rej)) return false;
+    rej = *dz; rej[3] = 1; if (aura::NativeHidBackend::IsSupportedOutputReport(rej)) return false;
+    rej = *dz; rej[7] = 1; if (aura::NativeHidBackend::IsSupportedOutputReport(rej)) return false;
+    rej = *dz; rej[64] = 1; if (aura::NativeHidBackend::IsSupportedOutputReport(rej)) return false;
+
+    // 3. Global Rapid Trigger: 51 53 <separate_mode> 00 <press> <release> <top> <bottom>
+    Report expected_rt{};
+    expected_rt[1] = 0x51; expected_rt[2] = 0x53; expected_rt[3] = 1;
+    expected_rt[5] = 4; expected_rt[6] = 2; expected_rt[7] = 0; expected_rt[8] = 1;
+    auto rt = BuildGlobalRapidTrigger(0.4, 0.2, 0.0, 0.1, true);
+    if (!rt || !Check(*rt, expected_rt, "Global RT P0.4 R0.2 Top0.0 Bot0.1 SeparateMode=1") ||
+        !aura::NativeHidBackend::IsSupportedOutputReport(*rt)) return false;
+
+    auto rt_off = BuildGlobalRapidTrigger(0.4, 0.2, 0.0, 0.1, false);
+    if (!rt_off || (*rt_off)[3] != 0 ||
+        !aura::NativeHidBackend::IsSupportedOutputReport(*rt_off)) return false;
+
+    if (BuildGlobalRapidTrigger(0.0, 0.2, 0.0, 0.1, true) ||
+        BuildGlobalRapidTrigger(2.6, 0.2, 0.0, 0.1, true) ||
+        BuildGlobalRapidTrigger(0.4, 0.0, 0.0, 0.1, true) ||
+        BuildGlobalRapidTrigger(0.4, 2.6, 0.0, 0.1, true) ||
+        BuildGlobalRapidTrigger(0.4, 0.2, 0.6, 0.1, true) ||
+        BuildGlobalRapidTrigger(0.4, 0.2, 0.0, 0.6, true) ||
+        BuildGlobalRapidTrigger(0.4, 0.2, -0.1, 0.1, true) ||
+        BuildGlobalRapidTrigger(0.45, 0.2, 0.0, 0.1, true) ||
+        BuildGlobalRapidTrigger(std::numeric_limits<double>::quiet_NaN(), 0.2, 0.0, 0.1, true)) return false;
+
+    rej = *rt; rej[3] = 2; if (aura::NativeHidBackend::IsSupportedOutputReport(rej)) return false;
+    rej = *rt; rej[4] = 1; if (aura::NativeHidBackend::IsSupportedOutputReport(rej)) return false;
+    rej = *rt; rej[5] = 0; if (aura::NativeHidBackend::IsSupportedOutputReport(rej)) return false;
+    rej = *rt; rej[5] = 26; if (aura::NativeHidBackend::IsSupportedOutputReport(rej)) return false;
+    rej = *rt; rej[6] = 0; if (aura::NativeHidBackend::IsSupportedOutputReport(rej)) return false;
+    rej = *rt; rej[6] = 26; if (aura::NativeHidBackend::IsSupportedOutputReport(rej)) return false;
+    rej = *rt; rej[7] = 6; if (aura::NativeHidBackend::IsSupportedOutputReport(rej)) return false;
+    rej = *rt; rej[8] = 6; if (aura::NativeHidBackend::IsSupportedOutputReport(rej)) return false;
+    rej = *rt; rej[9] = 1; if (aura::NativeHidBackend::IsSupportedOutputReport(rej)) return false;
+    rej = *rt; rej[64] = 1; if (aura::NativeHidBackend::IsSupportedOutputReport(rej)) return false;
+
+    // 4. Runtime lifecycle and shadow state
+    const auto state = std::make_shared<LatchState>();
+    auto io = std::make_unique<FakeTransport>();
+    io->stage_precondition = [state] { return state->armed; };
+    auto wait = std::make_unique<FakeWait>(io.get(), BlockPhase::None);
+    auto* io_ptr = io.get();
+    auto runtime = aura::M605RuntimeTestAccess::Create(
+        std::move(io), std::move(wait), std::make_unique<FakeLatch>(state));
+
+    // Global Actuation execution
+    if (!runtime->SetGlobalActuation(1.2).get()) return false;
+    if (state->arms != 1 || state->armed != false) return false;
+    auto reports = io_ptr->StageReports();
+    if (reports.size() != 1 || reports[0][2] != 0x50 || reports[0][5] != 12) return false;
+    auto shadow = runtime->GetAppliedRuntimeState();
+    if (!shadow.global_actuation_raw.has_value() || *shadow.global_actuation_raw != 12) return false;
+    // CRITICAL: Ensure NO 68-key loop occurred!
+    if (!shadow.per_key_actuation_raw.empty()) return false;
+
+    // Global Deadzone execution
+    if (!runtime->SetGlobalDeadzone(0.1, 0.2).get()) return false;
+    if (state->arms != 2 || state->armed != false) return false;
+    reports = io_ptr->StageReports();
+    if (reports.size() != 2 || reports[1][2] != 0x58 ||
+        reports[1][5] != 1 || reports[1][6] != 2) return false;
+    shadow = runtime->GetAppliedRuntimeState();
+    if (!shadow.global_deadzone.has_value() ||
+        shadow.global_deadzone->top_raw != 1 || shadow.global_deadzone->bottom_raw != 2) return false;
+    if (!shadow.per_key_deadzone.empty()) return false;
+
+    // Global Rapid Trigger execution
+    if (!runtime->SetGlobalRapidTrigger(0.5, 0.3, 0.0, 0.1, true).get()) return false;
+    if (state->arms != 3 || state->armed != false) return false;
+    reports = io_ptr->StageReports();
+    if (reports.size() != 3 || reports[2][2] != 0x53 ||
+        reports[2][3] != 1 || reports[2][5] != 5 || reports[2][6] != 3) return false;
+    shadow = runtime->GetAppliedRuntimeState();
+    if (!shadow.global_rapid_trigger.has_value() || !shadow.global_rapid_trigger->separate_mode ||
+        shadow.global_rapid_trigger->press_raw != 5 || shadow.global_rapid_trigger->release_raw != 3 ||
+        shadow.global_rapid_trigger->top_raw != 0 || shadow.global_rapid_trigger->bottom_raw != 1) return false;
+    if (!shadow.per_key_rapid_trigger.empty()) return false;
+
+    // Preflight failure: zero writes
+    const auto stage_count_before = io_ptr->StageReports().size();
+    if (runtime->SetGlobalActuation(0.0).get()) return false;
+    if (runtime->SetGlobalDeadzone(0.6, 0.1).get()) return false;
+    if (runtime->SetGlobalRapidTrigger(0.0, 0.2, 0.0, 0.1, true).get()) return false;
+    if (io_ptr->StageReports().size() != stage_count_before) return false;
+
+    // Stage failure locks runtime
+    io_ptr->stage_succeeds = false;
+    if (runtime->SetGlobalActuation(1.0).get()) return false;
+    if (runtime->GetHealth() != aura::M605RuntimeHealth::IndeterminateStagedState) return false;
+    if (runtime->IsPersistentSafetyQuarantined() != true) return false;
+    shadow = runtime->GetAppliedRuntimeState();
+    if (shadow.global_actuation_raw.has_value() || shadow.global_deadzone.has_value() ||
+        shadow.global_rapid_trigger.has_value()) return false;
+
+    return true;
+}
 }
 
 int main() {
@@ -1346,7 +1487,7 @@ int main() {
         !aura::NativeHidBackend::IsSupportedOutputReport(*master_off)) return 1;
 
     Report rejected = v4;
-    rejected[2] = 0x50; // unknown opcode
+    rejected[2] = 0xfe; // unknown opcode
     if (aura::NativeHidBackend::IsSupportedOutputReport(rejected)) return 1;
     rejected = v4;
     rejected[5] = 0x9e; // unknown Wire ID
@@ -1467,7 +1608,7 @@ int main() {
         !TestDksShadowUnchangedThroughEveryStage() ||
         !TestDksStageAndApplyFailures() || !TestDksFailureInvalidatesPriorShadow() ||
         !TestDksStandardRestoreAndStop() || !TestPersistentSafetyLatch() ||
-        !TestSafetyLatchArmFailure()) {
+        !TestSafetyLatchArmFailure() || !TestGlobalSettings()) {
         std::cerr << "FAIL: M605 runtime state machine\n";
         return 1;
     }

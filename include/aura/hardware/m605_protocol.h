@@ -60,6 +60,12 @@ std::optional<Report> BuildSpeedTapMaster(uint8_t enabled);
 // Restores runtime pair state toward the active-profile baseline; it does not
 // prove the device's full pair table is empty.
 Report BuildResetSpeedTapRuntimeToProfile();
+// Phase 6.1A Global Magnetic Settings builders:
+std::optional<Report> BuildGlobalActuation(double millimeters);
+std::optional<Report> BuildGlobalDeadzone(double top_mm, double bottom_mm);
+std::optional<Report> BuildGlobalRapidTrigger(
+    double press_mm, double release_mm, double top_mm, double bottom_mm, bool separate_mode);
+
 Report BuildRuntimeApply();
 
 } // namespace aura::m605

@@ -123,6 +123,23 @@ bool IsAllowedOutputReport(const std::array<uint8_t, HID_REPORT_SIZE>& report) {
         return report[3] == 0 && report[4] == 0 && report[5] <= 1 &&
             std::all_of(report.begin() + 6, report.end(), [](uint8_t b) { return b == 0; });
     }
+    if (report[1] == 0x51 && report[2] == 0x50) {
+        return report[3] == 0 && report[4] == 0 &&
+            report[5] >= 1 && report[5] <= 40 &&
+            std::all_of(report.begin() + 6, report.end(), [](uint8_t b) { return b == 0; });
+    }
+    if (report[1] == 0x51 && report[2] == 0x58) {
+        return report[3] == 0 && report[4] == 0 &&
+            report[5] <= 5 && report[6] <= 5 &&
+            std::all_of(report.begin() + 7, report.end(), [](uint8_t b) { return b == 0; });
+    }
+    if (report[1] == 0x51 && report[2] == 0x53) {
+        return (report[3] == 0 || report[3] == 1) && report[4] == 0 &&
+            report[5] >= 1 && report[5] <= 25 &&
+            report[6] >= 1 && report[6] <= 25 &&
+            report[7] <= 5 && report[8] <= 5 &&
+            std::all_of(report.begin() + 9, report.end(), [](uint8_t b) { return b == 0; });
+    }
     return false;
 }
 

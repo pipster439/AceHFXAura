@@ -14,6 +14,16 @@ public sealed class MagneticKeyDraft
     public bool DksDirty { get; set; }
 }
 
+public sealed class MagneticGlobalDraft
+{
+    public double? ActuationMm { get; set; }
+    public double? PressMm { get; set; }
+    public double? ReleaseMm { get; set; }
+    public bool? SeparateMode { get; set; }
+    public double? TopMm { get; set; }
+    public double? BottomMm { get; set; }
+}
+
 public sealed class MagneticSettingsModel
 {
     private readonly IMagneticControlClient _client;
@@ -29,8 +39,10 @@ public sealed class MagneticSettingsModel
     }
 
     public ushort? SelectedLogicalId { get; private set; }
+    public bool IsGlobalMode { get; private set; }
     public MagneticVisualKey? SelectedKey => SelectedLogicalId is ushort id ? MagneticKeyLayout.Find(id) : null;
     public MagneticKeyDraft? Draft => SelectedLogicalId is ushort id && _drafts.TryGetValue(id, out var draft) ? draft : null;
+    public MagneticGlobalDraft GlobalDraft { get; } = new();
     public MagneticStatus? Status { get; private set; }
     public bool Busy { get; private set; }
     public bool Refreshing { get; private set; }
@@ -39,7 +51,8 @@ public sealed class MagneticSettingsModel
         Status?.Health is "IndeterminateStagedState" or "PersistentSafetyQuarantine" or "Stopped";
     public bool CanWrite => !Busy && !Refreshing && Status is {
         ApiVersion: 1, Available: true, Health: "Clean", PersistentSafetyQuarantine: false };
-    public bool CanWriteSelected => CanWrite && SelectedKey != null;
+    public bool CanWriteSelected => CanWrite && !IsGlobalMode && SelectedKey != null;
+    public bool CanWriteGlobal => CanWrite && IsGlobalMode;
     public bool CanDisableRapidTrigger => SelectedLogicalId is ushort id && InheritedRt(id) is not null;
     public bool CanResetAllDeadzone => CanWrite && Status?.HostProfile is { GlobalDeadzoneTop.Known: true,
         GlobalDeadzoneBottom.Known: true };
@@ -71,8 +84,37 @@ public sealed class MagneticSettingsModel
     {
         if (Busy || MagneticKeyLayout.Find(logicalId) == null) return false;
         SelectedLogicalId = logicalId;
+        IsGlobalMode = false;
         _ = GetDraft(); // clone known session values into local editable state only
         return true;
+    }
+
+    public bool SelectGlobal()
+    {
+        if (Busy) return false;
+        SelectedLogicalId = null;
+        IsGlobalMode = true;
+        return true;
+    }
+
+    public void EditGlobalActuation(double value)
+    {
+        if (!Busy && IsGlobalMode && Valid(value, 0.1, 4.0)) GlobalDraft.ActuationMm = Math.Round(value, 1);
+    }
+
+    public void EditGlobalRapidTrigger(double? pressMm, double? releaseMm, bool? separateMode)
+    {
+        if (Busy || !IsGlobalMode) return;
+        if (pressMm is double press && Valid(press, 0.1, 2.5)) GlobalDraft.PressMm = Math.Round(press, 1);
+        if (releaseMm is double release && Valid(release, 0.1, 2.5)) GlobalDraft.ReleaseMm = Math.Round(release, 1);
+        if (separateMode is bool separate) GlobalDraft.SeparateMode = separate;
+    }
+
+    public void EditGlobalDeadzone(double? topMm, double? bottomMm)
+    {
+        if (Busy || !IsGlobalMode) return;
+        if (topMm is double top && Valid(top, 0, 0.5)) GlobalDraft.TopMm = Math.Round(top, 1);
+        if (bottomMm is double bottom && Valid(bottom, 0, 0.5)) GlobalDraft.BottomMm = Math.Round(bottom, 1);
     }
 
     public void EditActuation(double value)
@@ -230,6 +272,35 @@ public sealed class MagneticSettingsModel
         }) :
         Task.FromResult(false);
 
+    public Task<bool> ApplyGlobalActuationAsync()
+    {
+        if (!CanWriteGlobal || GlobalDraft.ActuationMm is not double mm)
+            return Task.FromResult(false);
+        return SubmitAsync(() => _client.SetGlobalActuationAsync(mm), () => GlobalDraft.ActuationMm = null);
+    }
+
+    public Task<bool> ApplyGlobalDeadzoneAsync()
+    {
+        if (!CanWriteGlobal || GlobalDraft.TopMm is not double top || GlobalDraft.BottomMm is not double bottom)
+            return Task.FromResult(false);
+        return SubmitAsync(() => _client.SetGlobalDeadzoneAsync(top, bottom),
+            () => { GlobalDraft.TopMm = null; GlobalDraft.BottomMm = null; });
+    }
+
+    public Task<bool> ApplyGlobalRapidTriggerAsync()
+    {
+        if (!CanWriteGlobal || GlobalDraft.PressMm is not double press || GlobalDraft.ReleaseMm is not double release)
+            return Task.FromResult(false);
+        double top = GlobalDraft.TopMm ?? (Status?.GlobalDeadzone.Known == true ? Status.GlobalDeadzone.TopRaw / 10.0 :
+            Status?.HostProfile.GlobalDeadzoneTop.Known == true ? Status.HostProfile.GlobalDeadzoneTop.Raw / 10.0 : 0.0);
+        double bottom = GlobalDraft.BottomMm ?? (Status?.GlobalDeadzone.Known == true ? Status.GlobalDeadzone.BottomRaw / 10.0 :
+            Status?.HostProfile.GlobalDeadzoneBottom.Known == true ? Status.HostProfile.GlobalDeadzoneBottom.Raw / 10.0 : 0.1);
+        bool separate = GlobalDraft.SeparateMode ?? (Status?.GlobalRapidTrigger.Known == true && Status.GlobalRapidTrigger.SeparateMode.HasValue ?
+            Status.GlobalRapidTrigger.SeparateMode.Value : Math.Abs(press - release) > 1e-4);
+        return SubmitAsync(() => _client.SetGlobalRapidTriggerAsync(press, release, top, bottom, separate),
+            () => { GlobalDraft.PressMm = null; GlobalDraft.ReleaseMm = null; GlobalDraft.SeparateMode = null; });
+    }
+
     public Task<bool> ApplySpeedTapPairAsync(bool enabled)
     {
         if (!CanWrite || SpeedTapKey1 is not ushort a || SpeedTapKey2 is not ushort b || a == b)
@@ -278,6 +349,8 @@ public sealed class MagneticSettingsModel
 
     private (double PressMm, double ReleaseMm)? InheritedRt(ushort key)
     {
+        if (Status?.GlobalRapidTrigger.Known == true)
+            return (Status.GlobalRapidTrigger.PressRaw / 10.0, Status.GlobalRapidTrigger.ReleaseRaw / 10.0);
         var host = Status?.HostProfile;
         if (host is { GlobalRtPress.Known: true, GlobalRtRelease.Known: true })
             return (host.GlobalRtPress.Raw / 10.0, host.GlobalRtRelease.Raw / 10.0);

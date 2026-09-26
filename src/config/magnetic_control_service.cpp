@@ -116,7 +116,8 @@ Json KnownRaw(std::optional<uint8_t> raw) {
 enum class Mutation {
     Actuation, RtOn, RtOff, Deadzone, ResetAllDeadzone, Dks,
     DksStandard, SpeedTapPairOn, SpeedTapPairOff, SpeedTapMaster,
-    SpeedTapProfileReset, StaticAnalog
+    SpeedTapProfileReset, StaticAnalog,
+    GlobalActuation, GlobalDeadzone, GlobalRapidTrigger
 };
 } // namespace
 
@@ -144,6 +145,35 @@ void MagneticControlService::WriteStatus(httplib::Response& response, bool resul
                              {"global_deadzone_top", KnownRaw(host.global_deadzone_top_raw)},
                              {"global_deadzone_bottom", KnownRaw(host.global_deadzone_bottom_raw)},
                              {"per_key_rt_list_known", host.per_key_rt_list_known}};
+    body["global_actuation"] = shadow.global_actuation_raw ?
+        Json{{"known", true}, {"raw", *shadow.global_actuation_raw}, {"source", "SessionApplied"}} :
+        host.global_actuation_raw ?
+        Json{{"known", true}, {"raw", *host.global_actuation_raw}, {"source", "HostProfile"}} :
+        Json{{"known", false}, {"source", "Unknown"}};
+    body["global_deadzone"] = shadow.global_deadzone ?
+        Json{{"known", true}, {"top_raw", shadow.global_deadzone->top_raw},
+             {"bottom_raw", shadow.global_deadzone->bottom_raw}, {"source", "SessionApplied"}} :
+        (host.global_deadzone_top_raw && host.global_deadzone_bottom_raw) ?
+        Json{{"known", true}, {"top_raw", *host.global_deadzone_top_raw},
+             {"bottom_raw", *host.global_deadzone_bottom_raw}, {"source", "HostProfile"}} :
+        Json{{"known", false}, {"source", "Unknown"}};
+    body["global_rapid_trigger"] = shadow.global_rapid_trigger ?
+        Json{{"known", true}, {"separate_mode", shadow.global_rapid_trigger->separate_mode},
+             {"press_raw", shadow.global_rapid_trigger->press_raw},
+             {"release_raw", shadow.global_rapid_trigger->release_raw},
+             {"top_raw", shadow.global_rapid_trigger->top_raw},
+             {"bottom_raw", shadow.global_rapid_trigger->bottom_raw},
+             {"source", "SessionApplied"}} :
+        (host.global_rt_press_raw && host.global_rt_release_raw) ?
+        Json{{"known", true},
+             {"separate_mode", host.global_rt_separate_mode ? Json(*host.global_rt_separate_mode) :
+                               Json(*host.global_rt_press_raw != *host.global_rt_release_raw)},
+             {"press_raw", *host.global_rt_press_raw},
+             {"release_raw", *host.global_rt_release_raw},
+             {"top_raw", host.global_deadzone_top_raw ? Json(*host.global_deadzone_top_raw) : Json(nullptr)},
+             {"bottom_raw", host.global_deadzone_bottom_raw ? Json(*host.global_deadzone_bottom_raw) : Json(nullptr)},
+             {"source", "HostProfile"}} :
+        Json{{"known", false}, {"source", "Unknown"}};
     body["actuation"] = Json::array();
     for (const auto& [key, raw] : shadow.per_key_actuation_raw)
         body["actuation"].push_back({{"logical_id", key}, {"raw", raw}, {"source", "SessionApplied"}});
@@ -221,7 +251,7 @@ void MagneticControlService::RegisterRoutes(httplib::Server& server) {
             if (!ValidRequest(request, response)) return;
             const Json body = Json::parse(request.body, nullptr, false);
             uint16_t key = 0, other = 0;
-            double first = 0, second = 0;
+            double first = 0, second = 0, third = 0, fourth = 0;
             bool flag = false, resolve = false;
             m605::DksConfig dks;
             bool valid = false;
@@ -258,6 +288,31 @@ void MagneticControlService::RegisterRoutes(httplib::Server& server) {
             case Mutation::SpeedTapProfileReset:
                 valid = ExactFields(body, {"confirm_profile_baseline"}) &&
                     Boolean(body, "confirm_profile_baseline", flag) && flag; break;
+            case Mutation::GlobalActuation:
+                valid = ExactFields(body, {"mm"}) && Millimeters(body, "mm", 1, 40, first); break;
+            case Mutation::GlobalDeadzone:
+                valid = ExactFields(body, {"top_mm", "bottom_mm"}) &&
+                    Millimeters(body, "top_mm", 0, 5, first) &&
+                    Millimeters(body, "bottom_mm", 0, 5, second); break;
+            case Mutation::GlobalRapidTrigger: {
+                const char* sep_key = body.contains("separate_mode") ? "separate_mode" :
+                                      body.contains("independent_sensitivity") ? "independent_sensitivity" : nullptr;
+                if (sep_key && ExactFields(body, {sep_key, "press_mm", "release_mm", "top_mm", "bottom_mm"})) {
+                    valid = Boolean(body, sep_key, flag) &&
+                        Millimeters(body, "press_mm", 1, 25, first) &&
+                        Millimeters(body, "release_mm", 1, 25, second) &&
+                        Millimeters(body, "top_mm", 0, 5, third) &&
+                        Millimeters(body, "bottom_mm", 0, 5, fourth);
+                } else if (sep_key && ExactFields(body, {sep_key, "press_mm", "release_mm"})) {
+                    const auto host = host_profile_();
+                    third = host.global_deadzone_top_raw.value_or(0) / 10.0;
+                    fourth = host.global_deadzone_bottom_raw.value_or(1) / 10.0;
+                    valid = Boolean(body, sep_key, flag) &&
+                        Millimeters(body, "press_mm", 1, 25, first) &&
+                        Millimeters(body, "release_mm", 1, 25, second);
+                }
+                break;
+            }
             }
             if (!valid) { WriteStatus(response, false, 422, "Invalid or unsupported magnetic setting input"); return; }
             std::unique_lock<std::mutex> write_lock(write_mutex_, std::try_to_lock);
@@ -346,6 +401,10 @@ void MagneticControlService::RegisterRoutes(httplib::Server& server) {
             case Mutation::SpeedTapMaster: future = runtime_->SetSpeedTapMaster(flag); break;
             case Mutation::SpeedTapProfileReset: future = runtime_->ResetSpeedTapRuntimeToProfile(); break;
             case Mutation::StaticAnalog: future = runtime_->SetAnalogEffect(0, flag); break;
+            case Mutation::GlobalActuation: future = runtime_->SetGlobalActuation(first); break;
+            case Mutation::GlobalDeadzone: future = runtime_->SetGlobalDeadzone(first, second); break;
+            case Mutation::GlobalRapidTrigger:
+                future = runtime_->SetGlobalRapidTrigger(first, second, third, fourth, flag); break;
             }
             const bool success = future.get(); // HTTP worker; UI awaits network asynchronously.
             const auto health = runtime_->GetHealth();
@@ -371,5 +430,8 @@ void MagneticControlService::RegisterRoutes(httplib::Server& server) {
     write("/api/magnetic/speedtap/master", Mutation::SpeedTapMaster);
     write("/api/magnetic/speedtap/profile-reset", Mutation::SpeedTapProfileReset);
     write("/api/magnetic/analog-effect/static", Mutation::StaticAnalog);
+    write("/api/magnetic/global/actuation", Mutation::GlobalActuation);
+    write("/api/magnetic/global/deadzone", Mutation::GlobalDeadzone);
+    write("/api/magnetic/global/rapid-trigger", Mutation::GlobalRapidTrigger);
 }
 } // namespace aura

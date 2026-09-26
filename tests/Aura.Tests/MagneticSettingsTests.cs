@@ -335,6 +335,215 @@ public sealed class MagneticSettingsTests
         Assert.AreEqual(0x0402, disabled.RootElement.GetProperty("logical_id").GetInt32());
     }
 
+    [TestMethod]
+    public void DksActionTargetsExcludesFnKey()
+    {
+        Assert.IsFalse(MagneticKeyLayout.IsValidDksActionTarget(0x0508)); // Fn
+        Assert.IsTrue(MagneticKeyLayout.IsValidDksActionTarget(0x050a)); // Copilot
+        Assert.IsTrue(MagneticKeyLayout.IsValidDksActionTarget(0x0602)); // A
+        Assert.IsFalse(MagneticKeyLayout.IsValidDksActionTarget(0xffff)); // Invalid ID
+
+        var fake = new Fake();
+        var model = new MagneticSettingsModel(fake);
+        Assert.IsTrue(model.Select(0x0402)); // V
+        Assert.IsFalse(model.EditDksSlot(0, 0x0508, "Tap", "Inactive", "Inactive", "Inactive"));
+        Assert.IsTrue(model.EditDksSlot(0, 0x050a, "Tap", "Inactive", "Inactive", "Inactive"));
+    }
+
+    [TestMethod]
+    public async Task DirtyDraftStateTransitionsReflectUnappliedChanges()
+    {
+        var fake = new Fake();
+        var model = new MagneticSettingsModel(fake);
+        await model.RefreshAsync();
+        model.Select(0x0402); // V
+
+        // Actuation draft
+        Assert.IsNull(model.Draft?.ActuationMm);
+        model.EditActuation(2.5);
+        Assert.AreEqual(2.5, model.Draft?.ActuationMm);
+        Assert.IsTrue(await model.ApplyActuationAsync());
+        Assert.IsNull(model.Draft?.ActuationMm);
+        Assert.AreEqual("actuation:1026:2.5", fake.Calls.Last());
+
+        // Rapid trigger draft
+        Assert.IsNull(model.Draft?.RapidTriggerEnabled);
+        model.EditRapidTrigger(true, 0.4, 0.3);
+        Assert.IsTrue(model.Draft?.RapidTriggerEnabled);
+        Assert.AreEqual(0.4, model.Draft?.PressMm);
+        Assert.AreEqual(0.3, model.Draft?.ReleaseMm);
+
+        // Deadzone draft
+        Assert.IsNull(model.Draft?.TopMm);
+        model.EditDeadzone(0.3, 0.2);
+        Assert.AreEqual(0.3, model.Draft?.TopMm);
+        Assert.AreEqual(0.2, model.Draft?.BottomMm);
+        Assert.IsTrue(await model.ApplyDeadzoneAsync());
+        Assert.IsNull(model.Draft?.TopMm);
+        Assert.IsNull(model.Draft?.BottomMm);
+        Assert.AreEqual("deadzone:1026:0.3:0.2", fake.Calls.Last());
+
+        // DKS dirty
+        Assert.IsFalse(model.Draft?.DksDirty);
+        model.EditDksThresholds(1.5, 3.5);
+        Assert.IsTrue(model.Draft?.DksDirty);
+    }
+
+    [TestMethod]
+    public async Task ConflictDetectionBetweenRtAndDksRequiresExplicitResolution()
+    {
+        var fake = new Fake();
+        var model = new MagneticSettingsModel(fake);
+        await model.RefreshAsync();
+        model.Select(0x0402);
+
+        // Initially no conflict with clean profile
+        Assert.IsTrue(model.RtConflictPossible); // initially DKS is unknown
+        model.EditRapidTrigger(true, 0.5, 0.5);
+
+        // Applying RT when DKS is unconfirmed requires explicit resolveDks=true
+        Assert.IsFalse(await model.ApplyRapidTriggerAsync(resolveDks: false));
+        Assert.IsTrue(await model.ApplyRapidTriggerAsync(resolveDks: true));
+        Assert.AreEqual("rt-on:1026:0.5:0.5:True", fake.Calls.Last());
+    }
+
+    [TestMethod]
+    public async Task GlobalModeSelectionAndTransitionsPerformZeroWrites()
+    {
+        var fake = new Fake();
+        var model = new MagneticSettingsModel(fake);
+        await model.RefreshAsync();
+        fake.Calls.Clear();
+
+        // Enter global mode: no key selected, IsGlobalMode = true
+        model.SelectGlobal();
+        Assert.IsTrue(model.IsGlobalMode);
+        Assert.IsNull(model.SelectedLogicalId);
+        Assert.IsNull(model.SelectedKey);
+        Assert.IsEmpty(fake.Calls);
+
+        // Select physical key: IsGlobalMode = false, key selected
+        Assert.IsTrue(model.Select(0x0402)); // V
+        Assert.IsFalse(model.IsGlobalMode);
+        Assert.AreEqual((ushort)0x0402, model.SelectedLogicalId);
+        Assert.AreEqual("V", model.SelectedKey?.FullName);
+        Assert.IsEmpty(fake.Calls);
+
+        // Return to global mode: zero writes
+        model.SelectGlobal();
+        Assert.IsTrue(model.IsGlobalMode);
+        Assert.IsNull(model.SelectedLogicalId);
+        Assert.IsEmpty(fake.Calls);
+    }
+
+    [TestMethod]
+    public async Task GlobalSettingsDraftAndApplyLifecycle()
+    {
+        var fake = new Fake();
+        var model = new MagneticSettingsModel(fake);
+        await model.RefreshAsync();
+        model.SelectGlobal();
+
+        // Global Actuation Draft & Apply
+        Assert.IsNull(model.GlobalDraft?.ActuationMm);
+        model.EditGlobalActuation(1.8);
+        Assert.AreEqual(1.8, model.GlobalDraft?.ActuationMm);
+        Assert.IsEmpty(fake.Calls);
+
+        Assert.IsTrue(await model.ApplyGlobalActuationAsync());
+        Assert.IsNull(model.GlobalDraft?.ActuationMm);
+        Assert.AreEqual("global-actuation:1.8", fake.Calls.Last());
+
+        // Global Deadzone Draft & Apply (must never call ResetAllDeadzoneAsync)
+        Assert.IsNull(model.GlobalDraft?.TopMm);
+        Assert.IsNull(model.GlobalDraft?.BottomMm);
+        model.EditGlobalDeadzone(0.3, 0.4);
+        Assert.AreEqual(0.3, model.GlobalDraft?.TopMm);
+        Assert.AreEqual(0.4, model.GlobalDraft?.BottomMm);
+        Assert.AreEqual(1, fake.Calls.Count);
+
+        Assert.IsTrue(await model.ApplyGlobalDeadzoneAsync());
+        Assert.IsNull(model.GlobalDraft?.TopMm);
+        Assert.IsNull(model.GlobalDraft?.BottomMm);
+        Assert.AreEqual("global-deadzone:0.3:0.4", fake.Calls.Last());
+        Assert.DoesNotContain("deadzone-reset-all", fake.Calls);
+
+        // Global Rapid Trigger Draft & Apply
+        Assert.IsNull(model.GlobalDraft?.PressMm);
+        model.EditGlobalDeadzone(0.1, 0.2);
+        model.EditGlobalRapidTrigger(0.5, 0.6, true);
+        Assert.AreEqual(0.5, model.GlobalDraft?.PressMm);
+        Assert.AreEqual(0.6, model.GlobalDraft?.ReleaseMm);
+        Assert.IsTrue(model.GlobalDraft?.SeparateMode);
+        Assert.AreEqual(0.1, model.GlobalDraft?.TopMm);
+        Assert.AreEqual(0.2, model.GlobalDraft?.BottomMm);
+
+        Assert.IsTrue(await model.ApplyGlobalRapidTriggerAsync());
+        Assert.IsNull(model.GlobalDraft?.PressMm);
+        Assert.AreEqual("global-rt:0.5:0.6:0.1:0.2:True", fake.Calls.Last());
+    }
+
+    [TestMethod]
+    public async Task GlobalRapidTriggerSeparateModeToggleBehavior()
+    {
+        var fake = new Fake();
+        var model = new MagneticSettingsModel(fake);
+        await model.RefreshAsync();
+        model.SelectGlobal();
+
+        // Linked sensitivity (separateMode = false): release follows press
+        model.EditGlobalDeadzone(0.1, 0.1);
+        model.EditGlobalRapidTrigger(0.4, 0.4, false);
+        Assert.IsFalse(model.GlobalDraft?.SeparateMode);
+        Assert.AreEqual(0.4, model.GlobalDraft?.PressMm);
+        Assert.AreEqual(0.4, model.GlobalDraft?.ReleaseMm);
+        Assert.IsTrue(await model.ApplyGlobalRapidTriggerAsync());
+        Assert.AreEqual("global-rt:0.4:0.4:0.1:0.1:False", fake.Calls.Last());
+
+        // Separate sensitivity (separateMode = true)
+        model.EditGlobalDeadzone(0.1, 0.1);
+        model.EditGlobalRapidTrigger(0.2, 0.8, true);
+        Assert.IsTrue(model.GlobalDraft?.SeparateMode);
+        Assert.AreEqual(0.2, model.GlobalDraft?.PressMm);
+        Assert.AreEqual(0.8, model.GlobalDraft?.ReleaseMm);
+        Assert.IsTrue(await model.ApplyGlobalRapidTriggerAsync());
+        Assert.AreEqual("global-rt:0.2:0.8:0.1:0.1:True", fake.Calls.Last());
+    }
+
+    [TestMethod]
+    public async Task GlobalIpcUsesSemanticContractsWithoutVendorFields()
+    {
+        var handler = new CaptureHandler();
+        var client = new MagneticControlClient(new HttpClient(handler));
+
+        // Actuation
+        Assert.IsTrue((await client.SetGlobalActuationAsync(1.5)).Succeeded);
+        Assert.AreEqual("/api/magnetic/global/actuation", handler.Path);
+        using var actDoc = JsonDocument.Parse(handler.Body!);
+        Assert.AreEqual(1.5, actDoc.RootElement.GetProperty("mm").GetDouble(), 0.001);
+        Assert.IsFalse(handler.Body!.Contains("raw", StringComparison.OrdinalIgnoreCase));
+        Assert.IsFalse(handler.Body.Contains("opcode", StringComparison.OrdinalIgnoreCase));
+
+        // Deadzone
+        Assert.IsTrue((await client.SetGlobalDeadzoneAsync(0.2, 0.3)).Succeeded);
+        Assert.AreEqual("/api/magnetic/global/deadzone", handler.Path);
+        using var dzDoc = JsonDocument.Parse(handler.Body!);
+        Assert.AreEqual(0.2, dzDoc.RootElement.GetProperty("top_mm").GetDouble(), 0.001);
+        Assert.AreEqual(0.3, dzDoc.RootElement.GetProperty("bottom_mm").GetDouble(), 0.001);
+        Assert.IsFalse(handler.Body!.Contains("raw", StringComparison.OrdinalIgnoreCase));
+
+        // Rapid Trigger
+        Assert.IsTrue((await client.SetGlobalRapidTriggerAsync(0.4, 0.5, 0.1, 0.2, true)).Succeeded);
+        Assert.AreEqual("/api/magnetic/global/rapid-trigger", handler.Path);
+        using var rtDoc = JsonDocument.Parse(handler.Body!);
+        Assert.AreEqual(0.4, rtDoc.RootElement.GetProperty("press_mm").GetDouble(), 0.001);
+        Assert.AreEqual(0.5, rtDoc.RootElement.GetProperty("release_mm").GetDouble(), 0.001);
+        Assert.AreEqual(0.1, rtDoc.RootElement.GetProperty("top_mm").GetDouble(), 0.001);
+        Assert.AreEqual(0.2, rtDoc.RootElement.GetProperty("bottom_mm").GetDouble(), 0.001);
+        Assert.IsTrue(rtDoc.RootElement.GetProperty("separate_mode").GetBoolean());
+        Assert.IsFalse(handler.Body!.Contains("opcode", StringComparison.OrdinalIgnoreCase));
+    }
+
     private sealed class CaptureHandler : HttpMessageHandler
     {
         public string? Path { get; private set; }
@@ -362,6 +571,10 @@ public sealed class MagneticSettingsTests
         public Task<MagneticStatus> DisableRapidTriggerAsync(ushort id) => Record($"rt-off:{id}");
         public Task<MagneticStatus> SetDeadzoneAsync(ushort id, double top, double bottom) => Record($"deadzone:{id}:{top:F1}:{bottom:F1}");
         public Task<MagneticStatus> ResetAllDeadzoneAsync() => Record("deadzone-reset-all");
+        public Task<MagneticStatus> SetGlobalActuationAsync(double mm) => Record($"global-actuation:{mm:F1}");
+        public Task<MagneticStatus> SetGlobalDeadzoneAsync(double top, double bottom) => Record($"global-deadzone:{top:F1}:{bottom:F1}");
+        public Task<MagneticStatus> SetGlobalRapidTriggerAsync(double press, double release, double top, double bottom, bool separate) =>
+            Record($"global-rt:{press:F1}:{release:F1}:{top:F1}:{bottom:F1}:{separate}");
         public Task<MagneticStatus> SetDksAsync(ushort id, double start, double end, IReadOnlyList<MagneticDksSlot> slots, bool resolve) =>
             Record($"dks:{id}:{start:F1}:{end:F1}:{slots.Count}:{resolve}");
         public Task<MagneticStatus> RestoreDksStandardAsync(ushort id) => Record($"dks-standard:{id}");

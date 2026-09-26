@@ -328,6 +328,59 @@ std::future<bool> M605Runtime::EnqueueDks(const m605::DksConfig& config,
     return Enqueue(std::move(job));
 }
 
+std::future<bool> M605Runtime::SetGlobalActuation(double millimeters) {
+    auto report = m605::BuildGlobalActuation(millimeters);
+    if (!report || !NativeHidBackend::IsSupportedOutputReport(*report)) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (health_ == M605RuntimeHealth::Clean ||
+            health_ == M605RuntimeHealth::TransactionInProgress) {
+            last_error_ = "Global actuation outside 0.1..4.0 mm";
+        }
+        return RejectedOperation();
+    }
+    Job job{};
+    job.stages[0] = *report;
+    job.stage_count = 1;
+    job.kind = Kind::GlobalActuation;
+    job.value = (*report)[5];
+    return Enqueue(std::move(job));
+}
+
+std::future<bool> M605Runtime::SetGlobalDeadzone(double top_mm, double bottom_mm) {
+    auto report = m605::BuildGlobalDeadzone(top_mm, bottom_mm);
+    if (!report || !NativeHidBackend::IsSupportedOutputReport(*report)) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (health_ == M605RuntimeHealth::Clean ||
+            health_ == M605RuntimeHealth::TransactionInProgress) {
+            last_error_ = "Global deadzone outside 0.0..0.5 mm";
+        }
+        return RejectedOperation();
+    }
+    Job job{};
+    job.stages[0] = *report;
+    job.stage_count = 1;
+    job.kind = Kind::GlobalDeadzone;
+    return Enqueue(std::move(job));
+}
+
+std::future<bool> M605Runtime::SetGlobalRapidTrigger(
+    double press_mm, double release_mm, double top_mm, double bottom_mm, bool separate_mode) {
+    auto report = m605::BuildGlobalRapidTrigger(press_mm, release_mm, top_mm, bottom_mm, separate_mode);
+    if (!report || !NativeHidBackend::IsSupportedOutputReport(*report)) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (health_ == M605RuntimeHealth::Clean ||
+            health_ == M605RuntimeHealth::TransactionInProgress) {
+            last_error_ = "Global Rapid Trigger parameters invalid or outside supported range";
+        }
+        return RejectedOperation();
+    }
+    Job job{};
+    job.stages[0] = *report;
+    job.stage_count = 1;
+    job.kind = Kind::GlobalRapidTrigger;
+    return Enqueue(std::move(job));
+}
+
 std::future<bool> M605Runtime::Enqueue(Job job) {
     auto future = job.completion.get_future();
     bool queued = false;
@@ -468,6 +521,14 @@ bool M605Runtime::Execute(const Job& job) {
             applied_state_.per_key_dks[job.logical_key_id] = {
                 job.stages[0][5], job.stages[0][6], job.dks_config->slots,
                 job.standard_dks_rewrite};
+        } else if (job.kind == Kind::GlobalActuation) {
+            applied_state_.global_actuation_raw = job.value;
+        } else if (job.kind == Kind::GlobalDeadzone) {
+            applied_state_.global_deadzone = {job.stages[0][5], job.stages[0][6]};
+        } else if (job.kind == Kind::GlobalRapidTrigger) {
+            applied_state_.global_rapid_trigger = {
+                job.stages[0][3] != 0, job.stages[0][5], job.stages[0][6],
+                job.stages[0][7], job.stages[0][8]};
         }
         last_error_.clear();
     }

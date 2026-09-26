@@ -134,6 +134,12 @@ MagneticHostProfile MagneticHostProfileProvider::Parse(
         result.global_actuation_raw = Raw(trigger, "actuation", 1, 40);
         result.global_rt_press_raw = Raw(trigger, "rapidTriggerPress", 1, 25);
         result.global_rt_release_raw = Raw(trigger, "rapidTriggerRelease", 1, 25);
+        const auto separate = Integer(trigger, "rapidTriggerSeparateMode", 0, 1);
+        if (separate) {
+            result.global_rt_separate_mode = (*separate == 1);
+        } else if (result.global_rt_press_raw && result.global_rt_release_raw) {
+            result.global_rt_separate_mode = (*result.global_rt_press_raw != *result.global_rt_release_raw);
+        }
         if (trigger.is_object() && trigger.contains("preKeyRapidTriggerList") &&
             trigger.at("preKeyRapidTriggerList").is_array()) {
             std::map<uint16_t, bool> enabled;

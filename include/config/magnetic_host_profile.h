@@ -15,6 +15,7 @@ struct MagneticHostProfile {
     std::optional<uint8_t> global_actuation_raw;
     std::optional<uint8_t> global_rt_press_raw;
     std::optional<uint8_t> global_rt_release_raw;
+    std::optional<bool> global_rt_separate_mode;
     bool per_key_rt_list_known = false;
     std::map<uint16_t, bool> per_key_rt_enabled;
     std::optional<uint8_t> global_deadzone_top_raw;

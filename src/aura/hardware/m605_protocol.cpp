@@ -12,6 +12,7 @@ std::optional<uint8_t> ScaleMillimeters(double millimeters, double min_mm,
     }
     const auto raw = static_cast<int>(std::lround(millimeters * 10.0));
     if (raw < min_raw || raw > max_raw) return std::nullopt;
+    if (std::abs(millimeters * 10.0 - raw) > 1e-4) return std::nullopt;
     return static_cast<uint8_t>(raw);
 }
 } // namespace
@@ -200,6 +201,49 @@ Report BuildResetSpeedTapRuntimeToProfile() {
     Report report{};
     report[1] = 0x51;
     report[2] = 0x56;
+    return report;
+}
+
+std::optional<Report> BuildGlobalActuation(double millimeters) {
+    const auto raw = ScaleMillimeters(millimeters, 0.1, 4.0, 1, 40);
+    if (!raw) return std::nullopt;
+
+    Report report{};
+    report[1] = 0x51;
+    report[2] = 0x50;
+    report[5] = *raw;
+    return report;
+}
+
+std::optional<Report> BuildGlobalDeadzone(double top_mm, double bottom_mm) {
+    const auto top = ScaleMillimeters(top_mm, 0.0, 0.5, 0, 5);
+    const auto bottom = ScaleMillimeters(bottom_mm, 0.0, 0.5, 0, 5);
+    if (!top || !bottom) return std::nullopt;
+
+    Report report{};
+    report[1] = 0x51;
+    report[2] = 0x58;
+    report[5] = *top;
+    report[6] = *bottom;
+    return report;
+}
+
+std::optional<Report> BuildGlobalRapidTrigger(
+    double press_mm, double release_mm, double top_mm, double bottom_mm, bool separate_mode) {
+    const auto press = ScaleMillimeters(press_mm, 0.1, 2.5, 1, 25);
+    const auto release = ScaleMillimeters(release_mm, 0.1, 2.5, 1, 25);
+    const auto top = ScaleMillimeters(top_mm, 0.0, 0.5, 0, 5);
+    const auto bottom = ScaleMillimeters(bottom_mm, 0.0, 0.5, 0, 5);
+    if (!press || !release || !top || !bottom) return std::nullopt;
+
+    Report report{};
+    report[1] = 0x51;
+    report[2] = 0x53;
+    report[3] = separate_mode ? 1 : 0;
+    report[5] = *press;
+    report[6] = *release;
+    report[7] = *top;
+    report[8] = *bottom;
     return report;
 }
 

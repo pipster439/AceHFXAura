@@ -13,7 +13,7 @@
         <MicaBackdrop />
     </Window.SystemBackdrop>
 
-    <Grid x:Name="RootGrid">
+    <Grid x:Name="RootGrid" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
         <Grid.RowDefinitions>
             <RowDefinition Height="48" />
             <RowDefinition Height="*" />
@@ -61,8 +61,14 @@
                         <FontIcon Glyph="&#xE790;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem Content="磁轴设置" Tag="magnetic">
-                    <NavigationViewItem.Icon><SymbolIcon Symbol="Keyboard" /></NavigationViewItem.Icon>
+                <NavigationViewItem
+                    x:Name="NavMagneticItem"
+                    Content="磁轴设置"
+                    Tag="magnetic"
+                    Foreground="{ThemeResource TextFillColorPrimaryBrush}">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE765;" />
+                    </NavigationViewItem.Icon>
                 </NavigationViewItem>
 
                 <NavigationViewItem

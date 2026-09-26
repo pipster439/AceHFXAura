@@ -43,6 +43,32 @@ public sealed class MagneticKnownBool
     [JsonPropertyName("source")] public string Source { get; set; } = "Unknown";
 }
 
+public sealed class MagneticGlobalActuationState
+{
+    [JsonPropertyName("known")] public bool Known { get; set; }
+    [JsonPropertyName("raw")] public byte Raw { get; set; }
+    [JsonPropertyName("source")] public string Source { get; set; } = "Unknown";
+}
+
+public sealed class MagneticGlobalDeadzoneState
+{
+    [JsonPropertyName("known")] public bool Known { get; set; }
+    [JsonPropertyName("top_raw")] public byte TopRaw { get; set; }
+    [JsonPropertyName("bottom_raw")] public byte BottomRaw { get; set; }
+    [JsonPropertyName("source")] public string Source { get; set; } = "Unknown";
+}
+
+public sealed class MagneticGlobalRapidTriggerState
+{
+    [JsonPropertyName("known")] public bool Known { get; set; }
+    [JsonPropertyName("separate_mode")] public bool? SeparateMode { get; set; }
+    [JsonPropertyName("press_raw")] public byte PressRaw { get; set; }
+    [JsonPropertyName("release_raw")] public byte ReleaseRaw { get; set; }
+    [JsonPropertyName("top_raw")] public byte? TopRaw { get; set; }
+    [JsonPropertyName("bottom_raw")] public byte? BottomRaw { get; set; }
+    [JsonPropertyName("source")] public string Source { get; set; } = "Unknown";
+}
+
 public sealed class MagneticHostProfileState
 {
     [JsonPropertyName("active_profile_id")] public int? ActiveProfileId { get; set; }
@@ -108,6 +134,9 @@ public sealed class MagneticStatus
     [JsonPropertyName("rapid_trigger")] public List<MagneticRapidTriggerValue> RapidTrigger { get; set; } = [];
     [JsonPropertyName("deadzone")] public List<MagneticDeadzoneValue> Deadzone { get; set; } = [];
     [JsonPropertyName("dks")] public List<MagneticDksValue> Dks { get; set; } = [];
+    [JsonPropertyName("global_actuation")] public MagneticGlobalActuationState GlobalActuation { get; set; } = new();
+    [JsonPropertyName("global_deadzone")] public MagneticGlobalDeadzoneState GlobalDeadzone { get; set; } = new();
+    [JsonPropertyName("global_rapid_trigger")] public MagneticGlobalRapidTriggerState GlobalRapidTrigger { get; set; } = new();
     [JsonPropertyName("host_profile")] public MagneticHostProfileState HostProfile { get; set; } = new();
     [JsonPropertyName("speedtap")] public MagneticSpeedTapState SpeedTap { get; set; } = new();
     [JsonPropertyName("static_analog_effect")] public MagneticKnownBool StaticAnalogEffect { get; set; } = new();
@@ -129,6 +158,9 @@ public interface IMagneticControlClient
     Task<MagneticStatus> SetSpeedTapMasterAsync(bool enabled);
     Task<MagneticStatus> ResetSpeedTapToProfileAsync();
     Task<MagneticStatus> SetStaticAnalogEffectAsync(bool enabled);
+    Task<MagneticStatus> SetGlobalActuationAsync(double mm);
+    Task<MagneticStatus> SetGlobalDeadzoneAsync(double topMm, double bottomMm);
+    Task<MagneticStatus> SetGlobalRapidTriggerAsync(double pressMm, double releaseMm, double topMm, double bottomMm, bool separateMode);
 }
 
 public sealed class MagneticControlClient(HttpClient? http = null) : IMagneticControlClient
@@ -165,6 +197,12 @@ public sealed class MagneticControlClient(HttpClient? http = null) : IMagneticCo
         SendAsync("speedtap/profile-reset", new { confirm_profile_baseline = true });
     public Task<MagneticStatus> SetStaticAnalogEffectAsync(bool enabled) =>
         SendAsync("analog-effect/static", new { enabled });
+    public Task<MagneticStatus> SetGlobalActuationAsync(double mm) =>
+        SendAsync("global/actuation", new { mm });
+    public Task<MagneticStatus> SetGlobalDeadzoneAsync(double topMm, double bottomMm) =>
+        SendAsync("global/deadzone", new { top_mm = topMm, bottom_mm = bottomMm });
+    public Task<MagneticStatus> SetGlobalRapidTriggerAsync(double pressMm, double releaseMm, double topMm, double bottomMm, bool separateMode) =>
+        SendAsync("global/rapid-trigger", new { press_mm = pressMm, release_mm = releaseMm, top_mm = topMm, bottom_mm = bottomMm, separate_mode = separateMode });
 
     private async Task<MagneticStatus> SendAsync(string path, object? body)
     {
