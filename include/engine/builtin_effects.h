@@ -1,6 +1,7 @@
 #pragma once
 
 #include "engine/effect.h"
+#include "monitor/key_input_hub.h"
 #include <cmath>
 #include <algorithm>
 #include <vector>
@@ -25,6 +26,11 @@ inline double ClampThickness(double t, double def = 1.0, double min_t = 0.1, dou
     return std::clamp(t, min_t, max_t);
 }
 
+struct ReleaseFade {
+    uint64_t observed_elapsed_ms{0};
+    uint64_t age_at_observation_ms{0};
+};
+
 // 1. 纯静态单色 (支持模拟按压触发增亮)
 class StaticEffect : public Effect {
 public:
@@ -38,7 +44,8 @@ public:
 private:
     ColorRGB color_;
     bool analog_{false};
-    std::unordered_map<std::string, double> analog_decays_;
+    std::unordered_map<std::string, ReleaseFade> analog_releases_;
+    uint64_t input_cursor_{KeyInputHub::Instance().CurrentSequence()};
 };
 
 // 2. 双色呼吸渐变
@@ -104,7 +111,8 @@ private:
     ColorRGB base_color_;
     ColorRGB trigger_color_;
     uint64_t speed_ms_;
-    std::unordered_map<std::string, double> key_decays_;
+    std::unordered_map<std::string, ReleaseFade> release_times_;
+    uint64_t input_cursor_{KeyInputHub::Instance().CurrentSequence()};
 };
 
 // 6. 涟漪扩散光效 (敲击按键向四周激发同心扩散波浪)
@@ -119,6 +127,7 @@ public:
     const ColorRGB& GetBaseColor() const { return base_color_; }
     const ColorRGB& GetTriggerColor() const { return trigger_color_; }
     double GetThickness() const { return thickness_; }
+    size_t GetActiveRippleCount() const { return ripples_.size(); }
 
 private:
     ColorRGB base_color_;
@@ -132,6 +141,7 @@ private:
         uint64_t start_ms{0};
     };
     std::vector<RippleWave> ripples_;
+    uint64_t input_cursor_{KeyInputHub::Instance().CurrentSequence()};
 };
 
 // 7. 星空 (繁星微光随机闪烁)

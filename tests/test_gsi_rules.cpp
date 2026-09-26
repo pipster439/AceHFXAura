@@ -20,6 +20,13 @@
 #include "engine/effect_engine.h"
 
 namespace aura {
+class KeyInputHubTestPeer {
+public:
+    static uint64_t Now() { return KeyInputHub::MonotonicMs(); }
+    static void RecordAt(KeyInputHub& hub, const std::string& key, KeyEventType type, uint64_t at_ms) {
+        hub.RecordKeyEventAt(key, type, at_ms);
+    }
+};
 double ParseAndClampThickness(const std::string& pname, const nlohmann::json& pval, double def_val = 1.0);
 double ParseAndClampThickness(const nlohmann::json& pval, double def_val = 1.0);
 std::shared_ptr<Effect> CreateEffectFromProfile(const std::string& pname, const nlohmann::json& pval);
@@ -1679,15 +1686,17 @@ int main() {
         // 18.3 KeyInputHub Copilot 宏消抖保护
         {
             auto& hub = aura::KeyInputHub::Instance();
-            std::vector<aura::KeyPressEvent> drained;
-            hub.DrainEvents(drained); // 清空历史
+            hub.Reset();
+            uint64_t cursor = hub.CurrentSequence();
+            std::vector<aura::KeyInputEvent> drained;
+            std::unordered_set<std::string> held;
 
             // 模拟 Windows 11 Copilot 组合键序列: L_WIN + L_SHIFT + F23
-            hub.RecordKeyPress("L_WIN");
-            hub.RecordKeyPress("L_SHIFT");
-            hub.RecordKeyPress("COPILOT");
+            hub.RecordKeyEvent("L_WIN", aura::KeyEventType::Down);
+            hub.RecordKeyEvent("L_SHIFT", aura::KeyEventType::Down);
+            hub.RecordKeyEvent("COPILOT", aura::KeyEventType::Down);
 
-            hub.DrainEvents(drained);
+            hub.ReadSince(cursor, drained, held);
             CHECK(drained.size() == 1, "Copilot 宏消抖后只保留单一按键事件");
             if (!drained.empty()) {
                 CHECK(drained[0].key_name == "COPILOT", "消抖后的保留事件为 COPILOT");
@@ -1873,8 +1882,8 @@ int main() {
 
             // 模拟按键激发涟漪
             auto& hub = aura::KeyInputHub::Instance();
-            hub.RecordKeyPress("SPACE");
-            hub.RecordKeyPress("W");
+            hub.RecordKeyEvent("SPACE", aura::KeyEventType::Down);
+            hub.RecordKeyEvent("W", aura::KeyEventType::Down);
 
             frame.Clear();
             for (uint64_t t = 0; t <= 2000; t += 200) {
@@ -1882,6 +1891,100 @@ int main() {
                 rip_zero.Render(t, frame, km);
             }
             CHECK(true, "RippleEffect 敲击同心扩散与极端下界厚度多帧渲染无除零无崩溃");
+        }
+
+        // alpha.6: lifecycle, independent readers, held lighting and elapsed-time release.
+        {
+            auto& hub = aura::KeyInputHub::Instance();
+            hub.Reset();
+            int led = -1;
+            CHECK(km.FindLedId("A", led) && led >= 0, "alpha6 fixture contains A");
+            auto red = [&] { return frame.buffer[static_cast<size_t>(led) * 3]; };
+            aura::ReactiveEffect reactive({0, 0, 0}, {200, 0, 0}, 1000);
+            aura::RippleEffect ripple({0, 0, 0}, {200, 0, 0}, 2500);
+            hub.RecordKeyEvent("A", aura::KeyEventType::Down);
+            reactive.Render(0, frame, km);
+            CHECK(red() == 200, "A: down activates Reactive");
+            ripple.Render(0, frame, km);
+            CHECK(ripple.GetActiveRippleCount() == 1, "F: down creates one ripple");
+            for (int i = 0; i < 20; ++i) hub.RecordKeyEvent("A", aura::KeyEventType::Down);
+            for (uint64_t t = 100; t <= 10000; t += 100) reactive.Render(t, frame, km);
+            CHECK(red() == 200, "A/B: held key stays active despite time and repeats");
+            ripple.Render(100, frame, km);
+            CHECK(ripple.GetActiveRippleCount() == 1, "G/J: repeat and hold produce no extra ripple");
+            hub.RecordKeyEvent("A", aura::KeyEventType::Up);
+            reactive.Render(10000, frame, km);
+            CHECK(red() == 200, "C: release begins fade at full intensity");
+            ripple.Render(10000, frame, km);
+            CHECK(ripple.GetActiveRippleCount() == 1, "H: up creates no ripple");
+            reactive.Render(10500, frame, km);
+            CHECK(red() == 100, "D: half release duration gives half intensity");
+            for (int i = 0; i < 20; ++i) reactive.Render(10500, frame, km);
+            CHECK(red() == 100, "D: repeated render at same time does not change fade");
+            reactive.Render(11000, frame, km);
+            CHECK(red() == 0, "C: released key returns to base");
+            hub.RecordKeyEvent("A", aura::KeyEventType::Up);
+            uint64_t cursor = hub.CurrentSequence();
+            std::vector<aura::KeyInputEvent> events;
+            std::unordered_set<std::string> held;
+            hub.ReadSince(cursor, events, held);
+            CHECK(events.empty() && held.empty(), "K: duplicate up is harmless");
+            hub.RecordKeyEvent("A", aura::KeyEventType::Down);
+            reactive.Render(12000, frame, km);
+            CHECK(red() == 200, "E: new physical down activates after release");
+            ripple.Render(12000, frame, km);
+            CHECK(ripple.GetActiveRippleCount() == 2, "I: release then press creates second ripple");
+            hub.Reset();
+            reactive.Render(12000, frame, km);
+            reactive.Render(13000, frame, km);
+            CHECK(red() == 0, "L: source reset releases held key");
+            aura::RippleEffect switched({0, 0, 0}, {200, 0, 0}, 2500);
+            switched.Render(0, frame, km);
+            CHECK(switched.GetActiveRippleCount() == 0, "L: new effect does not replay old press");
+            auto cached = std::make_shared<aura::Profile>();
+            cached->base_effect = std::make_shared<aura::RippleEffect>(
+                aura::ColorRGB(0, 0, 0), aura::ColorRGB(200, 0, 0));
+            hub.RecordKeyEvent("A", aura::KeyEventType::Down);
+            aura::EffectEngine engine;
+            engine.SetActiveProfile(cached);
+            engine.TickAt(0, frame, km);
+            CHECK(red() == 0, "L: activation skips past press");
+            hub.RecordKeyEvent("A", aura::KeyEventType::Up);
+            hub.RecordKeyEvent("A", aura::KeyEventType::Down);
+            engine.TickAt(1, frame, km);
+            CHECK(red() > 0, "L: active effect sees fresh press");
+            engine.SetActiveProfile(std::make_shared<aura::Profile>());
+            engine.SetActiveProfile(cached);
+            engine.TickAt(2, frame, km);
+            CHECK(red() == 0, "L: returning effect has no delayed ripple");
+            hub.Reset();
+        }
+
+        // A backdated event timestamp models a stalled renderer without sleeping.
+        {
+            auto& hub = aura::KeyInputHub::Instance();
+            hub.Reset();
+            int led = -1;
+            CHECK(km.FindLedId("A", led) && led >= 0, "fade stall fixture contains A");
+            auto red = [&] { return frame.buffer[static_cast<size_t>(led) * 3]; };
+            aura::ReactiveEffect reactive({0, 0, 0}, {200, 0, 0}, 1000);
+            aura::StaticEffect analog({0, 0, 0}, true);
+            const uint64_t now = aura::KeyInputHubTestPeer::Now();
+            aura::KeyInputHubTestPeer::RecordAt(hub, "A", aura::KeyEventType::Down, now - 700);
+            reactive.Render(0, frame, km);
+            CHECK(red() == 200, "held Reactive remains full before sparse render");
+            analog.Render(0, frame, km);
+            CHECK(red() == 255, "held Static highlight remains full");
+            aura::KeyInputHubTestPeer::RecordAt(hub, "A", aura::KeyEventType::Up, now - 600);
+            reactive.Render(700, frame, km);
+            CHECK(red() >= 75 && red() <= 81, "stalled Reactive first render includes 600 ms release age");
+            analog.Render(700, frame, km);
+            CHECK(red() >= 96 && red() <= 104, "stalled Static first render includes 600 ms release age");
+            reactive.Render(716, frame, km);
+            CHECK(red() >= 72 && red() <= 79, "60 FPS elapsed step preserves fade");
+            reactive.Render(733, frame, km);
+            CHECK(red() >= 69 && red() <= 76, "30 FPS elapsed step preserves fade");
+            hub.Reset();
         }
 
         // 21.7 StarryNightEffect (繁星闪烁 + random_colors)

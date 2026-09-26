@@ -1,8 +1,22 @@
 #include "engine/effect_engine.h"
 #include "engine/plugin_manager.h"
+#include "engine/builtin_effects.h"
 #include "utils/logger.h"
 
 namespace aura {
+
+// Input effects own a read cursor and transient visuals. Give each activation a
+// fresh instance even when a cached Profile is selected again.
+static std::shared_ptr<Effect> FreshInputEffect(const std::shared_ptr<Effect>& effect) {
+    if (auto reactive = std::dynamic_pointer_cast<ReactiveEffect>(effect))
+        return std::make_shared<ReactiveEffect>(reactive->GetBaseColor(), reactive->GetTriggerColor(), reactive->GetSpeedMs());
+    if (auto ripple = std::dynamic_pointer_cast<RippleEffect>(effect))
+        return std::make_shared<RippleEffect>(ripple->GetBaseColor(), ripple->GetTriggerColor(),
+                                              ripple->GetSpeedMs(), ripple->GetThickness());
+    if (auto plain = std::dynamic_pointer_cast<StaticEffect>(effect); plain && plain->GetAnalog())
+        return std::make_shared<StaticEffect>(plain->GetColor(), true);
+    return effect;
+}
 
 EffectEngine::EffectEngine()
     : start_time_(std::chrono::steady_clock::now()),
@@ -17,6 +31,14 @@ void EffectEngine::SetActiveProfile(std::shared_ptr<const Profile> profile) {
         auto instance = PluginManager::Instance().CreateEffect(profile->plugin_name);
         if (instance) copy->base_effect = instance;
         profile = copy;
+    }
+    if (profile && profile->base_effect) {
+        auto fresh = FreshInputEffect(profile->base_effect);
+        if (fresh != profile->base_effect) {
+            auto copy = std::make_shared<Profile>(*profile);
+            copy->base_effect = std::move(fresh);
+            profile = std::move(copy);
+        }
     }
     profile_started_ms_ = GetElapsedMs();
     active_profile_ = std::move(profile);
@@ -40,6 +62,7 @@ bool EffectEngine::ReconcileProfile(std::shared_ptr<const Profile> profile) {
             if (!fresh) { LOG_WARN("[Automation base] Replacement unavailable; retaining prior base"); return false; }
             candidate->base_effect = fresh.GetEffect();
         }
+        candidate->base_effect = FreshInputEffect(candidate->base_effect);
         std::lock_guard<std::mutex> lock(profile_mutex_);
         active_profile_ = std::move(candidate); base_identity_ = identity; profile_started_ms_ = GetElapsedMs();
         return true;
