@@ -326,12 +326,16 @@ bool TestService() {
     const auto count_during = io_ptr->reports.size();
     const auto busy = post("/api/magnetic/actuation", R"({"logical_id":1026,"mm":3.0})");
     const bool blocked_busy = busy && busy->status == 409 && io_ptr->reports.size() == count_during;
+    const auto busy_batch = post("/api/magnetic/batch/actuation",
+        R"({"logical_ids":[1793,1538],"millimeters":1.2})");
+    const bool blocked_busy_batch = busy_batch && busy_batch->status == 409 &&
+        io_ptr->reports.size() == count_during;
     const auto busy_ack = post("/api/magnetic/safety/acknowledge-external-resynchronization",
         R"({"confirm_external_resynchronization":true})");
     const bool blocked_busy_ack = busy_ack && busy_ack->status == 409;
     wait_ptr->Release();
     in_flight.join();
-    if (!blocked_busy || !blocked_busy_ack || !first_ok) return finish(false);
+    if (!blocked_busy || !blocked_busy_batch || !blocked_busy_ack || !first_ok) return finish(false);
 
     // After completion, status is Clean and quarantine is false:
     const auto clean_status = client.Get("/api/magnetic/status");
@@ -388,6 +392,135 @@ bool TestService() {
     const auto redundant_ack = post("/api/magnetic/safety/acknowledge-external-resynchronization",
         R"({"confirm_external_resynchronization":true})");
     if (!redundant_ack || redundant_ack->status != 409) return finish(false);
+
+    // Phase 3: a complete invalid request is rejected before any physical report.
+    const auto before_batch = io_ptr->reports.size();
+    const auto empty_batch = post("/api/magnetic/batch/actuation", R"({"logical_ids":[],"millimeters":1.2})");
+    const auto duplicate_batch = post("/api/magnetic/batch/actuation", R"({"logical_ids":[1793,1793],"millimeters":1.2})");
+    const auto invalid_third = post("/api/magnetic/batch/actuation", R"({"logical_ids":[1793,1538,65535,769],"millimeters":1.2})");
+    const auto bad_step = post("/api/magnetic/batch/actuation", R"({"logical_ids":[1793,1538],"millimeters":1.25})");
+    Json too_many_ids = Json::array();
+    for (int i = 0; i < 69; ++i) too_many_ids.push_back(1793);
+    const auto too_many_request = Json{{"logical_ids", too_many_ids}, {"millimeters", 1.2}}.dump();
+    const auto too_many = post("/api/magnetic/batch/actuation", too_many_request.c_str());
+    if (!empty_batch || empty_batch->status != 422 || !duplicate_batch || duplicate_batch->status != 422 ||
+        !invalid_third || invalid_third->status != 422 || !bad_step || bad_step->status != 422 ||
+        !too_many || too_many->status != 422 || io_ptr->reports.size() != before_batch) return finish(false);
+
+    // The JSON order is reversed; the service executes audited keyboard order W,A,S,D.
+    const auto batch_act = post("/api/magnetic/batch/actuation",
+        R"({"logical_ids":[769,1794,1538,1793],"millimeters":1.2})");
+    if (!batch_act || batch_act->status != 200 || io_ptr->reports.size() != before_batch + 8)
+        return finish(false);
+    body = Json::parse(batch_act->body);
+    const auto& act_result = body.at("batch_result");
+    if (act_result.at("applied_count") != 4 || act_result.at("completed_fully") != true ||
+        act_result.at("results")[0].at("logical_id") != 1793 ||
+        act_result.at("results")[1].at("logical_id") != 1538 ||
+        act_result.at("results")[2].at("logical_id") != 1794 ||
+        act_result.at("results")[3].at("logical_id") != 769 ||
+        io_ptr->reports[before_batch][2] != 0x4f || io_ptr->reports[before_batch + 1][1] != 0x50)
+        return finish(false);
+
+    const auto before_dz = io_ptr->reports.size();
+    const auto batch_dz = post("/api/magnetic/batch/deadzone",
+        R"({"logical_ids":[1793,1538,1794,769],"top_mm":0.0,"bottom_mm":0.3})");
+    if (!batch_dz || batch_dz->status != 200 || io_ptr->reports.size() != before_dz + 8)
+        return finish(false);
+    for (size_t i = before_dz; i < io_ptr->reports.size(); i += 2)
+        if (io_ptr->reports[i][2] != 0x59 || io_ptr->reports[i][7] != 3 ||
+            io_ptr->reports[i][8] != 0 || io_ptr->reports[i + 1][1] != 0x50) return finish(false);
+
+    // No SessionApplied DKS knowledge after quarantine recovery: no-write conflict.
+    const auto before_rt = io_ptr->reports.size();
+    const auto rt_unknown = post("/api/magnetic/batch/rapid-trigger",
+        R"({"logical_ids":[1793,1538,1794,769],"action":"enable","press_mm":0.8,"release_mm":0.6,"resolve_dks":false})");
+    if (!rt_unknown || rt_unknown->status != 409 || io_ptr->reports.size() != before_rt) return finish(false);
+    body = Json::parse(rt_unknown->body);
+    if (body.at("batch_result").at("unknown_dks_keys").size() != 4 ||
+        body.at("batch_result").at("not_executed_count") != 4) return finish(false);
+    const auto rt_resolved = post("/api/magnetic/batch/rapid-trigger",
+        R"({"logical_ids":[1793,1538,1794,769],"action":"enable","press_mm":0.8,"release_mm":0.6,"resolve_dks":true})");
+    if (!rt_resolved || rt_resolved->status != 200 || io_ptr->reports.size() != before_rt + 32 ||
+        io_ptr->reports[before_rt][2] != 0x23 || io_ptr->reports[before_rt + 5][2] != 0x54)
+        return finish(false);
+    const auto rt_standard = post("/api/magnetic/batch/rapid-trigger",
+        R"({"logical_ids":[1793,1538],"action":"enable","press_mm":0.5,"release_mm":0.3,"resolve_dks":false})");
+    if (!rt_standard || rt_standard->status != 200) return finish(false);
+    const auto rt_disable = post("/api/magnetic/batch/rapid-trigger",
+        R"({"logical_ids":[1793,1538],"action":"disable"})");
+    if (!rt_disable || rt_disable->status != 200) return finish(false);
+    host.global_rt_press_raw.reset();
+    const auto before_unknown_baseline = io_ptr->reports.size();
+    const auto no_baseline = post("/api/magnetic/batch/rapid-trigger",
+        R"({"logical_ids":[1793,1538],"action":"disable"})");
+    if (!no_baseline || no_baseline->status != 409 ||
+        io_ptr->reports.size() != before_unknown_baseline) return finish(false);
+    host.global_rt_press_raw = 4;
+
+    // Third transaction fails; the fourth key receives no report and no rollback occurs.
+    io_ptr->fail_at_stage = io_ptr->stages + 3;
+    const auto before_failure = io_ptr->reports.size();
+    const auto partial_batch = post("/api/magnetic/batch/actuation",
+        R"({"logical_ids":[1793,1538,1794,769],"millimeters":2.0})");
+    if (!partial_batch || partial_batch->status != 207 || !latch->armed ||
+        io_ptr->reports.size() != before_failure + 5) return finish(false);
+    body = Json::parse(partial_batch->body);
+    const auto& partial = body.at("batch_result");
+    if (partial.at("applied_count") != 2 || partial.at("failed_count") != 1 ||
+        partial.at("not_executed_count") != 1 ||
+        partial.at("results")[0].at("status") != "Applied" ||
+        partial.at("results")[1].at("status") != "Applied" ||
+        partial.at("results")[2].at("status") != "Failed" ||
+        partial.at("results")[3].at("status") != "NotExecuted") return finish(false);
+    const auto before_quarantine = io_ptr->reports.size();
+    const auto quarantined_batch = post("/api/magnetic/batch/deadzone",
+        R"({"logical_ids":[1793],"top_mm":0.0,"bottom_mm":0.1})");
+    if (!quarantined_batch || quarantined_batch->status != 409 ||
+        io_ptr->reports.size() != before_quarantine) return finish(false);
+
+    const auto recovery = post("/api/magnetic/safety/acknowledge-external-resynchronization",
+        R"({"confirm_external_resynchronization":true})");
+    if (!recovery || recovery->status != 200) return finish(false);
+    const auto configured_dks = post("/api/magnetic/dks",
+        R"({"logical_id":1793,"start_mm":1.0,"end_mm":3.0,"resolve_rt":false,"slots":[{"target":{"kind":"DefaultSentinel"},"down_start":"Inactive","down_end":"Inactive","up_start":"Inactive","up_end":"Inactive"},{"target":{"kind":"DefaultSentinel"},"down_start":"Inactive","down_end":"Inactive","up_start":"Inactive","up_end":"Inactive"},{"target":{"kind":"DefaultSentinel"},"down_start":"Inactive","down_end":"Inactive","up_start":"Inactive","up_end":"Inactive"},{"target":{"kind":"DefaultSentinel"},"down_start":"Inactive","down_end":"Inactive","up_start":"Inactive","up_end":"Inactive"}]})");
+    if (!configured_dks || configured_dks->status != 200) return finish(false);
+    const auto before_configured_conflict = io_ptr->reports.size();
+    const auto configured_conflict = post("/api/magnetic/batch/rapid-trigger",
+        R"({"logical_ids":[1793,1538],"action":"enable","press_mm":0.8,"release_mm":0.6,"resolve_dks":false})");
+    if (!configured_conflict || configured_conflict->status != 409 ||
+        io_ptr->reports.size() != before_configured_conflict) return finish(false);
+    body = Json::parse(configured_conflict->body);
+    if (body.at("batch_result").at("configured_dks_keys") != Json::array({1793}) ||
+        body.at("batch_result").at("unknown_dks_keys") != Json::array({1538})) return finish(false);
+
+    // A failed standard rewrite must never submit RT for that key or any later key.
+    io_ptr->fail_at_stage = io_ptr->stages + 1;
+    const auto before_restore_fail = io_ptr->reports.size();
+    const auto restore_fail = post("/api/magnetic/batch/rapid-trigger",
+        R"({"logical_ids":[1793,1538],"action":"enable","press_mm":0.8,"release_mm":0.6,"resolve_dks":true})");
+    if (!restore_fail || restore_fail->status != 409 ||
+        io_ptr->reports.size() != before_restore_fail + 1 ||
+        io_ptr->reports.back()[2] != 0x23) return finish(false);
+    body = Json::parse(restore_fail->body);
+    if (body.at("batch_result").at("results")[0].at("status") != "Failed" ||
+        body.at("batch_result").at("results")[1].at("status") != "NotExecuted") return finish(false);
+    const auto recover_again = post("/api/magnetic/safety/acknowledge-external-resynchronization",
+        R"({"confirm_external_resynchronization":true})");
+    if (!recover_again || recover_again->status != 200) return finish(false);
+
+    // Standard rewrite succeeds; RT stage fails. The response names the partial side effect.
+    io_ptr->fail_at_stage = io_ptr->stages + 5;
+    const auto before_rt_fail = io_ptr->reports.size();
+    const auto rt_after_restore_fail = post("/api/magnetic/batch/rapid-trigger",
+        R"({"logical_ids":[1793,1538],"action":"enable","press_mm":0.8,"release_mm":0.6,"resolve_dks":true})");
+    if (!rt_after_restore_fail || rt_after_restore_fail->status != 409 ||
+        io_ptr->reports.size() != before_rt_fail + 6 ||
+        io_ptr->reports[before_rt_fail + 5][2] != 0x54) return finish(false);
+    body = Json::parse(rt_after_restore_fail->body);
+    if (body.at("batch_result").at("results")[0].at("detail").get<std::string>().find(
+            "DKS restored before RT submission failed") == std::string::npos ||
+        body.at("batch_result").at("results")[1].at("status") != "NotExecuted") return finish(false);
 
     return finish(true);
 }

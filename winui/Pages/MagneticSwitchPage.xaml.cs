@@ -5,13 +5,18 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using System.Runtime.InteropServices;
 
 namespace Aura_WinUI.Pages;
 
 public sealed partial class MagneticSwitchPage : Page
 {
+    [DllImport("user32.dll")]
+    private static extern short GetKeyState(int virtualKey);
     private MagneticSettingsModel _model;
     private readonly Dictionary<ushort, Button> _keyButtons = [];
+    private readonly Dictionary<ushort, (TextBlock Legend, TextBlock Actuation, TextBlock RtPress,
+        TextBlock RtRelease)> _keycapParts = [];
     private readonly List<Canvas> _keyboardCanvases = [];
     private readonly List<(ComboBox Target, ComboBox DownStart, ComboBox DownEnd,
         ComboBox UpStart, ComboBox UpEnd)> _dksControls = [];
@@ -32,12 +37,27 @@ public sealed partial class MagneticSwitchPage : Page
     {
         _model = model;
         InitializeComponent();
+        // Set fractional ranges in code: XAML numeric conversion can follow the host locale.
+        _rendering = true;
+        ConfigureSlider(ActuationSlider, 0.1, 4.0);
+        ConfigureSlider(PressSlider, 0.1, 2.5);
+        ConfigureSlider(ReleaseSlider, 0.1, 2.5);
+        ConfigureSlider(TopSlider, 0, 0.5);
+        ConfigureSlider(BottomSlider, 0, 0.5);
+        ConfigureSlider(DksStartSlider, 0.1, 4.0);
+        ConfigureSlider(DksEndSlider, 0.1, 4.0);
+        _rendering = false;
         AutomationProperties.SetAutomationId(_quarantineRecoveryButton, "MagneticQuarantineRecoveryButton");
         _quarantineRecoveryButton.Click += QuarantineRecoveryButton_Click;
         HealthBar.ActionButton = _quarantineRecoveryButton;
         NavigationCacheMode = Microsoft.UI.Xaml.Navigation.NavigationCacheMode.Required;
         BuildKeyboard();
         BuildDksEditor();
+        FillBatchPicker(BatchActuationPicker, 1, 40);
+        FillBatchPicker(BatchRtPressPicker, 1, 25);
+        FillBatchPicker(BatchRtReleasePicker, 1, 25);
+        FillBatchPicker(BatchTopPicker, 0, 5);
+        FillBatchPicker(BatchBottomPicker, 0, 5);
         foreach (var key in MagneticKeyLayout.Keys)
         {
             SpeedTapKey1.Items.Add(new ComboBoxItem { Content = key.FullName, Tag = key.LogicalId });
@@ -45,25 +65,22 @@ public sealed partial class MagneticSwitchPage : Page
         }
         PageLayout.Attach(this, PageScroll, PageContent, width =>
         {
-            bool wide = width >= 1180;
-            ContentColumns.ColumnDefinitions[0].Width = wide ? GridLength.Auto : new GridLength(1, GridUnitType.Star);
-            ContentColumns.ColumnDefinitions[1].Width = wide ? new GridLength(460) : new GridLength(0);
+            bool wide = width >= 1120;
+            double detailsWidth = wide ? Math.Clamp(360 + (width - 1120) * 0.25, 360, 440) : 0;
+            ContentColumns.ColumnDefinitions[0].Width = new GridLength(1, GridUnitType.Star);
+            ContentColumns.ColumnDefinitions[1].Width = new GridLength(detailsWidth);
             Grid.SetColumn(DetailsPanel, wide ? 1 : 0);
             Grid.SetRow(DetailsPanel, wide ? 0 : 1);
+            Grid.SetRow(CommonLowerGrid, wide ? 1 : 2);
+            Grid.SetRow(GlobalFeaturesPanel, wide ? 2 : 3);
+            bool twoCommonColumns = width >= 800;
+            CommonLowerGrid.ColumnDefinitions[1].Width = twoCommonColumns ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
+            Grid.SetColumn(DeadzoneHost, twoCommonColumns ? 1 : 0);
+            Grid.SetRow(DeadzoneHost, twoCommonColumns ? 0 : 1);
+            PageLayout.Columns(DksSlotsHost, width >= 800 ? 2 : 1);
 
-            // Responsive positioning for GlobalFeaturesPanel:
-            // Wide: Row 1, ColumnSpan 2 (spans beneath Keyboard and Details)
-            // Stacked: Row 2, ColumnSpan 1
-            Grid.SetRow(GlobalFeaturesPanel, wide ? 1 : 2);
-            Grid.SetColumnSpan(GlobalFeaturesPanel, wide ? 2 : 1);
-
-            // Responsive DKS slots layout:
-            // In wide mode (2-column layout), DetailsPanel is 460px -> 1 column of slots avoids horizontal clipping.
-            // In stacked mode with width >= 800 (e.g. 1060px desktop), DetailsPanel is full-width -> 2x2 grid is balanced.
-            int dksCols = (!wide && width >= 800) ? 2 : 1;
-            PageLayout.Columns(DksSlotsHost, dksCols);
-
-            double unit = wide ? Math.Clamp((width - 500) / 19.5, 38.0, 44.0) : 38.0;
+            double keyboardWidth = width - detailsWidth - (wide ? 20 : 0);
+            double unit = wide ? Math.Clamp((keyboardWidth - 32 - 56 - 24) / 16.75, 34.0, 44.0) : 38.0;
             foreach (var key in MagneticKeyLayout.Keys)
             {
                 var button = _keyButtons[key.LogicalId];
@@ -83,7 +100,27 @@ public sealed partial class MagneticSwitchPage : Page
             await _model.RefreshAsync();
             Render();
         };
+        ActualThemeChanged += (_, _) => Render();
         Render();
+    }
+
+    private static void ConfigureSlider(Slider slider, double minimum, double maximum)
+    {
+        slider.Maximum = maximum;
+        slider.Minimum = minimum;
+        slider.StepFrequency = 0.1;
+        slider.Value = minimum;
+    }
+
+    private static void FillBatchPicker(ComboBox picker, int minRaw, int maxRaw)
+    {
+        for (int raw = minRaw; raw <= maxRaw; ++raw)
+            picker.Items.Add(new ComboBoxItem { Content = $"{raw / 10.0:F1} mm", Tag = raw / 10.0 });
+    }
+
+    private static void ShowBatchChoice(ComboBox picker, double? value, int minRaw)
+    {
+        picker.SelectedIndex = value is double mm ? (int)Math.Round(mm * 10) - minRaw : -1;
     }
 
     internal void SetModelForValidation(MagneticSettingsModel model)
@@ -173,13 +210,42 @@ public sealed partial class MagneticSwitchPage : Page
             var panel = new Canvas { Height = 38 };
             foreach (var key in MagneticKeyLayout.Keys.Where(key => key.Row == row))
             {
+                var keycap = new Grid { IsHitTestVisible = false, MinWidth = 0, MinHeight = 0 };
+                TextBlock Corner(string name, HorizontalAlignment horizontal, VerticalAlignment vertical)
+                {
+                    return new TextBlock {
+                        Name = name, Text = "—", FontSize = 7.5, Opacity = 0.82,
+                        TextTrimming = TextTrimming.CharacterEllipsis, MaxLines = 1,
+                        HorizontalAlignment = horizontal, VerticalAlignment = vertical,
+                        Margin = new Thickness(2, 1, 2, 1)
+                    };
+                }
+                var legend = new TextBlock {
+                    Name = $"MagneticKeyLegend{key.LogicalId:X4}", Text = key.Label,
+                    FontSize = 12, FontWeight = FontWeights.SemiBold,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    IsHitTestVisible = false
+                };
+                var actuation = Corner($"MagneticKeyActuation{key.LogicalId:X4}",
+                    HorizontalAlignment.Left, VerticalAlignment.Top);
+                var rtPress = Corner($"MagneticKeyRtPress{key.LogicalId:X4}",
+                    HorizontalAlignment.Right, VerticalAlignment.Top);
+                var rtRelease = Corner($"MagneticKeyRtRelease{key.LogicalId:X4}",
+                    HorizontalAlignment.Right, VerticalAlignment.Bottom);
+                keycap.Children.Add(actuation);
+                keycap.Children.Add(rtPress);
+                keycap.Children.Add(rtRelease);
+                keycap.Children.Add(legend);
                 var button = new Button
                 {
-                    Content = key.Label,
+                    Content = keycap,
                     Width = 38 * key.Units,
                     Height = 38,
                     MinWidth = 0,
                     Padding = new Thickness(1),
+                    HorizontalContentAlignment = HorizontalAlignment.Stretch,
+                    VerticalContentAlignment = VerticalAlignment.Stretch,
                     CornerRadius = new CornerRadius(5),
                     FontSize = 12,
                     FontWeight = FontWeights.SemiBold,
@@ -191,6 +257,7 @@ public sealed partial class MagneticSwitchPage : Page
                 button.Click += Key_Click;
                 panel.Children.Add(button);
                 _keyButtons.Add(key.LogicalId, button);
+                _keycapParts.Add(key.LogicalId, (legend, actuation, rtPress, rtRelease));
             }
             panel.Width = MagneticKeyLayout.RightmostColumn(38) + 1.3 * 38;
             _keyboardCanvases.Add(panel);
@@ -200,7 +267,9 @@ public sealed partial class MagneticSwitchPage : Page
 
     private void Key_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is Button { Tag: ushort logicalId } && _model.Select(logicalId)) Render();
+        if (sender is not Button { Tag: ushort logicalId }) return;
+        bool ctrl = (GetKeyState(0x11) & 0x8000) != 0;
+        if ((ctrl || _model.IsMultiMode) ? _model.ToggleMulti(logicalId) : _model.Select(logicalId)) Render();
     }
 
     private void Render()
@@ -215,10 +284,14 @@ public sealed partial class MagneticSwitchPage : Page
             var actuation = status?.Actuation.FirstOrDefault(value => value.LogicalId == key);
             var rt = status?.RapidTrigger.FirstOrDefault(value => value.LogicalId == key);
             var deadzone = status?.Deadzone.FirstOrDefault(value => value.LogicalId == key);
-            var dks = status?.Dks.FirstOrDefault(value => value.LogicalId == key);
+            var dks = status?.Dks.FirstOrDefault(value => value.LogicalId == key && value.Source == "SessionApplied");
 
             GlobalSelectButton.Style = _model.IsGlobalMode ? (Style)Application.Current.Resources["AccentButtonStyle"] : null;
+            MultiSelectButton.Style = _model.IsMultiMode ? (Style)Application.Current.Resources["AccentButtonStyle"] : null;
+            ClearSelectionButton.Visibility = _model.IsMultiMode ? Visibility.Visible : Visibility.Collapsed;
+            ClearSelectionButton.IsEnabled = _model.IsMultiMode && _model.SelectedCount > 0 && !_model.Busy;
             GlobalContextNotice.IsOpen = _model.IsGlobalMode;
+            MultiContextNotice.IsOpen = _model.IsMultiMode;
 
             // 1. Selected Key / Global Hero Presentation
             if (_model.IsGlobalMode)
@@ -229,8 +302,7 @@ public sealed partial class MagneticSwitchPage : Page
                 SelectedKeyHeroTitle.Text = "全部按键";
                 SelectedKeyHeroDesc.Text = "全局磁轴设置";
                 SelectedKeyTagText.Text = "全局基础值";
-                SelectedKeyDebugInfo.Text = "Global";
-                SelectedKeyText.Text = "已选按键：全部按键 (全局磁轴设置)";
+                SelectedKeyDebugInfo.Text = "";
 
                 foreach (var (_, button) in _keyButtons) button.Style = null;
             }
@@ -243,11 +315,20 @@ public sealed partial class MagneticSwitchPage : Page
                 SelectedKeyHeroDesc.Text = $"Row {selected.Row + 1} · 实体按键";
                 SelectedKeyTagText.Text = "选中按键";
                 SelectedKeyDebugInfo.Text = $"0x{selected.LogicalId:X4}";
-                SelectedKeyText.Text = $"已选按键：{selected.FullName}";
 
                 foreach (var (id, button) in _keyButtons)
                     button.Style = id == _model.SelectedLogicalId ?
                         (Style)Application.Current.Resources["AccentButtonStyle"] : null;
+            }
+            else if (_model.IsMultiMode)
+            {
+                KeyCapVisualText.Text = _model.SelectedCount.ToString();
+                KeyCapVisualBorder.Background = (Brush)Application.Current.Resources["AccentFillColorDefaultBrush"];
+                KeyCapVisualText.Foreground = (Brush)Application.Current.Resources["TextOnAccentFillColorPrimaryBrush"];
+                SelectedKeyHeroTitle.Text = $"{_model.SelectedCount} 个按键";
+                SelectedKeyHeroDesc.Text = _model.MultiSelectionSummary;
+                SelectedKeyTagText.Text = "多键选择";
+                SelectedKeyDebugInfo.Text = "";
             }
             else
             {
@@ -258,10 +339,50 @@ public sealed partial class MagneticSwitchPage : Page
                 SelectedKeyHeroDesc.Text = "请在左侧键盘中点击任意实体按键开始配置";
                 SelectedKeyTagText.Text = "未选择";
                 SelectedKeyDebugInfo.Text = "";
-                SelectedKeyText.Text = "已选按键：无";
-
                 foreach (var (_, button) in _keyButtons) button.Style = null;
             }
+
+            foreach (var (id, button) in _keyButtons)
+            {
+                bool isSelected = _model.SelectedLogicalId == id || _model.IsMultiMode && _model.SelectedLogicalIds.Contains(id);
+                button.Style = isSelected ? (Style)Application.Current.Resources["AccentButtonStyle"] : null;
+                var visual = MagneticKeyLayout.Find(id)!;
+                var overlay = _model.KeyOverlay(id);
+                var parts = _keycapParts[id];
+                parts.Actuation.Text = overlay.ActuationText;
+                parts.RtPress.Text = overlay.RtPressText;
+                parts.RtRelease.Text = overlay.RtReleaseText;
+                // The Button's theme-aware foreground also tracks its AccentButtonStyle.
+                // A brush fetched from Application.Resources can have the wrong theme
+                // when only this window requests Light or Dark.
+                parts.Legend.Foreground = button.Foreground;
+                parts.Actuation.Foreground = button.Foreground;
+                parts.RtPress.Foreground = button.Foreground;
+                parts.RtRelease.Foreground = button.Foreground;
+                button.BorderThickness = new Thickness(isSelected ? 2 : 1);
+                button.IsEnabled = !_model.Busy;
+                AutomationProperties.SetName(button, $"{visual.FullName}，{(isSelected ? "已选择" : "未选择")}，{overlay.AccessibilityText}");
+                AutomationProperties.SetHelpText(button, "键帽显示已知逐键配置，非设备读回。点击选中；Ctrl+点击切换多选；多选模式中点击切换选择");
+            }
+            AutomationProperties.SetName(SelectedKeyHeroCard, SelectedKeyHeroTitle.Text + "，" + SelectedKeyTagText.Text);
+            AutomationProperties.SetName(MultiSelectButton, _model.IsMultiMode ?
+                $"多选模式，已选择 {_model.SelectedCount} 个按键" : "进入多选模式");
+            GlobalSelectButton.IsEnabled = !_model.Busy;
+            MultiSelectButton.IsEnabled = !_model.Busy;
+            MultiContextNotice.Message = _model.SelectedCount >= 12 ?
+                "批量设置会逐个安全应用，选择的按键较多时可能需要一些时间。" :
+                "批量设置按键逐个安全应用；每个按键保留独立事务。";
+            var batchResult = _model.LastBatchResult;
+            BatchResultBar.IsOpen = batchResult is { AppliedCount: > 0 } or { FailedCount: > 0 };
+            BatchResultBar.Severity = batchResult?.CompletedFully == true ? InfoBarSeverity.Success : InfoBarSeverity.Error;
+            BatchResultBar.Title = batchResult?.CompletedFully == true ? "批量应用完成" : "批量应用未完整完成";
+            BatchResultBar.Message = batchResult == null ? "" :
+                $"已应用：{batchResult.AppliedCount} · 失败：{batchResult.FailedCount} · 未执行：{batchResult.NotExecutedCount}";
+            BatchResultDetailsText.Visibility = batchResult == null ? Visibility.Collapsed : Visibility.Visible;
+            BatchResultDetailsText.Text = batchResult == null ? "" : string.Join("\n", batchResult.Results.Select(item =>
+                $"{MagneticKeyLayout.Find(item.LogicalId)?.Label ?? $"0x{item.LogicalId:X4}"}  {item.Status switch {
+                    "Applied" => "已应用", "Failed" => "失败", _ => "未执行"}}" +
+                (string.IsNullOrWhiteSpace(item.Detail) ? "" : $"：{item.Detail}")));
 
             RapidTriggerMasterStatusText.Text = _model.RapidTriggerMasterText;
             RapidTriggerMasterExplanationText.Text = MagneticSettingsModel.RapidTriggerMasterExplanation;
@@ -275,7 +396,7 @@ public sealed partial class MagneticSwitchPage : Page
                 RapidTriggerCard.Description = "全键盘按键基础灵敏度与独立按下/抬起模式";
                 DeadzoneCard.Header = "全局死区设置";
                 DeadzoneCard.Description = "全键盘按键基础死区 (0.0–0.5 mm)；不清除已有逐键覆盖";
-                DksExpander.Visibility = Visibility.Collapsed;
+                DksSection.Visibility = Visibility.Collapsed;
 
                 RapidTriggerToggle.Visibility = Visibility.Collapsed;
                 SeparateModeToggle.Visibility = Visibility.Visible;
@@ -370,7 +491,9 @@ public sealed partial class MagneticSwitchPage : Page
                 RapidTriggerCard.Description = "根据移动方向即时重置与重新触发";
                 DeadzoneCard.Header = "死区设置";
                 DeadzoneCard.Description = "消除微触误触与触底杂音 (0.0–0.5 mm)";
-                DksExpander.Visibility = Visibility.Visible;
+                DksSection.Visibility = _model.IsMultiMode ? Visibility.Collapsed : Visibility.Visible;
+                DksExpander.Visibility = _model.DksEditorOpen ? Visibility.Visible : Visibility.Collapsed;
+                if (!_model.DksEditorOpen) DksExpander.IsExpanded = false;
 
                 RapidTriggerToggle.Visibility = Visibility.Visible;
                 SeparateModeToggle.Visibility = Visibility.Collapsed;
@@ -446,8 +569,11 @@ public sealed partial class MagneticSwitchPage : Page
                 "已保存配置：此键使用快速触发（灵敏度未知）";
             DeadzoneAppliedText.Text = deadzone == null ? "此键逐键死区：未知（可参考下方已保存全局值）" :
                 $"{SourceLabel(deadzone.Source)}：顶部 {deadzone.TopRaw / 10.0:F1} mm，底部 {deadzone.BottomRaw / 10.0:F1} mm";
-            DksAppliedText.Text = dks == null ? "当前来源：未知" :
-                $"{SourceLabel(dks.Source)}：{(dks.StandardRuntimeConfiguration ? "标准按键行为" : $"DKS {dks.StartRaw / 10.0:F1}–{dks.EndRaw / 10.0:F1} mm")}";
+            DksStatusText.Text = _model.DksStateText;
+            AutomationProperties.SetName(DksStatusText, _model.DksStateText);
+            DksAppliedText.Text = _model.DksState == MagneticDksState.SessionConfigured && dks != null ?
+                $"本次会话：DKS {dks.StartRaw / 10.0:F1}–{dks.EndRaw / 10.0:F1} mm" :
+                _model.DksStateText;
 
             // 5. Apply Affordance & Dirty Highlighting
             bool actuationDirty = _model.CanWriteSelected && draft?.ActuationMm != null;
@@ -471,7 +597,69 @@ public sealed partial class MagneticSwitchPage : Page
             DksApplyButton.IsEnabled = dksDirty;
             DksApplyButton.Style = dksDirty ? (Style)Application.Current.Resources["AccentButtonStyle"] : null;
             DksStandardButton.IsEnabled = _model.CanWriteSelected;
+            DksConfigureButton.IsEnabled = !_model.Busy && !_model.Refreshing;
             }
+
+            if (_model.IsMultiMode)
+            {
+                DksSection.Visibility = Visibility.Collapsed;
+                RapidTriggerToggle.Visibility = Visibility.Collapsed;
+                SeparateModeToggle.Visibility = Visibility.Collapsed;
+                foreach (var slider in new[] { ActuationSlider, PressSlider, ReleaseSlider, TopSlider, BottomSlider })
+                    slider.Visibility = Visibility.Collapsed;
+                ActuationAppliedText.Text = _model.MultiActuationText;
+                RapidTriggerAppliedText.Text = _model.MultiRapidTriggerText;
+                DeadzoneAppliedText.Text = _model.MultiDeadzoneText;
+                ActuationValueDisplay.Text = "—";
+                PressValueDisplay.Text = "—";
+                ReleaseValueDisplay.Text = "—";
+                TopValueDisplay.Text = "—";
+                BottomValueDisplay.Text = "—";
+                var batch = _model.BatchDraft;
+                ActuationDraftText.Text = Label("批量草稿", batch.ActuationMm);
+                PressDraftText.Text = Label("按下批量草稿", batch.PressMm);
+                ReleaseDraftText.Text = Label("抬起批量草稿", batch.ReleaseMm);
+                TopDraftText.Text = Label("顶部批量草稿", batch.TopMm);
+                BottomDraftText.Text = Label("底部批量草稿", batch.BottomMm);
+                ShowBatchChoice(BatchActuationPicker, batch.ActuationMm, 1);
+                ShowBatchChoice(BatchRtPressPicker, batch.PressMm, 1);
+                ShowBatchChoice(BatchRtReleasePicker, batch.ReleaseMm, 1);
+                ShowBatchChoice(BatchTopPicker, batch.TopMm, 0);
+                ShowBatchChoice(BatchBottomPicker, batch.BottomMm, 0);
+                BatchRtActionPicker.SelectedIndex = (int)batch.RtAction;
+                bool enable = batch.RtAction == MagneticBatchRtAction.Enable;
+                BatchRtPressPicker.Visibility = enable ? Visibility.Visible : Visibility.Collapsed;
+                BatchRtReleasePicker.Visibility = enable ? Visibility.Visible : Visibility.Collapsed;
+                RapidTriggerDisableWarningText.Visibility = batch.RtAction == MagneticBatchRtAction.Disable &&
+                    !_model.CanBatchRapidTrigger ? Visibility.Visible : Visibility.Collapsed;
+                RapidTriggerDisableWarningText.Text = "缺少可信来源的全局 RT 按下/抬起灵敏度，无法批量禁用。";
+                ActuationApplyButton.IsEnabled = _model.CanBatchActuation;
+                RapidTriggerApplyButton.IsEnabled = _model.CanBatchRapidTrigger;
+                DeadzoneApplyButton.IsEnabled = _model.CanBatchDeadzone;
+                foreach (var button in new[] { ActuationApplyButton, RapidTriggerApplyButton, DeadzoneApplyButton })
+                {
+                    button.Content = $"应用到 {_model.SelectedCount} 个按键";
+                    button.Style = button.IsEnabled ? (Style)Application.Current.Resources["AccentButtonStyle"] : null;
+                }
+            }
+            else
+            {
+                foreach (var slider in new[] { ActuationSlider, PressSlider, ReleaseSlider, TopSlider, BottomSlider })
+                    slider.Visibility = Visibility.Visible;
+                RapidTriggerDisableWarningText.Text = "当前无法确认已保存的全局灵敏度基线，暂无法安全禁用单键 RT。";
+            }
+            foreach (var picker in new[] { BatchActuationPicker, BatchRtActionPicker, BatchRtPressPicker,
+                BatchRtReleasePicker, BatchTopPicker, BatchBottomPicker })
+            {
+                if (picker != BatchRtPressPicker && picker != BatchRtReleasePicker)
+                    picker.Visibility = _model.IsMultiMode ? Visibility.Visible : Visibility.Collapsed;
+                picker.IsEnabled = _model.CanWrite && _model.IsMultiMode;
+            }
+            if (!_model.IsMultiMode) {
+                BatchRtPressPicker.Visibility = Visibility.Collapsed;
+                BatchRtReleasePicker.Visibility = Visibility.Collapsed;
+            }
+            BatchDeadzoneNote.Visibility = _model.IsMultiMode ? Visibility.Visible : Visibility.Collapsed;
 
             // 6. Global Features & Provenance
             var host = status?.HostProfile;
@@ -581,6 +769,28 @@ public sealed partial class MagneticSwitchPage : Page
         Render();
     }
 
+    private void MultiSelectButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_rendering) return;
+        if (_model.EnterMulti()) Render();
+    }
+
+    private void ClearSelectionButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_rendering) return;
+        if (_model.ClearMulti()) Render();
+    }
+
+    private void DksConfigureButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_rendering) return;
+        if (_model.ConfigureDksEditor())
+        {
+            Render();
+            DksExpander.IsExpanded = true;
+        }
+    }
+
     private void ActuationSlider_ValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
     {
         if (_rendering) return;
@@ -672,11 +882,27 @@ public sealed partial class MagneticSwitchPage : Page
     }
     private async void ActuationApplyButton_Click(object sender, RoutedEventArgs e)
     {
+        if (_model.IsMultiMode) { await ApplyAsync(_model.ApplyBatchActuationAsync); return; }
         if (_model.IsGlobalMode) await ApplyAsync(_model.ApplyGlobalActuationAsync);
         else await ApplyAsync(_model.ApplyActuationAsync);
     }
     private async void RapidTriggerApplyButton_Click(object sender, RoutedEventArgs e)
     {
+        if (_model.IsMultiMode)
+        {
+            await ApplyAsync(() => _model.ApplyBatchRapidTriggerAsync());
+            var conflict = _model.LastBatchResult;
+            if (_model.BatchDraft.RtAction != MagneticBatchRtAction.Enable || conflict == null ||
+                conflict.AppliedCount != 0 || conflict.FailedCount != 0 ||
+                conflict.ConfiguredDksKeys.Count + conflict.UnknownDksKeys.Count == 0) return;
+            var copy = $"所选 {_model.SelectedCount} 个按键中：\n" +
+                $"{conflict.ConfiguredDksKeys.Count} 个已在本次会话配置 DKS，" +
+                $"{conflict.UnknownDksKeys.Count} 个 DKS 状态未知。\n\n" +
+                "快速触发与自定义 DKS 不应同时使用。继续后，Aura 会先将已配置或状态未知的按键恢复为标准按键行为，再逐个应用快速触发。";
+            if (await ConfirmAsync("批量快速触发与 DKS", copy, "继续", "取消"))
+                await ApplyAsync(() => _model.ApplyBatchRapidTriggerAsync(resolveDks: true));
+            return;
+        }
         if (_model.IsGlobalMode)
         {
             await ApplyAsync(_model.ApplyGlobalRapidTriggerAsync);
@@ -684,14 +910,50 @@ public sealed partial class MagneticSwitchPage : Page
         }
         var resolve = _model.Draft?.RapidTriggerEnabled == true && _model.RtConflictPossible;
         if (resolve && !await ConfirmAsync("DKS 与快速触发",
-            "启用逐键快速触发将先为此键恢复标准按键行为，再应用快速触发。两次操作分别提交。\n\n确认继续吗？",
+            _model.RtDksConflictCopy + "\n\n确认继续吗？",
             "继续", "取消")) return;
         await ApplyAsync(() => _model.ApplyRapidTriggerAsync(resolve));
     }
     private async void DeadzoneApplyButton_Click(object sender, RoutedEventArgs e)
     {
+        if (_model.IsMultiMode) { await ApplyAsync(_model.ApplyBatchDeadzoneAsync); return; }
         if (_model.IsGlobalMode) await ApplyAsync(_model.ApplyGlobalDeadzoneAsync);
         else await ApplyAsync(_model.ApplyDeadzoneAsync);
+    }
+
+    private static double? PickerValue(ComboBox picker) =>
+        picker.SelectedItem is ComboBoxItem { Tag: double value } ? value : null;
+
+    private void BatchActuationPicker_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_rendering || PickerValue(BatchActuationPicker) is not double value) return;
+        _model.EditBatchActuation(value); Render();
+    }
+    private void BatchRtActionPicker_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_rendering || BatchRtActionPicker.SelectedItem is not ComboBoxItem item) return;
+        if (Enum.TryParse<MagneticBatchRtAction>(item.Tag?.ToString(), out var action))
+            { _model.EditBatchRapidTrigger(action); Render(); }
+    }
+    private void BatchRtPressPicker_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_rendering || PickerValue(BatchRtPressPicker) is not double value) return;
+        _model.EditBatchRapidTrigger(MagneticBatchRtAction.Enable, press: value); Render();
+    }
+    private void BatchRtReleasePicker_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_rendering || PickerValue(BatchRtReleasePicker) is not double value) return;
+        _model.EditBatchRapidTrigger(MagneticBatchRtAction.Enable, release: value); Render();
+    }
+    private void BatchTopPicker_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_rendering || PickerValue(BatchTopPicker) is not double value) return;
+        _model.EditBatchDeadzone(value, null); Render();
+    }
+    private void BatchBottomPicker_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_rendering || PickerValue(BatchBottomPicker) is not double value) return;
+        _model.EditBatchDeadzone(null, value); Render();
     }
 
     private void DksStartSlider_ValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)

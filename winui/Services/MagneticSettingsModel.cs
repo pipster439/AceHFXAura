@@ -1,5 +1,29 @@
 namespace Aura_WinUI.Services;
 
+public enum MagneticSelectionContext { Global, Single, Multi }
+public enum MagneticDksState { Standard, SessionConfigured, Unknown }
+public enum MagneticBatchRtAction { Unchanged, Enable, Disable }
+public enum MagneticAggregateKind { Unknown, UniformKnown, MixedKnown, ContainsUnknown }
+public sealed record MagneticAggregate(MagneticAggregateKind Kind, string? Value, int KnownCount,
+    int UnknownCount, string? Source);
+public sealed record MagneticKeyOverlay(string ActuationText, string RtPressText, string RtReleaseText,
+    bool ActuationKnown, bool RtPressKnown, bool RtReleaseKnown, string AccessibilityText);
+
+public sealed class MagneticBatchDraft
+{
+    public double? ActuationMm { get; internal set; }
+    public double? TopMm { get; internal set; }
+    public double? BottomMm { get; internal set; }
+    public double? PressMm { get; internal set; }
+    public double? ReleaseMm { get; internal set; }
+    public MagneticBatchRtAction RtAction { get; internal set; }
+    internal void Clear()
+    {
+        ActuationMm = TopMm = BottomMm = PressMm = ReleaseMm = null;
+        RtAction = MagneticBatchRtAction.Unchanged;
+    }
+}
+
 public sealed class MagneticKeyDraft
 {
     public double? ActuationMm { get; set; }
@@ -29,6 +53,7 @@ public sealed class MagneticSettingsModel
     private readonly IMagneticControlClient _client;
     private readonly Func<ushort, (double PressMm, double ReleaseMm)?>? _inheritedRapidTrigger;
     private readonly Dictionary<ushort, MagneticKeyDraft> _drafts = [];
+    private readonly HashSet<ushort> _multiIds = [];
     private static readonly HashSet<string> TriggerStates = ["Inactive", "Tap", "Release", "Hold"];
 
     public MagneticSettingsModel(IMagneticControlClient client,
@@ -38,8 +63,20 @@ public sealed class MagneticSettingsModel
         _inheritedRapidTrigger = inheritedRapidTrigger;
     }
 
+    public MagneticSelectionContext SelectionContext { get; private set; } = MagneticSelectionContext.Global;
     public ushort? SelectedLogicalId { get; private set; }
-    public bool IsGlobalMode { get; private set; }
+    public bool IsGlobalMode => SelectionContext == MagneticSelectionContext.Global;
+    public bool IsMultiMode => SelectionContext == MagneticSelectionContext.Multi;
+    public IReadOnlyList<ushort> SelectedLogicalIds => MagneticKeyLayout.Keys
+        .Where(key => _multiIds.Contains(key.LogicalId)).Select(key => key.LogicalId).ToArray();
+    public int SelectedCount => _multiIds.Count;
+    public string MultiSelectionSummary => SelectedCount == 0 ? "尚未选择按键" :
+        SelectedCount <= 6 ? string.Join(" · ", MagneticKeyLayout.Keys
+            .Where(key => _multiIds.Contains(key.LogicalId)).Select(key => key.Label)) :
+        $"已选择 {SelectedCount} 个按键";
+    public bool DksEditorOpen { get; private set; }
+    public MagneticBatchDraft BatchDraft { get; } = new();
+    public MagneticBatchResult? LastBatchResult { get; private set; }
     public MagneticVisualKey? SelectedKey => SelectedLogicalId is ushort id ? MagneticKeyLayout.Find(id) : null;
     public MagneticKeyDraft? Draft => SelectedLogicalId is ushort id && _drafts.TryGetValue(id, out var draft) ? draft : null;
     public MagneticGlobalDraft GlobalDraft { get; } = new();
@@ -51,8 +88,17 @@ public sealed class MagneticSettingsModel
         Status?.Health is "IndeterminateStagedState" or "PersistentSafetyQuarantine" or "Stopped";
     public bool CanWrite => !Busy && !Refreshing && Status is {
         ApiVersion: 1, Available: true, Health: "Clean", PersistentSafetyQuarantine: false };
-    public bool CanWriteSelected => CanWrite && !IsGlobalMode && SelectedKey != null;
+    public bool CanWriteSelected => CanWrite && SelectionContext == MagneticSelectionContext.Single && SelectedKey != null;
     public bool CanWriteGlobal => CanWrite && IsGlobalMode;
+    public bool CanBatchActuation => CanWrite && IsMultiMode && SelectedCount > 0 && BatchDraft.ActuationMm is not null;
+    public bool CanBatchDeadzone => CanWrite && IsMultiMode && SelectedCount > 0 &&
+        BatchDraft.TopMm is not null && BatchDraft.BottomMm is not null;
+    public bool CanBatchRapidTrigger => CanWrite && IsMultiMode && SelectedCount > 0 &&
+        (BatchDraft.RtAction == MagneticBatchRtAction.Enable && BatchDraft.PressMm is not null &&
+            BatchDraft.ReleaseMm is not null ||
+         BatchDraft.RtAction == MagneticBatchRtAction.Disable &&
+            (Status?.GlobalRapidTrigger.Known == true || Status?.HostProfile is {
+                GlobalRtPress.Known: true, GlobalRtRelease.Known: true }));
     public bool CanDisableRapidTrigger => SelectedLogicalId is ushort id && InheritedRt(id) is not null;
     public string RapidTriggerMasterText =>
         Status?.RapidTriggerMaster is { Known: true } master ?
@@ -74,8 +120,58 @@ public sealed class MagneticSettingsModel
             return true;
         }
     }
-    public bool RtConflictPossible => SelectedLogicalId is ushort id &&
-        Status?.Dks.FirstOrDefault(v => v.LogicalId == id)?.StandardRuntimeConfiguration != true;
+    public MagneticDksState DksState
+    {
+        get
+        {
+            if (SelectedLogicalId is not ushort id) return MagneticDksState.Unknown;
+            var applied = Status?.Dks.FirstOrDefault(v => v.LogicalId == id && v.Source == "SessionApplied");
+            return applied == null ? MagneticDksState.Unknown :
+                applied.StandardRuntimeConfiguration ? MagneticDksState.Standard : MagneticDksState.SessionConfigured;
+        }
+    }
+    public string DksStateText => DksState switch {
+        MagneticDksState.Standard => "标准按键行为",
+        MagneticDksState.SessionConfigured => "本次会话已配置 DKS",
+        _ => "当前 DKS 状态未知"
+    };
+    public bool RtConflictPossible => SelectedLogicalId is not null && DksState != MagneticDksState.Standard;
+    public string RtDksConflictCopy => DksState == MagneticDksState.SessionConfigured ?
+        "此键在本次会话中已配置 DKS。继续后，Aura 会先将此键恢复为标准按键行为，再应用快速触发。两次操作分别提交。" :
+        "无法确认此键当前的 DKS 状态。快速触发与自定义 DKS 不应同时使用。继续后，Aura 会先将此键恢复为标准按键行为，再应用快速触发。两次操作分别提交。";
+    public MagneticAggregate MultiActuation => AggregateMulti(id => Status?.Actuation
+        .FirstOrDefault(v => v.LogicalId == id && KnownSource(v.Source)) is { } v ?
+            ($"{v.Raw / 10.0:F1} mm", v.Source) : null);
+    // HostProfile only knows per-key RT membership; its sensitivity is not a full known value.
+    public MagneticAggregate MultiRapidTrigger => AggregateMulti(id => Status?.RapidTrigger
+        .FirstOrDefault(v => v.LogicalId == id && v.Source == "SessionApplied") is { } v ?
+            ($"{(v.Enabled ? "开启" : "关闭")} · 按下 {v.PressRaw / 10.0:F1} / 抬起 {v.ReleaseRaw / 10.0:F1} mm",
+                v.Source) : null);
+    public MagneticAggregate MultiDeadzone => AggregateMulti(id => Status?.Deadzone
+        .FirstOrDefault(v => v.LogicalId == id && KnownSource(v.Source)) is { } v ?
+            ($"顶部 {v.TopRaw / 10.0:F1} / 底部 {v.BottomRaw / 10.0:F1} mm", v.Source) : null);
+    public string MultiActuationText => FormatAggregate(MultiActuation);
+    public string MultiRapidTriggerText => FormatAggregate(MultiRapidTrigger);
+    public string MultiDeadzoneText => FormatAggregate(MultiDeadzone);
+
+    public MagneticKeyOverlay KeyOverlay(ushort logicalId)
+    {
+        // Only exact per-key values qualify. Global baselines and local drafts are excluded.
+        var actuation = Status?.Actuation.FirstOrDefault(value => value.LogicalId == logicalId &&
+            value.Source == "SessionApplied") ?? Status?.Actuation.FirstOrDefault(value =>
+            value.LogicalId == logicalId && value.Source == "HostProfile");
+        var rt = Status?.RapidTrigger.FirstOrDefault(value => value.LogicalId == logicalId &&
+            value.Source == "SessionApplied");
+        bool actuationKnown = actuation != null;
+        bool rtKnown = rt is { Enabled: true };
+        string actuationText = actuationKnown ? $"{actuation!.Raw / 10.0:F1}" : "—";
+        string pressText = rtKnown ? $"↓{rt!.PressRaw / 10.0:F1}" : "—";
+        string releaseText = rtKnown ? $"↑{rt!.ReleaseRaw / 10.0:F1}" : "—";
+        string accessibility = $"{(actuationKnown ? $"触发点 {actuationText} mm" : "触发点未知")}，" +
+            (rtKnown ? $"RT 按下 {rt!.PressRaw / 10.0:F1} mm，RT 抬起 {rt.ReleaseRaw / 10.0:F1} mm" :
+                rt is { Enabled: false } ? "RT 已禁用，按下和抬起灵敏度不适用" : "RT 按下未知，RT 抬起未知");
+        return new(actuationText, pressText, releaseText, actuationKnown, rtKnown, rtKnown, accessibility);
+    }
 
     public ushort? SpeedTapKey1 { get; private set; }
     public ushort? SpeedTapKey2 { get; private set; }
@@ -89,7 +185,10 @@ public sealed class MagneticSettingsModel
     {
         if (Busy || MagneticKeyLayout.Find(logicalId) == null) return false;
         SelectedLogicalId = logicalId;
-        IsGlobalMode = false;
+        SelectionContext = MagneticSelectionContext.Single;
+        _multiIds.Clear();
+        BatchDraft.Clear(); LastBatchResult = null;
+        DksEditorOpen = false;
         _ = GetDraft(); // clone known session values into local editable state only
         return true;
     }
@@ -98,8 +197,121 @@ public sealed class MagneticSettingsModel
     {
         if (Busy) return false;
         SelectedLogicalId = null;
-        IsGlobalMode = true;
+        SelectionContext = MagneticSelectionContext.Global;
+        _multiIds.Clear();
+        BatchDraft.Clear(); LastBatchResult = null;
+        DksEditorOpen = false;
         return true;
+    }
+
+    public bool EnterMulti()
+    {
+        if (Busy) return false;
+        if (IsMultiMode) return true;
+        _multiIds.Clear();
+        BatchDraft.Clear(); LastBatchResult = null;
+        if (SelectedLogicalId is ushort id) _multiIds.Add(id);
+        SelectedLogicalId = null;
+        SelectionContext = MagneticSelectionContext.Multi;
+        DksEditorOpen = false;
+        return true;
+    }
+
+    public bool ToggleMulti(ushort logicalId)
+    {
+        if (Busy || MagneticKeyLayout.Find(logicalId) == null) return false;
+        if (!IsMultiMode && !EnterMulti()) return false;
+        if (!_multiIds.Add(logicalId)) _multiIds.Remove(logicalId);
+        BatchDraft.Clear(); LastBatchResult = null;
+        return true;
+    }
+
+    public bool ClearMulti()
+    {
+        if (Busy || !IsMultiMode) return false;
+        _multiIds.Clear();
+        BatchDraft.Clear(); LastBatchResult = null;
+        return true;
+    }
+
+    public bool ConfigureDksEditor()
+    {
+        if (Busy || SelectionContext != MagneticSelectionContext.Single) return false;
+        DksEditorOpen = true;
+        return true;
+    }
+
+    public void EditBatchActuation(double value)
+    {
+        if (!Busy && IsMultiMode && Valid(value, 0.1, 4.0)) BatchDraft.ActuationMm = Math.Round(value, 1);
+    }
+
+    public void EditBatchDeadzone(double? top, double? bottom)
+    {
+        if (Busy || !IsMultiMode) return;
+        if (top is double t && Valid(t, 0, 0.5)) BatchDraft.TopMm = Math.Round(t, 1);
+        if (bottom is double b && Valid(b, 0, 0.5)) BatchDraft.BottomMm = Math.Round(b, 1);
+    }
+
+    public void EditBatchRapidTrigger(MagneticBatchRtAction action, double? press = null, double? release = null)
+    {
+        if (Busy || !IsMultiMode) return;
+        BatchDraft.RtAction = action;
+        if (press is double p && Valid(p, 0.1, 2.5)) BatchDraft.PressMm = Math.Round(p, 1);
+        if (release is double r && Valid(r, 0.1, 2.5)) BatchDraft.ReleaseMm = Math.Round(r, 1);
+    }
+
+    public Task<bool> ApplyBatchActuationAsync() => !CanBatchActuation ? Task.FromResult(false) :
+        SubmitBatchAsync(ids => _client.SetBatchActuationAsync(ids, BatchDraft.ActuationMm!.Value),
+            () => BatchDraft.ActuationMm = null);
+
+    public Task<bool> ApplyBatchDeadzoneAsync() => !CanBatchDeadzone ? Task.FromResult(false) :
+        SubmitBatchAsync(ids => _client.SetBatchDeadzoneAsync(ids, BatchDraft.TopMm!.Value,
+            BatchDraft.BottomMm!.Value), () => { BatchDraft.TopMm = null; BatchDraft.BottomMm = null; });
+
+    public Task<bool> ApplyBatchRapidTriggerAsync(bool resolveDks = false) => !CanBatchRapidTrigger ?
+        Task.FromResult(false) : SubmitBatchAsync(ids => _client.SetBatchRapidTriggerAsync(ids,
+            BatchDraft.RtAction == MagneticBatchRtAction.Enable, BatchDraft.PressMm,
+            BatchDraft.ReleaseMm, resolveDks), () => {
+                BatchDraft.RtAction = MagneticBatchRtAction.Unchanged;
+                BatchDraft.PressMm = BatchDraft.ReleaseMm = null;
+            });
+
+    private async Task<bool> SubmitBatchAsync(Func<IReadOnlyList<ushort>, Task<MagneticStatus>> submit,
+        Action clearDraft)
+    {
+        var ids = SelectedLogicalIds.ToArray(); // Freeze canonical order before the first await.
+        Busy = true;
+        LastBatchResult = null;
+        LastMessage = $"正在逐个安全应用 {ids.Length} 个按键…";
+        try
+        {
+            var response = await submit(ids);
+            LastBatchResult = response.BatchResult;
+            // A partial batch changes only successful SessionApplied entries. Refresh explicitly.
+            try { Status = await _client.GetStatusAsync(); }
+            catch (Exception ex) {
+                Status = null;
+                LastMessage = $"批量结果已收到，但状态刷新失败：{ex.Message}。请刷新状态。";
+                return false;
+            }
+            if (response.BatchResult?.CompletedFully == true) {
+                clearDraft();
+                LastMessage = $"已应用到 {ids.Length} 个按键；本次会话记录不是设备读回。";
+                return true;
+            }
+            LastMessage = response.BatchResult is { } result ?
+                $"批量应用未完整完成：已应用 {result.AppliedCount}，失败 {result.FailedCount}，未执行 {result.NotExecutedCount}。" :
+                $"无法确认批量应用结果：{response.LastError}。请刷新状态。";
+            return false;
+        }
+        catch (Exception ex)
+        {
+            Status = null;
+            LastMessage = $"无法确认批量应用结果：{ex.Message}。请刷新状态。";
+            return false;
+        }
+        finally { Busy = false; }
     }
 
     public void EditGlobalActuation(double value)
@@ -450,6 +662,30 @@ public sealed class MagneticSettingsModel
         MagneticKeyLayout.IsValidDksActionTarget(id))) &&
         TriggerStates.Contains(slot.DownStart) && TriggerStates.Contains(slot.DownEnd) &&
         TriggerStates.Contains(slot.UpStart) && TriggerStates.Contains(slot.UpEnd);
+
+    private static bool KnownSource(string source) => source is "SessionApplied" or "HostProfile";
+
+    private MagneticAggregate AggregateMulti(Func<ushort, (string Value, string Source)?> read)
+    {
+        if (!IsMultiMode || SelectedCount == 0) return new(MagneticAggregateKind.Unknown, null, 0, 0, null);
+        var known = SelectedLogicalIds.Select(read).Where(value => value.HasValue)
+            .Select(value => value!.Value).ToArray();
+        if (known.Length == 0) return new(MagneticAggregateKind.Unknown, null, 0, SelectedCount, null);
+        if (known.Length != SelectedCount) return new(MagneticAggregateKind.ContainsUnknown, null,
+            known.Length, SelectedCount - known.Length, null);
+        if (known.Select(value => value.Value).Distinct().Count() != 1)
+            return new(MagneticAggregateKind.MixedKnown, null, known.Length, 0, null);
+        string source = known.Select(value => value.Source).Distinct().Count() == 1 ?
+            (known[0].Source == "SessionApplied" ? "本次会话" : "已保存配置") : "来源混合";
+        return new(MagneticAggregateKind.UniformKnown, known[0].Value, known.Length, 0, source);
+    }
+
+    private static string FormatAggregate(MagneticAggregate aggregate) => aggregate.Kind switch {
+        MagneticAggregateKind.UniformKnown => $"{aggregate.Source}：{aggregate.Value}",
+        MagneticAggregateKind.MixedKnown => "混合值",
+        MagneticAggregateKind.ContainsUnknown => $"{aggregate.KnownCount} 个已知 · {aggregate.UnknownCount} 个未知",
+        _ => "未知"
+    };
 
     private static bool Valid(double value, double min, double max) =>
         double.IsFinite(value) && value >= min - 1e-9 && value <= max + 1e-9 &&

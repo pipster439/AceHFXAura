@@ -16,8 +16,10 @@ namespace Aura_WinUI.Validation;
 // Opt-in visual validation never starts the daemon or invokes a magnetic API.
 internal static class MagneticLayoutValidation
 {
-    internal static bool Requested => Environment.GetCommandLineArgs().Contains("--validate-magnetic-layout") &&
+    internal static bool Requested => (Environment.GetCommandLineArgs().Contains("--validate-magnetic-layout") ||
+        OverlayOnlyRequested) &&
         !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("AURA_UI_VALIDATION_DIR"));
+    private static bool OverlayOnlyRequested => Environment.GetCommandLineArgs().Contains("--validate-magnetic-overlays");
 
     private static IEnumerable<DependencyObject> Descendants(DependencyObject parent)
     {
@@ -31,8 +33,13 @@ internal static class MagneticLayoutValidation
 
     private static async Task CaptureAsync(MainWindow window, string directory, string name)
     {
+        await CaptureElementAsync(window.Content, directory, name);
+    }
+
+    private static async Task CaptureElementAsync(UIElement element, string directory, string name)
+    {
         var bitmap = new RenderTargetBitmap();
-        await bitmap.RenderAsync(window.Content);
+        await bitmap.RenderAsync(element);
         var buffer = await bitmap.GetPixelsAsync();
         var bytes = new byte[buffer.Length];
         using (var reader = DataReader.FromBuffer(buffer)) reader.ReadBytes(bytes);
@@ -47,6 +54,7 @@ internal static class MagneticLayoutValidation
 
     private sealed class OfflineValidationClient : IMagneticControlClient
     {
+        public MagneticStatus? BatchResponse { get; set; }
         public MagneticStatus CurrentStatus { get; set; } = new()
         {
             Status = "ok",
@@ -72,22 +80,140 @@ internal static class MagneticLayoutValidation
         };
 
         public Task<MagneticStatus> GetStatusAsync() => Task.FromResult(CurrentStatus);
-        public Task<MagneticStatus> SetActuationAsync(ushort logicalId, double mm) => Task.FromResult(CurrentStatus);
-        public Task<MagneticStatus> SetRapidTriggerAsync(ushort logicalId, double pressMm, double releaseMm, bool resolveDks) => Task.FromResult(CurrentStatus);
-        public Task<MagneticStatus> DisableRapidTriggerAsync(ushort logicalId) => Task.FromResult(CurrentStatus);
-        public Task<MagneticStatus> SetDeadzoneAsync(ushort logicalId, double topMm, double bottomMm) => Task.FromResult(CurrentStatus);
-        public Task<MagneticStatus> ResetAllDeadzoneAsync() => Task.FromResult(CurrentStatus);
-        public Task<MagneticStatus> SetDksAsync(ushort logicalId, double startMm, double endMm, IReadOnlyList<MagneticDksSlot> slots, bool resolveRt) => Task.FromResult(CurrentStatus);
-        public Task<MagneticStatus> RestoreDksStandardAsync(ushort logicalId) => Task.FromResult(CurrentStatus);
-        public Task<MagneticStatus> SetSpeedTapPairAsync(ushort key1, ushort key2) => Task.FromResult(CurrentStatus);
-        public Task<MagneticStatus> DisableSpeedTapPairAsync(ushort key1, ushort key2) => Task.FromResult(CurrentStatus);
-        public Task<MagneticStatus> SetSpeedTapMasterAsync(bool enabled) => Task.FromResult(CurrentStatus);
-        public Task<MagneticStatus> ResetSpeedTapToProfileAsync() => Task.FromResult(CurrentStatus);
-        public Task<MagneticStatus> SetStaticAnalogEffectAsync(bool enabled) => Task.FromResult(CurrentStatus);
-        public Task<MagneticStatus> SetGlobalActuationAsync(double mm) => Task.FromResult(CurrentStatus);
-        public Task<MagneticStatus> SetGlobalDeadzoneAsync(double topMm, double bottomMm) => Task.FromResult(CurrentStatus);
-        public Task<MagneticStatus> SetGlobalRapidTriggerAsync(double pressMm, double releaseMm, double topMm, double bottomMm, bool separateMode) => Task.FromResult(CurrentStatus);
-        public Task<MagneticStatus> AcknowledgeExternalResynchronizationAsync() => Task.FromResult(CurrentStatus);
+        private static Task<MagneticStatus> WriteForbidden() =>
+            throw new InvalidOperationException("Offline visual validation forbids magnetic writes");
+        public Task<MagneticStatus> SetActuationAsync(ushort logicalId, double mm) => WriteForbidden();
+        public Task<MagneticStatus> SetRapidTriggerAsync(ushort logicalId, double pressMm, double releaseMm, bool resolveDks) => WriteForbidden();
+        public Task<MagneticStatus> DisableRapidTriggerAsync(ushort logicalId) => WriteForbidden();
+        public Task<MagneticStatus> SetDeadzoneAsync(ushort logicalId, double topMm, double bottomMm) => WriteForbidden();
+        public Task<MagneticStatus> ResetAllDeadzoneAsync() => WriteForbidden();
+        public Task<MagneticStatus> SetDksAsync(ushort logicalId, double startMm, double endMm, IReadOnlyList<MagneticDksSlot> slots, bool resolveRt) => WriteForbidden();
+        public Task<MagneticStatus> RestoreDksStandardAsync(ushort logicalId) => WriteForbidden();
+        public Task<MagneticStatus> SetSpeedTapPairAsync(ushort key1, ushort key2) => WriteForbidden();
+        public Task<MagneticStatus> DisableSpeedTapPairAsync(ushort key1, ushort key2) => WriteForbidden();
+        public Task<MagneticStatus> SetSpeedTapMasterAsync(bool enabled) => WriteForbidden();
+        public Task<MagneticStatus> ResetSpeedTapToProfileAsync() => WriteForbidden();
+        public Task<MagneticStatus> SetStaticAnalogEffectAsync(bool enabled) => WriteForbidden();
+        public Task<MagneticStatus> SetGlobalActuationAsync(double mm) => WriteForbidden();
+        public Task<MagneticStatus> SetGlobalDeadzoneAsync(double topMm, double bottomMm) => WriteForbidden();
+        public Task<MagneticStatus> SetGlobalRapidTriggerAsync(double pressMm, double releaseMm, double topMm, double bottomMm, bool separateMode) => WriteForbidden();
+        public Task<MagneticStatus> AcknowledgeExternalResynchronizationAsync() => WriteForbidden();
+        public Task<MagneticStatus> SetBatchActuationAsync(IReadOnlyList<ushort> ids, double millimeters) =>
+            BatchResponse is { } response ? Task.FromResult(response) : WriteForbidden();
+        public Task<MagneticStatus> SetBatchRapidTriggerAsync(IReadOnlyList<ushort> ids, bool enable,
+            double? pressMm = null, double? releaseMm = null, bool resolveDks = false) =>
+            BatchResponse is { } response ? Task.FromResult(response) : WriteForbidden();
+        public Task<MagneticStatus> SetBatchDeadzoneAsync(IReadOnlyList<ushort> ids, double topMm, double bottomMm) =>
+            BatchResponse is { } response ? Task.FromResult(response) : WriteForbidden();
+    }
+
+    private static async Task ValidateOverlaysAsync(MainWindow window, string directory,
+        MagneticSwitchPage page, MagneticSettingsModel model, OfflineValidationClient client, List<object> observations)
+    {
+        var root = (FrameworkElement)window.Content;
+        root.RequestedTheme = ElementTheme.Light;
+        await Task.Delay(100);
+        var status = client.CurrentStatus;
+        Button Key(ushort id) => Descendants(page).OfType<Button>().First(button =>
+            Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(button) == $"MagneticKey{id:X4}");
+        TextBlock Part(ushort id, string kind) => Descendants(Key(id)).OfType<TextBlock>()
+            .First(block => block.Name == $"MagneticKey{kind}{id:X4}");
+        Windows.Foundation.Point Center(ushort id)
+        {
+            var label = Part(id, "Legend");
+            return label.TransformToVisual(Key(id)).TransformPoint(
+                new Windows.Foundation.Point(label.ActualWidth / 2, label.ActualHeight / 2));
+        }
+        var special = new ushort[] { 0x0701, 0x0100, 0x0503, 0x0707, 0x0400, 0x0508, 0x050a, 0x060a };
+        model.SelectGlobal();
+        page.ForceRender();
+        await Task.Delay(100);
+        var baseline = special.ToDictionary(id => id, id => (Key(id).ActualWidth, Key(id).ActualHeight, Center(id)));
+        status.Actuation.Add(new MagneticActuationValue { LogicalId = 0x0701, Raw = 10, Source = "SessionApplied" });
+        status.RapidTrigger.Add(new MagneticRapidTriggerValue { LogicalId = 0x0701, Enabled = true,
+            PressRaw = 2, ReleaseRaw = 2, Source = "SessionApplied" });
+        status.Actuation.Add(new MagneticActuationValue { LogicalId = 0x0503, Raw = 15, Source = "HostProfile" });
+        status.RapidTrigger.Add(new MagneticRapidTriggerValue { LogicalId = 0x0707, Enabled = true,
+            PressRaw = 4, ReleaseRaw = 3, Source = "SessionApplied" });
+        status.RapidTrigger.Add(new MagneticRapidTriggerValue { LogicalId = 0x0400, Enabled = true,
+            PressRaw = 4, ReleaseRaw = 2, Source = "HostProfile" });
+        page.ForceRender();
+        await Task.Delay(100);
+        if (Part(0x0701, "Actuation").Text != "1.0" || Part(0x0701, "RtPress").Text != "↓0.2" ||
+            Part(0x0701, "RtRelease").Text != "↑0.2" || Part(0x0100, "Actuation").Text != "—" ||
+            Part(0x0400, "RtPress").Text != "—" || Part(0x0503, "Actuation").Text != "1.5" ||
+            Part(0x0707, "RtPress").Text != "↓0.4")
+            throw new InvalidOperationException("Keycap overlay provenance or placement mismatch");
+        foreach (ushort id in special)
+        {
+            var visual = MagneticKeyLayout.Find(id)!;
+            var button = Key(id);
+            var point = Center(id);
+            var before = baseline[id];
+            if (Part(id, "Legend").Text != visual.Label ||
+                Math.Abs(button.ActualWidth - before.ActualWidth) > 0.1 ||
+                Math.Abs(button.ActualHeight - before.ActualHeight) > 0.1 ||
+                Math.Abs(point.X - before.Item3.X) > 0.5 || Math.Abs(point.Y - before.Item3.Y) > 0.5)
+                throw new InvalidOperationException($"Overlay changed key geometry or centered legend: {visual.FullName}");
+        }
+        var w = Key(0x0701);
+        var wName = Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(w);
+        if (!wName.Contains("未选择") || !wName.Contains("触发点 1.0 mm") ||
+            !wName.Contains("RT 按下 0.2 mm") ||
+            !Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(Key(0x0100)).Contains("触发点未知"))
+            throw new InvalidOperationException("Accessible overlay values or unknown state missing");
+
+        var scale = window.Content.XamlRoot.RasterizationScale;
+        async Task Resize(int width, int height)
+        {
+            ((OverlappedPresenter)window.AppWindow.Presenter).Restore();
+            window.AppWindow.Resize(new SizeInt32((int)(width * scale), (int)(height * scale)));
+            await Task.Delay(250);
+            var pageScroll = Descendants(page).OfType<ScrollViewer>().First(view => view.Name == "PageScroll");
+            if (pageScroll.ScrollableWidth > 1) throw new InvalidOperationException("Overlay caused page overflow");
+            foreach (ushort id in special)
+            {
+                var button = Key(id);
+                var center = Center(id);
+                if (Math.Abs(button.ActualWidth - button.Width) > 0.5 ||
+                    Math.Abs(button.ActualHeight - button.Height) > 0.5 ||
+                    Math.Abs(center.X - button.ActualWidth / 2) > 1 ||
+                    Math.Abs(center.Y - button.ActualHeight / 2) > 1)
+                    throw new InvalidOperationException($"Responsive keycap geometry or legend center changed: " +
+                        $"{MagneticKeyLayout.Find(id)!.FullName} at {width}x{height}, " +
+                        $"actual {button.ActualWidth:F2}x{button.ActualHeight:F2}, requested {button.Width:F2}x{button.Height:F2}, " +
+                        $"center {center.X:F2},{center.Y:F2}");
+            }
+            observations.Add(new { width, height, page_horizontal_overflow = pageScroll.ScrollableWidth,
+                keyboard_horizontal_overflow = Descendants(page).OfType<ScrollViewer>()
+                    .First(view => view.Name == "KeyboardViewport").ScrollableWidth });
+        }
+        await Resize(1060, 720);
+        await CaptureAsync(window, directory, "KeycapOverlay-Light-1060x720-Global-overview");
+        model.Select(0x0701); page.ForceRender();
+        await Task.Delay(80);
+        if (Math.Abs(Center(0x0701).X - baseline[0x0701].Item3.X) > 0.5 ||
+            !Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(w).Contains("已选择"))
+            throw new InvalidOperationException("Single selection moved W legend or lost accessible state");
+        await CaptureAsync(window, directory, "KeycapOverlay-Light-1060x720-W-selected");
+        model.EnterMulti();
+        foreach (ushort id in new ushort[] { 0x0602, 0x0702, 0x0301 }) model.ToggleMulti(id);
+        page.ForceRender();
+        await Task.Delay(80);
+        foreach (ushort id in new ushort[] { 0x0701, 0x0602, 0x0702, 0x0301 })
+            if (Part(id, "Legend").Text != MagneticKeyLayout.Find(id)!.Label ||
+                Math.Abs(Center(id).X - Key(id).ActualWidth / 2) > 0.5)
+                throw new InvalidOperationException("Multi selection moved a centered legend");
+        await CaptureAsync(window, directory, "KeycapOverlay-Light-1060x720-Multi-WASD");
+        root.RequestedTheme = ElementTheme.Dark;
+        await Task.Delay(160);
+        await CaptureAsync(window, directory, "KeycapOverlay-Dark-1060x720-Multi-WASD");
+        root.RequestedTheme = ElementTheme.Light;
+        foreach (var size in new[] { (600, 700), (1440, 900), (3840, 2160) })
+        {
+            await Resize(size.Item1, size.Item2);
+            await CaptureAsync(window, directory, $"KeycapOverlay-Light-{size.Item1}x{size.Item2}-Multi-WASD");
+        }
     }
 
     internal static async Task RunAsync(MainWindow window)
@@ -108,16 +234,23 @@ internal static class MagneticLayoutValidation
             var validationClient = new OfflineValidationClient();
             var validationModel = new MagneticSettingsModel(validationClient);
             await validationModel.RefreshAsync();
+            validationModel.Select(0x0301); // D: single-key baseline
 
             var initialPage = (MagneticSwitchPage)MainWindow.CurrentNavFrame!.Content;
             initialPage.SetModelForValidation(validationModel);
             await Task.Delay(100);
+            if (OverlayOnlyRequested)
+            {
+                await ValidateOverlaysAsync(window, directory, initialPage, validationModel,
+                    validationClient, observations);
+                return;
+            }
 
-            // 1. Breakpoint & Theme Matrix (Light & Dark x Narrow, Standard, 4K)
+            // Phase 2 breakpoint and theme matrix, with a single-key context.
             foreach (var theme in new[] { ElementTheme.Light, ElementTheme.Dark })
             {
                 ((FrameworkElement)window.Content).RequestedTheme = theme;
-                foreach (var size in new[] { (600, 500), (1060, 720), (3840, 2160) })
+                foreach (var size in new[] { (600, 700), (1060, 720), (1440, 900), (3840, 2160) })
                 {
                     var presenter = (OverlappedPresenter)window.AppWindow.Presenter;
                     presenter.Restore();
@@ -132,7 +265,13 @@ internal static class MagneticLayoutValidation
                     if (buttons.Length != 68) throw new InvalidOperationException($"Rendered {buttons.Length} keys, expected 68");
                     if (scroll.ScrollableWidth > 1) throw new InvalidOperationException("Page has horizontal overflow");
                     if (size.Item1 >= 1060 && keyboardScroll.ScrollableWidth > 1)
-                        throw new InvalidOperationException("Keyboard clips keys at desktop width");
+                        throw new InvalidOperationException($"Keyboard clips keys at desktop width: {keyboardScroll.ScrollableWidth:F1} px; workspace {Descendants(page).OfType<FrameworkElement>().First(e => e.Name == "ContentColumns").ActualWidth:F1} px");
+                    var details = Descendants(page).OfType<FrameworkElement>().First(e => e.Name == "DetailsPanel");
+                    if (size.Item1 >= 1440 && Grid.GetColumn(details) != 1)
+                        throw new InvalidOperationException("Wide workspace did not place common details beside keyboard");
+                    if (!Descendants(page).OfType<FrameworkElement>().Any(e => e.Name == "CommonLowerGrid") ||
+                        !Descendants(page).OfType<FrameworkElement>().Any(e => e.Name == "GlobalFeaturesPanel"))
+                        throw new InvalidOperationException("Responsive common/advanced regions missing");
                     var name = $"{theme}-{size.Item1}x{size.Item2}";
                     await CaptureAsync(window, directory, name);
                     observations.Add(new
@@ -173,14 +312,18 @@ internal static class MagneticLayoutValidation
             await Task.Delay(100);
             var copilot = Descendants(activePage).OfType<Button>()
                 .First(button => Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(button) == "MagneticKey050A");
-            if (!Equals(copilot.Content, "Cop")) throw new InvalidOperationException("Copilot short label missing");
+            if (!Descendants(copilot).OfType<TextBlock>().Any(block =>
+                block.Name == "MagneticKeyLegend050A" && block.Text == "Cop"))
+                throw new InvalidOperationException("Copilot short label missing");
             var peer = new Microsoft.UI.Xaml.Automation.Peers.ButtonAutomationPeer(copilot);
             ((Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider)peer.GetPattern(
                 Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke)).Invoke();
             await Task.Delay(150);
             var selectedText = Descendants(activePage).OfType<TextBlock>()
-                .First(block => block.Name == "SelectedKeyText");
-            if (!selectedText.Text.Contains("Copilot"))
+                .First(block => block.Name == "SelectedKeyHeroTitle");
+            if (!selectedText.Text.Contains("Copilot") ||
+                Descendants(activePage).OfType<TextBlock>().Any(block => block.Name == "SelectedKeyText" ||
+                    block.Text.StartsWith("已选按键：")))
                 throw new InvalidOperationException("Selected-key context did not update");
             await CaptureAsync(window, directory, "Light-1060x720-Copilot-selected");
 
@@ -209,9 +352,10 @@ internal static class MagneticLayoutValidation
             // Scenario 5: DKS Editor Expanded (Start 1.2 mm, End 3.0 mm, Slot 1 Tap)
             validationModel.EditDksThresholds(1.2, 3.0);
             validationModel.EditDksSlot(0, 0x0602, "Tap", "Inactive", "Release", "Inactive");
+            validationModel.ConfigureDksEditor();
             var dks = (CommunityToolkit.WinUI.Controls.SettingsExpander)FindNamed("DksExpander");
-            dks.IsExpanded = true;
             activePage.ForceRender();
+            dks.IsExpanded = true;
             BringToView(dks);
             await Task.Delay(150);
             await CaptureAsync(window, directory, "Light-1060x720-DKS-editor-expanded");
@@ -236,7 +380,6 @@ internal static class MagneticLayoutValidation
             unknownBaselineModel.Select(0x0402);
             unknownBaselineModel.EditSpeedTapPair(0x0602, 0x0301); // A + D
             activePage.SetModelForValidation(unknownBaselineModel);
-            dks.IsExpanded = false;
             await Task.Delay(100);
             BringToView(FindNamed("SpeedTapCard"));
             await Task.Delay(150);
@@ -295,6 +438,118 @@ internal static class MagneticLayoutValidation
             await Task.Delay(150);
             await CaptureAsync(window, directory, "Dark-1060x720-Global-mode");
             ((FrameworkElement)window.Content).RequestedTheme = ElementTheme.Light;
+
+            // Phase 2 selection and DKS evidence screenshots use offline status only.
+            var multiStatus = new MagneticStatus { Status = "ok", ApiVersion = 1, Health = "Clean", Available = true };
+            var multiClient = new OfflineValidationClient { CurrentStatus = multiStatus };
+            var multiModel = new MagneticSettingsModel(multiClient);
+            await multiModel.RefreshAsync();
+            multiModel.EnterMulti();
+            activePage.SetModelForValidation(multiModel);
+            ScrollTo(0);
+            await Task.Delay(120);
+            await CaptureAsync(window, directory, "Light-1060x720-Multi-no-selection");
+            foreach (ushort id in new ushort[] { 0x0701, 0x0602, 0x0702, 0x0301 }) multiModel.ToggleMulti(id);
+            activePage.SetModelForValidation(multiModel);
+            ScrollTo(0);
+            await Task.Delay(150);
+            if (FindNamed("SelectedKeyHeroTitle") is not TextBlock multiHero || multiHero.Text != "4 个按键" ||
+                FindNamed("ActuationApplyButton") is not Button multiApply || multiApply.IsEnabled ||
+                !Equals(multiApply.Content, "应用到 4 个按键"))
+                throw new InvalidOperationException("Multi selection did not show a read-only four-key context");
+            var selectedKeys = Descendants(activePage).OfType<Button>()
+                .Where(button => Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(button)?.StartsWith("MagneticKey") == true &&
+                    Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(button).Contains("已选择")).ToArray();
+            if (selectedKeys.Length != 4 || selectedKeys.Any(button =>
+                !Descendants(button).OfType<TextBlock>().Any(block => block.Name ==
+                    $"MagneticKeyLegend{(ushort)button.Tag:X4}" &&
+                    block.Text == MagneticKeyLayout.Find((ushort)button.Tag)!.Label) ||
+                button.BorderThickness.Left < 2 || button.HorizontalContentAlignment != HorizontalAlignment.Stretch))
+                throw new InvalidOperationException("Multi-selected keys lack visible and accessible selection state");
+            await CaptureAsync(window, directory, "Light-1060x720-Multi-4-keys");
+            BringToView(FindNamed("ActuationCard"));
+            await Task.Delay(100);
+            await CaptureAsync(window, directory, "Light-1060x720-Multi-Actuation-Unknown");
+            multiStatus.Actuation.Add(new MagneticActuationValue { LogicalId = 0x0701, Raw = 10, Source = "SessionApplied" });
+            multiStatus.Actuation.Add(new MagneticActuationValue { LogicalId = 0x0602, Raw = 20, Source = "SessionApplied" });
+            activePage.ForceRender();
+            await Task.Delay(150);
+            await CaptureAsync(window, directory, "Light-1060x720-Multi-Actuation-ContainsUnknown");
+            multiStatus.Actuation.Add(new MagneticActuationValue { LogicalId = 0x0702, Raw = 10, Source = "SessionApplied" });
+            multiStatus.Actuation.Add(new MagneticActuationValue { LogicalId = 0x0301, Raw = 10, Source = "SessionApplied" });
+            activePage.ForceRender();
+            await Task.Delay(120);
+            await CaptureAsync(window, directory, "Light-1060x720-Multi-Actuation-Mixed");
+            multiStatus.Actuation[1].Raw = 10;
+            activePage.ForceRender();
+            await Task.Delay(120);
+            await CaptureAsync(window, directory, "Light-1060x720-Multi-Actuation-Uniform");
+
+            multiModel.EditBatchRapidTrigger(MagneticBatchRtAction.Enable, 0.8, 0.6);
+            activePage.ForceRender();
+            BringToView(FindNamed("RapidTriggerCard"));
+            await Task.Delay(120);
+            await CaptureAsync(window, directory, "Light-1060x720-Multi-RT-Enable");
+
+            multiClient.BatchResponse = new MagneticStatus { Status = "error", ApiVersion = 1,
+                Health = "Clean", Available = true, BatchResult = new MagneticBatchResult {
+                    RequestedCount = 4, NotExecutedCount = 4,
+                    ConfiguredDksKeys = [0x0701], UnknownDksKeys = [0x0602, 0x0702],
+                    Results = [new() { LogicalId = 0x0701 }, new() { LogicalId = 0x0602 },
+                        new() { LogicalId = 0x0702 }, new() { LogicalId = 0x0301 }] } };
+            var rtApply = (Button)FindNamed("RapidTriggerApplyButton");
+            var rtPeer = new Microsoft.UI.Xaml.Automation.Peers.ButtonAutomationPeer(rtApply);
+            ((Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider)rtPeer.GetPattern(
+                Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke)).Invoke();
+            await Task.Delay(300);
+            await CaptureAsync(window, directory, "Light-1060x720-Multi-RT-DKS-conflict");
+            // The confirmation is only a screenshot scenario; close it without accepting.
+            var dialog = VisualTreeHelper.GetOpenPopupsForXamlRoot(window.Content.XamlRoot)
+                .Select(popup => popup.Child).OfType<ContentDialog>().FirstOrDefault();
+            if (dialog == null) throw new InvalidOperationException("Batch RT conflict dialog did not open");
+            await CaptureElementAsync(dialog, directory, "Light-1060x720-Multi-RT-DKS-conflict-dialog");
+            dialog.Hide();
+            await Task.Delay(120);
+
+            multiClient.BatchResponse = new MagneticStatus { Status = "error", ApiVersion = 1,
+                Health = "Clean", Available = true, BatchResult = new MagneticBatchResult {
+                    RequestedCount = 4, AppliedCount = 2, FailedCount = 1, NotExecutedCount = 1,
+                    Results = [new() { LogicalId = 0x0701, Status = "Applied" },
+                        new() { LogicalId = 0x0602, Status = "Applied" },
+                        new() { LogicalId = 0x0702, Status = "Failed", Detail = "模拟事务失败" },
+                        new() { LogicalId = 0x0301, Status = "NotExecuted" }] } };
+            multiModel.EditBatchActuation(1.2);
+            await multiModel.ApplyBatchActuationAsync();
+            activePage.ForceRender();
+            BringToView(FindNamed("BatchResultBar"));
+            await Task.Delay(120);
+            await CaptureAsync(window, directory, "Light-1060x720-Multi-partial-result");
+
+            var dksModel = new MagneticSettingsModel(new OfflineValidationClient());
+            await dksModel.RefreshAsync();
+            dksModel.Select(0x0301);
+            activePage.SetModelForValidation(dksModel);
+            BringToView(FindNamed("DksSection"));
+            await Task.Delay(150);
+            if (FindNamed("DksStatusText") is not TextBlock unknownText || unknownText.Text != "当前 DKS 状态未知" ||
+                FindNamed("DksExpander").Visibility != Visibility.Collapsed)
+                throw new InvalidOperationException("Unknown DKS state was not presented collapsed");
+            await CaptureAsync(window, directory, "Light-1060x720-DKS-Unknown-collapsed");
+            foreach (var (standard, name) in new[] { (false, "SessionConfigured"), (true, "Standard") })
+            {
+                var state = new MagneticStatus { Status = "ok", ApiVersion = 1, Health = "Clean", Available = true };
+                state.Dks.Add(new MagneticDksValue { LogicalId = 0x0301, Source = "SessionApplied",
+                    StandardRuntimeConfiguration = standard });
+                var model = new MagneticSettingsModel(new OfflineValidationClient { CurrentStatus = state });
+                await model.RefreshAsync();
+                model.Select(0x0301);
+                activePage.SetModelForValidation(model);
+                BringToView(FindNamed("DksSection"));
+                await Task.Delay(150);
+                if (FindNamed("DksStatusText") is not TextBlock stateText || stateText.Text != model.DksStateText)
+                    throw new InvalidOperationException($"DKS {name} status presentation mismatch");
+                await CaptureAsync(window, directory, $"Light-1060x720-DKS-{name}");
+            }
         }
         catch (Exception ex) { error = ex.ToString(); }
         finally
