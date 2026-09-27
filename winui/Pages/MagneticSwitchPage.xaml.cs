@@ -693,13 +693,15 @@ public sealed partial class MagneticSwitchPage : Page
             SpeedTapMasterApplyButton.Style = _model.SpeedTapMasterDraft != null ? (Style)Application.Current.Resources["AccentButtonStyle"] : null;
             SpeedTapProfileResetButton.IsEnabled = _model.CanWrite;
 
+            AnalogDescriptionText.Text = MagneticSettingsModel.HardwareAnalogDescription;
+            AnalogBlockedReasonText.Text = MagneticSettingsModel.HardwareAnalogBlockedReason;
             AnalogStateText.Text = status?.StaticAnalogEffect is { Known: true } analog ?
                 $"{SourceLabel(analog.Source)}：{(analog.Value ? "开启" : "关闭")}" : "当前来源：未知";
-            AnalogToggle.IsEnabled = _model.CanWrite;
+            AnalogToggle.IsEnabled = _model.CanApplyStaticAnalog && _model.CanWrite;
             AnalogToggle.IsOn = _model.StaticAnalogDraft ??
                 (status?.StaticAnalogEffect is { Known: true, Value: true });
-            AnalogApplyButton.IsEnabled = _model.CanWrite && _model.StaticAnalogDraft != null;
-            AnalogApplyButton.Style = _model.StaticAnalogDraft != null ? (Style)Application.Current.Resources["AccentButtonStyle"] : null;
+            AnalogApplyButton.IsEnabled = _model.CanApplyStaticAnalog && _model.CanWrite && _model.StaticAnalogDraft != null;
+            AnalogApplyButton.Style = AnalogApplyButton.IsEnabled ? (Style)Application.Current.Resources["AccentButtonStyle"] : null;
 
             // 7. Compact Health Strip & Escalation InfoBar
             RefreshButton.IsEnabled = !_model.Busy && !_model.Refreshing;

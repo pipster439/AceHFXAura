@@ -202,6 +202,13 @@ public sealed class MagneticSettingsModel
     public bool CanDisableSpeedTapPair => CanWrite && SpeedTapKey1 is ushort a && SpeedTapKey2 is ushort b && a != b;
     public bool? SpeedTapMasterDraft { get; private set; }
     public bool? StaticAnalogDraft { get; private set; }
+    public const string HardwareAnalogDescription =
+        "该功能由键盘固件根据磁轴行程直接渲染。目前仅验证其在键盘已处于固件恒亮模式时可正常工作。Aura 软件灯效启用后，当前版本无法安全地自动切回固件灯光模式。";
+    public const string HardwareAnalogBlockedReason =
+        "当前由 Aura 软件灯效控制键盘灯光，无法安全切换到固件压感灯效。";
+    // This UI has no trusted firmware-lighting-mode state. Keep the verified
+    // typed runtime operation, but do not offer an unsafe normal Apply path.
+    public bool CanApplyStaticAnalog => false;
 
     public bool Select(ushort logicalId)
     {
@@ -580,7 +587,7 @@ public sealed class MagneticSettingsModel
         Task.FromResult(false);
     public Task<bool> ResetSpeedTapToProfileAsync() => CanWrite ?
         SubmitAsync(_client.ResetSpeedTapToProfileAsync) : Task.FromResult(false);
-    public Task<bool> ApplyStaticAnalogAsync() => CanWrite && StaticAnalogDraft is bool enabled ?
+    public Task<bool> ApplyStaticAnalogAsync() => CanApplyStaticAnalog && CanWrite && StaticAnalogDraft is bool enabled ?
         SubmitAsync(() => _client.SetStaticAnalogEffectAsync(enabled), () => StaticAnalogDraft = null) :
         Task.FromResult(false);
 

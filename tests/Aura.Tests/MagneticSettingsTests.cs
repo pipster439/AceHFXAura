@@ -213,13 +213,27 @@ public sealed class MagneticSettingsTests
         await model.RefreshAsync();
         model.EditSpeedTapPair(0x0602, 0x0301);
         model.EditSpeedTapMaster(true);
-        model.EditStaticAnalog(true);
         Assert.IsEmpty(fake.Calls);
         Assert.IsTrue(await model.ApplySpeedTapPairAsync(true));
         Assert.IsTrue(await model.ApplySpeedTapMasterAsync());
         Assert.IsTrue(await model.ResetSpeedTapToProfileAsync());
-        Assert.IsTrue(await model.ApplyStaticAnalogAsync());
-        CollectionAssert.AreEqual(new[] { "pair-on:1538:769", "master:True", "profile-reset", "analog:True" }, fake.Calls);
+        CollectionAssert.AreEqual(new[] { "pair-on:1538:769", "master:True", "profile-reset" }, fake.Calls);
+    }
+
+    [TestMethod]
+    public async Task HardwareAnalogNormalApplyIsBlockedWhileAuraCannotEstablishFirmwareStatic()
+    {
+        var fake = new Fake();
+        var model = new MagneticSettingsModel(fake);
+        await model.RefreshAsync();
+        Assert.IsTrue(model.CanWrite);
+        Assert.IsFalse(model.CanApplyStaticAnalog);
+        StringAssert.Contains(MagneticSettingsModel.HardwareAnalogDescription, "固件根据磁轴行程直接渲染");
+        StringAssert.Contains(MagneticSettingsModel.HardwareAnalogDescription, "固件恒亮模式");
+        StringAssert.Contains(MagneticSettingsModel.HardwareAnalogBlockedReason, "无法安全切换");
+        model.EditStaticAnalog(true);
+        Assert.IsFalse(await model.ApplyStaticAnalogAsync());
+        Assert.IsEmpty(fake.Calls);
     }
 
     [TestMethod]

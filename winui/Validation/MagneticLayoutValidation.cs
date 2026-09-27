@@ -554,6 +554,30 @@ internal static class MagneticLayoutValidation
                     throw new InvalidOperationException($"DKS {name} status presentation mismatch");
                 await CaptureAsync(window, directory, $"Light-1060x720-DKS-{name}");
             }
+
+            var analogModel = new MagneticSettingsModel(new OfflineValidationClient());
+            await analogModel.RefreshAsync();
+            analogModel.SelectGlobal();
+            activePage.SetModelForValidation(analogModel);
+            BringToView(FindNamed("PressLightingCard"));
+            await Task.Delay(150);
+            if (FindNamed("AnalogToggle") is not ToggleSwitch analogToggle || analogToggle.IsEnabled ||
+                FindNamed("AnalogApplyButton") is not Button analogApply || analogApply.IsEnabled ||
+                FindNamed("AnalogDescriptionText") is not TextBlock analogDescription ||
+                analogDescription.Text != MagneticSettingsModel.HardwareAnalogDescription ||
+                FindNamed("AnalogBlockedReasonText") is not TextBlock analogReason ||
+                analogReason.Text != MagneticSettingsModel.HardwareAnalogBlockedReason)
+                throw new InvalidOperationException("Hardware Analog must show its prerequisite and block normal Apply");
+            if (pageScroll.ScrollableWidth > 1)
+                throw new InvalidOperationException("Hardware Analog copy caused horizontal page overflow");
+            await CaptureElementAsync(FindNamed("PressLightingCard"), directory,
+                "Light-HardwareAnalog-experimental-blocked-card");
+            await CaptureAsync(window, directory, "Light-1060x720-HardwareAnalog-experimental-blocked");
+            ((FrameworkElement)window.Content).RequestedTheme = ElementTheme.Dark;
+            await Task.Delay(150);
+            await CaptureElementAsync(FindNamed("PressLightingCard"), directory,
+                "Dark-HardwareAnalog-experimental-blocked-card");
+            await CaptureAsync(window, directory, "Dark-1060x720-HardwareAnalog-experimental-blocked");
         }
         catch (Exception ex) { error = ex.ToString(); }
         finally

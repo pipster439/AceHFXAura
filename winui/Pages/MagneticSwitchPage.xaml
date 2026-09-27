@@ -449,13 +449,21 @@
 
                         <!-- 全局 2: 磁轴按压灯效 -->
                         <controls:SettingsCard x:Name="PressLightingCard"
-                                               Header="硬件按压灯效（实验性）"
-                                               Description="键盘硬件按压力度灯效；与 Aura 软件灯效的协同尚未验证"
+                                               Header="硬件压感灯效（实验性 / 有前置条件）"
+                                               Description="由键盘固件根据磁轴行程渲染；仅验证固件恒亮模式"
                                                IsClickEnabled="False">
                             <controls:SettingsCard.HeaderIcon>
                                 <FontIcon Glyph="&#xE790;" />
                             </controls:SettingsCard.HeaderIcon>
-                            <StackPanel Spacing="8" MinWidth="300">
+                            <StackPanel Spacing="8" MinWidth="300" MaxWidth="360">
+                                <TextBlock x:Name="AnalogDescriptionText"
+                                           TextWrapping="Wrap"
+                                           AutomationProperties.AutomationId="MagneticAnalogLimitation" />
+                                <TextBlock x:Name="AnalogBlockedReasonText"
+                                           TextWrapping="Wrap"
+                                           Style="{ThemeResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           AutomationProperties.AutomationId="MagneticAnalogBlockedReason" />
                                 <TextBlock x:Name="AnalogStateText" Text="当前来源：未知"
                                            Style="{ThemeResource CaptionTextBlockStyle}"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
@@ -465,10 +473,10 @@
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
                                     <ToggleSwitch x:Name="AnalogToggle"
-                                                  OnContent="按压灯效：开启" OffContent="按压灯效：关闭"
+                                                  OnContent="硬件压感：开启" OffContent="硬件压感：关闭"
                                                   Toggled="AnalogToggle_Toggled"
                                                   AutomationProperties.AutomationId="MagneticAnalogEffect" />
-                                    <Button x:Name="AnalogApplyButton" Grid.Column="1" Content="应用按压灯效"
+                                    <Button x:Name="AnalogApplyButton" Grid.Column="1" Content="应用硬件压感"
                                             Click="AnalogApplyButton_Click"
                                             AutomationProperties.AutomationId="MagneticAnalogApply"
                                             VerticalAlignment="Center" />
