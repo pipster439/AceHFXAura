@@ -1,4 +1,4 @@
-## [0.1.0-alpha.6] — Release draft
+## [0.1.0-alpha.6] — Release candidate
 
 - Reactive, Ripple and Static key highlight now use physical Down/Up lifecycle input. OS key repeat is filtered; Reactive stays lit while held and fades after release; each Ripple press creates one wave.
 - Magnetic UX adds responsive Global / Single / Multi selection, batch Actuation / Rapid Trigger / Deadzone with partial-result and stop-on-first-failure semantics, and DKS Standard / SessionConfigured / Unknown status.
