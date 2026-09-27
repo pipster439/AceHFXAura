@@ -1563,6 +1563,14 @@ int main() {
     analog_off[6] = 0;
     auto actual_off = BuildAnalogEffect(0, 0);
     if (!actual_off || !Check(*actual_off, analog_off, "Static Analog OFF")) return 1;
+    Report firmware_static{};
+    firmware_static[1] = 0x51; firmware_static[2] = 0x2c;
+    firmware_static[5] = 0xff; firmware_static[6] = 0x64;
+    firmware_static[8] = 0xff; firmware_static[9] = 0xff; firmware_static[12] = 0xff;
+    if (aura::NativeHidBackend::IsSupportedOutputReport(firmware_static)) {
+        std::cerr << "Unverified firmware Static 51 2C must remain outside the allowlist\n";
+        return 1;
+    }
 
     Report rt_press_on{};
     rt_press_on[1] = 0x51; rt_press_on[2] = 0x54; rt_press_on[3] = 1;

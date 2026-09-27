@@ -8,6 +8,7 @@
 | [Native HID tests](../../tests/test_native_hid.cpp) | Automated protocol checks, not physical acceptance |
 | [M605 verified runtime protocol](M605_RUNTIME_PROTOCOL.md) | Alpha.5 Phase 1–4 runtime, including four-slot DKS, and Stage 7A explicit 68/68 physical magnetic-key mapping, namespace and apply boundaries |
 | [M605 magnetic product state](M605_MAGNETIC_PRODUCT_STATE.md) | Alpha.5 Phase 5 typed service/WinUI integration, HostProfile provenance and persistent safety quarantine |
+| [M605 alpha.6 lighting boundary](M605_ALPHA6_LIGHTING_BOUNDARY.md) | Firmware Static prerequisite, observed persistence, Hardware Analog product restriction, and deferred ownership |
 | [Light Bar mapping](lightbar_mapping.md) / [JSON](../../lightbar_mapping.json) | Recorded scan contains zero independently identified Light Bar LEDs; do not present it as a completed independent mapping |
 | [Light Bar research](LIGHTBAR_REVERSE_ENGINEERING_REPORT.md) | Historical HAL/MI_01/MI_04 investigation; hypotheses and device-specific observations remain research evidence |
 | [HAL compatibility](../../src/aura/hal_compat.cpp) / [Python helper](../../tools/py/aura_hal.py) | Retained legacy diagnostics and compatibility gates |

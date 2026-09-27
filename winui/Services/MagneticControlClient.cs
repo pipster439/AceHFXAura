@@ -29,6 +29,26 @@ public sealed class MagneticDeadzoneValue
     [JsonPropertyName("source")] public string Source { get; set; } = "Unknown";
 }
 
+public sealed class MagneticBatchKeyResult
+{
+    [JsonPropertyName("logical_id")] public ushort LogicalId { get; set; }
+    [JsonPropertyName("status")] public string Status { get; set; } = "NotExecuted";
+    [JsonPropertyName("detail")] public string? Detail { get; set; }
+}
+
+public sealed class MagneticBatchResult
+{
+    [JsonPropertyName("requested_count")] public int RequestedCount { get; set; }
+    [JsonPropertyName("applied_count")] public int AppliedCount { get; set; }
+    [JsonPropertyName("failed_count")] public int FailedCount { get; set; }
+    [JsonPropertyName("not_executed_count")] public int NotExecutedCount { get; set; }
+    [JsonPropertyName("completed_fully")] public bool CompletedFully { get; set; }
+    [JsonPropertyName("health")] public string Health { get; set; } = "Stopped";
+    [JsonPropertyName("results")] public List<MagneticBatchKeyResult> Results { get; set; } = [];
+    [JsonPropertyName("configured_dks_keys")] public List<ushort> ConfiguredDksKeys { get; set; } = [];
+    [JsonPropertyName("unknown_dks_keys")] public List<ushort> UnknownDksKeys { get; set; } = [];
+}
+
 public sealed class MagneticKnownRaw
 {
     [JsonPropertyName("known")] public bool Known { get; set; }
@@ -141,6 +161,7 @@ public sealed class MagneticStatus
     [JsonPropertyName("speedtap")] public MagneticSpeedTapState SpeedTap { get; set; } = new();
     [JsonPropertyName("static_analog_effect")] public MagneticKnownBool StaticAnalogEffect { get; set; } = new();
     [JsonPropertyName("rapid_trigger_master")] public MagneticKnownBool RapidTriggerMaster { get; set; } = new();
+    [JsonPropertyName("batch_result")] public MagneticBatchResult? BatchResult { get; set; }
     public bool Succeeded => Status == "ok";
 }
 
@@ -163,11 +184,15 @@ public interface IMagneticControlClient
     Task<MagneticStatus> SetGlobalDeadzoneAsync(double topMm, double bottomMm);
     Task<MagneticStatus> SetGlobalRapidTriggerAsync(double pressMm, double releaseMm, double topMm, double bottomMm, bool separateMode);
     Task<MagneticStatus> AcknowledgeExternalResynchronizationAsync();
+    Task<MagneticStatus> SetBatchActuationAsync(IReadOnlyList<ushort> logicalIds, double millimeters);
+    Task<MagneticStatus> SetBatchRapidTriggerAsync(IReadOnlyList<ushort> logicalIds, bool enable,
+        double? pressMm = null, double? releaseMm = null, bool resolveDks = false);
+    Task<MagneticStatus> SetBatchDeadzoneAsync(IReadOnlyList<ushort> logicalIds, double topMm, double bottomMm);
 }
 
 public sealed class MagneticControlClient(HttpClient? http = null) : IMagneticControlClient
 {
-    private readonly HttpClient _http = http ?? new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+    private readonly HttpClient _http = http ?? new HttpClient { Timeout = TimeSpan.FromMinutes(3) };
     private const string Base = "http://127.0.0.1:19897/api/magnetic/";
 
     public Task<MagneticStatus> GetStatusAsync() => SendAsync("status", null);
@@ -208,14 +233,27 @@ public sealed class MagneticControlClient(HttpClient? http = null) : IMagneticCo
     public Task<MagneticStatus> AcknowledgeExternalResynchronizationAsync() =>
         SendAsync("safety/acknowledge-external-resynchronization", new { confirm_external_resynchronization = true });
 
-    private async Task<MagneticStatus> SendAsync(string path, object? body)
+    public Task<MagneticStatus> SetBatchActuationAsync(IReadOnlyList<ushort> logicalIds, double millimeters) =>
+        SendAsync("batch/actuation", new { logical_ids = logicalIds, millimeters }, batch: true);
+    public Task<MagneticStatus> SetBatchRapidTriggerAsync(IReadOnlyList<ushort> logicalIds, bool enable,
+        double? pressMm = null, double? releaseMm = null, bool resolveDks = false) =>
+        enable ? SendAsync("batch/rapid-trigger", new { logical_ids = logicalIds, action = "enable",
+            press_mm = pressMm, release_mm = releaseMm, resolve_dks = resolveDks }, batch: true) :
+            SendAsync("batch/rapid-trigger", new { logical_ids = logicalIds, action = "disable" }, batch: true);
+    public Task<MagneticStatus> SetBatchDeadzoneAsync(IReadOnlyList<ushort> logicalIds, double topMm, double bottomMm) =>
+        SendAsync("batch/deadzone", new { logical_ids = logicalIds, top_mm = topMm, bottom_mm = bottomMm }, batch: true);
+
+    private async Task<MagneticStatus> SendAsync(string path, object? body, bool batch = false)
     {
         try
         {
             using var request = new HttpRequestMessage(body == null ? HttpMethod.Get : HttpMethod.Post, Base + path);
+            // 68 sequential transactions take at least 68 * (210 + 400) ms;
+            // RT conflict resolution can double that. Keep ordinary calls at 15 s.
+            using var timeout = new CancellationTokenSource(batch ? TimeSpan.FromMinutes(3) : TimeSpan.FromSeconds(15));
             if (body != null)
                 request.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
-            using var response = await _http.SendAsync(request).ConfigureAwait(false);
+            using var response = await _http.SendAsync(request, timeout.Token).ConfigureAwait(false);
             var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
             var status = JsonSerializer.Deserialize<MagneticStatus>(json);
             if (status == null || status.ApiVersion != 1 ||

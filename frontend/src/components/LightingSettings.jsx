@@ -203,13 +203,13 @@ export default function LightingSettings({
           </div>
         )}
 
-        {/* 磁轴模拟行程卡片 */}
+        {/* 基于按键事件的静态光效高亮，保留 analog 配置字段兼容旧方案。 */}
         {currentEffect === 'static' && (
           <div className="p-4 rounded-md-lg border border-md-outline-variant bg-md-surface-container flex flex-col gap-2 shadow-sm">
             <div className="flex items-center justify-between">
               <div className="flex flex-col">
-                <span className="text-xs font-bold text-md-on-surface">磁轴模拟行程 (Analog)</span>
-                <span className="text-xs text-md-on-surface-variant">实时映射实体磁轴行程下压深度</span>
+                <span className="text-xs font-bold text-md-on-surface">按键高亮</span>
+                <span className="text-xs text-md-on-surface-variant">按下按键时增强该键亮度，松开后渐隐。基于按键事件，不读取磁轴行程。</span>
               </div>
               <button
                 type="button"
@@ -219,7 +219,7 @@ export default function LightingSettings({
                     ? 'bg-md-primary text-md-on-primary border-md-primary shadow-sm'
                     : 'bg-md-surface-container-high border-md-outline text-md-on-surface-variant hover:text-md-on-surface'
                 }`}
-                aria-label={isAnalogEnabled ? '关闭磁轴模拟' : '开启磁轴模拟'}
+                aria-label={isAnalogEnabled ? '关闭按键高亮' : '开启按键高亮'}
               >
                 {isAnalogEnabled ? '已开启' : '已关闭'}
               </button>

@@ -3,7 +3,9 @@
 #include "aura/hardware/m605_key_mapping.h"
 #include <cmath>
 #include <future>
+#include <set>
 #include <string_view>
+#include <vector>
 
 namespace aura {
 namespace {
@@ -38,6 +40,21 @@ bool LogicalKeyValue(const Json& value, uint16_t& key) {
 
 bool LogicalKey(const Json& body, const char* field, uint16_t& key) {
     return body.is_object() && body.contains(field) && LogicalKeyValue(body.at(field), key);
+}
+
+bool BatchLogicalKeys(const Json& body, std::vector<uint16_t>& keys) {
+    if (!body.is_object() || !body.contains("logical_ids") ||
+        !body.at("logical_ids").is_array() || body.at("logical_ids").empty() ||
+        body.at("logical_ids").size() > m605::VerifiedM605PhysicalKeyCount()) return false;
+    std::set<uint16_t> requested;
+    for (const auto& value : body.at("logical_ids")) {
+        uint16_t key = 0;
+        if (!LogicalKeyValue(value, key) || !requested.insert(key).second) return false;
+    }
+    // The audited physical layout is the execution order, independent of JSON/click order.
+    for (const auto& physical : m605::detail::kVerifiedPhysicalKeys)
+        if (requested.find(physical.logical_id) != requested.end()) keys.push_back(physical.logical_id);
+    return keys.size() == requested.size();
 }
 
 bool Millimeters(const Json& body, const char* field, int min_raw, int max_raw, double& value) {
@@ -454,5 +471,160 @@ void MagneticControlService::RegisterRoutes(httplib::Server& server) {
     write("/api/magnetic/global/actuation", Mutation::GlobalActuation);
     write("/api/magnetic/global/deadzone", Mutation::GlobalDeadzone);
     write("/api/magnetic/global/rapid-trigger", Mutation::GlobalRapidTrigger);
+
+    const auto batch_write = [this, &server](const char* route, Mutation family) {
+        server.Post(route, [this, family](const httplib::Request& request, httplib::Response& response) {
+            if (!ValidRequest(request, response)) return;
+            const Json body = Json::parse(request.body, nullptr, false);
+            std::vector<uint16_t> keys;
+            double first = 0, second = 0;
+            bool resolve_dks = false;
+            bool enable_rt = false;
+            bool valid = BatchLogicalKeys(body, keys);
+            if (valid && family == Mutation::Actuation)
+                valid = ExactFields(body, {"logical_ids", "millimeters"}) &&
+                    Millimeters(body, "millimeters", 1, 40, first);
+            else if (valid && family == Mutation::Deadzone)
+                valid = ExactFields(body, {"logical_ids", "top_mm", "bottom_mm"}) &&
+                    Millimeters(body, "top_mm", 0, 5, first) &&
+                    Millimeters(body, "bottom_mm", 0, 5, second);
+            else if (valid && family == Mutation::RtOn) {
+                valid = body.contains("action") && body.at("action").is_string();
+                if (valid) {
+                    const auto action = body.at("action").get<std::string>();
+                    enable_rt = action == "enable";
+                    valid = enable_rt ?
+                        ExactFields(body, {"logical_ids", "action", "press_mm", "release_mm", "resolve_dks"}) &&
+                            Millimeters(body, "press_mm", 1, 25, first) &&
+                            Millimeters(body, "release_mm", 1, 25, second) &&
+                            Boolean(body, "resolve_dks", resolve_dks) :
+                        action == "disable" && ExactFields(body, {"logical_ids", "action"});
+                }
+            }
+            if (!valid) {
+                WriteStatus(response, false, 422, "Invalid batch shape, key set, or setting value"); return;
+            }
+
+            Json results = Json::array();
+            for (uint16_t key : keys)
+                results.push_back({{"logical_id", key}, {"status", "NotExecuted"}});
+            const auto respond = [&](bool success, int code, std::string_view detail,
+                                     const Json& configured, const Json& unknown) {
+                WriteStatus(response, success, code, detail);
+                Json output = Json::parse(response.body);
+                size_t applied = 0, failed = 0;
+                for (const auto& item : results) {
+                    applied += item.at("status") == "Applied";
+                    failed += item.at("status") == "Failed";
+                }
+                output["batch_result"] = {{"requested_count", keys.size()}, {"applied_count", applied},
+                    {"failed_count", failed}, {"not_executed_count", keys.size() - applied - failed},
+                    {"completed_fully", success && applied == keys.size()},
+                    {"health", HealthName(runtime_->GetHealth())}, {"results", results},
+                    {"configured_dks_keys", configured}, {"unknown_dks_keys", unknown}};
+                response.set_content(output.dump(), "application/json; charset=utf-8");
+            };
+            const Json empty = Json::array();
+            std::unique_lock<std::mutex> write_lock(write_mutex_, std::try_to_lock);
+            if (!write_lock.owns_lock() || runtime_->HasQueuedWork() ||
+                runtime_->GetHealth() == M605RuntimeHealth::TransactionInProgress) {
+                respond(false, 409, "Another magnetic setting is applying", empty, empty); return;
+            }
+            if (!HardwareAvailable() || runtime_->GetHealth() != M605RuntimeHealth::Clean ||
+                runtime_->IsPersistentSafetyQuarantined()) {
+                respond(false, 409, "Magnetic runtime unavailable or safety quarantined", empty, empty); return;
+            }
+
+            const auto host = host_profile_();
+            const auto shadow = runtime_->GetAppliedRuntimeState();
+            Json configured = Json::array(), unknown = Json::array();
+            std::set<uint16_t> needs_restore;
+            std::optional<std::pair<double, double>> inherited_rt;
+            if (shadow.global_rapid_trigger)
+                inherited_rt = {{shadow.global_rapid_trigger->press_raw / 10.0,
+                    shadow.global_rapid_trigger->release_raw / 10.0}};
+            else if (host.global_rt_press_raw && host.global_rt_release_raw)
+                inherited_rt = {{*host.global_rt_press_raw / 10.0,
+                    *host.global_rt_release_raw / 10.0}};
+            if (family == Mutation::RtOn && !enable_rt && !inherited_rt) {
+                respond(false, 409, "Trusted global RT Press/Release values are unavailable", empty, empty); return;
+            }
+            // Build the exact existing per-key reports for every key before the first write.
+            for (uint16_t key : keys) {
+                bool accepted = false;
+                if (family == Mutation::Actuation)
+                    accepted = m605::BuildPerKeyActuation(key, first).has_value();
+                else if (family == Mutation::Deadzone)
+                    accepted = m605::BuildPerKeyDeadzone(key, first, second).has_value();
+                else if (enable_rt) {
+                    accepted = m605::BuildPerKeyRapidTriggerStages(key, first, second, true).has_value();
+                    const auto dks = shadow.per_key_dks.find(key);
+                    if (dks == shadow.per_key_dks.end()) {
+                        unknown.push_back(key); needs_restore.insert(key);
+                    } else if (!dks->second.standard_runtime_configuration) {
+                        configured.push_back(key); needs_restore.insert(key);
+                    }
+                    if (accepted && needs_restore.find(key) != needs_restore.end())
+                        accepted = m605::BuildPerKeyDksStages(m605::StandardDksConfiguration(key)).has_value();
+                } else
+                    accepted = m605::BuildPerKeyRapidTriggerStages(key,
+                        inherited_rt->first, inherited_rt->second,
+                        false).has_value();
+                if (!accepted) {
+                    respond(false, 422, "Existing per-key builder rejected batch input", configured, unknown); return;
+                }
+            }
+            if (enable_rt && !resolve_dks && !needs_restore.empty()) {
+                respond(false, 409, "DKS is configured or unknown for selected keys; explicit confirmation is required",
+                    configured, unknown); return;
+            }
+
+            size_t applied = 0;
+            for (size_t i = 0; i < keys.size(); ++i) {
+                const uint16_t key = keys[i];
+                if (runtime_->GetHealth() != M605RuntimeHealth::Clean ||
+                    runtime_->IsPersistentSafetyQuarantined()) {
+                    results[i]["status"] = "Failed";
+                    results[i]["detail"] = "Runtime safety stop before this key was submitted";
+                    break;
+                }
+                bool restored = false;
+                std::string detail;
+                bool success = false;
+                try {
+                    if (enable_rt && needs_restore.find(key) != needs_restore.end()) {
+                        if (!runtime_->RestorePerKeyDksToStandard(key).get())
+                            detail = "DKS standard rewrite failed; RT was not submitted";
+                        else restored = true;
+                    }
+                    if (detail.empty()) {
+                        if (family == Mutation::Actuation) success = runtime_->SetPerKeyActuation(key, first).get();
+                        else if (family == Mutation::Deadzone) success = runtime_->SetPerKeyDeadzone(key, first, second).get();
+                        else if (enable_rt) success = runtime_->SetPerKeyRapidTrigger(key, first, second).get();
+                        else success = runtime_->DisablePerKeyRapidTrigger(key,
+                            inherited_rt->first, inherited_rt->second).get();
+                    }
+                } catch (const std::exception& ex) { detail = ex.what(); }
+                if (success) {
+                    results[i]["status"] = "Applied";
+                    ++applied;
+                    continue;
+                }
+                results[i]["status"] = "Failed";
+                if (restored && enable_rt)
+                    detail = "DKS restored before RT submission failed; this key may now be Standard";
+                else if (detail.empty()) detail = runtime_->GetLastError();
+                results[i]["detail"] = detail;
+                break; // No rollback and no subsequent key mutation.
+            }
+            const bool complete = applied == keys.size();
+            respond(complete, complete ? 200 : applied ? 207 :
+                runtime_->GetHealth() == M605RuntimeHealth::Clean ? 503 : 409,
+                complete ? "" : "Batch stopped at the first failed or unsafe key", configured, unknown);
+        });
+    };
+    batch_write("/api/magnetic/batch/actuation", Mutation::Actuation);
+    batch_write("/api/magnetic/batch/rapid-trigger", Mutation::RtOn);
+    batch_write("/api/magnetic/batch/deadzone", Mutation::Deadzone);
 }
 } // namespace aura

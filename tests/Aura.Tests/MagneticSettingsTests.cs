@@ -213,13 +213,27 @@ public sealed class MagneticSettingsTests
         await model.RefreshAsync();
         model.EditSpeedTapPair(0x0602, 0x0301);
         model.EditSpeedTapMaster(true);
-        model.EditStaticAnalog(true);
         Assert.IsEmpty(fake.Calls);
         Assert.IsTrue(await model.ApplySpeedTapPairAsync(true));
         Assert.IsTrue(await model.ApplySpeedTapMasterAsync());
         Assert.IsTrue(await model.ResetSpeedTapToProfileAsync());
-        Assert.IsTrue(await model.ApplyStaticAnalogAsync());
-        CollectionAssert.AreEqual(new[] { "pair-on:1538:769", "master:True", "profile-reset", "analog:True" }, fake.Calls);
+        CollectionAssert.AreEqual(new[] { "pair-on:1538:769", "master:True", "profile-reset" }, fake.Calls);
+    }
+
+    [TestMethod]
+    public async Task HardwareAnalogNormalApplyIsBlockedWhileAuraCannotEstablishFirmwareStatic()
+    {
+        var fake = new Fake();
+        var model = new MagneticSettingsModel(fake);
+        await model.RefreshAsync();
+        Assert.IsTrue(model.CanWrite);
+        Assert.IsFalse(model.CanApplyStaticAnalog);
+        StringAssert.Contains(MagneticSettingsModel.HardwareAnalogDescription, "固件根据磁轴行程直接渲染");
+        StringAssert.Contains(MagneticSettingsModel.HardwareAnalogDescription, "固件恒亮模式");
+        StringAssert.Contains(MagneticSettingsModel.HardwareAnalogBlockedReason, "无法安全切换");
+        model.EditStaticAnalog(true);
+        Assert.IsFalse(await model.ApplyStaticAnalogAsync());
+        Assert.IsEmpty(fake.Calls);
     }
 
     [TestMethod]
@@ -437,6 +451,156 @@ public sealed class MagneticSettingsTests
     }
 
     [TestMethod]
+    public async Task MultiSelectionIsUniqueReadOnlyAndPreservesUnknownProvenance()
+    {
+        var fake = new Fake();
+        var model = new MagneticSettingsModel(fake);
+        await model.RefreshAsync();
+        Assert.AreEqual(MagneticSelectionContext.Global, model.SelectionContext);
+        Assert.IsTrue(model.Select(0x0701)); // W
+        Assert.AreEqual(MagneticSelectionContext.Single, model.SelectionContext);
+        Assert.IsTrue(model.EnterMulti());
+        Assert.AreEqual(MagneticSelectionContext.Multi, model.SelectionContext);
+        Assert.AreEqual(1, model.SelectedCount);
+        Assert.IsTrue(model.ToggleMulti(0x0602)); // A
+        Assert.IsTrue(model.ToggleMulti(0x0702)); // S
+        Assert.IsTrue(model.ToggleMulti(0x0301)); // D
+        Assert.AreEqual("W · A · S · D", model.MultiSelectionSummary);
+        Assert.AreEqual(4, model.SelectedCount);
+        Assert.IsFalse(model.CanWriteSelected);
+        Assert.IsFalse(model.CanWriteGlobal);
+        Assert.IsFalse(model.ToggleMulti(0xffff));
+        Assert.AreEqual(4, model.SelectedCount);
+
+        fake.Status.Actuation.Add(new MagneticActuationValue { LogicalId = 0x0701, Raw = 10, Source = "SessionApplied" });
+        fake.Status.Actuation.Add(new MagneticActuationValue { LogicalId = 0x0602, Raw = 20, Source = "SessionApplied" });
+        fake.Status.RapidTrigger.Add(new MagneticRapidTriggerValue { LogicalId = 0x0701, Enabled = true, Source = "SessionApplied" });
+        fake.Status.Deadzone.Add(new MagneticDeadzoneValue { LogicalId = 0x0701, TopRaw = 1, BottomRaw = 2, Source = "SessionApplied" });
+        await model.RefreshAsync();
+        Assert.AreEqual("2 个已知 · 2 个未知", model.MultiActuationText);
+        Assert.AreEqual("1 个已知 · 3 个未知", model.MultiRapidTriggerText);
+        Assert.AreEqual("1 个已知 · 3 个未知", model.MultiDeadzoneText);
+        fake.Status.Actuation.Add(new MagneticActuationValue { LogicalId = 0x0702, Raw = 10, Source = "SessionApplied" });
+        fake.Status.Actuation.Add(new MagneticActuationValue { LogicalId = 0x0301, Raw = 10, Source = "HostProfile" });
+        Assert.AreEqual("混合值", model.MultiActuationText);
+        fake.Status.Actuation[1].Raw = 10;
+        Assert.AreEqual("来源混合：1.0 mm", model.MultiActuationText);
+
+        model.EditActuation(2.0);
+        model.EditRapidTrigger(true, 0.5, 0.3);
+        model.EditDeadzone(0.1, 0.2);
+        Assert.IsFalse(await model.ApplyActuationAsync());
+        Assert.IsFalse(await model.ApplyRapidTriggerAsync(true));
+        Assert.IsFalse(await model.ApplyDeadzoneAsync());
+        Assert.IsEmpty(fake.Calls);
+        Assert.IsTrue(model.ToggleMulti(0x0301));
+        Assert.AreEqual(3, model.SelectedCount);
+        Assert.IsTrue(model.ToggleMulti(0x0301));
+        Assert.AreEqual(4, model.SelectedCount);
+        Assert.AreEqual(4, model.SelectedLogicalIds.Distinct().Count());
+        Assert.IsTrue(model.ClearMulti());
+        Assert.AreEqual(0, model.SelectedCount);
+        Assert.IsTrue(model.SelectGlobal());
+        Assert.AreEqual(MagneticSelectionContext.Global, model.SelectionContext);
+        Assert.IsEmpty(fake.Calls);
+    }
+
+    [TestMethod]
+    public async Task DksTriStateAndConflictCopyUseSessionEvidenceOnly()
+    {
+        var fake = new Fake();
+        var model = new MagneticSettingsModel(fake);
+        await model.RefreshAsync();
+        model.Select(0x0402);
+        Assert.AreEqual(MagneticDksState.Unknown, model.DksState);
+        Assert.IsTrue(model.RtConflictPossible);
+        StringAssert.Contains(model.RtDksConflictCopy, "无法确认此键当前的 DKS 状态");
+        Assert.IsTrue(model.ConfigureDksEditor());
+        Assert.IsTrue(model.DksEditorOpen);
+        Assert.IsEmpty(fake.Calls);
+
+        fake.Status.Dks.Add(new MagneticDksValue { LogicalId = 0x0402, Source = "HostProfile", StandardRuntimeConfiguration = false });
+        await model.RefreshAsync();
+        Assert.AreEqual(MagneticDksState.Unknown, model.DksState);
+        fake.Status.Dks.Add(new MagneticDksValue { LogicalId = 0x0402, Source = "SessionApplied", StandardRuntimeConfiguration = true });
+        await model.RefreshAsync();
+        Assert.AreEqual(MagneticDksState.Standard, model.DksState);
+        Assert.IsFalse(model.RtConflictPossible);
+        fake.Status.Dks.Last().StandardRuntimeConfiguration = false;
+        Assert.AreEqual(MagneticDksState.SessionConfigured, model.DksState);
+        StringAssert.Contains(model.RtDksConflictCopy, "本次会话中已配置 DKS");
+        Assert.IsFalse(model.RtDksConflictCopy.Contains("无法确认"));
+        Assert.IsTrue(await model.RestoreDksStandardAsync());
+        CollectionAssert.AreEqual(new[] { "dks-standard:1026" }, fake.Calls);
+    }
+
+    [TestMethod]
+    public async Task BatchDraftsAreExplicitAggregatesTypedAndSelectionFreezesWhileBusy()
+    {
+        var fake = new Fake();
+        var model = new MagneticSettingsModel(fake);
+        await model.RefreshAsync();
+        model.EnterMulti();
+        foreach (ushort id in new ushort[] { 0x0301, 0x0702, 0x0602, 0x0701 }) model.ToggleMulti(id);
+        Assert.AreEqual(MagneticAggregateKind.Unknown, model.MultiActuation.Kind);
+        Assert.IsNull(model.BatchDraft.ActuationMm);
+        Assert.IsFalse(model.CanBatchActuation);
+        fake.Status.Actuation.Add(new MagneticActuationValue { LogicalId = 0x0701, Raw = 12, Source = "SessionApplied" });
+        Assert.AreEqual(MagneticAggregateKind.ContainsUnknown, model.MultiActuation.Kind);
+        foreach (ushort id in new ushort[] { 0x0602, 0x0702, 0x0301 })
+            fake.Status.Actuation.Add(new MagneticActuationValue { LogicalId = id, Raw = 12, Source = "SessionApplied" });
+        Assert.AreEqual(MagneticAggregateKind.UniformKnown, model.MultiActuation.Kind);
+        fake.Status.Actuation[1].Raw = 14;
+        Assert.AreEqual(MagneticAggregateKind.MixedKnown, model.MultiActuation.Kind);
+        Assert.IsNull(model.BatchDraft.ActuationMm); // Mixed did not seed a draft.
+
+        model.EditBatchActuation(1.2);
+        Assert.IsTrue(model.CanBatchActuation);
+        var pending = new TaskCompletionSource<MagneticStatus>();
+        fake.Next = pending.Task;
+        var apply = model.ApplyBatchActuationAsync();
+        Assert.IsTrue(model.Busy);
+        Assert.IsFalse(model.ToggleMulti(0x0402));
+        Assert.IsFalse(model.SelectGlobal());
+        CollectionAssert.AreEqual(new[] { "batch-actuation:1793,1538,1794,769:1.2" }, fake.Calls);
+        pending.SetResult(new MagneticStatus { Status = "ok", ApiVersion = 1, Health = "Clean", Available = true,
+            BatchResult = new MagneticBatchResult { RequestedCount = 4, AppliedCount = 4,
+                CompletedFully = true } });
+        Assert.IsTrue(await apply);
+        Assert.IsFalse(model.Busy);
+        Assert.IsNull(model.BatchDraft.ActuationMm);
+        Assert.AreEqual(4, model.LastBatchResult!.AppliedCount);
+        Assert.IsTrue(model.ToggleMulti(0x0402));
+        Assert.IsNull(model.BatchDraft.ActuationMm); // New selection cannot inherit an old batch draft.
+    }
+
+    [TestMethod]
+    public async Task BatchRtDisableRequiresBaselineAndPartialResultsStayDistinct()
+    {
+        var fake = new Fake();
+        var model = new MagneticSettingsModel(fake);
+        await model.RefreshAsync();
+        model.EnterMulti(); model.ToggleMulti(0x0701); model.ToggleMulti(0x0602);
+        model.EditBatchRapidTrigger(MagneticBatchRtAction.Disable);
+        Assert.IsFalse(model.CanBatchRapidTrigger);
+        Assert.IsFalse(await model.ApplyBatchRapidTriggerAsync());
+        Assert.IsEmpty(fake.Calls);
+        fake.Status.HostProfile.GlobalRtPress = new MagneticKnownRaw { Known = true, Raw = 4, Source = "HostProfile" };
+        fake.Status.HostProfile.GlobalRtRelease = new MagneticKnownRaw { Known = true, Raw = 2, Source = "HostProfile" };
+        Assert.IsTrue(model.CanBatchRapidTrigger);
+        fake.Next = Task.FromResult(new MagneticStatus { Status = "error", ApiVersion = 1,
+            Health = "IndeterminateStagedState", BatchResult = new MagneticBatchResult {
+                RequestedCount = 2, AppliedCount = 1, FailedCount = 1, CompletedFully = false,
+                Results = [new() { LogicalId = 0x0701, Status = "Applied" },
+                    new() { LogicalId = 0x0602, Status = "Failed", Detail = "fake failure" }] } });
+        Assert.IsFalse(await model.ApplyBatchRapidTriggerAsync());
+        Assert.AreEqual(1, model.LastBatchResult!.AppliedCount);
+        Assert.AreEqual("Failed", model.LastBatchResult.Results[1].Status);
+        Assert.AreEqual(MagneticBatchRtAction.Disable, model.BatchDraft.RtAction);
+        CollectionAssert.AreEqual(new[] { "batch-rt:1793,1538:False:::False" }, fake.Calls);
+    }
+
+    [TestMethod]
     public async Task GlobalSettingsDraftAndApplyLifecycle()
     {
         var fake = new Fake();
@@ -601,6 +765,95 @@ public sealed class MagneticSettingsTests
     }
 
     [TestMethod]
+    public async Task KeycapOverlayLabelsGlobalBaselineAndPrefersExactPerKeyValues()
+    {
+        var fake = new Fake();
+        var model = new MagneticSettingsModel(fake);
+        await model.RefreshAsync();
+        const ushort w = 0x0701;
+        var unknown = model.KeyOverlay(w);
+        Assert.AreEqual("—", unknown.ActuationText);
+        Assert.AreEqual("—", unknown.RtPressText);
+        Assert.AreEqual("—", unknown.RtReleaseText);
+        Assert.IsTrue(unknown.AccessibilityText.Contains("触发点未知"));
+
+        fake.Status.HostProfile.GlobalActuation = new MagneticKnownRaw { Known = true, Raw = 10, Source = "HostProfile" };
+        fake.Status.GlobalActuation = new MagneticGlobalActuationState { Known = true, Raw = 10, Source = "HostProfile" };
+        fake.Status.HostProfile.GlobalRtPress = new MagneticKnownRaw { Known = true, Raw = 4, Source = "HostProfile" };
+        fake.Status.HostProfile.GlobalRtRelease = new MagneticKnownRaw { Known = true, Raw = 2, Source = "HostProfile" };
+        fake.Status.RapidTrigger.Add(new MagneticRapidTriggerValue { LogicalId = w, Enabled = true,
+            PressRaw = 4, ReleaseRaw = 2, Source = "HostProfile" });
+        model.Select(w);
+        model.EditActuation(1.8);
+        model.EditRapidTrigger(true, 0.8, 0.6);
+        var baseline = model.KeyOverlay(w);
+        Assert.AreEqual("1.0", baseline.ActuationText);
+        Assert.AreEqual(MagneticOverlaySource.HostGlobalBaseline, baseline.ActuationSource);
+        Assert.IsTrue(baseline.AccessibilityText.Contains("全局基线 1.0 mm"));
+        Assert.IsTrue(baseline.AccessibilityText.Contains("设备逐键覆盖状态未确认"));
+        Assert.AreEqual("—", model.KeyOverlay(w).RtPressText);
+
+        fake.Status.Actuation.Add(new MagneticActuationValue { LogicalId = w, Raw = 10, Source = "HostProfile" });
+        fake.Status.RapidTrigger.Add(new MagneticRapidTriggerValue { LogicalId = w, Enabled = true,
+            PressRaw = 2, ReleaseRaw = 3, Source = "SessionApplied" });
+        var known = model.KeyOverlay(w);
+        Assert.AreEqual("1.0", known.ActuationText);
+        Assert.AreEqual("↓0.2", known.RtPressText);
+        Assert.AreEqual("↑0.3", known.RtReleaseText);
+        Assert.IsTrue(known.ActuationKnown && known.RtPressKnown && known.RtReleaseKnown);
+        Assert.AreEqual(MagneticOverlaySource.HostPerKey, known.ActuationSource);
+        Assert.IsTrue(known.AccessibilityText.Contains("触发点 1.0 mm"));
+        Assert.IsTrue(known.AccessibilityText.Contains("RT 按下 0.2 mm"));
+        Assert.IsTrue(known.AccessibilityText.Contains("RT 抬起 0.3 mm"));
+        Assert.AreEqual("1.0", model.KeyOverlay(0x0602).ActuationText);
+        Assert.AreEqual(MagneticOverlaySource.HostGlobalBaseline, model.KeyOverlay(0x0602).ActuationSource);
+
+        fake.Status.Actuation.Add(new MagneticActuationValue { LogicalId = w, Raw = 12, Source = "SessionApplied" });
+        Assert.AreEqual("1.2", model.KeyOverlay(w).ActuationText); // SessionApplied wins over HostProfile.
+        Assert.AreEqual(MagneticOverlaySource.SessionPerKey, model.KeyOverlay(w).ActuationSource);
+        Assert.IsTrue(model.KeyOverlay(w).AccessibilityText.Contains("本次会话逐键设置"));
+        fake.Status.RapidTrigger.Last().Enabled = false;
+        var disabled = model.KeyOverlay(w);
+        Assert.AreEqual("—", disabled.RtPressText);
+        Assert.AreEqual("—", disabled.RtReleaseText);
+        Assert.IsTrue(disabled.AccessibilityText.Contains("RT 已禁用"));
+        Assert.IsEmpty(fake.Calls); // Projection and drafts do not mutate hardware.
+    }
+
+    [TestMethod]
+    public async Task BatchIpcUsesOnlyTypedLogicalIdsAndExplicitRtAction()
+    {
+        var handler = new CaptureHandler();
+        var client = new MagneticControlClient(new HttpClient(handler));
+        ushort[] ids = [0x0701, 0x0602];
+        await client.SetBatchActuationAsync(ids, 1.2);
+        Assert.AreEqual("/api/magnetic/batch/actuation", handler.Path);
+        using (var doc = JsonDocument.Parse(handler.Body!)) {
+            Assert.AreEqual(2, doc.RootElement.GetProperty("logical_ids").GetArrayLength());
+            Assert.AreEqual(1.2, doc.RootElement.GetProperty("millimeters").GetDouble(), 0.001);
+        }
+        await client.SetBatchRapidTriggerAsync(ids, true, 0.8, 0.6, true);
+        Assert.AreEqual("/api/magnetic/batch/rapid-trigger", handler.Path);
+        using (var doc = JsonDocument.Parse(handler.Body!)) {
+            Assert.AreEqual("enable", doc.RootElement.GetProperty("action").GetString());
+            Assert.IsTrue(doc.RootElement.GetProperty("resolve_dks").GetBoolean());
+        }
+        await client.SetBatchRapidTriggerAsync(ids, false);
+        using (var doc = JsonDocument.Parse(handler.Body!)) {
+            Assert.AreEqual("disable", doc.RootElement.GetProperty("action").GetString());
+            Assert.IsFalse(doc.RootElement.TryGetProperty("press_mm", out _));
+        }
+        await client.SetBatchDeadzoneAsync(ids, 0.0, 0.3);
+        Assert.AreEqual("/api/magnetic/batch/deadzone", handler.Path);
+        using (var doc = JsonDocument.Parse(handler.Body!)) {
+            Assert.AreEqual(0.0, doc.RootElement.GetProperty("top_mm").GetDouble(), 0.001);
+            Assert.AreEqual(0.3, doc.RootElement.GetProperty("bottom_mm").GetDouble(), 0.001);
+        }
+        Assert.IsFalse(handler.Body!.Contains("opcode", StringComparison.OrdinalIgnoreCase));
+        Assert.IsFalse(handler.Body.Contains("wire_id", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [TestMethod]
     public async Task ServiceRouteRequiresExplicitConfirmationAndEmitsZeroVendorOpcode()
     {
         var handler = new CaptureHandler();
@@ -745,6 +998,13 @@ public sealed class MagneticSettingsTests
         public Task<MagneticStatus> SetSpeedTapMasterAsync(bool enabled) => Record($"master:{enabled}");
         public Task<MagneticStatus> ResetSpeedTapToProfileAsync() => Record("profile-reset");
         public Task<MagneticStatus> SetStaticAnalogEffectAsync(bool enabled) => Record($"analog:{enabled}");
+        public Task<MagneticStatus> SetBatchActuationAsync(IReadOnlyList<ushort> ids, double mm) =>
+            Record($"batch-actuation:{string.Join(',', ids)}:{mm:F1}");
+        public Task<MagneticStatus> SetBatchRapidTriggerAsync(IReadOnlyList<ushort> ids, bool enable,
+            double? press = null, double? release = null, bool resolveDks = false) =>
+            Record($"batch-rt:{string.Join(',', ids)}:{enable}:{press:F1}:{release:F1}:{resolveDks}");
+        public Task<MagneticStatus> SetBatchDeadzoneAsync(IReadOnlyList<ushort> ids, double top, double bottom) =>
+            Record($"batch-deadzone:{string.Join(',', ids)}:{top:F1}:{bottom:F1}");
         public Task<MagneticStatus> AcknowledgeExternalResynchronizationAsync()
         {
             Status.PersistentSafetyQuarantine = false;

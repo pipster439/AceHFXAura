@@ -1,3 +1,11 @@
+## [0.1.0-alpha.6] — Release draft
+
+- Reactive, Ripple and Static key highlight now use physical Down/Up lifecycle input. OS key repeat is filtered; Reactive stays lit while held and fades after release; each Ripple press creates one wave.
+- Magnetic UX adds responsive Global / Single / Multi selection, batch Actuation / Rapid Trigger / Deadzone with partial-result and stop-on-first-failure semantics, and DKS Standard / SessionConfigured / Unknown status.
+- Keycaps show known per-key magnetic values and a visually secondary, labeled Global Actuation baseline where available. Unknown RT sensitivity remains unknown; the key legend stays centered.
+- PC Static **按键高亮** is explicitly a key-event effect and does not read Hall travel.
+- 保留已验证的固件压感灯效底层支持；由于 Direct RGB 到固件灯光模式的安全切换尚未闭环，本版本将其标记为实验性并限制正常启用。自动 Lighting Ownership 延后。
+
 ## [0.1.0-alpha.5] — Magnetic switch controls
 
 - **Native magnetic-switch control for ROG Falchion Ace HFX**: Direct MI_01 Win32 HID native control without proprietary HAL dependency.

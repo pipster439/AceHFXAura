@@ -11,12 +11,14 @@ namespace aura {
 static ForegroundMonitor* g_monitor_instance = nullptr;
 
 static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
-    if (nCode == HC_ACTION && (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN)) {
+    if (nCode == HC_ACTION && (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN ||
+                               wParam == WM_KEYUP || wParam == WM_SYSKEYUP)) {
         KBDLLHOOKSTRUCT* pKb = reinterpret_cast<KBDLLHOOKSTRUCT*>(lParam);
         if (pKb) {
             std::string kName = VkToKeyName(pKb->vkCode, pKb->flags);
             if (!kName.empty()) {
-                KeyInputHub::Instance().RecordKeyPress(kName);
+                KeyInputHub::Instance().RecordKeyEvent(kName,
+                    (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN) ? KeyEventType::Down : KeyEventType::Up);
             }
         }
     }
@@ -259,6 +261,7 @@ void ForegroundMonitor::MonitorThreadProc() {
     if (kb_hook) {
         UnhookWindowsHookEx(kb_hook);
     }
+    KeyInputHub::Instance().Reset();
 
     if (hook_handle_) {
         UnhookWinEvent(hook_handle_);

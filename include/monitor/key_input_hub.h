@@ -4,12 +4,17 @@
 #include <vector>
 #include <mutex>
 #include <chrono>
+#include <unordered_set>
 #include <windows.h>
 
 namespace aura {
 
-struct KeyPressEvent {
+enum class KeyEventType { Down, Up };
+
+struct KeyInputEvent {
     std::string key_name;
+    KeyEventType type;
+    uint64_t sequence{0};
     uint64_t timestamp_ms{0};
 };
 
@@ -20,40 +25,77 @@ public:
         return instance;
     }
 
-    void RecordKeyPress(const std::string& key_name) {
+    void RecordKeyEvent(const std::string& key_name, KeyEventType type) {
+        RecordKeyEventAt(key_name, type, MonotonicMs());
+    }
+
+    void ReadSince(uint64_t& cursor, std::vector<KeyInputEvent>& out_events,
+                   std::unordered_set<std::string>& held, uint64_t* observed_at_ms = nullptr) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        out_events.clear();
+        for (const auto& event : events_) {
+            if (event.sequence > cursor) out_events.push_back(event);
+        }
+        cursor = sequence_;
+        held = held_;
+        if (observed_at_ms) *observed_at_ms = MonotonicMs();
+    }
+
+    uint64_t CurrentSequence() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return sequence_;
+    }
+
+    void Reset() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        const uint64_t now = MonotonicMs();
+        for (const auto& key : held_) {
+            events_.push_back({key, KeyEventType::Up, ++sequence_, now});
+        }
+        held_.clear();
+        TrimEvents();
+    }
+
+private:
+    friend class KeyInputHubTestPeer;
+    static uint64_t MonotonicMs() {
+        return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()).count());
+    }
+
+    void RecordKeyEventAt(const std::string& key_name, KeyEventType type, uint64_t now) {
         if (key_name.empty()) return;
-        auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::steady_clock::now().time_since_epoch()).count();
 
         std::lock_guard<std::mutex> lock(mutex_);
-        if (key_name == "COPILOT") {
+        if (type == KeyEventType::Down && !held_.insert(key_name).second) return;
+        if (type == KeyEventType::Up && held_.erase(key_name) == 0) return;
+        if (type == KeyEventType::Down && key_name == "COPILOT") {
             // Windows 11 Copilot 键硬件发送合成宏: Win + Shift + F23
             // 若 50ms 内刚压入了由该宏产生的合成 L_WIN 或 L_SHIFT，则消除前置假事件，避免左下角误闪
             while (!events_.empty() && 
                    (events_.back().key_name == "L_SHIFT" || events_.back().key_name == "L_WIN") &&
-                   (now - events_.back().timestamp_ms < 50)) {
+                   (now - events_.back().timestamp_ms < 50) &&
+                   events_.back().type == KeyEventType::Down) {
+                held_.erase(events_.back().key_name);
                 events_.pop_back();
             }
         }
-        events_.push_back({key_name, static_cast<uint64_t>(now)});
+        events_.push_back({key_name, type, ++sequence_, now});
         // 环形上限保护：当活跃灯效不消费按键事件时 (常亮/呼吸/波浪等)，
         // 防止长时间运行下事件队列无界增长；仅保留最近 MAX_PENDING_EVENTS 条
-        if (events_.size() > MAX_PENDING_EVENTS) {
-            events_.erase(events_.begin(), events_.begin() + (events_.size() - MAX_PENDING_EVENTS));
-        }
+        TrimEvents();
     }
 
-    void DrainEvents(std::vector<KeyPressEvent>& out_events) {
-        std::lock_guard<std::mutex> lock(mutex_);
-        out_events = std::move(events_);
-        events_.clear();
-    }
-
-private:
-    static constexpr size_t MAX_PENDING_EVENTS = 64;
+    static constexpr size_t MAX_PENDING_EVENTS = 1024;
     KeyInputHub() = default;
     std::mutex mutex_;
-    std::vector<KeyPressEvent> events_;
+    std::vector<KeyInputEvent> events_;
+    std::unordered_set<std::string> held_;
+    uint64_t sequence_{0};
+    void TrimEvents() {
+        if (events_.size() > MAX_PENDING_EVENTS)
+            events_.erase(events_.begin(), events_.begin() + (events_.size() - MAX_PENDING_EVENTS));
+    }
 };
 
 inline std::string VkToKeyName(DWORD vk, DWORD flags = 0) {

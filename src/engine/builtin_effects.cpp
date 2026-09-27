@@ -12,6 +12,12 @@ namespace aura {
 
 static constexpr double PI = 3.14159265358979323846;
 
+static double ReleaseAgeMs(const ReleaseFade& fade, uint64_t elapsed_ms) {
+    return static_cast<double>(fade.age_at_observation_ms) +
+           static_cast<double>(elapsed_ms >= fade.observed_elapsed_ms ?
+                               elapsed_ms - fade.observed_elapsed_ms : 0);
+}
+
 static ColorRGB HsvToRgb(double h, double s, double v) {
     while (h < 0.0) h += 360.0;
     while (h >= 360.0) h -= 360.0;
@@ -55,28 +61,31 @@ static void GetDirVector(const std::string& dir, double& out_x, double& out_y) {
 }
 
 // 1. 纯静态单色 (支持模拟触发压感增亮)
-void StaticEffect::Render(uint64_t /*elapsed_ms*/, FrameBuffer& out_frame, const Keymap& keymap) {
+void StaticEffect::Render(uint64_t elapsed_ms, FrameBuffer& out_frame, const Keymap& keymap) {
     if (!analog_) {
         out_frame.Fill(color_.r, color_.g, color_.b);
         return;
     }
 
     // 模拟灯效：读取真实按键，按下的键及周围爆发额外白炽光晕
-    std::vector<KeyPressEvent> events;
-    KeyInputHub::Instance().DrainEvents(events);
+    std::vector<KeyInputEvent> events;
+    std::unordered_set<std::string> held;
+    uint64_t observed_at_ms = 0;
+    KeyInputHub::Instance().ReadSince(input_cursor_, events, held, &observed_at_ms);
     for (const auto& ev : events) {
-        analog_decays_[ev.key_name] = 1.0;
+        if (ev.type == KeyEventType::Up)
+            analog_releases_[ev.key_name] = {elapsed_ms, observed_at_ms >= ev.timestamp_ms ?
+                observed_at_ms - ev.timestamp_ms : 0};
+        else analog_releases_.erase(ev.key_name);
     }
 
     for (const auto& [name, info] : keymap.GetAllKeys()) {
         if (info.led_id < 0 || info.led_id >= static_cast<int>(TOTAL_LEDS)) continue;
 
         double extra = 0.0;
-        auto it = analog_decays_.find(name);
-        if (it != analog_decays_.end()) {
-            extra = it->second;
-            it->second = std::max(0.0, it->second - 0.035);
-        }
+        if (held.count(name)) extra = 1.0;
+        else if (auto it = analog_releases_.find(name); it != analog_releases_.end())
+            extra = 1.0 - std::clamp(ReleaseAgeMs(it->second, elapsed_ms) / 1000.0, 0.0, 1.0);
 
         uint8_t r = static_cast<uint8_t>(std::min(255.0, color_.r + extra * (255.0 - color_.r)));
         uint8_t g = static_cast<uint8_t>(std::min(255.0, color_.g + extra * (255.0 - color_.g)));
@@ -131,12 +140,17 @@ void WaveEffect::Render(uint64_t elapsed_ms, FrameBuffer& out_frame, const Keyma
 }
 
 // 5. 按键触发响应 (仅被敲击键点亮并自然衰减，无涟漪扩散，无自动化假演示)
-void ReactiveEffect::Render(uint64_t /*elapsed_ms*/, FrameBuffer& out_frame, const Keymap& keymap) {
+void ReactiveEffect::Render(uint64_t elapsed_ms, FrameBuffer& out_frame, const Keymap& keymap) {
     // 1. 摄取真实物理敲击
-    std::vector<KeyPressEvent> events;
-    KeyInputHub::Instance().DrainEvents(events);
+    std::vector<KeyInputEvent> events;
+    std::unordered_set<std::string> held;
+    uint64_t observed_at_ms = 0;
+    KeyInputHub::Instance().ReadSince(input_cursor_, events, held, &observed_at_ms);
     for (const auto& ev : events) {
-        key_decays_[ev.key_name] = 1.0;
+        if (ev.type == KeyEventType::Up)
+            release_times_[ev.key_name] = {elapsed_ms, observed_at_ms >= ev.timestamp_ms ?
+                observed_at_ms - ev.timestamp_ms : 0};
+        else release_times_.erase(ev.key_name);
     }
 
     // 2. 逐键渲染
@@ -144,11 +158,10 @@ void ReactiveEffect::Render(uint64_t /*elapsed_ms*/, FrameBuffer& out_frame, con
         if (info.led_id < 0 || info.led_id >= static_cast<int>(TOTAL_LEDS)) continue;
 
         double decay = 0.0;
-        auto it = key_decays_.find(name);
-        if (it != key_decays_.end()) {
-            decay = it->second;
-            it->second = std::max(0.0, it->second - 0.035);
-        }
+        if (held.count(name)) decay = 1.0;
+        else if (auto it = release_times_.find(name); it != release_times_.end())
+            decay = 1.0 - std::clamp(ReleaseAgeMs(it->second, elapsed_ms) /
+                                     static_cast<double>(speed_ms_), 0.0, 1.0);
 
         if (decay > 0.01) {
             uint8_t r = static_cast<uint8_t>(base_color_.r + decay * (trigger_color_.r - base_color_.r));
@@ -164,11 +177,13 @@ void ReactiveEffect::Render(uint64_t /*elapsed_ms*/, FrameBuffer& out_frame, con
 // 6. 涟漪扩散光效 (敲击按键激荡同心水波向四周扩散，无自动化假演示)
 void RippleEffect::Render(uint64_t elapsed_ms, FrameBuffer& out_frame, const Keymap& keymap) {
     // 1. 摄取真实物理按键
-    std::vector<KeyPressEvent> events;
-    KeyInputHub::Instance().DrainEvents(events);
+    std::vector<KeyInputEvent> events;
+    std::unordered_set<std::string> held;
+    KeyInputHub::Instance().ReadSince(input_cursor_, events, held);
     const auto& all_keys = keymap.GetAllKeys();
 
     for (const auto& ev : events) {
+        if (ev.type != KeyEventType::Down) continue;
         auto it = all_keys.find(ev.key_name);
         if (it != all_keys.end()) {
             double rx = it->second.physical_x > 0.0 ? it->second.physical_x : static_cast<double>(it->second.physical_col);
