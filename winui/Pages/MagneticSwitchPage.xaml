@@ -116,7 +116,7 @@
                                    TextWrapping="Wrap"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                    Style="{ThemeResource CaptionTextBlockStyle}" />
-                        <TextBlock Text="键帽参数单位：mm · 左上 触发点 · 右上 ↓RT按下 · 右下 ↑RT抬起 · — 表示未知或不适用"
+                        <TextBlock Text="键帽参数单位：mm · 左上 触发点 · 右上 ↓RT按下 · 右下 ↑RT抬起 · 浅色数值为全局基线 · — 为未知或不适用"
                                    TextWrapping="Wrap"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                    Style="{ThemeResource CaptionTextBlockStyle}" />

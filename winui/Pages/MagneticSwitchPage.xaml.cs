@@ -359,10 +359,15 @@ public sealed partial class MagneticSwitchPage : Page
                 parts.Actuation.Foreground = button.Foreground;
                 parts.RtPress.Foreground = button.Foreground;
                 parts.RtRelease.Foreground = button.Foreground;
+                parts.Actuation.Opacity = overlay.ActuationSource is
+                    MagneticOverlaySource.SessionGlobalBaseline or MagneticOverlaySource.HostGlobalBaseline ? 0.55 : 0.82;
+                parts.RtPress.Opacity = overlay.RtPressKnown ? 0.82 : 0.55;
+                parts.RtRelease.Opacity = overlay.RtReleaseKnown ? 0.82 : 0.55;
                 button.BorderThickness = new Thickness(isSelected ? 2 : 1);
                 button.IsEnabled = !_model.Busy;
                 AutomationProperties.SetName(button, $"{visual.FullName}，{(isSelected ? "已选择" : "未选择")}，{overlay.AccessibilityText}");
-                AutomationProperties.SetHelpText(button, "键帽显示已知逐键配置，非设备读回。点击选中；Ctrl+点击切换多选；多选模式中点击切换选择");
+                AutomationProperties.SetHelpText(button, "键帽显示已知逐键配置或标注的全局基线，非设备读回。点击选中；Ctrl+点击切换多选；多选模式中点击切换选择");
+                ToolTipService.SetToolTip(button, $"{visual.FullName}：{overlay.AccessibilityText}。本页不是设备读回。");
             }
             AutomationProperties.SetName(SelectedKeyHeroCard, SelectedKeyHeroTitle.Text + "，" + SelectedKeyTagText.Text);
             AutomationProperties.SetName(MultiSelectButton, _model.IsMultiMode ?

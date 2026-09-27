@@ -114,6 +114,7 @@ internal static class MagneticLayoutValidation
         root.RequestedTheme = ElementTheme.Light;
         await Task.Delay(100);
         var status = client.CurrentStatus;
+        status.GlobalActuation = new MagneticGlobalActuationState { Known = true, Raw = 10, Source = "HostProfile" };
         Button Key(ushort id) => Descendants(page).OfType<Button>().First(button =>
             Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(button) == $"MagneticKey{id:X4}");
         TextBlock Part(ushort id, string kind) => Descendants(Key(id)).OfType<TextBlock>()
@@ -140,10 +141,13 @@ internal static class MagneticLayoutValidation
         page.ForceRender();
         await Task.Delay(100);
         if (Part(0x0701, "Actuation").Text != "1.0" || Part(0x0701, "RtPress").Text != "↓0.2" ||
-            Part(0x0701, "RtRelease").Text != "↑0.2" || Part(0x0100, "Actuation").Text != "—" ||
+            Part(0x0701, "RtRelease").Text != "↑0.2" || Part(0x0100, "Actuation").Text != "1.0" ||
             Part(0x0400, "RtPress").Text != "—" || Part(0x0503, "Actuation").Text != "1.5" ||
             Part(0x0707, "RtPress").Text != "↓0.4")
             throw new InvalidOperationException("Keycap overlay provenance or placement mismatch");
+        if (Part(0x0100, "Actuation").Opacity >= Part(0x0701, "Actuation").Opacity ||
+            !Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(Key(0x0100)).Contains("全局基线 1.0 mm"))
+            throw new InvalidOperationException("Global baseline lacks subtle or accessible source labeling");
         foreach (ushort id in special)
         {
             var visual = MagneticKeyLayout.Find(id)!;
@@ -160,7 +164,7 @@ internal static class MagneticLayoutValidation
         var wName = Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(w);
         if (!wName.Contains("未选择") || !wName.Contains("触发点 1.0 mm") ||
             !wName.Contains("RT 按下 0.2 mm") ||
-            !Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(Key(0x0100)).Contains("触发点未知"))
+            !Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(Key(0x0100)).Contains("设备逐键覆盖状态未确认"))
             throw new InvalidOperationException("Accessible overlay values or unknown state missing");
 
         var scale = window.Content.XamlRoot.RasterizationScale;

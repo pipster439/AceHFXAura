@@ -751,7 +751,7 @@ public sealed class MagneticSettingsTests
     }
 
     [TestMethod]
-    public async Task KeycapOverlayUsesOnlyAcceptedExactPerKeyValues()
+    public async Task KeycapOverlayLabelsGlobalBaselineAndPrefersExactPerKeyValues()
     {
         var fake = new Fake();
         var model = new MagneticSettingsModel(fake);
@@ -764,6 +764,7 @@ public sealed class MagneticSettingsTests
         Assert.IsTrue(unknown.AccessibilityText.Contains("触发点未知"));
 
         fake.Status.HostProfile.GlobalActuation = new MagneticKnownRaw { Known = true, Raw = 10, Source = "HostProfile" };
+        fake.Status.GlobalActuation = new MagneticGlobalActuationState { Known = true, Raw = 10, Source = "HostProfile" };
         fake.Status.HostProfile.GlobalRtPress = new MagneticKnownRaw { Known = true, Raw = 4, Source = "HostProfile" };
         fake.Status.HostProfile.GlobalRtRelease = new MagneticKnownRaw { Known = true, Raw = 2, Source = "HostProfile" };
         fake.Status.RapidTrigger.Add(new MagneticRapidTriggerValue { LogicalId = w, Enabled = true,
@@ -771,7 +772,11 @@ public sealed class MagneticSettingsTests
         model.Select(w);
         model.EditActuation(1.8);
         model.EditRapidTrigger(true, 0.8, 0.6);
-        Assert.AreEqual("—", model.KeyOverlay(w).ActuationText);
+        var baseline = model.KeyOverlay(w);
+        Assert.AreEqual("1.0", baseline.ActuationText);
+        Assert.AreEqual(MagneticOverlaySource.HostGlobalBaseline, baseline.ActuationSource);
+        Assert.IsTrue(baseline.AccessibilityText.Contains("全局基线 1.0 mm"));
+        Assert.IsTrue(baseline.AccessibilityText.Contains("设备逐键覆盖状态未确认"));
         Assert.AreEqual("—", model.KeyOverlay(w).RtPressText);
 
         fake.Status.Actuation.Add(new MagneticActuationValue { LogicalId = w, Raw = 10, Source = "HostProfile" });
@@ -782,13 +787,17 @@ public sealed class MagneticSettingsTests
         Assert.AreEqual("↓0.2", known.RtPressText);
         Assert.AreEqual("↑0.3", known.RtReleaseText);
         Assert.IsTrue(known.ActuationKnown && known.RtPressKnown && known.RtReleaseKnown);
+        Assert.AreEqual(MagneticOverlaySource.HostPerKey, known.ActuationSource);
         Assert.IsTrue(known.AccessibilityText.Contains("触发点 1.0 mm"));
         Assert.IsTrue(known.AccessibilityText.Contains("RT 按下 0.2 mm"));
         Assert.IsTrue(known.AccessibilityText.Contains("RT 抬起 0.3 mm"));
-        Assert.AreEqual("—", model.KeyOverlay(0x0602).ActuationText); // Global value is not a per-key value.
+        Assert.AreEqual("1.0", model.KeyOverlay(0x0602).ActuationText);
+        Assert.AreEqual(MagneticOverlaySource.HostGlobalBaseline, model.KeyOverlay(0x0602).ActuationSource);
 
         fake.Status.Actuation.Add(new MagneticActuationValue { LogicalId = w, Raw = 12, Source = "SessionApplied" });
         Assert.AreEqual("1.2", model.KeyOverlay(w).ActuationText); // SessionApplied wins over HostProfile.
+        Assert.AreEqual(MagneticOverlaySource.SessionPerKey, model.KeyOverlay(w).ActuationSource);
+        Assert.IsTrue(model.KeyOverlay(w).AccessibilityText.Contains("本次会话逐键设置"));
         fake.Status.RapidTrigger.Last().Enabled = false;
         var disabled = model.KeyOverlay(w);
         Assert.AreEqual("—", disabled.RtPressText);

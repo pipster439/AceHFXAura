@@ -4,10 +4,13 @@ public enum MagneticSelectionContext { Global, Single, Multi }
 public enum MagneticDksState { Standard, SessionConfigured, Unknown }
 public enum MagneticBatchRtAction { Unchanged, Enable, Disable }
 public enum MagneticAggregateKind { Unknown, UniformKnown, MixedKnown, ContainsUnknown }
+public enum MagneticOverlaySource { Unknown, SessionPerKey, HostPerKey, SessionGlobalBaseline, HostGlobalBaseline }
 public sealed record MagneticAggregate(MagneticAggregateKind Kind, string? Value, int KnownCount,
     int UnknownCount, string? Source);
 public sealed record MagneticKeyOverlay(string ActuationText, string RtPressText, string RtReleaseText,
-    bool ActuationKnown, bool RtPressKnown, bool RtReleaseKnown, string AccessibilityText);
+    bool ActuationKnown, bool RtPressKnown, bool RtReleaseKnown, string AccessibilityText,
+    MagneticOverlaySource ActuationSource, MagneticOverlaySource RtPressSource,
+    MagneticOverlaySource RtReleaseSource);
 
 public sealed class MagneticBatchDraft
 {
@@ -156,21 +159,40 @@ public sealed class MagneticSettingsModel
 
     public MagneticKeyOverlay KeyOverlay(ushort logicalId)
     {
-        // Only exact per-key values qualify. Global baselines and local drafts are excluded.
+        // Session/per-key values win. A known global value is a labeled baseline:
+        // this status model cannot prove absence of an unparsed device override.
         var actuation = Status?.Actuation.FirstOrDefault(value => value.LogicalId == logicalId &&
             value.Source == "SessionApplied") ?? Status?.Actuation.FirstOrDefault(value =>
             value.LogicalId == logicalId && value.Source == "HostProfile");
         var rt = Status?.RapidTrigger.FirstOrDefault(value => value.LogicalId == logicalId &&
             value.Source == "SessionApplied");
-        bool actuationKnown = actuation != null;
+        var global = Status?.GlobalActuation;
+        MagneticOverlaySource actuationSource = actuation?.Source switch {
+            "SessionApplied" => MagneticOverlaySource.SessionPerKey,
+            "HostProfile" => MagneticOverlaySource.HostPerKey,
+            _ => global is { Known: true, Source: "SessionApplied" } ? MagneticOverlaySource.SessionGlobalBaseline :
+                global is { Known: true, Source: "HostProfile" } ? MagneticOverlaySource.HostGlobalBaseline :
+                MagneticOverlaySource.Unknown
+        };
+        bool actuationKnown = actuationSource != MagneticOverlaySource.Unknown;
         bool rtKnown = rt is { Enabled: true };
-        string actuationText = actuationKnown ? $"{actuation!.Raw / 10.0:F1}" : "—";
+        byte actuationRaw = actuation?.Raw ?? global?.Raw ?? 0;
+        string actuationText = actuationKnown ? $"{actuationRaw / 10.0:F1}" : "—";
         string pressText = rtKnown ? $"↓{rt!.PressRaw / 10.0:F1}" : "—";
         string releaseText = rtKnown ? $"↑{rt!.ReleaseRaw / 10.0:F1}" : "—";
-        string accessibility = $"{(actuationKnown ? $"触发点 {actuationText} mm" : "触发点未知")}，" +
+        string actuationAccessible = actuationSource switch {
+            MagneticOverlaySource.SessionPerKey => $"触发点 {actuationText} mm，本次会话逐键设置",
+            MagneticOverlaySource.HostPerKey => $"触发点 {actuationText} mm，已保存逐键设置",
+            MagneticOverlaySource.SessionGlobalBaseline or MagneticOverlaySource.HostGlobalBaseline =>
+                $"触发点全局基线 {actuationText} mm，设备逐键覆盖状态未确认",
+            _ => "触发点未知"
+        };
+        string accessibility = actuationAccessible + "，" +
             (rtKnown ? $"RT 按下 {rt!.PressRaw / 10.0:F1} mm，RT 抬起 {rt.ReleaseRaw / 10.0:F1} mm" :
                 rt is { Enabled: false } ? "RT 已禁用，按下和抬起灵敏度不适用" : "RT 按下未知，RT 抬起未知");
-        return new(actuationText, pressText, releaseText, actuationKnown, rtKnown, rtKnown, accessibility);
+        return new(actuationText, pressText, releaseText, actuationKnown, rtKnown, rtKnown, accessibility,
+            actuationSource, rtKnown ? MagneticOverlaySource.SessionPerKey : MagneticOverlaySource.Unknown,
+            rtKnown ? MagneticOverlaySource.SessionPerKey : MagneticOverlaySource.Unknown);
     }
 
     public ushort? SpeedTapKey1 { get; private set; }

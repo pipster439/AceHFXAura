@@ -175,7 +175,7 @@ const std::vector<BuiltinLightingPreset>& GetBuiltinLightingPresets() {
             },
             {
                 {"color", "静态颜色", EffectParamType::Color, nlohmann::json::array({0, 80, 200})},
-                {"analog", "模拟按压增强", EffectParamType::Boolean, true}
+                {"analog", "按键高亮", EffectParamType::Boolean, true}
             }
         },
         {
