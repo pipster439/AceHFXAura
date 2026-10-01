@@ -7,6 +7,8 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+#include <cfgmgr32.h>
+#include <atomic>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -87,12 +89,20 @@ private:
     // cannot be interleaved with another runtime operation or a lighting frame.
     static std::mutex& DeviceWriteMutex();
     bool SendReport(const std::array<uint8_t, HID_REPORT_SIZE>& report);
+    bool ProbeCurrentM605Transport() const; // read-only; DeviceWriteMutex held
+    bool OpenDevice();
+    static DWORD CALLBACK OnInterfaceNotification(HCMNOTIFICATION, PVOID context,
+        CM_NOTIFY_ACTION action, PCM_NOTIFY_EVENT_DATA data, DWORD size);
 
     HANDLE hDevice_ = INVALID_HANDLE_VALUE;
     HANDLE hEvent_ = nullptr;
     bool validated_target_ = false;
     std::wstring device_path_;
     std::string last_error_;
+    HCMNOTIFICATION interface_notification_ = nullptr;
+    std::atomic<bool> interface_changed_{true};
+    std::mutex notification_mutex_;
+    std::wstring observed_path_; // callback-only identity, protected independently
 };
 
 } // namespace aura

@@ -8,8 +8,12 @@
 #include <memory>
 #include <mutex>
 #include <string_view>
+#include <filesystem>
 
 namespace aura {
+class DeviceProfileRuntime;
+class HardwareRtGateMonitor;
+class DeviceProfileAutomationCoordinator;
 
 // Daemon-owned, narrow local control surface. M605Runtime remains the sole
 // owner of packet construction, serialization, timing and applied shadow.
@@ -18,11 +22,15 @@ public:
     explicit MagneticControlService(std::shared_ptr<const RuntimeStatusStore> status_store,
         std::function<MagneticHostProfile()> host_profile =
             [] { return MagneticHostProfileProvider::LoadProduction(); },
-        std::unique_ptr<M605Runtime> runtime = std::make_unique<M605Runtime>())
-        : status_store_(std::move(status_store)), host_profile_(std::move(host_profile)),
-          runtime_(std::move(runtime)) {}
+        std::unique_ptr<M605Runtime> runtime = std::make_unique<M605Runtime>(),
+        std::filesystem::path profile_path = {}, std::filesystem::path legacy_config = {});
+    ~MagneticControlService();
     void RegisterRoutes(httplib::Server& server);
-    void Stop() { runtime_->Stop(); }
+    bool ObserveDeviceProfileForeground(const std::string& process_name);
+    void StartHardwareRtGateObservation(); // explicit production composition only
+    void StartDeviceProfileAutomation(); // exactly one daemon worker; excluded from dry run
+    void StopDeviceProfileAutomation();
+    void Stop();
 
 private:
     bool HardwareAvailable() const;
@@ -33,6 +41,9 @@ private:
     std::function<MagneticHostProfile()> host_profile_;
     std::unique_ptr<M605Runtime> runtime_;
     std::mutex write_mutex_; // Keep HTTP callers from piling up FIFO hardware jobs.
+    std::unique_ptr<DeviceProfileRuntime> profiles_;
+    std::unique_ptr<HardwareRtGateMonitor> rt_gate_monitor_;
+    std::unique_ptr<DeviceProfileAutomationCoordinator> automation_coordinator_;
 };
 
 } // namespace aura

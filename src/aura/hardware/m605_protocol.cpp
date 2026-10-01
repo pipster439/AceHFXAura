@@ -118,25 +118,33 @@ Report BuildRuntimeApply() {
     return report;
 }
 
+namespace {
+std::optional<Report> BuildRtSide(uint16_t key, double mm, bool enabled, uint8_t selector) {
+    const auto wire = WireIdForLogicalKey(key);
+    const auto raw = ScaleMillimeters(mm, 0.1, 2.5, 1, 25);
+    if (!wire || !raw) return std::nullopt;
+    Report r{};
+    r[1] = 0x51; r[2] = 0x54; r[3] = selector;
+    r[5] = static_cast<uint8_t>(*wire); r[6] = static_cast<uint8_t>(*wire >> 8);
+    r[7] = *raw; r[9] = enabled ? 1 : 0; // continuous/reserved fixed zero
+    return r;
+}
+}
+std::optional<Report> BuildPerKeyRapidTriggerUnified(uint16_t key, double mm, bool enabled) {
+    return BuildRtSide(key, mm, enabled, 0);
+}
+std::optional<Report> BuildPerKeyRapidTriggerPress(uint16_t key, double mm, bool enabled) {
+    return BuildRtSide(key, mm, enabled, 1);
+}
+std::optional<Report> BuildPerKeyRapidTriggerRelease(uint16_t key, double mm, bool enabled) {
+    return BuildRtSide(key, mm, enabled, 2);
+}
 std::optional<std::array<Report, 2>> BuildPerKeyRapidTriggerStages(
     uint16_t logical_key_id, double press_mm, double release_mm, bool enabled) {
-    const auto wire_id = WireIdForLogicalKey(logical_key_id);
-    const auto press = ScaleMillimeters(press_mm, 0.1, 2.5, 1, 25);
-    const auto release = ScaleMillimeters(release_mm, 0.1, 2.5, 1, 25);
-    if (!wire_id || !press || !release) return std::nullopt;
-
-    std::array<Report, 2> stages{};
-    for (size_t i = 0; i < stages.size(); ++i) {
-        Report& report = stages[i];
-        report[1] = 0x51;
-        report[2] = 0x54;
-        report[3] = static_cast<uint8_t>(i + 1); // Press, then Release.
-        report[5] = static_cast<uint8_t>(*wire_id & 0xff);
-        report[6] = static_cast<uint8_t>(*wire_id >> 8);
-        report[7] = i == 0 ? *press : *release;
-        report[9] = enabled ? 1 : 0;
-    }
-    return stages;
+    const auto press = BuildPerKeyRapidTriggerPress(logical_key_id, press_mm, enabled);
+    const auto release = BuildPerKeyRapidTriggerRelease(logical_key_id, release_mm, enabled);
+    if (!press || !release) return std::nullopt;
+    return std::array<Report, 2>{*press, *release};
 }
 
 std::optional<Report> BuildPerKeyDeadzone(
@@ -215,6 +223,17 @@ std::optional<Report> BuildGlobalActuation(double millimeters) {
     return report;
 }
 
+std::optional<Report> BuildResetAllPerKeyActuationOverrides(double common_millimeters) {
+    const auto raw = ScaleMillimeters(common_millimeters, 0.1, 4.0, 1, 40);
+    if (!raw) return std::nullopt;
+    Report report{}; // Existing 65-byte host framing: dummy ReportID at byte 0.
+    report[1] = 0x51;
+    report[2] = 0x52;
+    report[3] = 0x01;
+    report[5] = *raw;
+    return report; // type high byte, layer 0 and all reserved bytes stay zero.
+}
+
 std::optional<Report> BuildGlobalDeadzone(double top_mm, double bottom_mm) {
     const auto top = ScaleMillimeters(top_mm, 0.0, 0.5, 0, 5);
     const auto bottom = ScaleMillimeters(bottom_mm, 0.0, 0.5, 0, 5);
@@ -229,24 +248,9 @@ std::optional<Report> BuildGlobalDeadzone(double top_mm, double bottom_mm) {
 }
 
 std::optional<Report> BuildGlobalRapidTrigger(
-    double press_mm, double release_mm, double top_mm, double bottom_mm, bool separate_mode) {
-    if (!separate_mode && std::abs(press_mm - release_mm) > 1e-4) return std::nullopt;
-    const auto press = ScaleMillimeters(press_mm, 0.1, 2.5, 1, 25);
-    const auto release = ScaleMillimeters(release_mm, 0.1, 2.5, 1, 25);
-    const auto top = ScaleMillimeters(top_mm, 0.0, 0.5, 0, 5);
-    const auto bottom = ScaleMillimeters(bottom_mm, 0.0, 0.5, 0, 5);
-    if (!press || !release || !top || !bottom) return std::nullopt;
-    if (!separate_mode && *press != *release) return std::nullopt;
-
-    Report report{};
-    report[1] = 0x51;
-    report[2] = 0x53;
-    report[3] = separate_mode ? 1 : 0;
-    report[5] = *press;
-    report[6] = *release;
-    report[7] = *top;
-    report[8] = *bottom;
-    return report;
+    double, double, double, double, bool) {
+    // Historical field interpretation is invalid. No 51 53 packet can be built.
+    return std::nullopt;
 }
 
 } // namespace aura::m605

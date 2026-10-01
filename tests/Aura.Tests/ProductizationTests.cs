@@ -57,6 +57,8 @@ public sealed class ProductizationTests
     { protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token) => send(request); }
     private static HttpResponseMessage Json(object value, int status = 200) => new((HttpStatusCode)status)
     { Content = new StringContent(JsonSerializer.Serialize(value), Encoding.UTF8, "application/json") };
+    private static Task<ProfileApiResponse> CompatibleProfile(CancellationToken _) =>
+        Task.FromResult(new ProfileApiResponse { Status = "ok", ApiVersion = 1 });
     private static object Status(string instance = "external", int pid = 15, bool suppressed = false) => new {
         status = "ok", api_version = 1, identity = new { service = "aura_daemon", instance_id = instance, process_id = pid, product_version = "0.1.0-alpha.4", config_path = "external.json" },
         studio_web = new { suppressed }, hardware = new { connected = false }, runtime = new { dry_run = true } };
@@ -71,18 +73,64 @@ public sealed class ProductizationTests
     public async Task AttachedExitDoesNotPrepareSpawnOrStopExternalService()
     {
         var client = new AuraControlClient(new(new Handler(_ => Task.FromResult(Json(Status())))));
-        var supervisor = new DaemonSupervisor(client, prepare: () => throw new Exception("Must not prepare"), start: _ => throw new Exception("Must not spawn"));
+        var supervisor = new DaemonSupervisor(client, prepare: () => throw new Exception("Must not prepare"),
+            start: _ => throw new Exception("Must not spawn"), profileProbe: CompatibleProfile);
         await supervisor.EnsureStartedAsync();
-        Assert.IsTrue(supervisor.CoreReady); Assert.AreEqual(DaemonOwnership.AttachedPreExisting, supervisor.Ownership);
+        Assert.IsTrue(supervisor.CoreReady); Assert.IsTrue(supervisor.ProfileApiReady);
+        Assert.AreEqual(DaemonOwnership.AttachedPreExisting, supervisor.Ownership);
         await supervisor.StopAsync();
         Assert.Contains("外部核心保持运行", supervisor.StatusDescription);
+    }
+    [TestMethod]
+    public async Task ExternalOldDaemonWithMissingProfileApiIsReportedAndNeverStopped()
+    {
+        var client = new AuraControlClient(new(new Handler(_ => Task.FromResult(Json(Status("old", 51))))));
+        var oldProfileApi = new ProfileControlClient(new HttpClient(new Handler(_ =>
+            Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound) {
+                Content = new StringContent("") }))));
+        var starts = 0;
+        var supervisor = new DaemonSupervisor(client,
+            prepare: () => throw new Exception("External daemon must not be prepared"),
+            start: _ => { starts++; throw new Exception("External daemon must not be replaced"); },
+            profileProbe: token => oldProfileApi.GetRuntimeAsync(token));
+        await supervisor.EnsureStartedAsync();
+        Assert.IsTrue(supervisor.CoreReady);
+        Assert.IsFalse(supervisor.ProfileApiReady);
+        Assert.AreEqual(DaemonOwnership.AttachedPreExisting, supervisor.Ownership);
+        Assert.Contains("不支持配置文件", supervisor.StatusDescription);
+        Assert.AreEqual(0, starts);
+        await supervisor.RefreshAsync(); // Generic status updates must not erase the mismatch.
+        Assert.Contains("不支持配置文件", supervisor.StatusDescription);
+        await supervisor.StopAsync();
+        Assert.AreEqual(0, starts);
+        Assert.Contains("外部核心保持运行", supervisor.StatusDescription);
+    }
+    [TestMethod]
+    public async Task OwnedIncompatibleChildIsReportedWithoutRestartLoop()
+    {
+        Child? child = null; var starts = 0;
+        var core = new AuraControlClient(new(new Handler(_ => Task.FromResult(child is null ?
+            Json(new { }, 503) : Json(Status("owned", 42))))));
+        var supervisor = new DaemonSupervisor(core,
+            prepare: () => new("daemon", "data", "config", "keymap", "runtime", "template"),
+            start: _ => { starts++; return child = new(); }, mutexExists: () => false,
+            profileProbe: _ => throw new ProfileApiException("Profile route missing",
+                HttpStatusCode.NotFound, ProfileApiErrorCategory.IncompatibleDaemon));
+        await supervisor.EnsureStartedAsync();
+        await supervisor.EnsureStartedAsync();
+        Assert.AreEqual(1, starts);
+        Assert.AreEqual(DaemonOwnership.SpawnedByWinUI, supervisor.Ownership);
+        Assert.IsFalse(supervisor.ProfileApiReady);
+        Assert.Contains("不支持配置文件", supervisor.StatusDescription);
+        await supervisor.StopAsync();
+        Assert.AreEqual(1, child!.Stops);
     }
     [TestMethod]
     public async Task CoreRemainsReadyWhenWebIsSuppressedOrWrongService()
     {
         var core = new AuraControlClient(new(new Handler(_ => Task.FromResult(Json(Status(suppressed: true))))));
         var web = new AuraWebClient(new(new Handler(_ => Task.FromResult(Json(new { service = "other", web_api_version = 2 })))));
-        var supervisor = new DaemonSupervisor(core, web);
+        var supervisor = new DaemonSupervisor(core, web, profileProbe: CompatibleProfile);
         await supervisor.RefreshAsync(); Assert.IsTrue(supervisor.CoreReady); Assert.IsTrue(supervisor.WebSuppressed);
         Assert.IsFalse(await supervisor.ProbeWebServerAsync()); Assert.IsTrue(supervisor.CoreReady);
         await supervisor.StopAsync();
@@ -98,7 +146,7 @@ public sealed class ProductizationTests
             studio_web = new { suppressed = false }, hardware = new { connected = false }, runtime = new { dry_run = true }
         };
         var client = new AuraControlClient(new(new Handler(_ => Task.FromResult(Json(response)))));
-        var supervisor = new DaemonSupervisor(client);
+        var supervisor = new DaemonSupervisor(client, profileProbe: CompatibleProfile);
         await supervisor.RefreshAsync();
         Assert.IsTrue(supervisor.CoreReady);
         Assert.Contains("/fps", supervisor.StatusDescription);
@@ -110,7 +158,7 @@ public sealed class ProductizationTests
         string instance = "first";
         var core = new AuraControlClient(new(new Handler(_ => Task.FromResult(Json(Status(instance))))));
         var web = new AuraWebClient(new(new Handler(_ => Task.FromResult(Json(new { service="aura_web_ui",web_api_version=2,daemon_instance_id="first" })))));
-        var supervisor = new DaemonSupervisor(core,web);
+        var supervisor = new DaemonSupervisor(core,web, profileProbe: CompatibleProfile);
         await supervisor.RefreshAsync(); Assert.IsTrue(await supervisor.ProbeWebServerAsync());
         instance = "replacement"; await supervisor.RefreshAsync();
         Assert.IsTrue(supervisor.CoreReady); Assert.IsFalse(supervisor.StudioWebReady);
@@ -122,7 +170,7 @@ public sealed class ProductizationTests
     {
         Child? current = null; int starts = 0;
         var core = new AuraControlClient(new(new Handler(_ => Task.FromResult(current is { HasExited:false } ? Json(Status("owned",42)) : Json(new {},503)))));
-        var supervisor = new DaemonSupervisor(core,prepare:()=>new("d","w","c","k","r","t"),start:_=>{starts++;return current=new();},mutexExists:()=>false);
+        var supervisor = new DaemonSupervisor(core,prepare:()=>new("d","w","c","k","r","t"),start:_=>{starts++;return current=new();},mutexExists:()=>false,profileProbe:CompatibleProfile);
         await supervisor.EnsureStartedAsync(); var old = current!; old.HasExited=true;
         await Task.WhenAll(supervisor.EnsureStartedAsync(),supervisor.EnsureStartedAsync());
         Assert.AreEqual(2,starts); Assert.AreEqual(1,old.Disposals); Assert.IsTrue(supervisor.CoreReady);
@@ -134,9 +182,11 @@ public sealed class ProductizationTests
         Child? child = null; int starts = 0;
         var core = new AuraControlClient(new(new Handler(_ => Task.FromResult(child == null ? Json(new { }, 503) : Json(Status("owned",42))))));
         var supervisor = new DaemonSupervisor(core, prepare: () => new("daemon", "data", "config", "keymap", "runtime", "template"),
-            start: _ => { starts++; return child = new(); }, mutexExists: () => false);
+            start: _ => { starts++; return child = new(); }, mutexExists: () => false,
+            profileProbe: CompatibleProfile);
         await Task.WhenAll(supervisor.EnsureStartedAsync(), supervisor.EnsureStartedAsync());
         Assert.AreEqual(1, starts); Assert.AreEqual(DaemonOwnership.SpawnedByWinUI, supervisor.Ownership);
+        Assert.IsTrue(supervisor.ProfileApiReady);
         await supervisor.StopAsync(); Assert.AreEqual(1, child!.Stops); Assert.AreEqual(1, child.Disposals);
         await supervisor.EnsureStartedAsync(); Assert.AreEqual(1, starts);
     }
@@ -144,7 +194,8 @@ public sealed class ProductizationTests
     public async Task MutexWithoutCoreDoesNotSpawnOrClaimOwnership()
     {
         var core = new AuraControlClient(new(new Handler(_ => Task.FromResult(Json(new { },503)))));
-        var supervisor = new DaemonSupervisor(core, prepare: () => throw new Exception("no prepare"), mutexExists: () => true);
+        var supervisor = new DaemonSupervisor(core, prepare: () => throw new Exception("no prepare"),
+            mutexExists: () => true, profileProbe: CompatibleProfile);
         await supervisor.EnsureStartedAsync(); Assert.IsFalse(supervisor.CoreReady); Assert.AreEqual(DaemonOwnership.None, supervisor.Ownership);
         await supervisor.StopAsync();
     }
@@ -153,7 +204,8 @@ public sealed class ProductizationTests
     {
         var child = new Child(); int phase = 0;
         var core = new AuraControlClient(new(new Handler(_ => Task.FromResult(phase++ == 0 ? Json(new {},503) : Json(Status(phase == 2 ? "owned" : "external", phase == 2 ? 42 : 99))))));
-        var supervisor = new DaemonSupervisor(core, prepare: () => new("d","w","c","k","r","t"), start: _ => child, mutexExists: () => false);
+        var supervisor = new DaemonSupervisor(core, prepare: () => new("d","w","c","k","r","t"),
+            start: _ => child, mutexExists: () => false, profileProbe: CompatibleProfile);
         await supervisor.EnsureStartedAsync(); child.HasExited = true;
         await supervisor.RefreshAsync(); Assert.AreEqual(DaemonOwnership.AttachedPreExisting, supervisor.Ownership);
         await supervisor.StopAsync(); // Fake child receives cleanup, but no discovered external object exists to stop.

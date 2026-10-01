@@ -411,6 +411,18 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    // Test harness policy only; refusal precedes all physical initialization.
+    if (run_live_hardware) {
+        for (const auto* marker : {"CI", "GITHUB_ACTIONS"}) {
+            char value[64]{};
+            const auto length = GetEnvironmentVariableA(marker, value, sizeof(value));
+            if (length && (length >= sizeof(value) ||
+                (_stricmp(value, "false") != 0 && std::string(value) != "0"))) {
+                std::cerr << "Hardware acceptance is forbidden in CI." << std::endl;
+                return 2;
+            }
+        }
+    }
     std::cout << "=========================================================" << std::endl;
     std::cout << " AceHFXAura Native Win32 HID Backend Unit Tests" << std::endl;
     std::cout << "=========================================================" << std::endl;
@@ -437,4 +449,3 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 }
-

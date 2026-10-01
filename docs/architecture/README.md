@@ -2,6 +2,10 @@
 
 The current development line contains native Lighting controls and accepted Automation v2 through Stage 6. See [Automation v2](AUTOMATION_V2.md) for authoring, lifecycle, retrigger and reconciliation semantics. This describes source behavior, not a claim of physical acceptance.
 
+The [alpha.7 Profile Engine core](PROFILE_ENGINE.md) documents device profile desired state, apply ordering, migration, and hardware evidence limits. Its profiles are distinct from the existing lighting recipes.
+
+[Phase 4A / 4A.5 Device Profile Automation](DEVICE_PROFILE_AUTOMATION.md) adds daemon-owned, debounced GUID decisions, a native draft editor, accepted Manual Apply hold integration and pure-read process diagnostics. Hardware activation remains disabled; [decision/state table](DEVICE_PROFILE_AUTOMATION_STATES.md).
+
 ```text
 WinUI Home / Lighting ── HTTP 19897 ── aura_daemon
 WinUI Studio (WebView2) / browser ── HTTP 19898 ── aura_web_ui
@@ -22,3 +26,12 @@ WinUI Studio (WebView2) / browser ── HTTP 19898 ── aura_web_ui
 - Automation authoring uses the Web Studio V2 Blockly editor. The daemon owns the read-only effect catalog projection and isolated GSI simulation source; no separate native Application Rules editor remains.
 
 [Studio semantics](../studio/STUDIO_WORKFLOW.md), [hardware evidence](../hardware/README.md), and [packaging limitations](../development/PACKAGING.md) are maintained separately.
+
+The [RT hardware gate contract](../hardware/M605_RT_HARDWARE_GATE.md) separates
+passively observed physical switch state from Profile desired per-key RT and
+host-submission-only SessionApplied. Gate observation never controls the switch
+or triggers writes. [Phase 4B Device Profile Automation](DEVICE_PROFILE_AUTOMATION.md)
+uses a separate serialized coordinator and the existing Profile apply authority.
+
+[Reusable software CI and local Profile automation smoke](../development/CI.md) keep
+mock/dry-run regression separate from explicitly authorized hardware acceptance.

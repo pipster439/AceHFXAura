@@ -14,6 +14,8 @@ public interface IDaemonSupervisor
 {
     bool IsDaemonRunning { get; }
     bool CoreReady { get; }
+    bool ProfileApiReady { get; }
+    string ProfileCompatibilityDescription { get; }
     bool StudioWebReady { get; }
     bool IsWebServerReady { get; }
     string StatusDescription { get; }

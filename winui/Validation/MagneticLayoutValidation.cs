@@ -17,7 +17,7 @@ namespace Aura_WinUI.Validation;
 internal static class MagneticLayoutValidation
 {
     internal static bool Requested => (Environment.GetCommandLineArgs().Contains("--validate-magnetic-layout") ||
-        OverlayOnlyRequested) &&
+        OverlayOnlyRequested || ProfileRtLayoutValidation.Requested) &&
         !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("AURA_UI_VALIDATION_DIR"));
     private static bool OverlayOnlyRequested => Environment.GetCommandLineArgs().Contains("--validate-magnetic-overlays");
 
@@ -222,6 +222,7 @@ internal static class MagneticLayoutValidation
 
     internal static async Task RunAsync(MainWindow window)
     {
+        if (ProfileRtLayoutValidation.Requested) { await ProfileRtLayoutValidation.RunAsync(window); return; }
         var directory = Path.GetFullPath(Environment.GetEnvironmentVariable("AURA_UI_VALIDATION_DIR")!);
         var observations = new List<object>();
         string? error = null;

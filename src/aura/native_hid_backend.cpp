@@ -16,6 +16,7 @@ extern "C" {
 
 #pragma comment(lib, "setupapi.lib")
 #pragma comment(lib, "hid.lib")
+#pragma comment(lib, "cfgmgr32.lib")
 
 namespace aura {
 
@@ -91,7 +92,7 @@ bool IsAllowedOutputReport(const std::array<uint8_t, HID_REPORT_SIZE>& report) {
     }
     if (report[1] == 0x51 && report[2] == 0x54) {
         const uint16_t wire = static_cast<uint16_t>(report[5] | (report[6] << 8));
-        return (report[3] == 1 || report[3] == 2) && report[4] == 0 &&
+        return (report[3] <= 2) && report[4] == 0 &&
             m605::IsVerifiedM605WireId(wire) &&
             report[7] >= 1 && report[7] <= 25 && report[8] == 0 && report[9] <= 1 &&
             std::all_of(report.begin() + 10, report.end(), [](uint8_t b) { return b == 0; });
@@ -104,6 +105,10 @@ bool IsAllowedOutputReport(const std::array<uint8_t, HID_REPORT_SIZE>& report) {
             std::all_of(report.begin() + 9, report.end(), [](uint8_t b) { return b == 0; });
     }
     if (report[1] == 0x51 && report[2] == 0x52) {
+        if (report[3] == 0x01) {
+            return report[4] == 0 && report[5] >= 1 && report[5] <= 40 &&
+                std::all_of(report.begin() + 6, report.end(), [](uint8_t b) { return b == 0; });
+        }
         return report[3] == 0x04 && report[4] == 0 &&
             report[5] <= 5 && report[6] == 0 && report[7] <= 5 &&
             std::all_of(report.begin() + 8, report.end(), [](uint8_t b) { return b == 0; });
@@ -134,13 +139,8 @@ bool IsAllowedOutputReport(const std::array<uint8_t, HID_REPORT_SIZE>& report) {
             std::all_of(report.begin() + 7, report.end(), [](uint8_t b) { return b == 0; });
     }
     if (report[1] == 0x51 && report[2] == 0x53) {
-        return (report[3] == 0 || report[3] == 1) && report[4] == 0 &&
-            (report[3] == 1 || report[5] == report[6]) &&
-            report[5] >= 1 && report[5] <= 25 &&
-            report[6] >= 1 && report[6] <= 25 &&
-            report[7] <= 5 && report[8] <= 5 &&
-            std::all_of(report.begin() + 9, report.end(), [](uint8_t b) { return b == 0; });
-    }
+        return false; // Static-only, historical builder semantics invalid.
+}
     return false;
 }
 
@@ -158,6 +158,19 @@ bool NativeHidBackend::IsConnected() const {
     return validated_target_ && hDevice_ != INVALID_HANDLE_VALUE && hEvent_ != nullptr;
 }
 
+bool NativeHidBackend::ProbeCurrentM605Transport() const {
+    if (interface_changed_.load() || !IsConnected() || device_path_.empty() ||
+        !ValidateOpenedEndpoint(hDevice_, device_path_)) return false;
+    // Opening the present interface independently distinguishes a removed
+    // path from a merely non-null stale handle. No HID report is sent.
+    HANDLE present = CreateFileW(device_path_.c_str(), 0,
+        FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, 0, nullptr);
+    if (present == INVALID_HANDLE_VALUE) return false;
+    const bool valid = ValidateOpenedEndpoint(present, device_path_);
+    CloseHandle(present);
+    return valid && !interface_changed_.load();
+}
+
 std::mutex& NativeHidBackend::DeviceWriteMutex() {
     static std::mutex mutex;
     return mutex;
@@ -165,6 +178,14 @@ std::mutex& NativeHidBackend::DeviceWriteMutex() {
 
 void NativeHidBackend::Disconnect() {
     validated_target_ = false;
+    if (interface_notification_) {
+        // Unregister outside the callback and its mutex: Windows waits for
+        // callbacks to finish before this object/identity can be released.
+        CM_Unregister_Notification(interface_notification_);
+        interface_notification_ = nullptr;
+    }
+    interface_changed_ = true;
+    { std::lock_guard<std::mutex> lock(notification_mutex_); observed_path_.clear(); }
     if (hDevice_ != INVALID_HANDLE_VALUE) {
         CloseHandle(hDevice_);
         hDevice_ = INVALID_HANDLE_VALUE;
@@ -239,6 +260,26 @@ bool NativeHidBackend::IsSupportedOutputReport(const std::array<uint8_t, HID_REP
 
 bool NativeHidBackend::Connect() {
     Disconnect();
+    if (OpenDevice()) return true;
+    Disconnect(); // also release the notification on every failed open path
+    return false;
+}
+
+DWORD CALLBACK NativeHidBackend::OnInterfaceNotification(HCMNOTIFICATION,
+    PVOID context, CM_NOTIFY_ACTION action, PCM_NOTIFY_EVENT_DATA data, DWORD) {
+    if ((action != CM_NOTIFY_ACTION_DEVICEINTERFACEREMOVAL &&
+         action != CM_NOTIFY_ACTION_DEVICEINTERFACEARRIVAL) ||
+        data->FilterType != CM_NOTIFY_FILTER_TYPE_DEVICEINTERFACE) return ERROR_SUCCESS;
+    auto& backend = *static_cast<NativeHidBackend*>(context);
+    std::lock_guard<std::mutex> lock(backend.notification_mutex_);
+    if (backend.observed_path_.empty() ||
+        _wcsicmp(backend.observed_path_.c_str(), data->u.DeviceInterface.SymbolicLink) == 0)
+        backend.interface_changed_ = true;
+    // Never close a handle, perform I/O or unregister from this callback.
+    return ERROR_SUCCESS;
+}
+
+bool NativeHidBackend::OpenDevice() {
     last_error_.clear();
 
     // Check ASUS Exclusive Mutex (warning only, do not terminate)
@@ -250,6 +291,18 @@ bool NativeHidBackend::Connect() {
 
     GUID hidGuid;
     HidD_GetHidGuid(&hidGuid);
+    CM_NOTIFY_FILTER filter{};
+    filter.cbSize = sizeof(filter);
+    filter.FilterType = CM_NOTIFY_FILTER_TYPE_DEVICEINTERFACE;
+    filter.u.DeviceInterface.ClassGuid = hidGuid;
+    interface_changed_ = false;
+    const auto notification_result = CM_Register_Notification(&filter, this,
+        OnInterfaceNotification, &interface_notification_);
+    if (notification_result != CR_SUCCESS) {
+        last_error_ = "HID lifecycle notification registration failed: " +
+            std::to_string(notification_result);
+        return false;
+    }
 
     HDEVINFO hDevInfo = SetupDiGetClassDevsW(
         &hidGuid,
@@ -340,6 +393,7 @@ bool NativeHidBackend::Connect() {
         return false;
     }
 
+    { std::lock_guard<std::mutex> lock(notification_mutex_); observed_path_ = matchedPath; }
     hDevice_ = CreateFileW(
         matchedPath.c_str(),
         GENERIC_READ | GENERIC_WRITE,
@@ -377,6 +431,10 @@ bool NativeHidBackend::Connect() {
 
     device_path_ = matchedPath;
     validated_target_ = true;
+    if (!ProbeCurrentM605Transport()) {
+        last_error_ = "HID interface changed or disappeared while opening; no report submitted";
+        return false;
+    }
     LOG_INFO("[+] Native HID backend connected (VID=0x0B05, PID=0x1B7E, UsagePage=0xFF00, Usage=0x0001, Endpoint=MI_01, backend=native_hid)");
     return true;
 }

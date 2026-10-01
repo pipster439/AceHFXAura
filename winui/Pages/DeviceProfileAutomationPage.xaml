@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page x:Class="Aura_WinUI.Pages.DeviceProfileAutomationPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:controls="using:CommunityToolkit.WinUI.Controls"
+      xmlns:services="using:Aura_WinUI.Services"
+      Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+    <ScrollViewer x:Name="PageScroll" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Visible">
+        <StackPanel x:Name="PageContent" Spacing="16">
+            <Button Content="返回配置文件" Click="Back_Click" HorizontalAlignment="Left" AutomationProperties.AutomationId="DeviceAutomationBack" />
+            <StackPanel Spacing="4">
+                <TextBlock Text="配置文件自动切换" Style="{ThemeResource TitleTextBlockStyle}" TextWrapping="Wrap" />
+                <TextBlock Text="按当前前台程序匹配设备配置文件。规则与灯效自动化独立。"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+            </StackPanel>
+            <InfoBar x:Name="ActivationBar" Severity="Informational" IsOpen="True" IsClosable="False" Title="自动应用到键盘"
+                     Message="正在读取后台协调状态…" />
+            <InfoBar x:Name="NoticeBar" IsOpen="False" IsClosable="True" />
+            <Grid x:Name="CommandsGrid" ColumnSpacing="12" RowSpacing="8">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                <TextBlock x:Name="DraftText" VerticalAlignment="Center" Text="正在读取规则…" TextWrapping="Wrap" />
+                <StackPanel x:Name="CommandActions" Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                    <ProgressRing x:Name="BusyRing" Width="20" Height="20" IsActive="True" />
+                    <Button Content="重新读取" Click="Refresh_Click" AutomationProperties.AutomationId="DeviceAutomationRefresh" />
+                    <Button x:Name="SaveButton" Content="保存规则" Click="Save_Click"
+                            Style="{ThemeResource AccentButtonStyle}" AutomationProperties.AutomationId="DeviceAutomationSave" />
+                </StackPanel>
+            </Grid>
+            <InfoBar x:Name="ConflictBar" IsOpen="False" IsClosable="False" Severity="Warning" Title="配置已在其他位置更改"
+                     Message="草稿已保留。请检查最新配置后，再决定是否保存。">
+                <InfoBar.ActionButton><Button Content="继续使用草稿" Click="KeepDraft_Click" AutomationProperties.AutomationId="DeviceAutomationKeepDraft" /></InfoBar.ActionButton>
+            </InfoBar>
+            <Button x:Name="DiscardButton" Content="放弃草稿并使用最新版本" Click="Discard_Click" Visibility="Collapsed" HorizontalAlignment="Left" AutomationProperties.AutomationId="DeviceAutomationDiscardDraft" />
+            <controls:SettingsExpander x:Name="PreviewExpander" Header="实时匹配预览" Description="只显示将选择的配置文件，不代表已应用到键盘。" IsExpanded="False" AutomationProperties.AutomationId="DeviceAutomationPreview">
+                <TextBlock x:Name="PreviewSummary" MaxWidth="400" TextWrapping="Wrap" AutomationProperties.AutomationId="DeviceAutomationPreviewSummary" />
+                <controls:SettingsExpander.Items>
+                    <controls:SettingsCard Header="当前前台程序" IsClickEnabled="False"><TextBlock x:Name="ForegroundText" Text="正在读取…" TextWrapping="Wrap" IsTextSelectionEnabled="True" /></controls:SettingsCard>
+                    <controls:SettingsCard Header="匹配规则" IsClickEnabled="False"><TextBlock x:Name="MatchedRuleText" Text="—" TextWrapping="Wrap" /></controls:SettingsCard>
+                    <controls:SettingsCard Header="将选择配置文件" IsClickEnabled="False"><TextBlock x:Name="TargetText" Text="—" TextWrapping="Wrap" AutomationProperties.AutomationId="DeviceAutomationWouldSelect" /></controls:SettingsCard>
+                    <controls:SettingsCard Header="匹配状态" IsClickEnabled="False"><TextBlock x:Name="PreviewStatusText" Text="正在读取…" MaxWidth="520" TextWrapping="Wrap" AutomationProperties.AutomationId="DeviceAutomationState" /></controls:SettingsCard>
+                    <controls:SettingsCard Header="自动应用到键盘" IsClickEnabled="False"><TextBlock x:Name="ActivationStatusText" MaxWidth="520" TextWrapping="Wrap" /></controls:SettingsCard>
+                </controls:SettingsExpander.Items>
+            </controls:SettingsExpander>
+            <ContentControl x:Name="EditorSurface" IsEnabled="False" HorizontalContentAlignment="Stretch">
+            <StackPanel Spacing="12">
+                <controls:SettingsCard Header="自动切换配置文件" Description="前台程序稳定匹配后，后台自动应用对应的设备配置文件。" IsClickEnabled="False">
+                    <ToggleSwitch x:Name="EnabledToggle" OnContent="开启" OffContent="关闭" Toggled="Enabled_Toggled"
+                                  AutomationProperties.Name="自动切换配置文件" AutomationProperties.AutomationId="DeviceAutomationEnabled" />
+                </controls:SettingsCard>
+                <controls:SettingsCard Header="无匹配规则时" Description="选择后备配置文件，或不执行任何操作。" IsClickEnabled="False">
+                    <ComboBox x:Name="FallbackPicker" DisplayMemberPath="Label" MinWidth="160" MaxWidth="340"
+                              SelectionChanged="Fallback_Changed" AutomationProperties.Name="无匹配规则时"
+                              AutomationProperties.AutomationId="DeviceAutomationFallback" />
+                </controls:SettingsCard>
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <TextBlock Text="程序规则" Style="{ThemeResource SubtitleTextBlockStyle}" VerticalAlignment="Center" />
+                    <Button x:Name="AddButton" Grid.Column="1" Content="添加规则" Click="Add_Click" AutomationProperties.AutomationId="DeviceAutomationAdd" />
+                </Grid>
+                <TextBlock Text="数值越大，多个规则同时匹配时优先级越高。保存前仍按已保存的规则匹配。"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                <TextBlock x:Name="EmptyRulesText" Text="尚未添加程序规则。" TextWrapping="Wrap" />
+                <ItemsRepeater x:Name="RulesRepeater">
+                    <ItemsRepeater.Layout><StackLayout Spacing="8" /></ItemsRepeater.Layout>
+                    <ItemsRepeater.ItemTemplate>
+                        <DataTemplate x:DataType="services:DeviceProfileRuleRow">
+                            <!-- Immutable row snapshots are replaced when data changes. -->
+                            <controls:SettingsCard Header="{x:Bind ProcessName, Mode=OneTime}" Description="{x:Bind Description, Mode=OneTime}" IsClickEnabled="False">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Button Content="编辑" Tag="{x:Bind RuleId, Mode=OneTime}" Click="Edit_Click" AutomationProperties.Name="{x:Bind EditName, Mode=OneTime}" AutomationProperties.AutomationId="{x:Bind EditId, Mode=OneTime}" />
+                                    <Button Content="删除" Tag="{x:Bind RuleId, Mode=OneTime}" Click="Delete_Click" AutomationProperties.Name="{x:Bind DeleteName, Mode=OneTime}" AutomationProperties.AutomationId="{x:Bind DeleteId, Mode=OneTime}" />
+                                </StackPanel>
+                            </controls:SettingsCard>
+                        </DataTemplate>
+                    </ItemsRepeater.ItemTemplate>
+                </ItemsRepeater>
+            </StackPanel>
+            </ContentControl>
+
+        </StackPanel>
+    </ScrollViewer>
+</Page>

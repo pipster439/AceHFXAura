@@ -642,10 +642,10 @@ public sealed class MagneticSettingsTests
         Assert.AreEqual(0.1, model.GlobalDraft?.TopMm);
         Assert.AreEqual(0.2, model.GlobalDraft?.BottomMm);
 
-        Assert.IsTrue(await model.ApplyGlobalRapidTriggerAsync());
-        Assert.IsNull(model.GlobalDraft?.PressMm);
+        Assert.IsFalse(await model.ApplyGlobalRapidTriggerAsync());
+        Assert.AreEqual(0.5, model.GlobalDraft?.PressMm);
         // Preserves currently applied global deadzone 0.3 / 0.4, NOT the unapplied draft 0.1 / 0.2
-        Assert.AreEqual("global-rt:0.5:0.6:0.3:0.4:True", fake.Calls.Last());
+        Assert.IsFalse(fake.Calls.Any(call => call.StartsWith("global-rt:")));
     }
 
     [TestMethod]
@@ -653,6 +653,8 @@ public sealed class MagneticSettingsTests
     {
         var fake = new Fake();
         fake.Status.GlobalDeadzone = new MagneticGlobalDeadzoneState { Known = true, TopRaw = 1, BottomRaw = 1, Source = "SessionApplied" };
+        fake.Status.HostProfile.GlobalDeadzoneTop = new MagneticKnownRaw { Known = true, Raw = 1, Source = "HostProfile" };
+        fake.Status.HostProfile.GlobalDeadzoneBottom = new MagneticKnownRaw { Known = true, Raw = 1, Source = "HostProfile" };
         var model = new MagneticSettingsModel(fake);
         await model.RefreshAsync();
         model.SelectGlobal();
@@ -662,16 +664,16 @@ public sealed class MagneticSettingsTests
         Assert.IsFalse(model.GlobalDraft?.SeparateMode);
         Assert.AreEqual(0.4, model.GlobalDraft?.PressMm);
         Assert.AreEqual(0.4, model.GlobalDraft?.ReleaseMm);
-        Assert.IsTrue(await model.ApplyGlobalRapidTriggerAsync());
-        Assert.AreEqual("global-rt:0.4:0.4:0.1:0.1:False", fake.Calls.Last());
+        Assert.IsFalse(await model.ApplyGlobalRapidTriggerAsync());
+        Assert.IsFalse(fake.Calls.Any(call => call.StartsWith("global-rt:")));
 
         // Separate sensitivity (separateMode = true)
         model.EditGlobalRapidTrigger(0.2, 0.8, true);
         Assert.IsTrue(model.GlobalDraft?.SeparateMode);
         Assert.AreEqual(0.2, model.GlobalDraft?.PressMm);
         Assert.AreEqual(0.8, model.GlobalDraft?.ReleaseMm);
-        Assert.IsTrue(await model.ApplyGlobalRapidTriggerAsync());
-        Assert.AreEqual("global-rt:0.2:0.8:0.1:0.1:True", fake.Calls.Last());
+        Assert.IsFalse(await model.ApplyGlobalRapidTriggerAsync());
+        Assert.IsFalse(fake.Calls.Any(call => call.StartsWith("global-rt:")));
     }
 
     [TestMethod]
@@ -685,6 +687,8 @@ public sealed class MagneticSettingsTests
             BottomRaw = 2,
             Source = "SessionApplied"
         };
+        fake.Status.HostProfile.GlobalDeadzoneTop = new MagneticKnownRaw { Known = true, Raw = 1, Source = "HostProfile" };
+        fake.Status.HostProfile.GlobalDeadzoneBottom = new MagneticKnownRaw { Known = true, Raw = 2, Source = "HostProfile" };
         var model = new MagneticSettingsModel(fake);
         await model.RefreshAsync();
         model.SelectGlobal();
@@ -696,10 +700,10 @@ public sealed class MagneticSettingsTests
 
         // Edit and Apply Global RT
         model.EditGlobalRapidTrigger(0.5, 0.6, true);
-        Assert.IsTrue(await model.ApplyGlobalRapidTriggerAsync());
+        Assert.IsFalse(await model.ApplyGlobalRapidTriggerAsync());
 
         // Expected: RT packet uses currently applied/known global deadzone (0.1 / 0.2), NOT 0.3 / 0.4!
-        Assert.AreEqual("global-rt:0.5:0.6:0.1:0.2:True", fake.Calls.Last());
+        Assert.IsFalse(fake.Calls.Any(call => call.StartsWith("global-rt:")));
 
         // Deadzone draft remains unapplied
         Assert.AreEqual(0.3, model.GlobalDraft?.TopMm);
@@ -727,7 +731,7 @@ public sealed class MagneticSettingsTests
         Assert.IsEmpty(fake.Calls);
         Assert.AreEqual(0.4, model.GlobalDraft?.PressMm);
         Assert.AreEqual(0.4, model.GlobalDraft?.ReleaseMm);
-        Assert.AreEqual("无法确认当前全局死区，无法安全应用快速触发设置。", model.LastMessage);
+        StringAssert.Contains(model.LastMessage, "停用");
     }
 
     [TestMethod]
@@ -752,16 +756,11 @@ public sealed class MagneticSettingsTests
         Assert.AreEqual(0.3, dzDoc.RootElement.GetProperty("bottom_mm").GetDouble(), 0.001);
         Assert.IsFalse(handler.Body!.Contains("raw", StringComparison.OrdinalIgnoreCase));
 
-        // Rapid Trigger
-        Assert.IsTrue((await client.SetGlobalRapidTriggerAsync(0.4, 0.5, 0.1, 0.2, true)).Succeeded);
-        Assert.AreEqual("/api/magnetic/global/rapid-trigger", handler.Path);
-        using var rtDoc = JsonDocument.Parse(handler.Body!);
-        Assert.AreEqual(0.4, rtDoc.RootElement.GetProperty("press_mm").GetDouble(), 0.001);
-        Assert.AreEqual(0.5, rtDoc.RootElement.GetProperty("release_mm").GetDouble(), 0.001);
-        Assert.AreEqual(0.1, rtDoc.RootElement.GetProperty("top_mm").GetDouble(), 0.001);
-        Assert.AreEqual(0.2, rtDoc.RootElement.GetProperty("bottom_mm").GetDouble(), 0.001);
-        Assert.IsTrue(rtDoc.RootElement.GetProperty("separate_mode").GetBoolean());
-        Assert.IsFalse(handler.Body!.Contains("opcode", StringComparison.OrdinalIgnoreCase));
+        // Compatibility client cannot issue a legacy HTTP mutation.
+        var previousPath=handler.Path;
+        Assert.IsFalse((await client.SetGlobalRapidTriggerAsync(0.4,0.5,0.1,0.2,true)).Succeeded);
+        Assert.AreEqual(previousPath,handler.Path);
+
     }
 
     [TestMethod]
@@ -943,10 +942,139 @@ public sealed class MagneticSettingsTests
 
         // 4. Global RT modifies separate_mode / press / release (51 53), NOT master enable:
         fake.Status.GlobalDeadzone = new MagneticGlobalDeadzoneState { Known = true, TopRaw = 0, BottomRaw = 1, Source = "SessionApplied" };
+        fake.Status.HostProfile.GlobalDeadzoneTop = new MagneticKnownRaw { Known = true, Raw = 0, Source = "HostProfile" };
+        fake.Status.HostProfile.GlobalDeadzoneBottom = new MagneticKnownRaw { Known = true, Raw = 1, Source = "HostProfile" };
         model.SelectGlobal();
         model.EditGlobalRapidTrigger(0.5, 0.5, false);
-        Assert.IsTrue(await model.ApplyGlobalRapidTriggerAsync());
-        Assert.AreEqual("global-rt:0.5:0.5:0.0:0.1:False", fake.Calls.Last());
+        Assert.IsFalse(await model.ApplyGlobalRapidTriggerAsync());
+        Assert.IsFalse(fake.Calls.Any(call => call.StartsWith("global-rt:")));
+    }
+
+    [TestMethod]
+    public async Task ProfileAllKeySubmissionNeverSeedsManualGlobalDraft()
+    {
+        var magnetic = new Fake();
+        var profiles = new BaselineFake();
+        var desktop = Guid.NewGuid(); var custom = Guid.NewGuid();
+        profiles.Response.SelectedProfileId = custom;
+        profiles.Response.ActiveProfileId = custom;
+        profiles.Response.Dirty = false;
+        profiles.Response.GlobalDefaults = new ProfileMagnetic {
+            GlobalActuationMm = 1.0, GlobalDeadzone = new(0.0, 0.1),
+            GlobalRapidTrigger = new(true, 0.4, 0.4, false, 0.0, 0.1) };
+        profiles.Response.EffectiveGlobalDefaults = profiles.Response.GlobalDefaults;
+        magnetic.Status.GlobalActuation = new() { Known = true, Raw = 40, Source = "SessionApplied" };
+        magnetic.Status.GlobalDeadzone = new() { Known = true, TopRaw = 2,
+            BottomRaw = 3, Source = "SessionApplied" };
+        magnetic.Status.GlobalRapidTrigger = new() { Known = true, PressRaw = 6,
+            ReleaseRaw = 6, Source = "SessionApplied" };
+        var model = new MagneticSettingsModel(magnetic, profileClient: profiles);
+        await model.RefreshAsync(); model.SelectGlobal();
+
+        Assert.AreEqual((byte)10, model.ManualGlobalActuation.Raw);
+        Assert.AreEqual("DeviceBaseline", model.ManualGlobalActuation.Source);
+        Assert.AreEqual((byte)1, model.ManualGlobalDeadzone.BottomRaw);
+        Assert.AreEqual((byte)4, model.ManualGlobalRapidTrigger.PressRaw);
+        Assert.IsTrue(model.ProfileOverridesActuation);
+        Assert.IsTrue(model.ProfileOverridesDeadzone);
+        Assert.IsNull(model.GlobalDraft.ActuationMm);
+        Assert.IsFalse(await model.ApplyGlobalActuationAsync());
+        Assert.IsFalse(await model.ApplyGlobalDeadzoneAsync());
+        Assert.IsEmpty(magnetic.Calls);
+
+        profiles.Response.SelectedProfileId = desktop;
+        profiles.Response.ActiveProfileId = desktop;
+        magnetic.Status.GlobalActuation.Raw = 10;
+        magnetic.Status.GlobalDeadzone.TopRaw = 0;
+        magnetic.Status.GlobalDeadzone.BottomRaw = 1;
+        await model.RefreshAsync();
+        Assert.AreEqual((byte)10, model.ManualGlobalActuation.Raw);
+        Assert.IsFalse(model.ProfileOverridesActuation);
+        Assert.IsFalse(model.ProfileOverridesDeadzone);
+
+        profiles.Response.SelectedProfileId = custom;
+        profiles.Response.ActiveProfileId = custom;
+        magnetic.Status.GlobalActuation.Raw = 40;
+        magnetic.GlobalActuationWritten = mm => {
+            profiles.Response.GlobalDefaults!.GlobalActuationMm = mm;
+            profiles.Response.ActiveProfileId = null;
+            profiles.Response.Dirty = true;
+            magnetic.Status.GlobalActuation.Raw = (byte)Math.Round(mm * 10);
+        };
+        await model.RefreshAsync();
+        model.EditGlobalActuation(1.5);
+        Assert.IsTrue(await model.ApplyGlobalActuationAsync());
+        Assert.AreEqual("global-actuation:1.5", magnetic.Calls.Last());
+        Assert.AreEqual((byte)15, model.ManualGlobalActuation.Raw);
+        Assert.IsTrue(profiles.Response.Dirty);
+        Assert.IsNull(profiles.Response.ActiveProfileId);
+        Assert.AreEqual(custom, profiles.Response.SelectedProfileId);
+        Assert.AreEqual(1.5, profiles.Response.GlobalDefaults!.GlobalActuationMm);
+
+        profiles.Response.ActiveProfileId = custom; profiles.Response.Dirty = false;
+        magnetic.Status.GlobalActuation.Raw = 40;
+        await model.RefreshAsync();
+        Assert.AreEqual((byte)15, model.ManualGlobalActuation.Raw);
+        Assert.IsTrue(model.ProfileOverridesActuation);
+        profiles.Response.ActiveProfileId = desktop;
+        profiles.Response.SelectedProfileId = desktop;
+        magnetic.Status.GlobalActuation.Raw = 15;
+        await model.RefreshAsync();
+        Assert.AreEqual((byte)15, model.ManualGlobalActuation.Raw);
+        Assert.IsFalse(model.ProfileOverridesActuation);
+    }
+
+    [TestMethod]
+    public async Task GlobalRapidTriggerUsesManualDeadzoneAndBaselineFailureNeverFallsBackToProfileSubmission()
+    {
+        var magnetic = new Fake(); var profiles = new BaselineFake();
+        profiles.Response.GlobalDefaults = new ProfileMagnetic {
+            GlobalActuationMm = 1.0, GlobalDeadzone = new(0.0, 0.1) };
+        profiles.Response.EffectiveGlobalDefaults = profiles.Response.GlobalDefaults;
+        magnetic.Status.GlobalActuation = new() { Known = true, Raw = 40, Source = "SessionApplied" };
+        magnetic.Status.GlobalDeadzone = new() { Known = true, TopRaw = 2,
+            BottomRaw = 3, Source = "SessionApplied" };
+        var model = new MagneticSettingsModel(magnetic, profileClient: profiles);
+        await model.RefreshAsync(); model.SelectGlobal();
+        model.EditGlobalRapidTrigger(0.5, 0.5, false);
+        Assert.IsFalse(await model.ApplyGlobalRapidTriggerAsync());
+        Assert.IsFalse(magnetic.Calls.Any(call => call.StartsWith("global-rt:")));
+
+        profiles.Offline = true;
+        await model.RefreshAsync();
+        Assert.IsFalse(model.ManualGlobalActuation.Known);
+        Assert.IsFalse(model.ManualGlobalDeadzone.Known);
+        Assert.IsNull(model.GlobalDraft.ActuationMm);
+        Assert.IsFalse(await model.ApplyGlobalActuationAsync());
+        Assert.IsFalse(model.ProfileOverridesActuation);
+    }
+
+    [TestMethod]
+    public async Task NullDocumentBaselineUsesDaemonResolvedHostIntentNotSessionSubmission()
+    {
+        var magnetic = new Fake(); var profiles = new BaselineFake();
+        profiles.Response.GlobalDefaults = new ProfileMagnetic();
+        profiles.Response.EffectiveGlobalDefaults = new ProfileMagnetic {
+            GlobalActuationMm = 1.0, GlobalDeadzone = new(0.0, 0.1) };
+        magnetic.Status.GlobalActuation = new() { Known = true, Raw = 40, Source = "SessionApplied" };
+        magnetic.Status.GlobalDeadzone = new() { Known = true, TopRaw = 2,
+            BottomRaw = 3, Source = "SessionApplied" };
+        magnetic.Status.HostProfile.GlobalRtPress = new() { Known = true, Raw = 4,
+            Source = "HostProfile" };
+        magnetic.Status.HostProfile.GlobalRtRelease = new() { Known = true, Raw = 2,
+            Source = "HostProfile" };
+        var model = new MagneticSettingsModel(magnetic, profileClient: profiles);
+        await model.RefreshAsync();
+
+        Assert.AreEqual((byte)10, model.ManualGlobalActuation.Raw);
+        Assert.AreEqual("HostProfile", model.ManualGlobalActuation.Source);
+        Assert.AreEqual((byte)1, model.ManualGlobalDeadzone.BottomRaw);
+        Assert.AreEqual("HostProfile", model.ManualGlobalDeadzone.Source);
+        Assert.AreEqual((byte)4, model.ManualGlobalRapidTrigger.PressRaw);
+        Assert.AreEqual((byte)2, model.ManualGlobalRapidTrigger.ReleaseRaw);
+        Assert.IsNull(model.GlobalDraft.ActuationMm);
+        Assert.IsFalse(await model.ApplyGlobalActuationAsync());
+        Assert.IsEmpty(magnetic.Calls);
     }
 
     private sealed class CaptureHandler : HttpMessageHandler
@@ -968,6 +1096,7 @@ public sealed class MagneticSettingsTests
     {
         public MagneticStatus Status { get; } = Clean();
         public List<string> Calls { get; } = [];
+        public Action<double>? GlobalActuationWritten { get; set; }
         public Task<MagneticStatus>? Next { get; set; }
         public Task<MagneticStatus> GetStatusAsync() => Task.FromResult(Status);
         private Task<MagneticStatus> Record(string call) { Calls.Add(call); return Next ?? Task.FromResult(Status); }
@@ -976,7 +1105,10 @@ public sealed class MagneticSettingsTests
         public Task<MagneticStatus> DisableRapidTriggerAsync(ushort id) => Record($"rt-off:{id}");
         public Task<MagneticStatus> SetDeadzoneAsync(ushort id, double top, double bottom) => Record($"deadzone:{id}:{top:F1}:{bottom:F1}");
         public Task<MagneticStatus> ResetAllDeadzoneAsync() => Record("deadzone-reset-all");
-        public Task<MagneticStatus> SetGlobalActuationAsync(double mm) => Record($"global-actuation:{mm:F1}");
+        public Task<MagneticStatus> SetGlobalActuationAsync(double mm) {
+            GlobalActuationWritten?.Invoke(mm);
+            return Record($"global-actuation:{mm:F1}");
+        }
         public Task<MagneticStatus> SetGlobalDeadzoneAsync(double top, double bottom)
         {
             Status.GlobalDeadzone = new MagneticGlobalDeadzoneState
@@ -986,6 +1118,10 @@ public sealed class MagneticSettingsTests
                 BottomRaw = (byte)(bottom * 10),
                 Source = "SessionApplied"
             };
+            Status.HostProfile.GlobalDeadzoneTop = new MagneticKnownRaw {
+                Known = true, Raw = (byte)Math.Round(top * 10), Source = "HostProfile" };
+            Status.HostProfile.GlobalDeadzoneBottom = new MagneticKnownRaw {
+                Known = true, Raw = (byte)Math.Round(bottom * 10), Source = "HostProfile" };
             return Record($"global-deadzone:{top:F1}:{bottom:F1}");
         }
         public Task<MagneticStatus> SetGlobalRapidTriggerAsync(double press, double release, double top, double bottom, bool separate) =>
@@ -1018,5 +1154,31 @@ public sealed class MagneticSettingsTests
             Status.GlobalDeadzone = new MagneticGlobalDeadzoneState { Known = false, Source = "Unknown" };
             return Record("ack-external-resync");
         }
+    }
+
+    private sealed class BaselineFake : IProfileControlClient
+    {
+        public Task<ProfileApiResponse> GetDiagnosticsAsync(CancellationToken token = default) => throw new NotSupportedException();
+        public ProfileApiResponse Response { get; } = new() { Status = "ok", ApiVersion = 1 };
+        public bool Offline { get; set; }
+        public Task<ProfileApiResponse> GetRuntimeAsync(CancellationToken token = default) =>
+            Offline ? Task.FromException<ProfileApiResponse>(new HttpRequestException("offline")) :
+            Task.FromResult(Response);
+        public Task<ProfileApiResponse> ListAsync(CancellationToken token = default) => throw new NotSupportedException();
+        public Task<ProfileApiResponse> GetAsync(Guid id, CancellationToken token = default) => throw new NotSupportedException();
+        public Task<ProfileApiResponse> CreateAsync(string name, long revision, CancellationToken token = default) => throw new NotSupportedException();
+        public Task<ProfileApiResponse> DuplicateAsync(Guid id, string name, long revision,
+            CancellationToken token = default) => throw new NotSupportedException();
+        public Task<ProfileApiResponse> RenameAsync(Guid id, string name, long revision,
+            CancellationToken token = default) => throw new NotSupportedException();
+        public Task<ProfileApiResponse> UpdateAsync(DeviceProfile profile, long revision,
+            CancellationToken token = default) => throw new NotSupportedException();
+        public Task<ProfileApiResponse> DeleteAsync(Guid id, long revision,
+            CancellationToken token = default) => throw new NotSupportedException();
+        public Task<ProfileApiResponse> UpdateDefaultsAsync(ProfileMagnetic defaults, long revision,
+            CancellationToken token = default) => throw new NotSupportedException();
+        public Task<ProfileApiResponse> ActivateAsync(Guid id, ProfileActivationReason reason,
+            long revision, ProfileMagnetic? temporaryOverride = null,
+            CancellationToken token = default) => throw new NotSupportedException();
     }
 }

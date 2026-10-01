@@ -116,6 +116,7 @@ ORIGINAL_REQUEST.md
 # ---- 审计、排查与补丁临时产物 ----
 /audit_artifacts/
 /audit_repros/
+/artifacts/
 /*.patch
 /*_audit.md
 /*_report.md

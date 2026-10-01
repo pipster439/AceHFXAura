@@ -29,7 +29,8 @@ public sealed partial class MagneticSwitchPage : Page
 
     public MagneticSettingsModel Model => _model;
 
-    public MagneticSwitchPage() : this(new MagneticSettingsModel(new MagneticControlClient()))
+    public MagneticSwitchPage() : this(new MagneticSettingsModel(new MagneticControlClient(),
+        profileClient: new ProfileControlClient()))
     {
     }
 
@@ -396,11 +397,11 @@ public sealed partial class MagneticSwitchPage : Page
             {
                 // Card headers & descriptions
                 ActuationCard.Header = "全局触发点";
-                ActuationCard.Description = "全键盘按键基础触发深度 (0.1–4.0 mm)；移动滑杆仅修改草稿";
-                RapidTriggerCard.Header = "全局快速触发";
-                RapidTriggerCard.Description = "全键盘按键基础灵敏度与独立按下/抬起模式";
+                ActuationCard.Description = "手动全局设置的基础触发深度 (0.1–4.0 mm)；配置文件覆盖时仍显示基础值";
+                RapidTriggerCard.Header = "旧版快速触发参数（只读）";
+                RapidTriggerCard.Description = "请在键盘中选择单键或多键后设置快速触发；本页不再编辑旧版整体参数";
                 DeadzoneCard.Header = "全局死区设置";
-                DeadzoneCard.Description = "全键盘按键基础死区 (0.0–0.5 mm)；不清除已有逐键覆盖";
+                DeadzoneCard.Description = "手动全局设置的基础死区 (0.0–0.5 mm)；不清除已有逐键覆盖";
                 DksSection.Visibility = Visibility.Collapsed;
 
                 RapidTriggerToggle.Visibility = Visibility.Collapsed;
@@ -408,39 +409,32 @@ public sealed partial class MagneticSwitchPage : Page
 
                 // Enabled states
                 ActuationSlider.IsEnabled = _model.CanWriteGlobal;
-                PressSlider.IsEnabled = _model.CanWriteGlobal;
-                ReleaseSlider.IsEnabled = _model.CanWriteGlobal;
+                PressSlider.IsEnabled = false;
+                ReleaseSlider.IsEnabled = false;
                 TopSlider.IsEnabled = _model.CanWriteGlobal;
                 BottomSlider.IsEnabled = _model.CanWriteGlobal;
-                SeparateModeToggle.IsEnabled = _model.CanWriteGlobal;
+                SeparateModeToggle.IsEnabled = false;
 
                 // Values & Displays
                 var globalDraft = _model.GlobalDraft;
-                var globalAct = status?.GlobalActuation;
-                var globalRt = status?.GlobalRapidTrigger;
-                var globalDz = status?.GlobalDeadzone;
+                var globalAct = _model.ManualGlobalActuation;
+                var globalRt = _model.ManualGlobalRapidTrigger;
+                var globalDz = _model.ManualGlobalDeadzone;
 
-                bool sepMode = globalDraft.SeparateMode ?? globalRt?.SeparateMode ??
-                    (globalRt is { Known: true } ? globalRt.PressRaw != globalRt.ReleaseRaw :
-                     status?.HostProfile.GlobalRtPress.Known == true && status?.HostProfile.GlobalRtRelease.Known == true &&
-                     status.HostProfile.GlobalRtPress.Raw != status.HostProfile.GlobalRtRelease.Raw);
+                bool sepMode = globalDraft.SeparateMode ?? globalRt.SeparateMode ??
+                    (globalRt.Known && globalRt.PressRaw != globalRt.ReleaseRaw);
                 SeparateModeToggle.IsOn = sepMode;
 
                 ActuationSlider.Value = globalDraft.ActuationMm ??
-                    (globalAct is { Known: true } ? globalAct.Raw / 10.0 :
-                     status?.HostProfile.GlobalActuation.Known == true ? status.HostProfile.GlobalActuation.Raw / 10.0 : 1.0);
+                    (globalAct.Known ? globalAct.Raw / 10.0 : 1.0);
                 PressSlider.Value = globalDraft.PressMm ??
-                    (globalRt is { Known: true } ? globalRt.PressRaw / 10.0 :
-                     status?.HostProfile.GlobalRtPress.Known == true ? status.HostProfile.GlobalRtPress.Raw / 10.0 : 0.4);
+                    (globalRt.Known ? globalRt.PressRaw / 10.0 : 0.4);
                 ReleaseSlider.Value = globalDraft.ReleaseMm ??
-                    (globalRt is { Known: true } ? globalRt.ReleaseRaw / 10.0 :
-                     status?.HostProfile.GlobalRtRelease.Known == true ? status.HostProfile.GlobalRtRelease.Raw / 10.0 : 0.2);
+                    (globalRt.Known ? globalRt.ReleaseRaw / 10.0 : 0.2);
                 TopSlider.Value = globalDraft.TopMm ??
-                    (globalDz is { Known: true } ? globalDz.TopRaw / 10.0 :
-                     status?.HostProfile.GlobalDeadzoneTop.Known == true ? status.HostProfile.GlobalDeadzoneTop.Raw / 10.0 : 0.0);
+                    (globalDz.Known ? globalDz.TopRaw / 10.0 : 0.0);
                 BottomSlider.Value = globalDraft.BottomMm ??
-                    (globalDz is { Known: true } ? globalDz.BottomRaw / 10.0 :
-                     status?.HostProfile.GlobalDeadzoneBottom.Known == true ? status.HostProfile.GlobalDeadzoneBottom.Raw / 10.0 : 0.1);
+                    (globalDz.Known ? globalDz.BottomRaw / 10.0 : 0.1);
 
                 ActuationDraftText.Text = Label("草稿", globalDraft.ActuationMm);
                 ActuationValueDisplay.Text = $"{ActuationSlider.Value:F1} mm";
@@ -454,22 +448,20 @@ public sealed partial class MagneticSwitchPage : Page
                 BottomValueDisplay.Text = $"{BottomSlider.Value:F1} mm";
 
                 // Provenance
-                ActuationAppliedText.Text = globalAct is { Known: true } ?
-                    $"{SourceLabel(globalAct.Source)}：{globalAct.Raw / 10.0:F1} mm" :
-                    status?.HostProfile.GlobalActuation.Known == true ?
-                    $"已保存配置全局值：{status.HostProfile.GlobalActuation.Raw / 10.0:F1} mm" :
-                    "全局基础触发点：未知";
-                RapidTriggerAppliedText.Text = globalRt is { Known: true } ?
+                ActuationAppliedText.Text = globalAct.Known ?
+                    $"{SourceLabel(globalAct.Source)}：{globalAct.Raw / 10.0:F1} mm" +
+                    (_model.ProfileOverridesActuation ?
+                        $" · 当前配置文件提交：{status!.GlobalActuation.Raw / 10.0:F1} mm（非设备读回）" : "") :
+                    "手动全局触发点：未知";
+                RapidTriggerAppliedText.Text = globalRt.Known ?
                     $"{SourceLabel(globalRt.Source)}：按下 {globalRt.PressRaw / 10.0:F1} mm，抬起 {globalRt.ReleaseRaw / 10.0:F1} mm ({(globalRt.SeparateMode == true ? "独立灵敏度" : "同步灵敏度")})" :
-                    (status?.HostProfile.GlobalRtPress.Known == true && status?.HostProfile.GlobalRtRelease.Known == true) ?
-                    $"已保存配置全局值：按下 {status.HostProfile.GlobalRtPress.Raw / 10.0:F1} mm，抬起 {status.HostProfile.GlobalRtRelease.Raw / 10.0:F1} mm" :
-                    "全局基础快速触发：未知";
+                    "请选择按键后设置快速触发；旧版批量写入已停用";
                 RapidTriggerDisableWarningText.Visibility = Visibility.Collapsed;
-                DeadzoneAppliedText.Text = globalDz is { Known: true } ?
-                    $"{SourceLabel(globalDz.Source)}：顶部 {globalDz.TopRaw / 10.0:F1} mm，底部 {globalDz.BottomRaw / 10.0:F1} mm" :
-                    (status?.HostProfile.GlobalDeadzoneTop.Known == true && status?.HostProfile.GlobalDeadzoneBottom.Known == true) ?
-                    $"已保存配置全局值：顶部 {status.HostProfile.GlobalDeadzoneTop.Raw / 10.0:F1} mm，底部 {status.HostProfile.GlobalDeadzoneBottom.Raw / 10.0:F1} mm" :
-                    "全局基础死区：未知";
+                DeadzoneAppliedText.Text = globalDz.Known ?
+                    $"{SourceLabel(globalDz.Source)}：顶部 {globalDz.TopRaw / 10.0:F1} mm，底部 {globalDz.BottomRaw / 10.0:F1} mm" +
+                    (_model.ProfileOverridesDeadzone ?
+                        $" · 当前配置文件提交：顶部 {status!.GlobalDeadzone.TopRaw / 10.0:F1} mm，底部 {status.GlobalDeadzone.BottomRaw / 10.0:F1} mm（非设备读回）" : "") :
+                    "手动全局死区：未知";
 
                 // Apply buttons
                 ActuationApplyButton.Content = "应用全局触发点";
@@ -477,8 +469,8 @@ public sealed partial class MagneticSwitchPage : Page
                 ActuationApplyButton.IsEnabled = actDirty;
                 ActuationApplyButton.Style = actDirty ? (Style)Application.Current.Resources["AccentButtonStyle"] : null;
 
-                RapidTriggerApplyButton.Content = "应用全局快速触发";
-                bool rtDirty = _model.CanWriteGlobal && (globalDraft.PressMm != null || globalDraft.ReleaseMm != null || globalDraft.SeparateMode != null);
+                RapidTriggerApplyButton.Content = "旧版写入已停用";
+                bool rtDirty = false; // 51 53 remains fail-closed.
                 RapidTriggerApplyButton.IsEnabled = rtDirty;
                 RapidTriggerApplyButton.Style = rtDirty ? (Style)Application.Current.Resources["AccentButtonStyle"] : null;
 
@@ -519,8 +511,8 @@ public sealed partial class MagneticSwitchPage : Page
 
             // 3. Values & Displays
             ActuationSlider.Value = draft?.ActuationMm ?? (actuation?.Raw / 10.0) ?? 0.1;
-            PressSlider.Value = draft?.PressMm ?? (rt?.Source == "SessionApplied" ? rt.PressRaw / 10.0 : 0.1);
-            ReleaseSlider.Value = draft?.ReleaseMm ?? (rt?.Source == "SessionApplied" ? rt.ReleaseRaw / 10.0 : 0.1);
+            PressSlider.Value = draft?.PressMm ?? (rt is { Source: "SessionApplied", PressKnown: true } ? rt.PressRaw / 10.0 : 0.1);
+            ReleaseSlider.Value = draft?.ReleaseMm ?? (rt is { Source: "SessionApplied", ReleaseKnown: true } ? rt.ReleaseRaw / 10.0 : 0.1);
             TopSlider.Value = draft?.TopMm ?? (deadzone?.TopRaw / 10.0) ?? 0;
             BottomSlider.Value = draft?.BottomMm ?? (deadzone?.BottomRaw / 10.0) ?? 0;
             RapidTriggerToggle.IsOn = draft?.RapidTriggerEnabled ?? rt?.Enabled ?? false;
@@ -569,7 +561,8 @@ public sealed partial class MagneticSwitchPage : Page
             RapidTriggerAppliedText.Text = rt == null ?
                 status?.HostProfile.PerKeyRtListKnown == true ?
                 "已保存配置逐键 RT 列表未包含此键；设备状态未知" : "逐键 RT：未知" :
-                rt.Source == "SessionApplied" ?
+                rt.Source == "SessionApplied" && (!rt.PressKnown || !rt.ReleaseKnown) ?
+                "本次会话仅提交了部分灵敏度，完整快速触发设置尚未确认。" : rt.Source == "SessionApplied" ?
                 $"本次会话：{(rt.Enabled ? "此键使用快速触发" : "关闭")}；按下 {rt.PressRaw / 10.0:F1} mm，抬起 {rt.ReleaseRaw / 10.0:F1} mm" :
                 "已保存配置：此键使用快速触发（灵敏度未知）";
             DeadzoneAppliedText.Text = deadzone == null ? "此键逐键死区：未知（可参考下方已保存全局值）" :
@@ -767,7 +760,8 @@ public sealed partial class MagneticSwitchPage : Page
     private static string Label(string name, double? value) =>
         value is double mm ? $"{name}：{mm:F1} mm" : $"{name}：未指定";
     private static string SourceLabel(string source) => source switch {
-        "SessionApplied" => "本次会话", "HostProfile" => "已保存配置", _ => "未知" };
+        "SessionApplied" => "本次会话", "DeviceBaseline" => "手动全局设置",
+        "HostProfile" => "已保存配置", _ => "未知" };
 
     private void GlobalSelectButton_Click(object sender, RoutedEventArgs e)
     {
@@ -827,8 +821,9 @@ public sealed partial class MagneticSwitchPage : Page
         if (_model.IsGlobalMode)
         {
             double p = Math.Round(e.NewValue, 1);
-            bool separate = _model.GlobalDraft.SeparateMode ?? _model.Status?.GlobalRapidTrigger.SeparateMode ??
-                (_model.Status?.GlobalRapidTrigger.PressRaw != _model.Status?.GlobalRapidTrigger.ReleaseRaw);
+            var baselineRt = _model.ManualGlobalRapidTrigger;
+            bool separate = _model.GlobalDraft.SeparateMode ?? baselineRt.SeparateMode ??
+                (baselineRt.Known && baselineRt.PressRaw != baselineRt.ReleaseRaw);
             _model.EditGlobalRapidTrigger(p, separate ? null : p, null);
             Render();
             return;
@@ -842,8 +837,9 @@ public sealed partial class MagneticSwitchPage : Page
         if (_model.IsGlobalMode)
         {
             double r = Math.Round(e.NewValue, 1);
-            bool separate = _model.GlobalDraft.SeparateMode ?? _model.Status?.GlobalRapidTrigger.SeparateMode ??
-                (_model.Status?.GlobalRapidTrigger.PressRaw != _model.Status?.GlobalRapidTrigger.ReleaseRaw);
+            var baselineRt = _model.ManualGlobalRapidTrigger;
+            bool separate = _model.GlobalDraft.SeparateMode ?? baselineRt.SeparateMode ??
+                (baselineRt.Known && baselineRt.PressRaw != baselineRt.ReleaseRaw);
             _model.EditGlobalRapidTrigger(separate ? null : r, r, null);
             Render();
             return;
@@ -1048,6 +1044,7 @@ public sealed partial class MagneticSwitchPage : Page
             "• AceHFXAura 当前并不知道键盘的实际磁轴硬件配置。\n" +
             "• 此操作不会向键盘恢复或更改任何设置（0 次硬件写入）。\n" +
             "• 您必须先通过外部方式（例如华硕官方 Armoury Crate 软件）将键盘恢复或验证至已知良好状态。\n" +
+            "• 请重新连接键盘。后台会重新打开并验证连接；仅拔插或重启 Aura 不会清除安全隔离。\n" +
             "• 继续操作仅会清除 AceHFXAura 的持久安全隔离状态，并清空本次会话已应用记录（SessionApplied）。\n\n" +
             "确认已在外部完成重新同步并清除安全隔离？";
 

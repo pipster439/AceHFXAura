@@ -10,6 +10,7 @@
 #include "gsi/gsi_adapter.h"
 #include "config/lighting_service.h"
 #include "config/automation_service.h"
+#include "config/daemon_process_identity.h"
 #include "config/magnetic_control_service.h"
 #include "aura/runtime_status.h"
 #include "aura_version.h"
@@ -142,6 +143,7 @@ struct ComScope {
 } // namespace
 
 int main(int argc, char* argv[]) {
+    (void)aura::DaemonProcessIdentity::Current(); // one software identity per daemon lifetime
     if (argc == 3 && std::string(argv[1]) == "--validate-config") {
         aura::Logger::Instance().Init("");
         aura::RuleEngine validator;
@@ -594,7 +596,13 @@ int main(int argc, char* argv[]) {
     auto status_store = std::make_shared<aura::RuntimeStatusStore>();
     auto lighting_service = std::make_shared<aura::LightingControlService>(std::filesystem::path(config_path));
     auto automation_service = std::make_shared<aura::AutomationControlService>(std::filesystem::path(config_path));
-    aura::MagneticControlService magnetic_service(status_store);
+    aura::MagneticControlService magnetic_service(status_store,
+        [] { return aura::MagneticHostProfileProvider::LoadProduction(); },
+        std::make_unique<aura::M605Runtime>(),
+        std::filesystem::absolute(config_path).parent_path() / "device-profiles.json",
+        std::filesystem::absolute(config_path));
+    if (!dry_run) magnetic_service.StartHardwareRtGateObservation();
+    if (!dry_run) magnetic_service.StartDeviceProfileAutomation();
     aura::GsiAdapter gsi_adapter;
     gsi_adapter.SetInstanceId(instance_id);
     gsi_adapter.SetStatusStore(status_store);
@@ -756,6 +764,9 @@ int main(int argc, char* argv[]) {
 
     // 填入初始运行态快照
     update_status_snapshot(monitor.GetCurrentProcessName());
+    // Initial known foreground enters the same stability/debounce path. This
+    // subsystem only records what it WOULD select; automatic HID is disabled.
+    magnetic_service.ObserveDeviceProfileForeground(monitor.GetCurrentProcessName());
 
     while (g_running.load(std::memory_order_acquire)) {
         // 检查是否有外部管理端发出的优雅停机通知
@@ -775,7 +786,8 @@ int main(int argc, char* argv[]) {
 
         // 主线程统一评估当前前台进程与 GSI 状态驱动的灯效方案
         // (严格遵循主线程独占 COM/HAL 纪律，绝不在网络线程执行硬件调用)
-        const auto automation = gsi_adapter.EvaluateAutomation(rule_engine, monitor.GetCurrentProcessName());
+        const auto real_foreground_process = monitor.GetCurrentProcessName();
+        const auto automation = gsi_adapter.EvaluateAutomation(rule_engine, real_foreground_process);
         if (automation.source_changed) { effect_engine.GetAutomationEffects().Clear(); effect_engine.ClearPreview(); }
         const auto effect_revision = effect_engine.GetAutomationEffects().Revision();
         effect_engine.GetAutomationEffects().Consume(automation,
@@ -784,6 +796,10 @@ int main(int argc, char* argv[]) {
             [&rule_engine](const nlohmann::json& reference) { return aura::PrepareAutomationEffect(reference, rule_engine); });
         const auto layer_activations = effect_engine.GetAutomationEffects().TakeActivations();
         const std::string& cur_proc = automation.foreground_process;
+        // Device binding observation uses the real observer, never the legacy
+        // lighting/GSI simulation's optional foreground substitution.
+        if (magnetic_service.ObserveDeviceProfileForeground(real_foreground_process))
+            LOG_INFO("[DeviceProfileAutomation] committed stable decision; coordinator will revalidate admission");
         gsi_adapter.GetState().SetForegroundProcess(cur_proc);
         std::shared_ptr<const aura::Profile> matched = automation.profile;
         std::string prof_name = matched ? matched->name : "(None)";
@@ -928,6 +944,7 @@ int main(int argc, char* argv[]) {
     }
 
     // 14. 优雅停机与资源回收
+    magnetic_service.StopDeviceProfileAutomation();
     LOG_INFO("正在停止网页配置服务监护器...");
     web_supervisor.Shutdown();
 

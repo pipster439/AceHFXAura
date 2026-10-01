@@ -9,6 +9,7 @@ public sealed class DaemonSupervisor : IDaemonSupervisor
     private readonly Func<RuntimeLayout> _prepare;
     private readonly Func<RuntimeLayout, IOwnedDaemonProcess> _start;
     private readonly Func<bool> _mutexExists;
+    private readonly Func<CancellationToken, Task<ProfileApiResponse>> _profileProbe;
     private readonly SemaphoreSlim _lifecycle = new(1, 1);
     private readonly CancellationTokenSource _shutdown = new();
     private IOwnedDaemonProcess? _child;
@@ -16,18 +17,26 @@ public sealed class DaemonSupervisor : IDaemonSupervisor
     private string? _startupLogPath;
     private long _startupLogOffset;
     private string? _startupFailureDescription;
+    private string? _profileProbeInstanceId;
+    private bool _profileIncompatible;
     private static readonly Lazy<DaemonSupervisor> Singleton = new(() => new());
     public static DaemonSupervisor Instance => Singleton.Value;
 
     public DaemonSupervisor(IAuraControlClient? client = null, AuraWebClient? web = null,
-        Func<RuntimeLayout>? prepare = null, Func<RuntimeLayout, IOwnedDaemonProcess>? start = null, Func<bool>? mutexExists = null)
+        Func<RuntimeLayout>? prepare = null, Func<RuntimeLayout, IOwnedDaemonProcess>? start = null,
+        Func<bool>? mutexExists = null,
+        Func<CancellationToken, Task<ProfileApiResponse>>? profileProbe = null)
     {
         _client = client ?? AuraControlClient.Instance; _web = web ?? new();
         _prepare = prepare ?? (() => { var layout = RuntimeLayoutResolver.Resolve(); RuntimePreparer.Prepare(layout); return layout; });
         _start = start ?? (layout => new OwnedDaemonProcess(layout)); _mutexExists = mutexExists ?? CheckMutexExists;
+        var profileClient = profileProbe is null ? new ProfileControlClient() : null;
+        _profileProbe = profileProbe ?? (token => profileClient!.GetRuntimeAsync(token));
     }
     public bool IsDaemonRunning { get; private set; }
     public bool CoreReady { get; private set; }
+    public bool ProfileApiReady { get; private set; }
+    public string ProfileCompatibilityDescription { get; private set; } = "尚未检查配置文件服务";
     public bool IsWebServerReady { get; private set; }
     public bool StudioWebReady => IsWebServerReady;
     public bool WebSuppressed { get; private set; }
@@ -55,6 +64,10 @@ public sealed class DaemonSupervisor : IDaemonSupervisor
         if (_shutdown.IsCancellationRequested) return;
         var previousInstance = Identity?.InstanceId;
         Identity = status.Data?.Identity;
+        if (previousInstance != Identity?.InstanceId) {
+            ProfileApiReady = false; _profileIncompatible = false; _profileProbeInstanceId = null;
+            ProfileCompatibilityDescription = "尚未检查配置文件服务";
+        }
         ConfigStatusDescription = status.Data == null ? "核心数据不可用" :
             status.Data.Config.Healthy ? "配置正常" : "配置热重载失败：" + status.Data.Config.LastError;
         IsDaemonRunning = status.IsOnline;
@@ -66,7 +79,8 @@ public sealed class DaemonSupervisor : IDaemonSupervisor
             Ownership = DaemonOwnership.SpawnedByWinUI;
         else if (status.IsOnline) Ownership = DaemonOwnership.AttachedPreExisting;
         else if (_child is null || _child.HasExited) Ownership = DaemonOwnership.None;
-        UpdateStatus(CoreReady ? status.Data!.Config.Healthy
+        UpdateStatus(_profileIncompatible && _profileProbeInstanceId == Identity?.InstanceId ?
+            ProfileCompatibilityDescription : CoreReady ? status.Data!.Config.Healthy
                 ? $"核心已就绪 · {OwnershipDescription} · {Identity!.ProductVersion}"
                 : $"配置热重载失败，仍使用先前有效配置：{status.Data.Config.LastError}" :
             status.IsOnline ? "外部核心版本不兼容，仅可查看；请在外部升级后重新连接" : _startupFailureDescription ?? status.ErrorMessage);
@@ -89,7 +103,10 @@ public sealed class DaemonSupervisor : IDaemonSupervisor
             try
             {
                 await RefreshAsync(_shutdown.Token);
-                if (IsDaemonRunning) return; // Never acquire ownership by attaching.
+                if (IsDaemonRunning) {
+                    if (CoreReady) await ProbeProfileAsync(_shutdown.Token);
+                    return; // Never acquire ownership by attaching.
+                }
                 if (_child?.HasExited == true) { _child.Dispose(); _child = null; }
                 if (_child == null && _mutexExists())
                 { UpdateStatus("检测到外部核心，但 Control API 尚未就绪；不会启动或停止它"); return; }
@@ -112,7 +129,7 @@ public sealed class DaemonSupervisor : IDaemonSupervisor
                 while (!deadline.IsCancellationRequested)
                 {
                     await RefreshAsync(deadline.Token);
-                    if (CoreReady) return;
+                    if (CoreReady) { await ProbeProfileAsync(deadline.Token); return; }
                     if (_child.HasExited) { _startupFailureDescription = DescribeStartupExit(); UpdateStatus(_startupFailureDescription); return; }
                     await Task.Delay(200, deadline.Token);
                 }
@@ -137,7 +154,7 @@ public sealed class DaemonSupervisor : IDaemonSupervisor
                 finally { _child.Dispose(); _child = null; }
             }
             var attached = Ownership == DaemonOwnership.AttachedPreExisting;
-            CoreReady = false; IsWebServerReady = false; Ownership = DaemonOwnership.None;
+            CoreReady = false; ProfileApiReady = false; IsWebServerReady = false; Ownership = DaemonOwnership.None;
             IsDaemonRunning = attached;
             UpdateStatus(attached ? "客户端已断开，外部核心保持运行" : "后台核心已停止");
         }
@@ -165,6 +182,34 @@ public sealed class DaemonSupervisor : IDaemonSupervisor
         }
         catch (IOException) { return fallback; }
         catch (UnauthorizedAccessException) { return fallback; }
+    }
+
+    private async Task ProbeProfileAsync(CancellationToken token)
+    {
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
+        deadline.CancelAfter(TimeSpan.FromSeconds(3));
+        try {
+            var result = await _profileProbe(deadline.Token);
+            if (result.Status != "ok" || result.ApiVersion != 1)
+                throw new ProfileApiException("Unsupported daemon Profile API version",
+                    category: ProfileApiErrorCategory.IncompatibleDaemon);
+            ProfileApiReady = true; _profileIncompatible = false;
+            ProfileCompatibilityDescription = "配置文件服务已就绪";
+        }
+        catch (ProfileApiException ex) {
+            ProfileApiReady = false; _profileIncompatible = ex.IncompatibleDaemon;
+            ProfileCompatibilityDescription = _profileIncompatible ?
+                Ownership == DaemonOwnership.AttachedPreExisting ?
+                    "外部后台服务版本不支持配置文件；请退出或升级旧服务后重启 Aura。不会自动停止外部进程。" :
+                    "后台服务版本不支持配置文件；请检查安装版本并重启 Aura。" :
+                "配置文件服务暂不可用：" + ex.Message;
+        }
+        catch (OperationCanceledException) when (!token.IsCancellationRequested) {
+            ProfileApiReady = false; _profileIncompatible = false;
+            ProfileCompatibilityDescription = "配置文件服务探测超时；可稍后重试连接";
+        }
+        _profileProbeInstanceId = Identity?.InstanceId;
+        if (!ProfileApiReady) UpdateStatus(ProfileCompatibilityDescription);
     }
     public static bool CheckMutexExists()
     {

@@ -54,16 +54,19 @@ public sealed class MagneticGlobalDraft
 public sealed class MagneticSettingsModel
 {
     private readonly IMagneticControlClient _client;
+    private readonly IProfileControlClient? _profileClient;
     private readonly Func<ushort, (double PressMm, double ReleaseMm)?>? _inheritedRapidTrigger;
     private readonly Dictionary<ushort, MagneticKeyDraft> _drafts = [];
     private readonly HashSet<ushort> _multiIds = [];
     private static readonly HashSet<string> TriggerStates = ["Inactive", "Tap", "Release", "Hold"];
 
     public MagneticSettingsModel(IMagneticControlClient client,
-        Func<ushort, (double PressMm, double ReleaseMm)?>? inheritedRapidTrigger = null)
+        Func<ushort, (double PressMm, double ReleaseMm)?>? inheritedRapidTrigger = null,
+        IProfileControlClient? profileClient = null)
     {
         _client = client;
         _inheritedRapidTrigger = inheritedRapidTrigger;
+        _profileClient = profileClient;
     }
 
     public MagneticSelectionContext SelectionContext { get; private set; } = MagneticSelectionContext.Global;
@@ -84,6 +87,59 @@ public sealed class MagneticSettingsModel
     public MagneticKeyDraft? Draft => SelectedLogicalId is ushort id && _drafts.TryGetValue(id, out var draft) ? draft : null;
     public MagneticGlobalDraft GlobalDraft { get; } = new();
     public MagneticStatus? Status { get; private set; }
+    // Short-lived daemon snapshot. The Profile Runtime remains the sole baseline owner.
+    public ProfileApiResponse? BaselineSnapshot { get; private set; }
+    public MagneticGlobalActuationState ManualGlobalActuation {
+        get {
+            var root = BaselineSnapshot?.GlobalDefaults?.GlobalActuationMm;
+            if (root is double value) return new() { Known = true, Raw = ToRaw(value), Source = "DeviceBaseline" };
+            var effective = BaselineSnapshot?.EffectiveGlobalDefaults?.GlobalActuationMm;
+            if (effective is double inherited) return new() { Known = true, Raw = ToRaw(inherited), Source = "HostProfile" };
+            return _profileClient is null && Status?.HostProfile.GlobalActuation is { Known: true } host ?
+                new() { Known = true, Raw = host.Raw, Source = "HostProfile" } : new();
+        }
+    }
+    public MagneticGlobalDeadzoneState ManualGlobalDeadzone {
+        get {
+            var root = BaselineSnapshot?.GlobalDefaults?.GlobalDeadzone;
+            if (root is not null) return new() { Known = true, TopRaw = ToRaw(root.TopMm),
+                BottomRaw = ToRaw(root.BottomMm), Source = "DeviceBaseline" };
+            var effective = BaselineSnapshot?.EffectiveGlobalDefaults?.GlobalDeadzone;
+            if (effective is not null) return new() { Known = true, TopRaw = ToRaw(effective.TopMm),
+                BottomRaw = ToRaw(effective.BottomMm), Source = "HostProfile" };
+            var host = Status?.HostProfile;
+            return _profileClient is null && host is { GlobalDeadzoneTop.Known: true,
+                GlobalDeadzoneBottom.Known: true } ?
+                new() { Known = true, TopRaw = host.GlobalDeadzoneTop.Raw,
+                    BottomRaw = host.GlobalDeadzoneBottom.Raw, Source = "HostProfile" } : new();
+        }
+    }
+    public MagneticGlobalRapidTriggerState ManualGlobalRapidTrigger {
+        get {
+            var root = BaselineSnapshot?.GlobalDefaults?.GlobalRapidTrigger;
+            if (root is not null) return new() { Known = true, PressRaw = ToRaw(root.PressMm),
+                ReleaseRaw = ToRaw(root.ReleaseMm), SeparateMode = root.SeparateMode,
+                TopRaw = root.TopMm is double top ? ToRaw(top) : null,
+                BottomRaw = root.BottomMm is double bottom ? ToRaw(bottom) : null,
+                Source = "DeviceBaseline" };
+            var host = Status?.HostProfile;
+            return (BaselineSnapshot is not null || _profileClient is null) &&
+                host is { GlobalRtPress.Known: true, GlobalRtRelease.Known: true } ?
+                new() { Known = true, PressRaw = host.GlobalRtPress.Raw,
+                    ReleaseRaw = host.GlobalRtRelease.Raw,
+                    SeparateMode = host.GlobalRtPress.Raw != host.GlobalRtRelease.Raw,
+                    Source = "HostProfile" } : new();
+        }
+    }
+    public bool ProfileOverridesActuation => BaselineSnapshot is { ActiveProfileId: not null, Dirty: false } &&
+        ManualGlobalActuation is { Known: true } baseline &&
+        Status?.GlobalActuation is { Known: true, Source: "SessionApplied" } applied &&
+        baseline.Raw != applied.Raw;
+    public bool ProfileOverridesDeadzone => BaselineSnapshot is { ActiveProfileId: not null, Dirty: false } &&
+        ManualGlobalDeadzone is { Known: true } baseline &&
+        Status?.GlobalDeadzone is { Known: true, Source: "SessionApplied" } applied &&
+        (baseline.TopRaw != applied.TopRaw || baseline.BottomRaw != applied.BottomRaw);
+    private static byte ToRaw(double mm) => checked((byte)Math.Round(mm * 10));
     public bool Busy { get; private set; }
     public bool Refreshing { get; private set; }
     public string LastMessage { get; private set; } = "尚未读取配置来源；请选择按键并设置本地草稿。";
@@ -100,8 +156,8 @@ public sealed class MagneticSettingsModel
         (BatchDraft.RtAction == MagneticBatchRtAction.Enable && BatchDraft.PressMm is not null &&
             BatchDraft.ReleaseMm is not null ||
          BatchDraft.RtAction == MagneticBatchRtAction.Disable &&
-            (Status?.GlobalRapidTrigger.Known == true || Status?.HostProfile is {
-                GlobalRtPress.Known: true, GlobalRtRelease.Known: true }));
+            Status?.HostProfile is {
+                GlobalRtPress.Known: true, GlobalRtRelease.Known: true });
     public bool CanDisableRapidTrigger => SelectedLogicalId is ushort id && InheritedRt(id) is not null;
     public string RapidTriggerMasterText =>
         Status?.RapidTriggerMaster is { Known: true } master ?
@@ -147,7 +203,7 @@ public sealed class MagneticSettingsModel
             ($"{v.Raw / 10.0:F1} mm", v.Source) : null);
     // HostProfile only knows per-key RT membership; its sensitivity is not a full known value.
     public MagneticAggregate MultiRapidTrigger => AggregateMulti(id => Status?.RapidTrigger
-        .FirstOrDefault(v => v.LogicalId == id && v.Source == "SessionApplied") is { } v ?
+        .FirstOrDefault(v => v.LogicalId == id && v.Source == "SessionApplied" && v.PressKnown && v.ReleaseKnown) is { } v ?
             ($"{(v.Enabled ? "开启" : "关闭")} · 按下 {v.PressRaw / 10.0:F1} / 抬起 {v.ReleaseRaw / 10.0:F1} mm",
                 v.Source) : null);
     public MagneticAggregate MultiDeadzone => AggregateMulti(id => Status?.Deadzone
@@ -175,7 +231,7 @@ public sealed class MagneticSettingsModel
                 MagneticOverlaySource.Unknown
         };
         bool actuationKnown = actuationSource != MagneticOverlaySource.Unknown;
-        bool rtKnown = rt is { Enabled: true };
+        bool rtKnown = rt is { Enabled: true, PressKnown: true, ReleaseKnown: true };
         byte actuationRaw = actuation?.Raw ?? global?.Raw ?? 0;
         string actuationText = actuationKnown ? $"{actuationRaw / 10.0:F1}" : "—";
         string pressText = rtKnown ? $"↓{rt!.PressRaw / 10.0:F1}" : "—";
@@ -429,6 +485,12 @@ public sealed class MagneticSettingsModel
         try
         {
             Status = await _client.GetStatusAsync();
+            BaselineSnapshot = null;
+            var baselineUnavailable = false;
+            if (_profileClient is not null) {
+                try { BaselineSnapshot = await _profileClient.GetRuntimeAsync(); }
+                catch (Exception) { baselineUnavailable = true; }
+            }
             foreach (var (id, draft) in _drafts)
                 if (!draft.DksDirty) HydrateDks(id, draft);
             LastMessage = Status.Health switch
@@ -441,10 +503,13 @@ public sealed class MagneticSettingsModel
                 _ when !Status.Available => "原生 HID 设备当前不可用，或核心正在模拟/使用其他后端。",
                 _ => "配置文件保存值与本次会话已应用值均不是设备读回。"
             };
+            if (baselineUnavailable)
+                LastMessage += " 手动全局基准暂时无法读取；不会用当前配置文件的提交值填充全局控件。";
         }
         catch (Exception ex)
         {
             Status = null;
+            BaselineSnapshot = null;
             LastMessage = $"无法读取磁轴运行状态：{ex.Message}";
         }
         finally { Refreshing = false; }
@@ -522,7 +587,8 @@ public sealed class MagneticSettingsModel
     {
         if (!CanWriteGlobal || GlobalDraft.ActuationMm is not double mm)
             return Task.FromResult(false);
-        return SubmitAsync(() => _client.SetGlobalActuationAsync(mm), () => GlobalDraft.ActuationMm = null);
+        return SubmitAsync(() => _client.SetGlobalActuationAsync(mm),
+            () => GlobalDraft.ActuationMm = null, refreshBaseline: true);
     }
 
     public Task<bool> ApplyGlobalDeadzoneAsync()
@@ -530,45 +596,14 @@ public sealed class MagneticSettingsModel
         if (!CanWriteGlobal || GlobalDraft.TopMm is not double top || GlobalDraft.BottomMm is not double bottom)
             return Task.FromResult(false);
         return SubmitAsync(() => _client.SetGlobalDeadzoneAsync(top, bottom),
-            () => { GlobalDraft.TopMm = null; GlobalDraft.BottomMm = null; });
+            () => { GlobalDraft.TopMm = null; GlobalDraft.BottomMm = null; }, refreshBaseline: true);
     }
 
     public Task<bool> ApplyGlobalRapidTriggerAsync()
     {
-        if (!CanWriteGlobal || GlobalDraft.PressMm is not double press || GlobalDraft.ReleaseMm is not double release)
-            return Task.FromResult(false);
-
-        double top;
-        double bottom;
-        if (Status?.GlobalDeadzone.Known == true)
-        {
-            top = Status.GlobalDeadzone.TopRaw / 10.0;
-            bottom = Status.GlobalDeadzone.BottomRaw / 10.0;
-        }
-        else if (Status?.HostProfile.GlobalDeadzoneTop.Known == true &&
-                 Status?.HostProfile.GlobalDeadzoneBottom.Known == true)
-        {
-            top = Status.HostProfile.GlobalDeadzoneTop.Raw / 10.0;
-            bottom = Status.HostProfile.GlobalDeadzoneBottom.Raw / 10.0;
-        }
-        else
-        {
-            LastMessage = "无法确认当前全局死区，无法安全应用快速触发设置。";
-            return Task.FromResult(false);
-        }
-
-        bool separate = GlobalDraft.SeparateMode ?? (Status?.GlobalRapidTrigger.Known == true && Status.GlobalRapidTrigger.SeparateMode.HasValue ?
-            Status.GlobalRapidTrigger.SeparateMode.Value : Math.Abs(press - release) > 1e-4);
-
-        if (!separate && Math.Abs(press - release) > 1e-4)
-        {
-            LastMessage = "联动灵敏度模式下，按下与释放行程必须相同。";
-            return Task.FromResult(false);
-        }
-
-        return SubmitAsync(() => _client.SetGlobalRapidTriggerAsync(press, release, top, bottom, separate),
-            () => { GlobalDraft.PressMm = null; GlobalDraft.ReleaseMm = null; GlobalDraft.SeparateMode = null; });
-    }
+        LastMessage = "旧版批量快速触发写入已停用，请选择按键后设置快速触发。";
+        return Task.FromResult(false);
+}
 
     public Task<bool> ApplySpeedTapPairAsync(bool enabled)
     {
@@ -620,7 +655,8 @@ public sealed class MagneticSettingsModel
         finally { Busy = false; }
     }
 
-    private async Task<bool> SubmitAsync(Func<Task<MagneticStatus>> submit, Action? clearDraft = null)
+    private async Task<bool> SubmitAsync(Func<Task<MagneticStatus>> submit, Action? clearDraft = null,
+        bool refreshBaseline = false)
     {
         Busy = true; // Set before first await: duplicate clicks cannot queue writes.
         LastMessage = "正在应用…磁轴事务期间灯光帧可能短暂等待。";
@@ -628,7 +664,18 @@ public sealed class MagneticSettingsModel
         {
             var response = await submit();
             Status = response; // Service returns a fresh aggregated state after completion.
-            if (response.Succeeded) clearDraft?.Invoke();
+            if (!response.Succeeded && refreshBaseline) BaselineSnapshot = null;
+            if (response.Succeeded) {
+                clearDraft?.Invoke();
+                if (refreshBaseline && _profileClient is not null) {
+                    BaselineSnapshot = null;
+                    try { BaselineSnapshot = await _profileClient.GetRuntimeAsync(); }
+                    catch (Exception) {
+                        LastMessage = "设置已提交，但无法刷新手动全局基准。请重新读取状态。";
+                        return true;
+                    }
+                }
+            }
             LastMessage = response.Health is "IndeterminateStagedState" or "PersistentSafetyQuarantine" ||
                 response.PersistentSafetyQuarantine ?
                 "配置状态不确定，磁轴写入已被安全隔离；需要外部重新同步。" :
@@ -639,6 +686,7 @@ public sealed class MagneticSettingsModel
         catch (Exception ex)
         {
             Status = null; // Submission may have reached daemon. Fail closed.
+            if (refreshBaseline) BaselineSnapshot = null;
             LastMessage = $"无法确认应用结果：{ex.Message}。请刷新状态。";
             return false;
         }
@@ -647,8 +695,6 @@ public sealed class MagneticSettingsModel
 
     private (double PressMm, double ReleaseMm)? InheritedRt(ushort key)
     {
-        if (Status?.GlobalRapidTrigger.Known == true)
-            return (Status.GlobalRapidTrigger.PressRaw / 10.0, Status.GlobalRapidTrigger.ReleaseRaw / 10.0);
         var host = Status?.HostProfile;
         if (host is { GlobalRtPress.Known: true, GlobalRtRelease.Known: true })
             return (host.GlobalRtPress.Raw / 10.0, host.GlobalRtRelease.Raw / 10.0);

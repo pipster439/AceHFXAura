@@ -1,5 +1,9 @@
 #include "config/magnetic_control_service.h"
+#include "monitor/hardware_rt_gate_monitor.h"
 #include "config/config_writer_util.h"
+#include "config/device_profile_runtime.h"
+#include "config/device_profile_automation_coordinator.h"
+#include "utils/logger.h"
 #include "aura/hardware/m605_key_mapping.h"
 #include <cmath>
 #include <future>
@@ -138,6 +142,50 @@ enum class Mutation {
 };
 } // namespace
 
+MagneticControlService::MagneticControlService(std::shared_ptr<const RuntimeStatusStore> status_store,
+    std::function<MagneticHostProfile()> host_profile, std::unique_ptr<M605Runtime> runtime,
+    std::filesystem::path profile_path, std::filesystem::path legacy_config)
+    : status_store_(std::move(status_store)), host_profile_(std::move(host_profile)),
+      runtime_(std::move(runtime)) {
+    if (!profile_path.empty())
+        profiles_ = std::make_unique<DeviceProfileRuntime>(std::move(profile_path),
+            std::move(legacy_config), *runtime_, write_mutex_, host_profile_,
+            [this] { return HardwareAvailable(); });
+}
+MagneticControlService::~MagneticControlService() { Stop(); }
+void MagneticControlService::StartHardwareRtGateObservation() {
+    if (rt_gate_monitor_) return;
+    rt_gate_monitor_ = std::make_unique<HardwareRtGateMonitor>([this](const auto& value) {
+        runtime_->ObserveHardwareRtGate(value);
+    });
+    rt_gate_monitor_->Start();
+}
+void MagneticControlService::Stop() {
+    StopDeviceProfileAutomation();
+    if (rt_gate_monitor_) rt_gate_monitor_->Stop();
+    runtime_->Stop();
+}
+void MagneticControlService::StartDeviceProfileAutomation() {
+    if (!profiles_ || automation_coordinator_) return;
+    automation_coordinator_ = std::make_unique<DeviceProfileAutomationCoordinator>(
+        [this] { return profiles_->AutomationAdmissionSnapshot(); },
+        [this](const auto& token, const auto& stopping) { return profiles_->ActivateAutomationDecision(token, stopping); },
+        DeviceProfileAutomationCoordinator::Clock{}, [](const auto& snapshot) {
+            LOG_INFO("[DeviceProfileAutomation] " + snapshot.dump());
+        });
+    profiles_->SetAutomationCoordinatorDiagnostics([this] { return automation_coordinator_->Snapshot(); });
+    automation_coordinator_->Start();
+}
+void MagneticControlService::StopDeviceProfileAutomation() {
+    if (automation_coordinator_) automation_coordinator_->Stop();
+}
+
+bool MagneticControlService::ObserveDeviceProfileForeground(const std::string& name) {
+    const bool changed = profiles_ && profiles_->ObserveAutomationForeground(name);
+    if (automation_coordinator_) automation_coordinator_->Wake();
+    return changed;
+}
+
 bool MagneticControlService::HardwareAvailable() const {
     if (!status_store_) return false;
     const auto status = status_store_->GetSnapshot();
@@ -146,6 +194,7 @@ bool MagneticControlService::HardwareAvailable() const {
 
 void MagneticControlService::WriteStatus(httplib::Response& response, bool result, int status_code,
                                          std::string_view detail) const {
+    runtime_->RefreshTransportPresence();
     const auto health = runtime_->GetHealth();
     const auto shadow = runtime_->GetAppliedRuntimeState();
     const auto host = host_profile_();
@@ -154,6 +203,7 @@ void MagneticControlService::WriteStatus(httplib::Response& response, bool resul
                  {"persistent_safety_quarantine", runtime_->IsPersistentSafetyQuarantined()},
                  {"applied_state_source", "SessionApplied: completed AceHFXAura runtime sequence, not device readback"},
                  {"last_error", detail.empty() ? runtime_->GetLastError() : std::string(detail)}};
+    body["m605_session_generation"] = runtime_->GetSessionGeneration();
     body["host_profile"] = {{"source", host.active_profile_id ? "HostProfile" : "Unknown"},
                              {"active_profile_id", host.active_profile_id ? Json(*host.active_profile_id) : Json(nullptr)},
                              {"global_actuation", KnownRaw(host.global_actuation_raw)},
@@ -204,6 +254,7 @@ void MagneticControlService::WriteStatus(httplib::Response& response, bool resul
         }
         list.push_back({{"logical_id", key}, {"enabled", rt.enabled},
                         {"press_raw", rt.press_raw}, {"release_raw", rt.release_raw},
+                        {"press_known", rt.press_known}, {"release_known", rt.release_known}, {"continuous", rt.continuous},
                         {"source", "SessionApplied"}});
     }
     body["deadzone"] = Json::array();
@@ -252,13 +303,18 @@ void MagneticControlService::WriteStatus(httplib::Response& response, bool resul
         host.static_analog_effect ?
         Json{{"known", true}, {"value", *host.static_analog_effect}, {"source", "HostProfile"}} :
         Json{{"known", false}, {"source", "Unknown"}};
-    body["rapid_trigger_master"] = Json{{"known", false}, {"source", "Unknown"}};
+    const auto gate = runtime_->GetHardwareRtGateObservation();
+    body["rapid_trigger_master"] = Json{{"known", gate.state != HardwareRtGateState::Unknown},
+        {"source", gate.state == HardwareRtGateState::Unknown ? "Unknown" : "USBStatusNotification"}};
+    if (gate.state != HardwareRtGateState::Unknown)
+        body["rapid_trigger_master"]["value"] = gate.state == HardwareRtGateState::On;
     response.status = status_code;
     response.set_header("Cache-Control", "no-store");
     response.set_content(body.dump(), "application/json; charset=utf-8");
 }
 
 void MagneticControlService::RegisterRoutes(httplib::Server& server) {
+    if (profiles_) profiles_->RegisterRoutes(server);
     server.Get("/api/magnetic/status", [this](const httplib::Request& request, httplib::Response& response) {
         if (!IsAllowedLoopbackHost(request.get_header_value("Host"))) { response.status = 403; return; }
         WriteStatus(response, true, 200);
@@ -285,15 +341,20 @@ void MagneticControlService::RegisterRoutes(httplib::Server& server) {
                 WriteStatus(response, false, 409, "Persistent safety quarantine acknowledgment failed or runtime not quarantined");
                 return;
             }
+            if (profiles_) profiles_->ExternalMutationLocked();
             WriteStatus(response, true, 200);
         });
 
     const auto write = [this, &server](const char* route, Mutation kind) {
         server.Post(route, [this, kind](const httplib::Request& request, httplib::Response& response) {
             if (!ValidRequest(request, response)) return;
+            if (kind == Mutation::GlobalRapidTrigger) {
+                WriteStatus(response, false, 422, "Legacy 51 53 Rapid Trigger writer blocked: not physically validated");
+                return; // No mutation invalidation, baseline change, or HID operation.
+            }
             const Json body = Json::parse(request.body, nullptr, false);
             uint16_t key = 0, other = 0;
-            double first = 0, second = 0, third = 0, fourth = 0;
+            double first = 0, second = 0;
             bool flag = false, resolve = false;
             m605::DksConfig dks;
             bool valid = false;
@@ -336,21 +397,8 @@ void MagneticControlService::RegisterRoutes(httplib::Server& server) {
                 valid = ExactFields(body, {"top_mm", "bottom_mm"}) &&
                     Millimeters(body, "top_mm", 0, 5, first) &&
                     Millimeters(body, "bottom_mm", 0, 5, second); break;
-            case Mutation::GlobalRapidTrigger: {
-                const char* sep_key = body.contains("separate_mode") ? "separate_mode" :
-                                      body.contains("independent_sensitivity") ? "independent_sensitivity" : nullptr;
-                if (sep_key && ExactFields(body, {sep_key, "press_mm", "release_mm", "top_mm", "bottom_mm"})) {
-                    valid = Boolean(body, sep_key, flag) &&
-                        Millimeters(body, "press_mm", 1, 25, first) &&
-                        Millimeters(body, "release_mm", 1, 25, second) &&
-                        Millimeters(body, "top_mm", 0, 5, third) &&
-                        Millimeters(body, "bottom_mm", 0, 5, fourth);
-                    if (valid && !flag && std::abs(first - second) > 1e-4) {
-                        valid = false;
-                    }
-                }
-                break;
-            }
+            case Mutation::GlobalRapidTrigger: break; // Rejected before parsing.
+
             }
             if (!valid) { WriteStatus(response, false, 422, "Invalid or unsupported magnetic setting input"); return; }
             std::unique_lock<std::mutex> write_lock(write_mutex_, std::try_to_lock);
@@ -414,6 +462,7 @@ void MagneticControlService::RegisterRoutes(httplib::Server& server) {
             // These are separate verified runtime transactions, never one
             // fictional device-atomic operation. A failed second step leaves
             // the first success visible in SessionApplied shadow.
+            if (profiles_) profiles_->ExternalMutationLocked();
             if (kind == Mutation::RtOn && (dks_active || dks_known == shadow.per_key_dks.end()) &&
                 !runtime_->RestorePerKeyDksToStandard(key).get()) {
                 WriteStatus(response, false, 503, "DKS standard rewrite failed; Rapid Trigger was not submitted"); return;
@@ -442,10 +491,24 @@ void MagneticControlService::RegisterRoutes(httplib::Server& server) {
             case Mutation::GlobalActuation: future = runtime_->SetGlobalActuation(first); break;
             case Mutation::GlobalDeadzone: future = runtime_->SetGlobalDeadzone(first, second); break;
             case Mutation::GlobalRapidTrigger:
-                future = runtime_->SetGlobalRapidTrigger(first, second, third, fourth, flag); break;
+                WriteStatus(response, false, 422, "Legacy RT writer blocked"); return;
             }
             const bool success = future.get(); // HTTP worker; UI awaits network asynchronously.
             const auto health = runtime_->GetHealth();
+            if (success && health == M605RuntimeHealth::Clean && profiles_) {
+                try {
+                    if (kind == Mutation::GlobalActuation)
+                        profiles_->RecordManualGlobalBaselineLocked("global_actuation_mm", first);
+                    else if (kind == Mutation::GlobalDeadzone)
+                        profiles_->RecordManualGlobalBaselineLocked("global_deadzone",
+                            {{"top_mm", first}, {"bottom_mm", second}});
+
+                } catch (const std::exception& ex) {
+                    WriteStatus(response, false, 503,
+                        std::string("Device accepted the global setting, but its desired baseline was not saved: ") + ex.what());
+                    return;
+                }
+            }
             const char* partial = kind == Mutation::RtOn &&
                 (dks_active || dks_known == shadow.per_key_dks.end()) ?
                 "DKS standard rewrite completed before RT failure; current device state is uncertain" :
@@ -540,10 +603,7 @@ void MagneticControlService::RegisterRoutes(httplib::Server& server) {
             Json configured = Json::array(), unknown = Json::array();
             std::set<uint16_t> needs_restore;
             std::optional<std::pair<double, double>> inherited_rt;
-            if (shadow.global_rapid_trigger)
-                inherited_rt = {{shadow.global_rapid_trigger->press_raw / 10.0,
-                    shadow.global_rapid_trigger->release_raw / 10.0}};
-            else if (host.global_rt_press_raw && host.global_rt_release_raw)
+            if (host.global_rt_press_raw && host.global_rt_release_raw)
                 inherited_rt = {{*host.global_rt_press_raw / 10.0,
                     *host.global_rt_release_raw / 10.0}};
             if (family == Mutation::RtOn && !enable_rt && !inherited_rt) {
@@ -578,6 +638,8 @@ void MagneticControlService::RegisterRoutes(httplib::Server& server) {
                 respond(false, 409, "DKS is configured or unknown for selected keys; explicit confirmation is required",
                     configured, unknown); return;
             }
+
+            if (profiles_) profiles_->ExternalMutationLocked();
 
             size_t applied = 0;
             for (size_t i = 0; i < keys.size(); ++i) {

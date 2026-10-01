@@ -250,6 +250,8 @@ WinUI ZIP 携带 Aura Plugin SDK，随 runtime 校验后缓存，因此无需源
 
 ## 验证
 
+统一软件验证入口与本地硬件 smoke 边界：[CI / 本地验证](docs/development/CI.md)。
+
 前端测试与生产构建：
 
 ```cmd

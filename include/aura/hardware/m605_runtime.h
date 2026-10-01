@@ -1,7 +1,9 @@
 #pragma once
+#include "aura/hardware/m605_rt_gate.h"
 
 #include "aura/hardware/m605_protocol.h"
 #include "aura/native_hid_backend.h"
+#include <chrono>
 #include <condition_variable>
 #include <cstdint>
 #include <future>
@@ -13,6 +15,7 @@
 #include <string>
 #include <thread>
 #include <utility>
+#include <vector>
 
 namespace aura {
 
@@ -23,6 +26,9 @@ class Transport {
 public:
     virtual ~Transport() = default;
     virtual bool IsConnected() const = 0;
+    // Read-only preflight of the existing handle against a currently opened
+    // validated HID interface. False means the handle cannot be reused.
+    virtual bool IsCurrentSession() const = 0;
     virtual bool Connect() = 0;
     virtual bool WriteStage(const Report& report) = 0;
     virtual bool WriteApply(const Report& report) = 0;
@@ -59,15 +65,34 @@ enum class M605RuntimeHealth {
     Stopped
 };
 
+// Cumulative host-side timings for completed worker jobs. These measure
+// software/transport calls and mandated waits, not firmware acknowledgements.
+struct M605TimingSnapshot {
+    uint64_t transactions = 0;
+    double total_ms = 0;
+    double queue_wait_ms = 0;
+    double device_lock_wait_ms = 0;
+    double connect_ms = 0;
+    double safety_latch_ms = 0;
+    double stage_submit_ms = 0;
+    double inter_stage_settle_ms = 0;
+    double pre_apply_settle_ms = 0;
+    double apply_submit_ms = 0;
+    double post_apply_settle_ms = 0;
+};
+
 // AceHFXAura submitted stage + apply and completed both settle intervals.
 // This is not device readback, MCU acknowledgement or physical confirmation.
 struct M605AppliedRuntimeState {
     std::map<uint16_t, uint8_t> per_key_actuation_raw; // logical ID -> 0.1 mm units
+    bool per_key_actuation_table_known = false; // host ownership, only after type 1 reset
     std::optional<bool> static_analog_effect;
     struct RapidTrigger {
         bool enabled = false;
         uint8_t press_raw = 0;
         uint8_t release_raw = 0;
+        bool press_known = false, release_known = false;
+        bool continuous = false; // Captured OFF only; no production ON API.
     };
     struct Deadzone {
         uint8_t top_raw = 0;
@@ -75,6 +100,7 @@ struct M605AppliedRuntimeState {
     };
     std::map<uint16_t, RapidTrigger> per_key_rapid_trigger; // logical IDs
     std::map<uint16_t, Deadzone> per_key_deadzone; // runtime-known overrides only
+    bool per_key_deadzone_table_known = false; // true only after verified resetType 4
     enum class SpeedTapPairKnowledge { Unknown, ProfileBaselineUnknown };
     // Only AceHFXAura submissions, not the complete device/profile pair table.
     std::map<std::pair<uint16_t, uint16_t>, bool> speedtap_pair_submissions;
@@ -95,6 +121,7 @@ struct M605AppliedRuntimeState {
         uint8_t bottom_raw = 0;
     };
     std::optional<GlobalDeadzone> global_deadzone;
+    // Legacy compatibility DTO only. No production writer populates this field.
     struct GlobalRapidTrigger {
         bool separate_mode = false;
         uint8_t press_raw = 0;
@@ -103,6 +130,27 @@ struct M605AppliedRuntimeState {
         uint8_t bottom_raw = 0;
     };
     std::optional<GlobalRapidTrigger> global_rapid_trigger;
+};
+
+// Cached host observations only. Reading this snapshot never probes/opens HID.
+struct M605SessionTransition {
+    uint64_t from_generation = 0, to_generation = 0;
+    std::string reason;
+};
+struct M605DiagnosticSnapshot {
+    M605RuntimeHealth health;
+    bool persistent_safety_quarantine = false;
+    bool transport_open_at_last_observation = false;
+    uint64_t session_generation = 0, last_open_generation = 0;
+    size_t queued_jobs = 0;
+    M605AppliedRuntimeState session_applied;
+    M605TimingSnapshot timing;
+    std::string last_error;
+    std::vector<M605SessionTransition> transitions;
+    std::string last_failed_kind, last_failed_error;
+    uint16_t last_failed_logical_id = 0;
+    uint64_t last_failed_generation = 0;
+    HardwareRtGateObservation hardware_rt_gate; // passive input; NOT SessionApplied
 };
 
 class M605Runtime {
@@ -120,13 +168,18 @@ public:
     std::future<bool> SetAnalogEffect(uint8_t effect_id, bool enabled);
     std::future<bool> SetPerKeyRapidTrigger(
         uint16_t logical_key_id, double press_mm, double release_mm);
-    // Explicit inherited/global values are required; the device does not
-    // provide a verified readback for them. Disable stages both values with
+    std::future<bool> SetPerKeyRapidTriggerUnified(uint16_t key, double sensitivity, bool enabled);
+    std::future<bool> SetPerKeyRapidTriggerPress(uint16_t key, double press, bool enabled);
+    std::future<bool> SetPerKeyRapidTriggerRelease(uint16_t key, double release, bool enabled);
+    // Explicit stored values are required; there is no firmware RT inheritance
+    // or verified readback. Disable stages both values with
     // the enable flag clear; it is not a separate reset opcode.
     std::future<bool> DisablePerKeyRapidTrigger(
         uint16_t logical_key_id, double inherited_press_mm, double inherited_release_mm);
     std::future<bool> SetPerKeyDeadzone(
         uint16_t logical_key_id, double top_mm, double bottom_mm);
+    // Clear layer-0 Actuation overrides and carry trusted common actuation.
+    std::future<bool> ResetAllPerKeyActuationOverrides(double common_millimeters);
     // Destructive across the ENTIRE per-key Deadzone override table. The
     // caller supplies authoritative global raw values; only layer 0 is valid.
     std::future<bool> ResetAllPerKeyDeadzoneOverrides(
@@ -147,6 +200,7 @@ public:
     // Phase 6.1A Global Magnetic Settings:
     std::future<bool> SetGlobalActuation(double millimeters);
     std::future<bool> SetGlobalDeadzone(double top_mm, double bottom_mm);
+    // Compatibility rejection stub: never queues or writes 51 53.
     std::future<bool> SetGlobalRapidTrigger(
         double press_mm, double release_mm, double top_mm, double bottom_mm, bool separate_mode);
 
@@ -161,7 +215,17 @@ public:
     bool AcknowledgeExternalResynchronization();
 
     M605AppliedRuntimeState GetAppliedRuntimeState() const;
+    uint64_t GetSessionGeneration() const;
+    // Before Profile diff planning, refresh a stale/removed handle without
+    // submitting a stage. Also used by the worker before every transaction.
+    bool PrepareTransportSession();
+    // Observe idle removal on status reads, without opening or writing HID.
+    void RefreshTransportPresence();
+    M605TimingSnapshot GetTimingSnapshot() const;
     std::string GetLastError() const;
+    M605DiagnosticSnapshot GetDiagnosticSnapshot() const;
+    void ObserveHardwareRtGate(const HardwareRtGateObservation& observation);
+    HardwareRtGateObservation GetHardwareRtGateObservation() const;
 
 private:
     friend struct M605RuntimeTestAccess;
@@ -173,7 +237,7 @@ private:
     enum class Kind {
         Actuation, Analog, RapidTrigger, Deadzone, ResetAllDeadzone,
         SpeedTapPair, SpeedTapMaster, SpeedTapProfileReset, Dks,
-        GlobalActuation, GlobalDeadzone, GlobalRapidTrigger
+        GlobalActuation, GlobalDeadzone, GlobalRapidTrigger, ResetAllActuation
     };
     struct Job {
         std::array<m605::Report, 4> stages{};
@@ -185,9 +249,11 @@ private:
         uint8_t value = 0;
         std::optional<m605::DksConfig> dks_config;
         bool standard_dks_rewrite = false;
+        std::chrono::steady_clock::time_point queued_at{};
         std::promise<bool> completion;
     };
 
+    std::future<bool> EnqueueRapidTriggerSide(uint16_t key, std::optional<m605::Report> report);
     std::future<bool> EnqueueRapidTrigger(
         uint16_t logical_key_id, double press_mm, double release_mm, bool enabled);
     std::future<bool> EnqueueSpeedTapPair(
@@ -195,8 +261,11 @@ private:
     std::future<bool> EnqueueDks(const m605::DksConfig& config, bool standard_rewrite);
     std::future<bool> Enqueue(Job job);
     void WorkerLoop();
-    bool Execute(const Job& job); // called with DeviceWriteMutex held
+    bool Execute(const Job& job, M605TimingSnapshot& timing); // DeviceWriteMutex held
+    bool EnsureTransportReady(M605TimingSnapshot& timing); // DeviceWriteMutex held
+    void DiscardStaleTransport(); // DeviceWriteMutex held
     void MarkIndeterminate(std::string cause);
+    void RecordSessionTransitionLocked(const char* reason); // mutex_ held; diagnostics only
     static void ResolveCancelled(std::queue<Job>& cancelled);
 
     std::unique_ptr<m605::detail::Transport> transport_;
@@ -209,6 +278,16 @@ private:
     bool stopping_ = false;
     M605RuntimeHealth health_ = M605RuntimeHealth::Clean;
     M605AppliedRuntimeState applied_state_;
+    HardwareRtGateObservation hardware_rt_gate_;
+    uint64_t session_generation_ = 0; // host transport epoch, never firmware readback
+    bool transport_session_open_ = false; // DeviceWriteMutex protects lifecycle
+    bool diagnostic_transport_open_ = false; // cached under mutex_; not a live presence probe
+    uint64_t last_open_generation_ = 0;
+    std::vector<M605SessionTransition> session_transitions_; // last 16, process-local
+    std::string last_failed_kind_, last_failed_error_;
+    uint16_t last_failed_logical_id_ = 0;
+    uint64_t last_failed_generation_ = 0;
+    M605TimingSnapshot timing_;
     std::string last_error_;
     std::thread worker_;
 };

@@ -215,6 +215,9 @@ SpeedTap 用于在 FPS/竞技游戏中实现双键对冲裁决（如 A 键与 D 
 ### 2.6 复位控制与通知使能
 
 #### (1) 恢复默认键程与 RT (Reset_Actuation_RapidTrigger, Function ID `0x2B` -> `FUN_180022100`)
+
+**生产边界**：下列模式分类来自静态分析，不是全部可调用的生产能力。当前输出白名单仅允许两个独立、严格 typed 的 reset 形状：已验证 Deadzone type 4 和官方 1.00.59 USB 抓包验证的 Actuation type 1（layer 固定0，common raw1–40，其余字节严格为0）。type1 使用 `ResetAllPerKeyActuationOverrides(common)`，不开放 type/layer/reserved 参数；见 [生产契约与待实机验收](M605_ACTUATION_RESET_PRODUCTION.md)。resetType 0 同时影响 Actuation 与 RT，仍禁止生产写入；type2/3不放行。详见 [2026-09-30 复核](M605_RECONNECT_AND_INHERITANCE_AUDIT.md)。
+
 - **报文头**：`0x5251` (`Byte 0 = 0x51`, `Byte 1 = 0x52`)
 - **Byte 2..3**: 复位子模式
   - `0`: 全部复位（Default Actuation + Default RT）

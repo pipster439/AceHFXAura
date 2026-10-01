@@ -59,6 +59,7 @@ set(DAEMON_SOURCES
     src/aura/hal_compat.cpp
     src/aura/keymap.cpp
     src/monitor/foreground_monitor.cpp
+    src/monitor/hardware_rt_gate_monitor.cpp
     src/config/rule_engine.cpp
     src/config/automation_evaluation.cpp
     src/engine/effect_engine.cpp
@@ -70,7 +71,10 @@ set(DAEMON_SOURCES
     src/config/lighting_service.cpp
     src/config/automation_service.cpp
     src/config/automation_authoring.cpp
+    src/config/device_profile_automation_coordinator.cpp
     src/config/magnetic_control_service.cpp
+    src/config/device_profile_runtime.cpp
+    src/config/device_profile_binding_engine.cpp
     src/config/magnetic_host_profile.cpp
     src/config/config_writer_util.cpp
 )
@@ -89,6 +93,7 @@ set(DAEMON_HEADERS
     include/config/lighting_service.h
     include/config/automation_service.h
     include/config/magnetic_control_service.h
+    include/config/device_profile_runtime.h
     include/config/config_writer_util.h
     include/engine/effect.h
     include/engine/builtin_effects.h
@@ -218,8 +223,12 @@ add_executable(test_m605_protocol
 target_link_libraries(test_m605_protocol PRIVATE setupapi hid user32)
 
 add_executable(test_magnetic_control
+    src/config/device_profile_automation_coordinator.cpp
+    src/monitor/hardware_rt_gate_monitor.cpp
     tests/test_magnetic_control.cpp
     src/config/magnetic_control_service.cpp
+    src/config/device_profile_runtime.cpp
+    src/config/device_profile_binding_engine.cpp
     src/config/magnetic_host_profile.cpp
     src/config/config_writer_util.cpp
     src/aura/hardware/m605_key_mapping.cpp
@@ -228,6 +237,22 @@ add_executable(test_magnetic_control
     src/aura/native_hid_backend.cpp
 )
 target_link_libraries(test_magnetic_control PRIVATE setupapi hid user32 ws2_32)
+
+add_executable(test_device_profile_runtime
+    src/config/device_profile_automation_coordinator.cpp
+    src/monitor/hardware_rt_gate_monitor.cpp
+    tests/test_device_profile_runtime.cpp
+    src/config/device_profile_runtime.cpp
+    src/config/device_profile_binding_engine.cpp
+    src/config/magnetic_control_service.cpp
+    src/config/magnetic_host_profile.cpp
+    src/config/config_writer_util.cpp
+    src/aura/hardware/m605_key_mapping.cpp
+    src/aura/hardware/m605_protocol.cpp
+    src/aura/hardware/m605_runtime.cpp
+    src/aura/native_hid_backend.cpp
+)
+target_link_libraries(test_device_profile_runtime PRIVATE setupapi hid user32 ws2_32 ole32)
 
 # 5. 诊断测试: test_diag_hook (手动交互式诊断工具，不注册到 CTest)
 add_executable(test_diag_hook tests/test_diag_hook.cpp)
@@ -289,6 +314,18 @@ target_link_libraries(test_lighting_service PRIVATE
 enable_testing()
 add_test(NAME m605_protocol COMMAND test_m605_protocol)
 add_test(NAME magnetic_control COMMAND test_magnetic_control)
+add_test(NAME device_profile_runtime COMMAND test_device_profile_runtime)
+add_executable(test_hardware_rt_gate tests/test_hardware_rt_gate.cpp src/monitor/hardware_rt_gate_monitor.cpp)
+target_link_libraries(test_hardware_rt_gate PRIVATE user32 hid)
+add_test(NAME hardware_rt_gate COMMAND test_hardware_rt_gate)
+add_executable(test_device_profile_binding_engine
+    tests/test_device_profile_binding_engine.cpp src/config/device_profile_binding_engine.cpp)
+add_test(NAME device_profile_binding_engine COMMAND test_device_profile_binding_engine)
+add_executable(test_device_profile_automation_coordinator
+    tests/test_device_profile_automation_coordinator.cpp
+    src/config/device_profile_automation_coordinator.cpp
+    src/config/device_profile_binding_engine.cpp)
+add_test(NAME device_profile_automation_coordinator COMMAND test_device_profile_automation_coordinator)
 add_library(plugin_fixture_v1 SHARED tests/fixtures/plugin_reload_fixture.cpp)
 target_compile_definitions(plugin_fixture_v1 PRIVATE FIXTURE_VALUE=17)
 add_library(plugin_fixture_v2 SHARED tests/fixtures/plugin_reload_fixture.cpp)
@@ -425,6 +462,10 @@ set_tests_properties(gsi_simulation PROPERTIES TIMEOUT 30)
 if(Python3_Interpreter_FOUND)
     add_test(NAME packaging_local_state COMMAND ${Python3_EXECUTABLE} -X utf8 "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_packaging_local_state.py")
     add_test(NAME automation_migration COMMAND ${Python3_EXECUTABLE} -X utf8 "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_automation_migration.py" "$<TARGET_FILE:aura_daemon>")
+    add_test(NAME native_hardware_ci_guard COMMAND ${Python3_EXECUTABLE} -X utf8
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_native_hardware_ci_guard.py" "$<TARGET_FILE:test_native_hid>")
+    add_test(NAME ci_infrastructure COMMAND ${Python3_EXECUTABLE} -X utf8
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_ci_infrastructure.py")
 endif()
 
 # Windows 11 release sidecars use UTF-8 for argv, filesystem and JSON paths.

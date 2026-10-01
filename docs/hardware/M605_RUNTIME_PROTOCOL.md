@@ -34,7 +34,7 @@
 
 单键 Deadzone 覆盖使用 `00 51 59 00 00 [Wire低] [Wire高] [Bottom_raw] [Top_raw] 00...`，两值均为 0.0–0.5 mm（raw 0–5）。**Byte 7 是 Bottom；Byte 8 是 Top。** 旧资料中相反的次序已被受控 A/B 和 HAL 字段偏移证据推翻。V 的 Top 0.2 / Bottom 0.3 mm 必须为 `00 51 59 00 00 31 00 03 02 ...`。
 
-`ResetAllPerKeyDeadzoneOverrides` 是**清空全部单键 Deadzone 覆盖表**的破坏性操作，绝非删除指定键。唯一允许的 resetType 是 `0x04`，Falchion Ace HFX 仅支持 dual-deadzone 的 layer 0：`00 51 52 04 00 [全局Bottom_raw] 00 [全局Top_raw] 00...`。调用者显式提供权威应用配置中的全局值（raw 0–5）；后端不读取设备或自动导入 ASUS XML。Bottom 4 / Top 3 的官方 A/B 报文是 `00 51 52 04 00 04 00 03 ...`。若权威值为 Bottom 1 / Top 0，builder 产生 `00 51 52 04 00 01 00 00 ...`；此精确 Top=0 报文已在生产路径实体 smoke 中发送，操作者确认恢复全局继承行为。
+`ResetAllPerKeyDeadzoneOverrides` 是**清空全部单键 Deadzone 覆盖表**的破坏性操作，绝非删除指定键。此 Deadzone typed path 固定 resetType `0x04`（另一个独立的 Actuation typed path 允许 type 1），Falchion Ace HFX 仅支持 dual-deadzone 的 layer 0：`00 51 52 04 00 [全局Bottom_raw] 00 [全局Top_raw] 00...`。调用者显式提供权威应用配置中的全局值（raw 0–5）；后端不读取设备或自动导入 ASUS XML。Bottom 4 / Top 3 的官方 A/B 报文是 `00 51 52 04 00 04 00 03 ...`。若权威值为 Bottom 1 / Top 0，builder 产生 `00 51 52 04 00 01 00 00 ...`；此精确 Top=0 报文已在生产路径实体 smoke 中发送，操作者确认恢复全局继承行为。
 
 较早观察到的 `00 51 52 04 00 01 00 02 ...` 实际编码 Top=2。ASUS 前端的 `deadZoneTop = O || W` 在 `O=0` 时错误回退到默认 `W=2`；本实现不复制这个前端行为。早期把 Byte 7 称为 Deadzone Mode 的说法也不适用。匹配的设备 echo 已被观察到，但不能据此宣称存在独立的 MCU ACK 确认协议。
 
@@ -97,8 +97,27 @@ Stage 8A 官方被动捕获、Stage 8B 受控重放和实体确认，以及 F1R 
 
 ## 状态边界
 
+### alpha.7 真机发现与会话边界修正（2026-09-30）
+
+`51 50` 已被真机证实只更新触发点 common/base，不能假定清除 `51 4F` 单键覆盖；`51 58` 同样不能用作清除 `51 59` 覆盖的证据。Global setter 成功后保留对应单键 SessionApplied 记录。Deadzone 只有 verified resetType 4 成功后才建立覆盖表已清理的 host submission knowledge；空 map 或 Global submission 本身不建立此知识。现已依据官方 1.00.59 USB 捕获增加固定 layer 0 的 typed Actuation resetType 1：成功后清 actuation override shadow、更新 common，并建立仅代表 host submission 的 table knowledge。Profile 使用 type1(common)→exceptions 重建继承；不额外发 `51 50`、不污染 durable baseline。实现后的物理 preservation 验收仍待用户授权，详见 [typed production contract](M605_ACTUATION_RESET_PRODUCTION.md)。
+
+新事务在持久 latch Arm 前检查 M605 原生 transport 的 HID interface 通知与只读 endpoint presence。旧会话失效时关闭、重新枚举并验证 open，清空影子、递增 generation；连接失败且尚未开始 stage 时不制造 quarantine。若移除发生在 stage 已可能提交之后，或 Apply 后 settle 期间，会继续进入 indeterminate/quarantine。不会把 Win32 1167 当成可忽略或任意重试的错误。
+
+上文关于“不在普通 WinUI 暴露”的描述仅适用于早期阶段。当前磁轴页已有明确的**外部恢复确认**入口；确认仍不发送 HID，现在额外要求在空闲状态成功打开一个 fresh validated transport 后才能清 latch。离线、繁忙或 latch 清理失败都会拒绝；启动、完整拔插或 arrival notification 本身绝不自动清除真正 indeterminate 事务。该入口依赖操作者确认外部恢复，不能证明设备 staging RAM 已重置。完整证据和剩余验收见 [重连与继承审计](M605_RECONNECT_AND_INHERITANCE_AUDIT.md)。
+
 设备完整配置读取路径尚未验证。代码中的 **AceHFXAura Applied Runtime State** 只记录本进程成功提交 stage、完成 Apply 前等待、成功提交 apply、完成 Apply 后等待的设置；它不是 **Known Device Readback State** 或 MCU ACK。写入失败或重新连接时清除该影子状态。ASUS XML 不能充当设备实时读取。
 
 产品层来源、只读主机配置和 IPC 的边界见 [磁轴产品状态与服务](M605_MAGNETIC_PRODUCT_STATE.md)。
 
 已测试的运行时 USB 协议未发现连续逐键 Hall 行程值；不要提供伪造的 `GetTravelMm`、`GetHallDepth` 或 `RawHallValue` API。DKS 仅包含上述 Phase 4 受验证写入；固件操作和持久化写入仍未实现。
+
+## alpha.7 RT selector production cutover
+
+Official USB captures on firmware 1.00.59 confirm `51 54` selector 0/1/2,
+enable 0/1 and continuous=0. The current typed API includes Unified, Press and
+Release, with no arbitrary selector/wire/layer/continuous-ON input. The pair API
+reuses Press/Release builders. Selector-local submission knowledge is explicit;
+all shadow remains host-submission only. `51 53` is rejected by the historical
+builder, runtime compatibility entry, manual route and NativeHid transport.
+See [Profile RT production model](../architecture/PROFILE_RT_PRODUCTION_MODEL.md)
+and the preserved [official audit](M605_GLOBAL_RAPID_TRIGGER_AUDIT.md).

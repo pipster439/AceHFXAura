@@ -2,6 +2,8 @@
 #include "aura/hardware/m605_protocol.h"
 #include "aura/hardware/m605_runtime.h"
 #include <array>
+#include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <condition_variable>
@@ -14,6 +16,7 @@
 #include <set>
 #include <string>
 #include <thread>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -94,10 +97,14 @@ class FakeTransport final : public aura::m605::detail::Transport {
 public:
     bool stage_succeeds = true;
     bool apply_succeeds = true;
+    bool connect_succeeds = true;
+    std::atomic<bool> current_session{true};
     int fail_stage_call = 0;
     std::function<bool()> stage_precondition;
     bool IsConnected() const override { return connected_; }
-    bool Connect() override { Record("connect"); connected_ = true; return true; }
+    bool IsCurrentSession() const override { return current_session.load(); }
+    bool Connect() override { Record("connect"); connected_ = connect_succeeds;
+        current_session = connect_succeeds; return connect_succeeds; }
     bool WriteStage(const aura::m605::Report& report) override {
         if (stage_precondition && !stage_precondition()) return false;
         {
@@ -108,6 +115,7 @@ public:
         else if (report[2] == 0x54 && report[3] == 1) Record("stage-rt-press");
         else if (report[2] == 0x54 && report[3] == 2) Record("stage-rt-release");
         else if (report[2] == 0x59) Record("stage-deadzone");
+        else if (report[2] == 0x52 && report[3] == 1) Record("stage-reset-all-actuation");
         else if (report[2] == 0x52) Record("stage-reset-all-deadzone");
         else if (report[2] == 0x55) Record(report[9] ? "stage-speedtap-pair-on" : "stage-speedtap-pair-off");
         else if (report[2] == 0x56) Record("stage-speedtap-profile-reset");
@@ -121,7 +129,7 @@ public:
         stage_cv_.wait(lock, [this, this_call] {
             return block_after_stage_call_ != this_call || stage_released_;
         });
-        return stage_succeeds && this_call != fail_stage_call;
+        return stage_succeeds && current_session.load() && this_call != fail_stage_call;
     }
     bool WriteApply(const aura::m605::Report& report) override {
         if (report != aura::m605::BuildRuntimeApply()) return false;
@@ -414,7 +422,7 @@ bool TestSafetyQuarantineRecoverySemantics() {
         }
 
         const size_t stage_reports_before = fixture.io->StageReports().size();
-        const size_t events_before = fixture.io->Events().size();
+        const auto events_before = fixture.io->Events();
 
         // Perform confirmed acknowledgement
         if (!fixture.runtime->AcknowledgeExternalResynchronization()) return false;
@@ -437,28 +445,17 @@ bool TestSafetyQuarantineRecoverySemantics() {
             return false;
         }
         // - Emits ZERO HID reports
+        const auto events_after = fixture.io->Events();
         if (fixture.io->StageReports().size() != stage_reports_before ||
-            fixture.io->Events().size() != events_before) {
+            std::count(events_after.begin(), events_after.end(), "apply") !=
+            std::count(events_before.begin(), events_before.end(), "apply")) {
             return false;
         }
     }
 
-    // Test 5: 51 53 remains separate_mode semantics
-    {
-        // Byte 3 is separate_mode (0 = linked, 1 = separate)
-        const auto rt_linked = aura::m605::BuildGlobalRapidTrigger(0.4, 0.4, 0.1, 0.2, false);
-        if (!rt_linked || (*rt_linked)[1] != 0x51 || (*rt_linked)[2] != 0x53 || (*rt_linked)[3] != 0) {
-            return false;
-        }
-        const auto rt_separate = aura::m605::BuildGlobalRapidTrigger(0.4, 0.8, 0.1, 0.2, true);
-        if (!rt_separate || (*rt_separate)[1] != 0x51 || (*rt_separate)[2] != 0x53 || (*rt_separate)[3] != 1) {
-            return false;
-        }
-        // Contradictory values (linked mode with different press/release) must be rejected
-        if (aura::m605::BuildGlobalRapidTrigger(0.4, 0.8, 0.1, 0.2, false).has_value()) {
-            return false;
-        }
-    }
+    // Historical 51 53 layout cannot produce a packet.
+    if (aura::m605::BuildGlobalRapidTrigger(0.4, 0.4, 0.1, 0.2, false) ||
+        aura::m605::BuildGlobalRapidTrigger(0.4, 0.8, 0.1, 0.2, true)) return false;
 
     return true;
 }
@@ -858,6 +855,132 @@ bool TestRapidTriggerApplyFailureInvalidatesShadow() {
         fixture.io->Events() == std::vector<std::string>{
             "connect", "stage-deadzone", "pre-wait", "apply", "post-wait",
             "stage-rt-press", "stage-rt-release", "pre-wait", "apply", "disconnect"};
+}
+
+bool TestResetAllActuationPacket() {
+    static_assert(std::is_same_v<decltype(&aura::m605::BuildResetAllPerKeyActuationOverrides),
+        std::optional<aura::m605::Report>(*)(double)>);
+    static_assert(std::is_same_v<decltype(&aura::M605Runtime::ResetAllPerKeyActuationOverrides),
+        std::future<bool>(aura::M605Runtime::*)(double)>);
+    // 64 bytes observed on USB; prepend the existing Windows dummy ReportID.
+    aura::m605::Report expected{};
+    expected[1] = 0x51; expected[2] = 0x52; expected[3] = 1; expected[5] = 10;
+    const auto report = aura::m605::BuildResetAllPerKeyActuationOverrides(1.0);
+    if (!report || *report != expected || !aura::NativeHidBackend::IsSupportedOutputReport(*report)) return false;
+    for (double value : {0.1, 1.5, 4.0}) {
+        const auto reset = aura::m605::BuildResetAllPerKeyActuationOverrides(value);
+        const auto global = aura::m605::BuildGlobalActuation(value);
+        const auto key = aura::m605::BuildPerKeyActuation(0x0405, value);
+        if (!reset || !global || !key || (*reset)[5] != (*global)[5] || (*reset)[5] != (*key)[7]) return false;
+    }
+    for (double invalid : {-0.1, 0.0, 0.09, 4.01, 4.1, 0.15,
+            std::numeric_limits<double>::infinity(), std::numeric_limits<double>::quiet_NaN()}) {
+        auto fixture = MakeFixture();
+        if (aura::m605::BuildResetAllPerKeyActuationOverrides(invalid) ||
+            fixture.runtime->ResetAllPerKeyActuationOverrides(invalid).get() ||
+            !fixture.io->Events().empty()) return false;
+    }
+    // Reject every fixed byte corruption, including layer, high type and tail.
+    for (size_t index = 0; index < expected.size(); ++index) {
+        if (index == 5) continue; // separately bounded common raw field
+        auto changed = expected; changed[index] ^= 0x80;
+        if (aura::NativeHidBackend::IsSupportedOutputReport(changed)) return false;
+    }
+    for (uint8_t type : std::array<uint8_t, 5>{0, 2, 3, 5, 255}) {
+        auto changed = expected; changed[3] = type;
+        if (aura::NativeHidBackend::IsSupportedOutputReport(changed)) return false;
+    }
+    for (uint8_t raw : std::array<uint8_t, 4>{0, 41, 127, 255}) {
+        auto changed = expected; changed[5] = raw;
+        if (aura::NativeHidBackend::IsSupportedOutputReport(changed)) return false;
+    }
+    return true;
+}
+
+bool TestResetAllActuationShadowBoundary() {
+    auto fixture = MakeFixture();
+    if (!fixture.runtime->SetGlobalActuation(1.0).get() ||
+        !fixture.runtime->SetPerKeyActuation(0x0405, 4.0).get() ||
+        !fixture.runtime->SetGlobalDeadzone(0.1, 0.2).get() ||
+        !fixture.runtime->SetPerKeyDeadzone(0x0501, 0.2, 0.3).get() ||
+        !fixture.runtime->SetPerKeyRapidTrigger(0x0701, 0.8, 0.6).get() ||
+        !fixture.runtime->RestorePerKeyDksToStandard(0x0501).get() ||
+        !fixture.runtime->SetSpeedTapMaster(true).get()) return false;
+    const auto prior = fixture.runtime->GetAppliedRuntimeState();
+    const int before_waits = fixture.wait->AfterCount();
+    fixture.wait->BlockOn(BlockPhase::AfterApply);
+    auto reset = fixture.runtime->ResetAllPerKeyActuationOverrides(1.5);
+    const bool waiting = fixture.wait->AwaitAfter(before_waits + 1);
+    const auto during = fixture.runtime->GetAppliedRuntimeState();
+    const bool old_shadow = during.global_actuation_raw == prior.global_actuation_raw &&
+        during.per_key_actuation_raw == prior.per_key_actuation_raw && !during.per_key_actuation_table_known;
+    const auto events = fixture.io->Events();
+    fixture.wait->Release();
+    const bool succeeded = reset.get();
+    const auto after = fixture.runtime->GetAppliedRuntimeState();
+    const auto reports = fixture.io->StageReports();
+    return waiting && old_shadow && succeeded && after.global_actuation_raw == 15 &&
+        after.per_key_actuation_table_known && after.per_key_actuation_raw.empty() &&
+        after.global_deadzone->top_raw == prior.global_deadzone->top_raw &&
+        after.global_deadzone->bottom_raw == prior.global_deadzone->bottom_raw &&
+        after.per_key_deadzone.at(0x0501).bottom_raw == prior.per_key_deadzone.at(0x0501).bottom_raw &&
+        after.per_key_deadzone_table_known == prior.per_key_deadzone_table_known &&
+        after.per_key_rapid_trigger.at(0x0701).press_raw == prior.per_key_rapid_trigger.at(0x0701).press_raw &&
+        after.per_key_rapid_trigger.at(0x0701).release_raw == prior.per_key_rapid_trigger.at(0x0701).release_raw &&
+        after.per_key_rapid_trigger.at(0x0701).enabled == prior.per_key_rapid_trigger.at(0x0701).enabled &&
+        !after.global_rapid_trigger && !prior.global_rapid_trigger &&
+        after.per_key_dks.at(0x0501).standard_runtime_configuration && after.speedtap_master == true &&
+        fixture.wait->BeforeCount() == before_waits + 1 && fixture.wait->AfterCount() == before_waits + 1 &&
+        reports.back() == *aura::m605::BuildResetAllPerKeyActuationOverrides(1.5) &&
+        std::vector<std::string>(events.end() - 4, events.end()) ==
+            std::vector<std::string>{"stage-reset-all-actuation", "pre-wait", "apply", "post-wait"};
+}
+
+bool TestResetAllActuationSafety() {
+    for (int failure = 0; failure < 4; ++failure) {
+        auto state = std::make_shared<LatchState>();
+        auto io = std::make_unique<FakeTransport>(); auto* transport = io.get();
+        auto wait = std::make_unique<FakeWait>(transport, failure == 3 ? BlockPhase::AfterApply : BlockPhase::None);
+        auto* waits = wait.get();
+        auto runtime = aura::M605RuntimeTestAccess::Create(std::move(io), std::move(wait), std::make_unique<FakeLatch>(state));
+        if (failure == 0) transport->connect_succeeds = false;
+        if (failure == 1) transport->stage_succeeds = false;
+        if (failure == 2) transport->apply_succeeds = false;
+        auto operation = runtime->ResetAllPerKeyActuationOverrides(1.0);
+        if (failure == 3) {
+            const bool entered = waits->AwaitAfter(1);
+            transport->current_session = false;
+            waits->Release();
+            if (!entered) return false;
+        }
+        if (operation.get() || runtime->GetAppliedRuntimeState().per_key_actuation_table_known) return false;
+        if (failure == 0) {
+            if (state->arms != 0 || state->armed || runtime->GetHealth() != aura::M605RuntimeHealth::Clean ||
+                !transport->StageReports().empty()) return false;
+        } else {
+            if (!state->armed || !runtime->IsPersistentSafetyQuarantined() ||
+                runtime->GetHealth() != aura::M605RuntimeHealth::IndeterminateStagedState) return false;
+            const auto count = transport->StageReports().size();
+            if (runtime->ResetAllPerKeyActuationOverrides(1.5).get() || transport->StageReports().size() != count) return false;
+            runtime->Stop();
+            auto fresh_io = std::make_unique<FakeTransport>(); auto* fresh = fresh_io.get();
+            auto fresh_wait = std::make_unique<FakeWait>(fresh, BlockPhase::None);
+            auto restarted = aura::M605RuntimeTestAccess::Create(std::move(fresh_io), std::move(fresh_wait), std::make_unique<FakeLatch>(state));
+            if (!restarted->IsPersistentSafetyQuarantined() ||
+                restarted->ResetAllPerKeyActuationOverrides(1.0).get() || !fresh->Events().empty()) return false;
+        }
+    }
+    auto fixture = MakeFixture();
+    if (!fixture.runtime->ResetAllPerKeyActuationOverrides(1.0).get()) return false;
+    const auto generation = fixture.runtime->GetSessionGeneration();
+    fixture.io->current_session = false;
+    if (!fixture.runtime->ResetAllPerKeyActuationOverrides(1.5).get()) return false;
+    return fixture.runtime->GetSessionGeneration() > generation &&
+        fixture.runtime->GetAppliedRuntimeState().global_actuation_raw == 15 &&
+        fixture.runtime->GetAppliedRuntimeState().per_key_actuation_table_known &&
+        !fixture.runtime->IsPersistentSafetyQuarantined() &&
+        fixture.io->Events() == std::vector<std::string>{"connect", "stage-reset-all-actuation", "pre-wait", "apply", "post-wait",
+            "disconnect", "connect", "stage-reset-all-actuation", "pre-wait", "apply", "post-wait"};
 }
 
 bool TestResetAllDeadzoneShadowBoundary() {
@@ -1369,6 +1492,97 @@ bool TestDksStandardRestoreAndStop() {
         fixture.io->StageReports().size() == 4 && fixture.wait->BetweenCount() == 3;
 }
 
+bool TestPerKeyRtDisablePacket() {
+    using namespace aura::m605;
+    // 65-byte host framing: byte 0 dummy Report ID; USB enable at offset 8
+    // is host offset 9. Disabling retains the supplied sensitivities.
+    for (int selector : {0, 1, 2}) {
+        const auto report = selector == 0 ? BuildPerKeyRapidTriggerUnified(0x0701, 0.5, false) :
+            selector == 1 ? BuildPerKeyRapidTriggerPress(0x0701, 0.5, false) :
+            BuildPerKeyRapidTriggerRelease(0x0701, 1.5, false);
+        Report expected{};
+        expected[1] = 0x51; expected[2] = 0x54;
+        expected[3] = static_cast<uint8_t>(selector);
+        expected[5] = 0x12; // audited W wire ID LE16
+        expected[7] = selector == 2 ? 15 : 5;
+        expected[9] = 0; // explicit disable, not removal/inheritance
+        if (!report || !Check(*report, expected, "RT disable enable=0") ||
+            !std::all_of(report->begin() + 10, report->end(), [](uint8_t b) { return b == 0; }) ||
+            !aura::NativeHidBackend::IsSupportedOutputReport(*report)) return false;
+    }
+    return true;
+}
+
+bool TestPerKeyRtDisableReplacesEnabledShadow() {
+    auto fixture = MakeFixture();
+    if (!fixture.runtime->SetPerKeyRapidTrigger(0x0701, 0.5, 1.5).get()) return false;
+    const auto enabled = fixture.runtime->GetAppliedRuntimeState().per_key_rapid_trigger.at(0x0701);
+    if (!enabled.enabled || !enabled.press_known || !enabled.release_known ||
+        enabled.press_raw != 5 || enabled.release_raw != 15) return false;
+    const auto stages_before = fixture.io->StageReports().size();
+    const auto applies_before = fixture.wait->AfterCount();
+    if (!fixture.runtime->DisablePerKeyRapidTrigger(0x0701, 0.5, 1.5).get()) return false;
+    const auto reports = fixture.io->StageReports();
+    const auto shadow = fixture.runtime->GetAppliedRuntimeState().per_key_rapid_trigger;
+    // The runtime must submit both stored sides despite the old enabled shadow.
+    if (reports.size() != stages_before + 2 || fixture.wait->AfterCount() != applies_before + 1 ||
+        shadow.size() != 1 || shadow.at(0x0701).enabled ||
+        !shadow.at(0x0701).press_known || !shadow.at(0x0701).release_known ||
+        shadow.at(0x0701).press_raw != 5 || shadow.at(0x0701).release_raw != 15) return false;
+    for (size_t i = stages_before; i < reports.size(); ++i)
+        if (reports[i][1] != 0x51 || reports[i][2] != 0x54 || reports[i][9] != 0 ||
+            !std::all_of(reports[i].begin() + 10, reports[i].end(), [](uint8_t b) { return b == 0; }))
+            return false;
+    return reports[stages_before][3] == 1 && reports[stages_before + 1][3] == 2;
+}
+
+bool TestCapturedRtSelectorsAndShadow() {
+    using namespace aura::m605;
+    // Firmware 1.00.59 official Scenario B/D W wire 0x0012.
+    for (auto [selector, raw, enabled] : std::array<std::array<int,3>,7>{{
+        {0,10,1},{1,5,1},{2,15,1},{1,15,1},{2,5,1},{1,15,0},{2,5,0}}}) {
+        const auto report = selector == 0 ? BuildPerKeyRapidTriggerUnified(0x0701, raw/10.0, enabled != 0) :
+            selector == 1 ? BuildPerKeyRapidTriggerPress(0x0701, raw/10.0, enabled != 0) :
+            BuildPerKeyRapidTriggerRelease(0x0701, raw/10.0, enabled != 0);
+        Report expected{}; expected[1]=0x51; expected[2]=0x54; expected[3]=static_cast<uint8_t>(selector);
+        expected[5]=0x12; expected[7]=static_cast<uint8_t>(raw); expected[9]=static_cast<uint8_t>(enabled);
+        if (!report || !Check(*report,expected,"captured 51 54") ||
+            !aura::NativeHidBackend::IsSupportedOutputReport(*report)) return false;
+        auto bad=*report;
+        for (int offset : {4,6,8,10,64}) {
+            bad=*report; bad[offset]=255;
+            if (aura::NativeHidBackend::IsSupportedOutputReport(bad)) return false;
+        }
+        bad=*report; bad[3]=3; if (aura::NativeHidBackend::IsSupportedOutputReport(bad)) return false;
+        bad=*report; bad[9]=2; if (aura::NativeHidBackend::IsSupportedOutputReport(bad)) return false;
+    }
+    if (BuildPerKeyRapidTriggerUnified(0xffff,1,true) || BuildPerKeyRapidTriggerPress(0x0701,0,true) ||
+        BuildPerKeyRapidTriggerRelease(0x0701,2.6,false) || BuildPerKeyRapidTriggerPress(0x0701,0.55,true)) return false;
+    for (double mm : {0.1,2.5}) if (!BuildPerKeyRapidTriggerUnified(0x0701,mm,true)) return false;
+    auto f=MakeFixture();
+    if (!f.runtime->SetPerKeyActuation(0x0701,1).get() ||
+        !f.runtime->SetPerKeyDeadzone(0x0701,0.1,0.2).get() ||
+        !f.runtime->RestorePerKeyDksToStandard(0x0701).get()) return false;
+    auto prior=f.runtime->GetAppliedRuntimeState();
+    if (!f.runtime->SetPerKeyRapidTriggerPress(0x0701,0.5,true).get()) return false;
+    auto rt=f.runtime->GetAppliedRuntimeState().per_key_rapid_trigger.at(0x0701);
+    if (!rt.press_known || rt.release_known || rt.press_raw!=5) return false;
+    if (!f.runtime->SetPerKeyRapidTriggerRelease(0x0701,1.5,true).get()) return false;
+    if (!f.runtime->SetPerKeyRapidTriggerPress(0x0701,0.7,false).get()) return false;
+    rt=f.runtime->GetAppliedRuntimeState().per_key_rapid_trigger.at(0x0701);
+    if (rt.enabled || !rt.release_known || rt.press_raw!=7 || rt.release_raw!=15 || rt.continuous) return false;
+    if (!f.runtime->SetPerKeyRapidTriggerUnified(0x0701,1,true).get()) return false;
+    auto after=f.runtime->GetAppliedRuntimeState(); rt=after.per_key_rapid_trigger.at(0x0701);
+    if (!rt.enabled || rt.press_raw!=10 || rt.release_raw!=10 ||
+        after.per_key_actuation_raw!=prior.per_key_actuation_raw ||
+        after.per_key_deadzone.at(0x0701).bottom_raw!=prior.per_key_deadzone.at(0x0701).bottom_raw ||
+        !after.per_key_dks.at(0x0701).standard_runtime_configuration) return false;
+    f.io->stage_succeeds=false;
+    if (f.runtime->SetPerKeyRapidTriggerRelease(0x0701,1.2,true).get() ||
+        !f.runtime->IsPersistentSafetyQuarantined() || !f.runtime->GetAppliedRuntimeState().per_key_rapid_trigger.empty()) return false;
+    return true;
+}
+
 bool TestGlobalSettings() {
     using namespace aura::m605;
     // 1. Packet structure and NativeHid allowlist checks
@@ -1416,42 +1630,15 @@ bool TestGlobalSettings() {
     rej = *dz; rej[7] = 1; if (aura::NativeHidBackend::IsSupportedOutputReport(rej)) return false;
     rej = *dz; rej[64] = 1; if (aura::NativeHidBackend::IsSupportedOutputReport(rej)) return false;
 
-    // 3. Global Rapid Trigger: 51 53 <separate_mode> 00 <press> <release> <top> <bottom>
-    Report expected_rt{};
-    expected_rt[1] = 0x51; expected_rt[2] = 0x53; expected_rt[3] = 1;
-    expected_rt[5] = 4; expected_rt[6] = 2; expected_rt[7] = 0; expected_rt[8] = 1;
-    auto rt = BuildGlobalRapidTrigger(0.4, 0.2, 0.0, 0.1, true);
-    if (!rt || !Check(*rt, expected_rt, "Global RT P0.4 R0.2 Top0.0 Bot0.1 SeparateMode=1") ||
-        !aura::NativeHidBackend::IsSupportedOutputReport(*rt)) return false;
-
-    auto rt_linked = BuildGlobalRapidTrigger(0.4, 0.4, 0.0, 0.1, false);
-    if (!rt_linked || (*rt_linked)[3] != 0 ||
-        !aura::NativeHidBackend::IsSupportedOutputReport(*rt_linked)) return false;
-
-    if (BuildGlobalRapidTrigger(0.4, 0.2, 0.0, 0.1, false).has_value()) return false;
-
-    if (BuildGlobalRapidTrigger(0.0, 0.2, 0.0, 0.1, true) ||
-        BuildGlobalRapidTrigger(2.6, 0.2, 0.0, 0.1, true) ||
-        BuildGlobalRapidTrigger(0.4, 0.0, 0.0, 0.1, true) ||
-        BuildGlobalRapidTrigger(0.4, 2.6, 0.0, 0.1, true) ||
-        BuildGlobalRapidTrigger(0.4, 0.2, 0.6, 0.1, true) ||
-        BuildGlobalRapidTrigger(0.4, 0.2, 0.0, 0.6, true) ||
-        BuildGlobalRapidTrigger(0.4, 0.2, -0.1, 0.1, true) ||
-        BuildGlobalRapidTrigger(0.45, 0.2, 0.0, 0.1, true) ||
-        BuildGlobalRapidTrigger(std::numeric_limits<double>::quiet_NaN(), 0.2, 0.0, 0.1, true)) return false;
-
-    rej = *rt; rej[3] = 2; if (aura::NativeHidBackend::IsSupportedOutputReport(rej)) return false;
-    rej = *rt; rej[4] = 1; if (aura::NativeHidBackend::IsSupportedOutputReport(rej)) return false;
-    rej = *rt; rej[5] = 0; if (aura::NativeHidBackend::IsSupportedOutputReport(rej)) return false;
-    rej = *rt; rej[5] = 26; if (aura::NativeHidBackend::IsSupportedOutputReport(rej)) return false;
-    rej = *rt; rej[6] = 0; if (aura::NativeHidBackend::IsSupportedOutputReport(rej)) return false;
-    rej = *rt; rej[6] = 26; if (aura::NativeHidBackend::IsSupportedOutputReport(rej)) return false;
-    rej = *rt; rej[7] = 6; if (aura::NativeHidBackend::IsSupportedOutputReport(rej)) return false;
-    rej = *rt; rej[8] = 6; if (aura::NativeHidBackend::IsSupportedOutputReport(rej)) return false;
-    rej = *rt; rej[9] = 1; if (aura::NativeHidBackend::IsSupportedOutputReport(rej)) return false;
-    rej = *rt; rej[64] = 1; if (aura::NativeHidBackend::IsSupportedOutputReport(rej)) return false;
-    rej = *rt_linked; rej[5] = 4; rej[6] = 2; if (aura::NativeHidBackend::IsSupportedOutputReport(rej)) return false;
-
+    // 51 53 remains rejected at BOTH builder and native boundary.
+    if (BuildGlobalRapidTrigger(0.4, 0.4, 0.0, 0.1, false) ||
+        BuildGlobalRapidTrigger(0.4, 0.2, 0.0, 0.1, true)) return false;
+    Report forbidden{}; forbidden[1] = 0x51; forbidden[2] = 0x53;
+    for (int selector = 0; selector <= 2; ++selector) {
+        forbidden[3] = static_cast<uint8_t>(selector);
+        forbidden[5] = 4; forbidden[6] = 4; forbidden[7] = 1;
+        if (aura::NativeHidBackend::IsSupportedOutputReport(forbidden)) return false;
+    }
     // 4. Runtime lifecycle and shadow state
     const auto state = std::make_shared<LatchState>();
     auto io = std::make_unique<FakeTransport>();
@@ -1482,17 +1669,23 @@ bool TestGlobalSettings() {
         shadow.global_deadzone->top_raw != 1 || shadow.global_deadzone->bottom_raw != 2) return false;
     if (!shadow.per_key_deadzone.empty()) return false;
 
-    // Global Rapid Trigger execution
-    if (!runtime->SetGlobalRapidTrigger(0.5, 0.3, 0.0, 0.1, true).get()) return false;
-    if (state->arms != 3 || state->armed != false) return false;
-    reports = io_ptr->StageReports();
-    if (reports.size() != 3 || reports[2][2] != 0x53 ||
-        reports[2][3] != 1 || reports[2][5] != 5 || reports[2][6] != 3) return false;
+    // Valid-looking legacy arguments still perform zero activity.
+    if (runtime->SetGlobalRapidTrigger(0.5, 0.3, 0.0, 0.1, true).get() ||
+        state->arms != 2 || io_ptr->StageReports().size() != 2 ||
+        runtime->GetAppliedRuntimeState().global_rapid_trigger) return false;
+    // A later all-key base write does not clear either per-key table.
+    if (!runtime->SetPerKeyActuation(0x0402, 2.0).get() ||
+        !runtime->SetPerKeyDeadzone(0x0402, 0.2, 0.3).get()) return false;
     shadow = runtime->GetAppliedRuntimeState();
-    if (!shadow.global_rapid_trigger.has_value() || !shadow.global_rapid_trigger->separate_mode ||
-        shadow.global_rapid_trigger->press_raw != 5 || shadow.global_rapid_trigger->release_raw != 3 ||
-        shadow.global_rapid_trigger->top_raw != 0 || shadow.global_rapid_trigger->bottom_raw != 1) return false;
-    if (!shadow.per_key_rapid_trigger.empty()) return false;
+    if (shadow.per_key_actuation_raw.at(0x0402) != 20 ||
+        shadow.per_key_deadzone.at(0x0402).bottom_raw != 3) return false;
+    if (!runtime->SetGlobalActuation(1.2).get() ||
+        !runtime->SetGlobalDeadzone(0.1, 0.2).get()) return false;
+    shadow = runtime->GetAppliedRuntimeState();
+    if (shadow.per_key_actuation_raw.at(0x0402) != 20 ||
+        shadow.per_key_deadzone.at(0x0402).bottom_raw != 3 ||
+        shadow.global_actuation_raw != 12 || !shadow.global_deadzone ||
+        shadow.global_deadzone->bottom_raw != 2) return false;
 
     // Preflight failure: zero writes
     const auto stage_count_before = io_ptr->StageReports().size();
@@ -1511,6 +1704,56 @@ bool TestGlobalSettings() {
     if (shadow.global_actuation_raw.has_value() || shadow.global_deadzone.has_value() ||
         shadow.global_rapid_trigger.has_value()) return false;
 
+    return true;
+}
+
+bool TestStaleTransportPreflightAndInFlightRemoval() {
+    auto io = std::make_unique<FakeTransport>();
+    auto* transport = io.get();
+    auto wait = std::make_unique<FakeWait>(transport, BlockPhase::None);
+    auto* waits = wait.get();
+    auto runtime = aura::M605RuntimeTestAccess::Create(std::move(io), std::move(wait));
+    if (!runtime->SetPerKeyActuation(0x0402, 1.0).get()) return false;
+    const auto generation = runtime->GetSessionGeneration();
+    transport->current_session = false; // unplug/re-enumerate while idle
+    if (!runtime->PrepareTransportSession() ||
+        runtime->GetSessionGeneration() <= generation ||
+        !runtime->GetAppliedRuntimeState().per_key_actuation_raw.empty() ||
+        runtime->IsPersistentSafetyQuarantined()) return false;
+    if (!runtime->SetPerKeyActuation(0x0402, 1.5).get() ||
+        runtime->GetAppliedRuntimeState().per_key_actuation_raw.at(0x0402) != 15)
+        return false;
+
+    waits->BlockOn(BlockPhase::BetweenDksStages);
+    auto in_flight = runtime->SetPerKeyDks(MakeDksConfig());
+    if (!waits->AwaitBetween(1)) return false; // first stage succeeded
+    transport->current_session = false;
+    waits->Release();
+    if (in_flight.get() || runtime->GetHealth() !=
+        aura::M605RuntimeHealth::IndeterminateStagedState ||
+        !runtime->IsPersistentSafetyQuarantined() ||
+        !runtime->GetAppliedRuntimeState().per_key_actuation_raw.empty()) return false;
+    return !runtime->PrepareTransportSession(); // no implicit latch clear
+}
+
+bool TestRemovalDuringSettleAndOfflineRecovery() {
+    auto io = std::make_unique<FakeTransport>(); auto* transport = io.get();
+    auto wait = std::make_unique<FakeWait>(transport, BlockPhase::AfterApply); auto* waits = wait.get();
+    auto state = std::make_shared<LatchState>();
+    auto runtime = aura::M605RuntimeTestAccess::Create(std::move(io), std::move(wait),
+        std::make_unique<FakeLatch>(state));
+    auto operation = runtime->SetPerKeyActuation(0x0402, 1.0);
+    if (!waits->AwaitAfter(1)) return false;
+    transport->current_session = false;
+    waits->Release();
+    if (operation.get() || !state->armed || !runtime->IsPersistentSafetyQuarantined()) return false;
+    transport->connect_succeeds = false;
+    if (runtime->AcknowledgeExternalResynchronization() || !state->armed) return false;
+    const auto reports = transport->StageReports().size();
+    transport->connect_succeeds = true;
+    if (!runtime->AcknowledgeExternalResynchronization() || state->armed ||
+        reports != transport->StageReports().size() ||
+        runtime->GetHealth() != aura::M605RuntimeHealth::Clean) return false;
     return true;
 }
 }
@@ -1683,6 +1926,9 @@ int main() {
     rejected[3] = 3; // unknown resetType
     if (aura::NativeHidBackend::IsSupportedOutputReport(rejected)) return 1;
     rejected = reset_all;
+    rejected[3] = 0; // statically observed, but not approved for production
+    if (aura::NativeHidBackend::IsSupportedOutputReport(rejected)) return 1;
+    rejected = reset_all;
     rejected[6] = 1; // unsupported layer
     if (aura::NativeHidBackend::IsSupportedOutputReport(rejected)) return 1;
     rejected = reset_all;
@@ -1741,6 +1987,9 @@ int main() {
         BuildSpeedTapPair(0x0602, 0x0301, 2) ||
         BuildSpeedTapMaster(2)) return 1;
 
+    if (!TestResetAllActuationPacket() || !TestResetAllActuationShadowBoundary() || !TestResetAllActuationSafety()) {
+        std::cerr << "FAIL: typed actuation reset\n"; return 1;
+    }
     if (!TestSuccessfulTransactionAndShadow() || !TestPostApplyBoundaryAndRgbSerialization() ||
         !TestPriorShadowUnchangedUntilPostSettleFinishes() ||
         !TestStageFailure() ||
@@ -1766,9 +2015,16 @@ int main() {
         !TestDksStageAndApplyFailures() || !TestDksFailureInvalidatesPriorShadow() ||
         !TestDksStandardRestoreAndStop() || !TestPersistentSafetyLatch() ||
         !TestSafetyQuarantineRecoverySemantics() ||
-        !TestSafetyLatchArmFailure() || !TestGlobalSettings()) {
+        !TestSafetyLatchArmFailure()) {
         std::cerr << "FAIL: M605 runtime state machine\n";
         return 1;
+    }
+    if (!TestPerKeyRtDisablePacket()) { std::cerr << "FAIL: RT disable exact bytes\n"; return 1; }
+    if (!TestPerKeyRtDisableReplacesEnabledShadow()) { std::cerr << "FAIL: RT enabled shadow must submit disable\n"; return 1; }
+    if (!TestCapturedRtSelectorsAndShadow() || !TestGlobalSettings()) { std::cerr << "FAIL: global shadow semantics\n"; return 1; }
+    if (!TestStaleTransportPreflightAndInFlightRemoval() ||
+        !TestRemovalDuringSettleAndOfflineRecovery()) {
+        std::cerr << "FAIL: stale transport lifecycle\n"; return 1;
     }
 
     std::cout << "M605 packet, mapping, and validation checks passed\n";

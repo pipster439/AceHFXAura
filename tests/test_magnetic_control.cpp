@@ -31,6 +31,7 @@ struct FakeTransport final : aura::m605::detail::Transport {
     int applies = 0;
     std::vector<aura::m605::Report> reports;
     bool IsConnected() const override { return connected; }
+    bool IsCurrentSession() const override { return true; }
     bool Connect() override { connected = true; return true; }
     bool WriteStage(const aura::m605::Report& report) override {
         reports.push_back(report);
@@ -159,12 +160,12 @@ bool TestService() {
         return client.Post(path, json, "application/json");
     };
     const auto initial = client.Get("/api/magnetic/status");
-    if (!initial || initial->status != 200) return finish(false);
+    if (!initial || initial->status != 200) return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
     auto body = Json::parse(initial->body);
     if (body.at("health") != "Clean" || body.at("available") != false ||
         body.at("host_profile").at("global_deadzone_top").at("raw") != 0 ||
         body.at("host_profile").at("global_deadzone_top").at("source") != "HostProfile")
-        return finish(false);
+        return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
     const auto invalid_key = post("/api/magnetic/actuation", R"({"logical_id":65535,"mm":1.0})");
     const auto invalid_dks = post("/api/magnetic/dks", R"({"logical_id":1026,"start_mm":3.6,"end_mm":1.0,"slots":[],"resolve_rt":false})");
     const auto invalid_wire = post("/api/magnetic/deadzone", R"({"logical_id":1026,"top_mm":0.2,"bottom_mm":0.3,"wire_id":49})");
@@ -174,9 +175,9 @@ bool TestService() {
         !invalid_wire || invalid_wire->status != 422 ||
         !fn_target_dks || fn_target_dks->status != 422 ||
         latch->arms != 0 || !io_ptr->reports.empty())
-        return finish(false);
+        return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
     const auto offline = post("/api/magnetic/actuation", R"({"logical_id":1026,"mm":1.0})");
-    if (!offline || offline->status != 409 || latch->arms != 0) return finish(false);
+    if (!offline || offline->status != 409 || latch->arms != 0) return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
 
     // Only the deterministic injected transport is reachable below.
     snapshot.dry_run = false;
@@ -185,124 +186,101 @@ bool TestService() {
     status->Update(snapshot);
     const auto actuation = post("/api/magnetic/actuation", R"({"logical_id":1026,"mm":1.0})");
     if (!actuation || actuation->status != 200 || io_ptr->reports.size() != 2 || latch->armed)
-        return finish(false);
+        return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
     body = Json::parse(actuation->body);
-    if (body.at("actuation")[0].at("source") != "SessionApplied") return finish(false);
+    if (body.at("actuation")[0].at("source") != "SessionApplied") return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
     const auto rt_conflict = post("/api/magnetic/rapid-trigger", R"({"logical_id":1026,"press_mm":0.8,"release_mm":0.6,"resolve_dks":false})");
     if (!rt_conflict || rt_conflict->status != 409 || io_ptr->reports.size() != 2)
-        return finish(false);
+        return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
     const auto rt = post("/api/magnetic/rapid-trigger", R"({"logical_id":1026,"press_mm":0.8,"release_mm":0.6,"resolve_dks":true})");
     if (!rt || rt->status != 200 || io_ptr->reports.size() != 10 || // four DKS + apply, two RT + apply
         io_ptr->reports[2][2] != 0x23 || io_ptr->reports[7][2] != 0x54)
-        return finish(false);
+        return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
     body = Json::parse(rt->body);
-    if (body.at("rapid_trigger")[0].at("source") != "SessionApplied") return finish(false);
+    if (body.at("rapid_trigger")[0].at("source") != "SessionApplied") return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
     const auto reset = post("/api/magnetic/deadzone/reset-all", R"({"confirm_all_keys":true})");
     if (!reset || reset->status != 200 || io_ptr->reports[10][2] != 0x52 ||
         io_ptr->reports[10][5] != 1 || io_ptr->reports[10][7] != 0)
-        return finish(false);
+        return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
     const auto analog = post("/api/magnetic/analog-effect/static", R"({"enabled":true})");
     if (!analog || analog->status != 200 || io_ptr->reports[12][2] != 0x2d)
-        return finish(false);
+        return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
     const auto speedtap = post("/api/magnetic/speedtap/profile-reset", R"({"confirm_profile_baseline":true})");
-    if (!speedtap || speedtap->status != 200) return finish(false);
+    if (!speedtap || speedtap->status != 200) return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
     body = Json::parse(speedtap->body);
     if (body.at("speedtap").at("pair_knowledge") != "ProfileBaselineUnknown" ||
-        !body.at("speedtap").at("pair_submissions").empty()) return finish(false);
+        !body.at("speedtap").at("pair_submissions").empty()) return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
 
     // SpeedTap enable fails closed when baseline is unknown
     const auto speedtap_pair_on_unknown = post("/api/magnetic/speedtap/pair", R"({"key1":1538,"key2":769})");
-    if (!speedtap_pair_on_unknown || speedtap_pair_on_unknown->status != 409) return finish(false);
+    if (!speedtap_pair_on_unknown || speedtap_pair_on_unknown->status != 409) return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
     body = Json::parse(speedtap_pair_on_unknown->body);
     if (body.at("last_error").get<std::string>().find("trustworthy pair baseline") == std::string::npos)
-        return finish(false);
+        return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
 
     // Targeted disable of this pair remains available
     const auto speedtap_pair_off = post("/api/magnetic/speedtap/pair/disable", R"({"key1":1538,"key2":769})");
     if (!speedtap_pair_off || speedtap_pair_off->status != 200 ||
         io_ptr->reports[io_ptr->reports.size() - 2][2] != 0x55 ||
-        io_ptr->reports[io_ptr->reports.size() - 2][9] != 0) return finish(false);
+        io_ptr->reports[io_ptr->reports.size() - 2][9] != 0) return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
 
     // When saved pair baseline becomes known, pair-on succeeds
     host.saved_speedtap_pairs_known = true;
     const auto speedtap_pair_on_known = post("/api/magnetic/speedtap/pair", R"({"key1":1538,"key2":769})");
     if (!speedtap_pair_on_known || speedtap_pair_on_known->status != 200 ||
         io_ptr->reports[io_ptr->reports.size() - 2][2] != 0x55 ||
-        io_ptr->reports[io_ptr->reports.size() - 2][9] != 1) return finish(false);
+        io_ptr->reports[io_ptr->reports.size() - 2][9] != 1) return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
 
     // Global Actuation route
     const auto bad_global_act = post("/api/magnetic/global/actuation", R"({"mm":4.5})");
-    if (!bad_global_act || bad_global_act->status != 422) return finish(false);
+    if (!bad_global_act || bad_global_act->status != 422) return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
     const auto global_act = post("/api/magnetic/global/actuation", R"({"mm":1.5})");
     if (!global_act || global_act->status != 200 ||
         io_ptr->reports[io_ptr->reports.size() - 2][2] != 0x50 ||
-        io_ptr->reports[io_ptr->reports.size() - 2][5] != 15) return finish(false);
+        io_ptr->reports[io_ptr->reports.size() - 2][5] != 15) return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
     body = Json::parse(global_act->body);
     if (body.at("global_actuation").at("source") != "SessionApplied" ||
-        body.at("global_actuation").at("raw") != 15) return finish(false);
+        body.at("global_actuation").at("raw") != 15) return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
 
     // Global Deadzone route
     const auto bad_global_dz = post("/api/magnetic/global/deadzone", R"({"top_mm":0.6,"bottom_mm":0.1})");
-    if (!bad_global_dz || bad_global_dz->status != 422) return finish(false);
+    if (!bad_global_dz || bad_global_dz->status != 422) return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
     const auto global_dz = post("/api/magnetic/global/deadzone", R"({"top_mm":0.2,"bottom_mm":0.3})");
     if (!global_dz || global_dz->status != 200 ||
         io_ptr->reports[io_ptr->reports.size() - 2][2] != 0x58 ||
         io_ptr->reports[io_ptr->reports.size() - 2][5] != 2 ||
-        io_ptr->reports[io_ptr->reports.size() - 2][6] != 3) return finish(false);
+        io_ptr->reports[io_ptr->reports.size() - 2][6] != 3) return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
     body = Json::parse(global_dz->body);
     if (body.at("global_deadzone").at("source") != "SessionApplied" ||
         body.at("global_deadzone").at("top_raw") != 2 ||
-        body.at("global_deadzone").at("bottom_raw") != 3) return finish(false);
+        body.at("global_deadzone").at("bottom_raw") != 3) return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
 
     // Global Rapid Trigger route (5 fields required)
     const auto bad_global_rt = post("/api/magnetic/global/rapid-trigger",
         R"({"separate_mode":true,"press_mm":3.0,"release_mm":0.2,"top_mm":0.0,"bottom_mm":0.1})");
-    if (!bad_global_rt || bad_global_rt->status != 422) return finish(false);
+    if (!bad_global_rt || bad_global_rt->status != 422) return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
 
     // Missing deadzones (3 fields): rejected with 422 because exact 5 fields are required
     const auto missing_dz = post("/api/magnetic/global/rapid-trigger",
         R"({"separate_mode":true,"press_mm":0.5,"release_mm":0.3})");
-    if (!missing_dz || missing_dz->status != 422) return finish(false);
+    if (!missing_dz || missing_dz->status != 422) return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
 
     // Requirement 4.C: separate_mode=false, press=0.4, release=0.2 -> 422 and zero HID reports
     const auto count_before_c = io_ptr->reports.size();
     const auto contradictory_rt = post("/api/magnetic/global/rapid-trigger",
         R"({"separate_mode":false,"press_mm":0.4,"release_mm":0.2,"top_mm":0.0,"bottom_mm":0.1})");
     if (!contradictory_rt || contradictory_rt->status != 422 ||
-        io_ptr->reports.size() != count_before_c) return finish(false);
+        io_ptr->reports.size() != count_before_c) return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
 
-    // Requirement 4.D: separate_mode=false, press=release=0.4 -> accepted (200)
-    const auto global_rt_linked = post("/api/magnetic/global/rapid-trigger",
-        R"({"separate_mode":false,"press_mm":0.4,"release_mm":0.4,"top_mm":0.0,"bottom_mm":0.1})");
-    if (!global_rt_linked || global_rt_linked->status != 200 ||
-        io_ptr->reports[io_ptr->reports.size() - 2][2] != 0x53 ||
-        io_ptr->reports[io_ptr->reports.size() - 2][3] != 0 ||
-        io_ptr->reports[io_ptr->reports.size() - 2][5] != 4 ||
-        io_ptr->reports[io_ptr->reports.size() - 2][6] != 4 ||
-        io_ptr->reports[io_ptr->reports.size() - 2][7] != 0 ||
-        io_ptr->reports[io_ptr->reports.size() - 2][8] != 1) return finish(false);
-    body = Json::parse(global_rt_linked->body);
-    if (body.at("global_rapid_trigger").at("source") != "SessionApplied" ||
-        body.at("global_rapid_trigger").at("separate_mode") != false ||
-        body.at("global_rapid_trigger").at("press_raw") != 4 ||
-        body.at("global_rapid_trigger").at("release_raw") != 4) return finish(false);
-
-    // Requirement 4.E: separate_mode=true, press=0.4, release=0.2 -> accepted (200)
-    const auto global_rt_sep = post("/api/magnetic/global/rapid-trigger",
-        R"({"separate_mode":true,"press_mm":0.4,"release_mm":0.2,"top_mm":0.0,"bottom_mm":0.1})");
-    if (!global_rt_sep || global_rt_sep->status != 200 ||
-        io_ptr->reports[io_ptr->reports.size() - 2][2] != 0x53 ||
-        io_ptr->reports[io_ptr->reports.size() - 2][3] != 1 ||
-        io_ptr->reports[io_ptr->reports.size() - 2][5] != 4 ||
-        io_ptr->reports[io_ptr->reports.size() - 2][6] != 2 ||
-        io_ptr->reports[io_ptr->reports.size() - 2][7] != 0 ||
-        io_ptr->reports[io_ptr->reports.size() - 2][8] != 1) return finish(false);
-    body = Json::parse(global_rt_sep->body);
-    if (body.at("global_rapid_trigger").at("source") != "SessionApplied" ||
-        body.at("global_rapid_trigger").at("separate_mode") != true ||
-        body.at("global_rapid_trigger").at("press_raw") != 4 ||
-        body.at("global_rapid_trigger").at("release_raw") != 2) return finish(false);
-
+    // Even previously accepted legacy shapes are blocked without submissions.
+    for (const char* json : {
+        R"({"separate_mode":false,"press_mm":0.4,"release_mm":0.4,"top_mm":0.0,"bottom_mm":0.1})",
+        R"({"separate_mode":true,"press_mm":0.4,"release_mm":0.2,"top_mm":0.0,"bottom_mm":0.1})"}) {
+        const auto result=post("/api/magnetic/global/rapid-trigger",json);
+        if (!result || result->status!=422 || io_ptr->reports.size()!=count_before_c) return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
+        body=Json::parse(result->body);
+        if (body.at("global_rapid_trigger").at("source")=="SessionApplied") return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
+    }
     wait_ptr->Block();
     std::atomic<bool> first_ok = false;
     std::thread in_flight([&] {
@@ -312,16 +290,16 @@ bool TestService() {
             R"({"logical_id":1026,"mm":2.0})", "application/json");
         first_ok = first && first->status == 200;
     });
-    if (!wait_ptr->Await()) { wait_ptr->Release(); in_flight.join(); return finish(false); }
+    if (!wait_ptr->Await()) { wait_ptr->Release(); in_flight.join(); return finish((std::cerr << "Failure line " << __LINE__ << '\n', false)); }
     // Inspect status while transaction is deliberately blocked in post-Apply settle:
     const auto settling_status = client.Get("/api/magnetic/status");
     if (!settling_status || settling_status->status != 200) {
-        wait_ptr->Release(); in_flight.join(); return finish(false);
+        wait_ptr->Release(); in_flight.join(); return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
     }
     const auto settling_body = Json::parse(settling_status->body);
     if (settling_body.at("health") != "TransactionInProgress" ||
         settling_body.at("persistent_safety_quarantine") != false) {
-        wait_ptr->Release(); in_flight.join(); return finish(false);
+        wait_ptr->Release(); in_flight.join(); return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
     }
     const auto count_during = io_ptr->reports.size();
     const auto busy = post("/api/magnetic/actuation", R"({"logical_id":1026,"mm":3.0})");
@@ -335,49 +313,49 @@ bool TestService() {
     const bool blocked_busy_ack = busy_ack && busy_ack->status == 409;
     wait_ptr->Release();
     in_flight.join();
-    if (!blocked_busy || !blocked_busy_batch || !blocked_busy_ack || !first_ok) return finish(false);
+    if (!blocked_busy || !blocked_busy_batch || !blocked_busy_ack || !first_ok) return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
 
     // After completion, status is Clean and quarantine is false:
     const auto clean_status = client.Get("/api/magnetic/status");
-    if (!clean_status || clean_status->status != 200) return finish(false);
+    if (!clean_status || clean_status->status != 200) return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
     const auto clean_body = Json::parse(clean_status->body);
     if (clean_body.at("health") != "Clean" || clean_body.at("persistent_safety_quarantine") != false)
-        return finish(false);
+        return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
 
     // First cross-feature operation succeeds; the next stage fails. No
     // rollback is attempted and the response reports the partial sequence.
     io_ptr->fail_at_stage = io_ptr->stages + 5;
     const auto failed = post("/api/magnetic/rapid-trigger",
         R"({"logical_id":1281,"press_mm":0.8,"release_mm":0.6,"resolve_dks":true})");
-    if (!failed || failed->status != 409 || !latch->armed) return finish(false);
+    if (!failed || failed->status != 409 || !latch->armed) return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
     body = Json::parse(failed->body);
     if (body.at("health") != "IndeterminateStagedState" ||
         body.at("persistent_safety_quarantine") != true ||
         body.at("last_error").get<std::string>().find("DKS standard rewrite completed") == std::string::npos ||
-        !body.at("dks").empty()) return finish(false);
+        !body.at("dks").empty()) return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
     const auto count = io_ptr->reports.size();
     const auto blocked = post("/api/magnetic/actuation", R"({"logical_id":1026,"mm":1.0})");
     if (!blocked || blocked->status != 409 || io_ptr->reports.size() != count)
-        return finish(false);
+        return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
 
     // Endpoint validation: explicit confirmation required (no extra fields, must be true)
     const auto missing_field = post("/api/magnetic/safety/acknowledge-external-resynchronization", "{}");
-    if (!missing_field || missing_field->status != 422) return finish(false);
+    if (!missing_field || missing_field->status != 422) return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
 
     const auto confirm_false = post("/api/magnetic/safety/acknowledge-external-resynchronization",
         R"({"confirm_external_resynchronization":false})");
-    if (!confirm_false || confirm_false->status != 422) return finish(false);
+    if (!confirm_false || confirm_false->status != 422) return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
 
     const auto extra_field = post("/api/magnetic/safety/acknowledge-external-resynchronization",
         R"({"confirm_external_resynchronization":true,"extra":1})");
-    if (!extra_field || extra_field->status != 422) return finish(false);
+    if (!extra_field || extra_field->status != 422) return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
 
     // Confirmed acknowledgment: latch cleared, health Clean, SessionApplied cleared, ZERO HID reports
     const auto count_before_ack = io_ptr->reports.size();
     const auto ack = post("/api/magnetic/safety/acknowledge-external-resynchronization",
         R"({"confirm_external_resynchronization":true})");
     if (!ack || ack->status != 200 || io_ptr->reports.size() != count_before_ack || latch->armed)
-        return finish(false);
+        return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
 
     body = Json::parse(ack->body);
     if (body.at("health") != "Clean" ||
@@ -386,12 +364,12 @@ bool TestService() {
         !body.at("deadzone").empty() ||
         !body.at("dks").empty() ||
         body.at("rapid_trigger_master").at("known") != false)
-        return finish(false);
+        return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
 
     // Calling again when already Clean/unquarantined rejects with 409
     const auto redundant_ack = post("/api/magnetic/safety/acknowledge-external-resynchronization",
         R"({"confirm_external_resynchronization":true})");
-    if (!redundant_ack || redundant_ack->status != 409) return finish(false);
+    if (!redundant_ack || redundant_ack->status != 409) return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
 
     // Phase 3: a complete invalid request is rejected before any physical report.
     const auto before_batch = io_ptr->reports.size();
@@ -405,13 +383,13 @@ bool TestService() {
     const auto too_many = post("/api/magnetic/batch/actuation", too_many_request.c_str());
     if (!empty_batch || empty_batch->status != 422 || !duplicate_batch || duplicate_batch->status != 422 ||
         !invalid_third || invalid_third->status != 422 || !bad_step || bad_step->status != 422 ||
-        !too_many || too_many->status != 422 || io_ptr->reports.size() != before_batch) return finish(false);
+        !too_many || too_many->status != 422 || io_ptr->reports.size() != before_batch) return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
 
     // The JSON order is reversed; the service executes audited keyboard order W,A,S,D.
     const auto batch_act = post("/api/magnetic/batch/actuation",
         R"({"logical_ids":[769,1794,1538,1793],"millimeters":1.2})");
     if (!batch_act || batch_act->status != 200 || io_ptr->reports.size() != before_batch + 8)
-        return finish(false);
+        return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
     body = Json::parse(batch_act->body);
     const auto& act_result = body.at("batch_result");
     if (act_result.at("applied_count") != 4 || act_result.at("completed_fully") != true ||
@@ -420,42 +398,42 @@ bool TestService() {
         act_result.at("results")[2].at("logical_id") != 1794 ||
         act_result.at("results")[3].at("logical_id") != 769 ||
         io_ptr->reports[before_batch][2] != 0x4f || io_ptr->reports[before_batch + 1][1] != 0x50)
-        return finish(false);
+        return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
 
     const auto before_dz = io_ptr->reports.size();
     const auto batch_dz = post("/api/magnetic/batch/deadzone",
         R"({"logical_ids":[1793,1538,1794,769],"top_mm":0.0,"bottom_mm":0.3})");
     if (!batch_dz || batch_dz->status != 200 || io_ptr->reports.size() != before_dz + 8)
-        return finish(false);
+        return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
     for (size_t i = before_dz; i < io_ptr->reports.size(); i += 2)
         if (io_ptr->reports[i][2] != 0x59 || io_ptr->reports[i][7] != 3 ||
-            io_ptr->reports[i][8] != 0 || io_ptr->reports[i + 1][1] != 0x50) return finish(false);
+            io_ptr->reports[i][8] != 0 || io_ptr->reports[i + 1][1] != 0x50) return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
 
     // No SessionApplied DKS knowledge after quarantine recovery: no-write conflict.
     const auto before_rt = io_ptr->reports.size();
     const auto rt_unknown = post("/api/magnetic/batch/rapid-trigger",
         R"({"logical_ids":[1793,1538,1794,769],"action":"enable","press_mm":0.8,"release_mm":0.6,"resolve_dks":false})");
-    if (!rt_unknown || rt_unknown->status != 409 || io_ptr->reports.size() != before_rt) return finish(false);
+    if (!rt_unknown || rt_unknown->status != 409 || io_ptr->reports.size() != before_rt) return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
     body = Json::parse(rt_unknown->body);
     if (body.at("batch_result").at("unknown_dks_keys").size() != 4 ||
-        body.at("batch_result").at("not_executed_count") != 4) return finish(false);
+        body.at("batch_result").at("not_executed_count") != 4) return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
     const auto rt_resolved = post("/api/magnetic/batch/rapid-trigger",
         R"({"logical_ids":[1793,1538,1794,769],"action":"enable","press_mm":0.8,"release_mm":0.6,"resolve_dks":true})");
     if (!rt_resolved || rt_resolved->status != 200 || io_ptr->reports.size() != before_rt + 32 ||
         io_ptr->reports[before_rt][2] != 0x23 || io_ptr->reports[before_rt + 5][2] != 0x54)
-        return finish(false);
+        return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
     const auto rt_standard = post("/api/magnetic/batch/rapid-trigger",
         R"({"logical_ids":[1793,1538],"action":"enable","press_mm":0.5,"release_mm":0.3,"resolve_dks":false})");
-    if (!rt_standard || rt_standard->status != 200) return finish(false);
+    if (!rt_standard || rt_standard->status != 200) return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
     const auto rt_disable = post("/api/magnetic/batch/rapid-trigger",
         R"({"logical_ids":[1793,1538],"action":"disable"})");
-    if (!rt_disable || rt_disable->status != 200) return finish(false);
+    if (!rt_disable || rt_disable->status != 200) return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
     host.global_rt_press_raw.reset();
     const auto before_unknown_baseline = io_ptr->reports.size();
     const auto no_baseline = post("/api/magnetic/batch/rapid-trigger",
         R"({"logical_ids":[1793,1538],"action":"disable"})");
     if (!no_baseline || no_baseline->status != 409 ||
-        io_ptr->reports.size() != before_unknown_baseline) return finish(false);
+        io_ptr->reports.size() != before_unknown_baseline) return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
     host.global_rt_press_raw = 4;
 
     // Third transaction fails; the fourth key receives no report and no rollback occurs.
@@ -464,7 +442,7 @@ bool TestService() {
     const auto partial_batch = post("/api/magnetic/batch/actuation",
         R"({"logical_ids":[1793,1538,1794,769],"millimeters":2.0})");
     if (!partial_batch || partial_batch->status != 207 || !latch->armed ||
-        io_ptr->reports.size() != before_failure + 5) return finish(false);
+        io_ptr->reports.size() != before_failure + 5) return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
     body = Json::parse(partial_batch->body);
     const auto& partial = body.at("batch_result");
     if (partial.at("applied_count") != 2 || partial.at("failed_count") != 1 ||
@@ -472,27 +450,27 @@ bool TestService() {
         partial.at("results")[0].at("status") != "Applied" ||
         partial.at("results")[1].at("status") != "Applied" ||
         partial.at("results")[2].at("status") != "Failed" ||
-        partial.at("results")[3].at("status") != "NotExecuted") return finish(false);
+        partial.at("results")[3].at("status") != "NotExecuted") return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
     const auto before_quarantine = io_ptr->reports.size();
     const auto quarantined_batch = post("/api/magnetic/batch/deadzone",
         R"({"logical_ids":[1793],"top_mm":0.0,"bottom_mm":0.1})");
     if (!quarantined_batch || quarantined_batch->status != 409 ||
-        io_ptr->reports.size() != before_quarantine) return finish(false);
+        io_ptr->reports.size() != before_quarantine) return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
 
     const auto recovery = post("/api/magnetic/safety/acknowledge-external-resynchronization",
         R"({"confirm_external_resynchronization":true})");
-    if (!recovery || recovery->status != 200) return finish(false);
+    if (!recovery || recovery->status != 200) return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
     const auto configured_dks = post("/api/magnetic/dks",
         R"({"logical_id":1793,"start_mm":1.0,"end_mm":3.0,"resolve_rt":false,"slots":[{"target":{"kind":"DefaultSentinel"},"down_start":"Inactive","down_end":"Inactive","up_start":"Inactive","up_end":"Inactive"},{"target":{"kind":"DefaultSentinel"},"down_start":"Inactive","down_end":"Inactive","up_start":"Inactive","up_end":"Inactive"},{"target":{"kind":"DefaultSentinel"},"down_start":"Inactive","down_end":"Inactive","up_start":"Inactive","up_end":"Inactive"},{"target":{"kind":"DefaultSentinel"},"down_start":"Inactive","down_end":"Inactive","up_start":"Inactive","up_end":"Inactive"}]})");
-    if (!configured_dks || configured_dks->status != 200) return finish(false);
+    if (!configured_dks || configured_dks->status != 200) return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
     const auto before_configured_conflict = io_ptr->reports.size();
     const auto configured_conflict = post("/api/magnetic/batch/rapid-trigger",
         R"({"logical_ids":[1793,1538],"action":"enable","press_mm":0.8,"release_mm":0.6,"resolve_dks":false})");
     if (!configured_conflict || configured_conflict->status != 409 ||
-        io_ptr->reports.size() != before_configured_conflict) return finish(false);
+        io_ptr->reports.size() != before_configured_conflict) return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
     body = Json::parse(configured_conflict->body);
     if (body.at("batch_result").at("configured_dks_keys") != Json::array({1793}) ||
-        body.at("batch_result").at("unknown_dks_keys") != Json::array({1538})) return finish(false);
+        body.at("batch_result").at("unknown_dks_keys") != Json::array({1538})) return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
 
     // A failed standard rewrite must never submit RT for that key or any later key.
     io_ptr->fail_at_stage = io_ptr->stages + 1;
@@ -501,13 +479,13 @@ bool TestService() {
         R"({"logical_ids":[1793,1538],"action":"enable","press_mm":0.8,"release_mm":0.6,"resolve_dks":true})");
     if (!restore_fail || restore_fail->status != 409 ||
         io_ptr->reports.size() != before_restore_fail + 1 ||
-        io_ptr->reports.back()[2] != 0x23) return finish(false);
+        io_ptr->reports.back()[2] != 0x23) return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
     body = Json::parse(restore_fail->body);
     if (body.at("batch_result").at("results")[0].at("status") != "Failed" ||
-        body.at("batch_result").at("results")[1].at("status") != "NotExecuted") return finish(false);
+        body.at("batch_result").at("results")[1].at("status") != "NotExecuted") return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
     const auto recover_again = post("/api/magnetic/safety/acknowledge-external-resynchronization",
         R"({"confirm_external_resynchronization":true})");
-    if (!recover_again || recover_again->status != 200) return finish(false);
+    if (!recover_again || recover_again->status != 200) return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
 
     // Standard rewrite succeeds; RT stage fails. The response names the partial side effect.
     io_ptr->fail_at_stage = io_ptr->stages + 5;
@@ -516,11 +494,11 @@ bool TestService() {
         R"({"logical_ids":[1793,1538],"action":"enable","press_mm":0.8,"release_mm":0.6,"resolve_dks":true})");
     if (!rt_after_restore_fail || rt_after_restore_fail->status != 409 ||
         io_ptr->reports.size() != before_rt_fail + 6 ||
-        io_ptr->reports[before_rt_fail + 5][2] != 0x54) return finish(false);
+        io_ptr->reports[before_rt_fail + 5][2] != 0x54) return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
     body = Json::parse(rt_after_restore_fail->body);
     if (body.at("batch_result").at("results")[0].at("detail").get<std::string>().find(
             "DKS restored before RT submission failed") == std::string::npos ||
-        body.at("batch_result").at("results")[1].at("status") != "NotExecuted") return finish(false);
+        body.at("batch_result").at("results")[1].at("status") != "NotExecuted") return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
 
     return finish(true);
 }

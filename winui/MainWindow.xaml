@@ -71,6 +71,12 @@
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
 
+                <NavigationViewItem Content="配置文件" Tag="profiles">
+                    <NavigationViewItem.Icon>
+                        <SymbolIcon Symbol="Save" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+
                 <NavigationViewItem
                     Content="游戏集成"
                     Tag="gsi">

@@ -183,6 +183,7 @@ public sealed partial class MainWindow : Window
             "home" => typeof(HomePage),
             "lighting" => typeof(LightingPage),
             "magnetic" => typeof(MagneticSwitchPage),
+            "profiles" => typeof(ProfilesPage),
             "gsi" => typeof(GameIntegrationPage),
             "studio" => typeof(StudioPage),
             _ => null

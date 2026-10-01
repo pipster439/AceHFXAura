@@ -18,6 +18,10 @@ public sealed class MagneticRapidTriggerValue
     [JsonPropertyName("enabled")] public bool Enabled { get; set; }
     [JsonPropertyName("press_raw")] public byte PressRaw { get; set; }
     [JsonPropertyName("release_raw")] public byte ReleaseRaw { get; set; }
+    // Older pair-only daemon responses always contained both values.
+    [JsonPropertyName("press_known")] public bool PressKnown { get; set; } = true;
+    [JsonPropertyName("release_known")] public bool ReleaseKnown { get; set; } = true;
+    [JsonPropertyName("continuous")] public bool Continuous { get; set; }
     [JsonPropertyName("source")] public string Source { get; set; } = "Unknown";
 }
 
@@ -229,7 +233,7 @@ public sealed class MagneticControlClient(HttpClient? http = null) : IMagneticCo
     public Task<MagneticStatus> SetGlobalDeadzoneAsync(double topMm, double bottomMm) =>
         SendAsync("global/deadzone", new { top_mm = topMm, bottom_mm = bottomMm });
     public Task<MagneticStatus> SetGlobalRapidTriggerAsync(double pressMm, double releaseMm, double topMm, double bottomMm, bool separateMode) =>
-        SendAsync("global/rapid-trigger", new { press_mm = pressMm, release_mm = releaseMm, top_mm = topMm, bottom_mm = bottomMm, separate_mode = separateMode });
+        Task.FromResult(new MagneticStatus { Status = "error", LastError = "旧版批量快速触发写入已停用，请选择按键后设置。" });
     public Task<MagneticStatus> AcknowledgeExternalResynchronizationAsync() =>
         SendAsync("safety/acknowledge-external-resynchronization", new { confirm_external_resynchronization = true });
 

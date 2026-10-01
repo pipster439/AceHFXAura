@@ -11,6 +11,8 @@ public partial class App : Application
 {
     private static Window? _window;
     public static Window? MainWindowInstance => _window;
+    // Transport only. The daemon is the sole Profile document/runtime owner.
+    public static IProfileControlClient ProfileClient { get; } = new ProfileControlClient();
 
     private static readonly object _activationLock = new();
     private static bool _hasPendingActivation = false;

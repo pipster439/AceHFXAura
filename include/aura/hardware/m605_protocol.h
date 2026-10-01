@@ -44,7 +44,14 @@ DksConfig StandardDksConfiguration(uint16_t source_logical_key_id);
 // Builders accept logical identities only. Invalid or unverified inputs
 // produce no report, so callers cannot fall back to a guessed Wire ID.
 std::optional<Report> BuildPerKeyActuation(uint16_t logical_key_id, double millimeters);
+// Official USB capture on firmware 1.00.59: type 1 carries common actuation
+// and clears per-key inheritance flags. Layer 0 is fixed; no reset dispatcher.
+std::optional<Report> BuildResetAllPerKeyActuationOverrides(double common_millimeters);
 std::optional<Report> BuildAnalogEffect(uint8_t effect_id, uint8_t enabled);
+// Captured 51 54, continuous fixed OFF. No caller-supplied selector/layer.
+std::optional<Report> BuildPerKeyRapidTriggerUnified(uint16_t key, double sensitivity, bool enabled);
+std::optional<Report> BuildPerKeyRapidTriggerPress(uint16_t key, double sensitivity, bool enabled);
+std::optional<Report> BuildPerKeyRapidTriggerRelease(uint16_t key, double sensitivity, bool enabled);
 // Fixed Press/Release pair; no caller-supplied vendor packet list.
 std::optional<std::array<Report, 2>> BuildPerKeyRapidTriggerStages(
     uint16_t logical_key_id, double press_mm, double release_mm, bool enabled);
@@ -63,6 +70,7 @@ Report BuildResetSpeedTapRuntimeToProfile();
 // Phase 6.1A Global Magnetic Settings builders:
 std::optional<Report> BuildGlobalActuation(double millimeters);
 std::optional<Report> BuildGlobalDeadzone(double top_mm, double bottom_mm);
+// Compatibility stub ONLY: always returns nullopt; 51 53 is not physically validated.
 std::optional<Report> BuildGlobalRapidTrigger(
     double press_mm, double release_mm, double top_mm, double bottom_mm, bool separate_mode);
 
