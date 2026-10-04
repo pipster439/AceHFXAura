@@ -23,7 +23,12 @@ def digest(path):
 def command(args, cwd=ROOT):
     subprocess.run([str(x) for x in args], cwd=cwd, check=True)
 
-def product_version(path):
+def candidate_build_id(stage, files):
+    # Include the managed publish output: public metadata changes must identify a new candidate.
+    published = {p.relative_to(stage).as_posix(): digest(p) for p in sorted(stage.rglob("*")) if p.is_file()}
+    return hashlib.sha256(json.dumps({"runtime_files": files, "published_files": published}, sort_keys=True).encode()).hexdigest()[:16]
+
+def product_version(path, *, exact=False):
     """Read the actual Windows version resource; never trust a requested build version."""
     import ctypes
     from ctypes import wintypes
@@ -42,7 +47,8 @@ def product_version(path):
     key=f"\\StringFileInfo\\{pair[0]:04x}{pair[1]:04x}\\ProductVersion"
     if not version.VerQueryValueW(buffer,key,ctypes.byref(pointer),ctypes.byref(length)):
         raise RuntimeError(f"Missing ProductVersion: {path}")
-    return ctypes.wstring_at(pointer).split("+")[0]
+    value = ctypes.wstring_at(pointer)
+    return value if exact else value.split("+")[0]
 
 def verify_package(directory):
     directory = Path(directory)
@@ -73,11 +79,13 @@ def verify_package(directory):
             raise RuntimeError(f"Runtime hash mismatch: {path}")
     if roles != ASSETS:
         raise RuntimeError("Runtime roles do not match the release contract")
-    for path in (directory/"Aura.exe", directory/"Aura.dll", payload/"aura_daemon.exe", payload/"aura_web_ui.exe"):
-        if product_version(path) != manifest["version"]:
+    if not (directory / "AsusPlatform.dll").is_file():
+        raise RuntimeError("Incomplete self-contained WinUI output: AsusPlatform.dll")
+    for path in (directory/"Aura.exe", directory/"Aura.dll", directory/"AsusPlatform.dll", payload/"aura_daemon.exe", payload/"aura_web_ui.exe"):
+        if product_version(path, exact=True) != manifest["version"]:
             raise RuntimeError(f"Stale or mixed-version binary: {path}")
     for file in directory.rglob("*"):
-        if file.name.lower() in ("aackbhal_x64.dll", "config.json", "portable.marker"):
+        if file.name.lower() in ("aackbhal_x64.dll", "config.json", "portable.marker") or file.suffix.lower() == ".pdb":
             raise RuntimeError(f"Forbidden public package file: {file}")
     for name in ("aura_daemon.exe", "aura_web_ui.exe"):
         data = (payload / name).read_bytes()
@@ -108,7 +116,8 @@ def build(version, generator, vcvars, build_dir=None, skip_build=False, skip_zip
         stage = Path(staging)
         command(["dotnet", "publish", ROOT / "winui/Aura.WinUI.csproj", "-c", "Release", "-p:Platform=x64",
                  "-r", "win-x64", "--self-contained", "true", "-p:WindowsPackageType=None",
-                 "-p:WindowsAppSDKSelfContained=true", "-o", stage])
+                 "-p:WindowsAppSDKSelfContained=true", "-p:DebugType=None", "-p:DebugSymbols=false",
+                 "-p:IncludeSourceRevisionInInformationalVersion=false", f"-p:Version={version}", "-o", stage])
         payload = stage / "runtime-payload"
         payload.mkdir()
         files = []
@@ -122,7 +131,7 @@ def build(version, generator, vcvars, build_dir=None, skip_build=False, skip_zip
         for source in vc_runtime(vcvars):
             shutil.copy2(source, payload / source.name)
             files.append({"role": "native_dependency", "path": source.name, "sha256": digest(source)})
-        build_id = hashlib.sha256(json.dumps(files, sort_keys=True).encode()).hexdigest()[:16]
+        build_id = candidate_build_id(stage, files)
         manifest = {"schema_version": 1, "version": version, "build_id": build_id, "files": files}
         (payload / "runtime-manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
         shutil.copy2(ROOT / "LICENSE", stage / "LICENSE")

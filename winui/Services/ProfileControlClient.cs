@@ -8,6 +8,7 @@ namespace Aura_WinUI.Services;
 // A transport DTO only. The daemon owns all document and runtime state.
 public sealed class ProfileApiResponse
 {
+    public HardwareSlotStatus? HardwareSlotStatus { get; set; }
     public string Status { get; set; } = "";
     public int ApiVersion { get; set; }
     public long DocumentRevision { get; set; }
@@ -39,6 +40,16 @@ public sealed class ProfileApiResponse
 }
 
 // Observed device status, never a Profile desired field or submission shadow.
+public sealed class HardwareSlotStatus
+{
+    public string? ProfileActivationBackend { get; set; }
+    public int? DesiredHardwareSlot { get; set; }
+    public int? ObservedHardwareSlot { get; set; }
+    public bool? HardwareSlotMatch { get; set; }
+    public string? SlotObservationTime { get; set; }
+    public string? Source { get; set; }
+}
+
 public sealed class HardwareRtGateStatus
 {
     public string State { get; set; } = "unknown";
@@ -87,6 +98,7 @@ public interface IProfileControlClient
     Task<ProfileApiResponse> GetRuntimeAsync(CancellationToken token = default);
     Task<ProfileApiResponse> GetDiagnosticsAsync(CancellationToken token = default);
     Task<ProfileApiResponse> GetHardwareRtGateAsync(CancellationToken token = default) => throw new NotSupportedException();
+    Task<ProfileApiResponse> RefreshHardwareSlotAsync(CancellationToken token = default) => throw new NotSupportedException();
     Task<ProfileApiResponse> GetAutomationAsync(CancellationToken token = default) => throw new NotSupportedException();
     Task<ProfileApiResponse> GetAutomationStatusAsync(CancellationToken token = default) => GetAutomationAsync(token);
     Task<ProfileApiResponse> UpdateAutomationAsync(DeviceProfileAutomationConfig configuration, long expectedRevision,
@@ -118,6 +130,8 @@ public sealed class ProfileControlClient(HttpClient? http = null) : IProfileCont
         SendAsync(HttpMethod.Get, Base + "/diagnostics", null, token);
     public Task<ProfileApiResponse> GetHardwareRtGateAsync(CancellationToken token = default) =>
         SendAsync(HttpMethod.Get, Base + "/hardware-rt-gate", null, token);
+    public Task<ProfileApiResponse> RefreshHardwareSlotAsync(CancellationToken token = default) =>
+        Mutation("hardware-slot/refresh", new { }, token);
     public Task<ProfileApiResponse> GetAutomationAsync(CancellationToken token = default) =>
         SendAsync(HttpMethod.Get, Base + "/automation", null, token);
     public Task<ProfileApiResponse> GetAutomationStatusAsync(CancellationToken token = default) =>

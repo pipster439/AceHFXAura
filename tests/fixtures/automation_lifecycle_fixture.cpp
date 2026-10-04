@@ -2,6 +2,8 @@
 #include "engine/effect.h"
 #include <stdexcept>
 #include <limits>
+#include <atomic>
+#include <cstdio>
 #ifndef LIFECYCLE_MARKER
 #define LIFECYCLE_MARKER 200
 #endif
@@ -13,6 +15,25 @@ int mode = 0;
 uint64_t finish_at = LIFECYCLE_FINISH;
 float opacity = 0.5f;
 unsigned created = 0, destroyed = 0, renders = 0, finished_calls = 0, opacity_calls = 0;
+std::atomic<uint64_t> next_instance{0};
+// Optional test journal: an identity survives across renders and ends at destruction.
+// A reload validation probe is distinguishable from an instance that actually renders.
+void Journal(const char* event, uint64_t instance, uint64_t elapsed) {
+    char path[MAX_PATH];
+    const auto length = GetEnvironmentVariableA("AURA_LIFECYCLE_FIXTURE_EVENTS", path, MAX_PATH);
+    if (!length || length >= MAX_PATH) return;
+    HANDLE file = CreateFileA(path, FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE,
+        nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE) return;
+    char line[256];
+    const auto size = snprintf(line, sizeof(line),
+        "{\"event\":\"%s\",\"marker\":%d,\"instance\":%llu,\"elapsed\":%llu}\n",
+        event, LIFECYCLE_MARKER, static_cast<unsigned long long>(instance),
+        static_cast<unsigned long long>(elapsed));
+    DWORD written;
+    if (size > 0 && size < sizeof(line)) WriteFile(file, line, static_cast<DWORD>(size), &written, nullptr);
+    CloseHandle(file);
+}
 void Trace(const char* text) {
     char path[MAX_PATH]; const auto length=GetEnvironmentVariableA("AURA_LIFECYCLE_FIXTURE_TRACE",path,MAX_PATH);
     if (!length || length>=MAX_PATH) return;
@@ -22,14 +43,18 @@ void Trace(const char* text) {
 }
 class Fixture final : public aura::Effect {
 public:
+    const uint64_t identity = ++next_instance;
     const int marker = LIFECYCLE_MARKER, behavior = mode;
     const uint64_t completion = finish_at;
     const float weight = opacity;
     uint64_t last_render = UINT64_MAX;
     mutable uint64_t last_finished = UINT64_MAX;
     unsigned ticks = 0;
+    Fixture() { Journal("created", identity, 0); }
+    ~Fixture() override { Journal("destroyed", identity, last_render); }
     void Render(uint64_t elapsed, aura::FrameBuffer& out, const aura::Keymap&) override {
         ++renders; ++ticks; last_render = elapsed;
+        Journal("render", identity, elapsed);
         Trace("render\n");
         Trace(marker == 200 ? "old_render\n" : "new_render\n");
         out.buffer[0] = marker; out.buffer[1] = marker; out.buffer[2] = marker;

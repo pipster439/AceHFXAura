@@ -27,6 +27,8 @@ public:
     ~MagneticControlService();
     void RegisterRoutes(httplib::Server& server);
     bool ObserveDeviceProfileForeground(const std::string& process_name);
+    void ObserveHardwareSlot();
+    bool WithProfileLightingOwnership(const std::function<bool()>& write_frame);
     void StartHardwareRtGateObservation(); // explicit production composition only
     void StartDeviceProfileAutomation(); // exactly one daemon worker; excluded from dry run
     void StopDeviceProfileAutomation();

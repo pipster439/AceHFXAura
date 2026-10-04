@@ -39,7 +39,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ hashFiles('winui/**/*.csproj', 'tests/**/*.csproj', '**/NuGet.Config', '**/packages.lock.json', 'VERSION') }}
+          key: nuget-${{ runner.os }}-${{ hashFiles('winui/**/*.csproj', 'src/**/*.csproj', 'tests/**/*.csproj', '**/NuGet.Config', '**/packages.lock.json', 'VERSION') }}
       - name: Run shared software CI
         shell: pwsh
         run: ./tools/ci/run-ci.ps1
@@ -63,4 +63,5 @@ jobs:
             artifacts/ci/*.log
             artifacts/ci/ctest-discovery.json
             artifacts/ci/ctest-results.xml
+            artifacts/ci/aura-gate-a-tests.xml
             artifacts/ci/dotnet-test/**/*.trx

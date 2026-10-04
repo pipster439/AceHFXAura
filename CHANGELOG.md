@@ -1,3 +1,11 @@
+## [0.1.0-alpha.7] — Final release freeze (not released)
+
+- HardwareSlot activation selects existing firmware banks with BasicInfo verification, selector deduplication, firmware lighting ownership and no automatic reclaim after external drift. HostManaged profile behavior remains separately supported.
+- Plugin reload regression fixtures isolate real GSI input; production reload lifecycle semantics remain unchanged.
+- ASUS read-only IPC command9 is additive to protocol v1; existing IDs1–8 are unchanged. Cooling and Aura diagnostics retain read-only safety gates.
+- Public WinUI ZIPs use exact product versions and omit managed PDB/local symbol paths. Candidate clean startup, sanitized upgrade, packaged keyboard/reconnect and CS2 acceptance passed; final exact-commit hosted CI and artifact acceptance are separate gates.
+- Known limits and current state: [release closure](docs/release/HARDWARE_SLOT_RELEASE_CLOSURE.md). No hidden hardware-bank authoring.
+
 ## [0.1.0-alpha.6] — Release candidate
 
 - Reactive, Ripple and Static key highlight now use physical Down/Up lifecycle input. OS key repeat is filtered; Reactive stays lit while held and fades after release; each Ripple press creates one wave.

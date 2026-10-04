@@ -68,8 +68,30 @@ authoritative. New decisions wait for serialization.
 
 Manual accepted selection sets existing session ManualHold inside this gate,
 including deferred/failed hardware submission. Pre-selection rejection does not.
-Old automatic tokens cannot write after that hold. Unknown/churn cannot clear it;
-stable different known foreground does. Save alone is not a manual action.
+Old automatic tokens cannot write after that hold. Save alone is not a manual action.
+Aura (`aura.exe`, normalized basename) is a control surface for override lifecycle,
+not an external context transition. When accepting Manual intent in Aura, the engine
+anchors to the immediately preceding stable external context only if the continuous
+control-surface entry is at most 30 seconds old. This checks candidate freshness;
+an established hold has no timer expiry. No second observer is introduced.
+
+If the current external foreground is stable, it is the anchor directly. If history
+is missing, stale, intervened by unresolved input, or current external focus is not
+stable, hold starts pending with no guessed anchor. The first stable external input
+anchors it and is suppressed. Only a DIFFERENT stable external foreground clears
+hold. Aura and unknown/transient input retain it. Notepad→Aura→manual B→Notepad
+therefore stays B; Notepad→Aura→charmap (stable) clears hold.
+
+Explicit `aura.exe` rules still match normally when no hold exists. During hold,
+all automatic decisions are suppressed including those rules; bindings are not deleted.
+Diagnostic `manual_hold_foreground` remains compatible and equals the external anchor
+(null while pending); additive anchor/source/pending/control-surface fields explain
+provenance. Foreground identities remain basenames only.
+
+WinUI manual Apply success is a transient event with a local `NoticeSequence`, not
+derived from active/selected state. A native presentation cursor consumes each sequence
+once. Dismissal/normal success expiry and page unload cannot be undone by polling/rebase
+renders. Automatic success updates state and never creates a manual success notification.
 
 ## Startup / selection / dedup
 

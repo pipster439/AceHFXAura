@@ -1,0 +1,1278 @@
+{
+  "schema_version": 1,
+  "source_capture_sha256": "f397bf90c0ae4e18266185e7ac0c2c3c8d8415359c52aef2a3bb75691eea13b4",
+  "timeline": [
+    {
+      "frame": 3,
+      "timestamp_utc": "2026-10-02T15:52:45.293067Z",
+      "timestamp_ns": 1790956365293067000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x0d",
+      "direction": "OUT",
+      "completed": false,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "12 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "12 00",
+        "selector": 0,
+        "kind": "QueryOrOtherReviewedCommand"
+      },
+      "identical_echo": null,
+      "delta_previous_out_ms": null
+    },
+    {
+      "frame": 4,
+      "timestamp_utc": "2026-10-02T15:52:45.294162Z",
+      "timestamp_ns": 1790956365294162000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x85",
+      "direction": "IN",
+      "completed": true,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "12 00 00 00 59 00 01 00 06 00 05 ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "12 00",
+        "selector": 0,
+        "kind": "QueryOrOtherReviewedCommand"
+      }
+    },
+    {
+      "frame": 5,
+      "timestamp_utc": "2026-10-02T15:52:54.607109Z",
+      "timestamp_ns": 1790956374607109000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x0d",
+      "direction": "OUT",
+      "completed": false,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "12 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "12 00",
+        "selector": 0,
+        "kind": "QueryOrOtherReviewedCommand"
+      },
+      "identical_echo": null,
+      "delta_previous_out_ms": 9314.042
+    },
+    {
+      "frame": 6,
+      "timestamp_utc": "2026-10-02T15:52:54.608034Z",
+      "timestamp_ns": 1790956374608034000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x85",
+      "direction": "IN",
+      "completed": true,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "12 00 00 00 59 00 01 00 06 00 05 ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "12 00",
+        "selector": 0,
+        "kind": "QueryOrOtherReviewedCommand"
+      }
+    },
+    {
+      "frame": 7,
+      "timestamp_utc": "2026-10-02T15:52:55.123204Z",
+      "timestamp_ns": 1790956375123204000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x0d",
+      "direction": "OUT",
+      "completed": false,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "12 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "12 00",
+        "selector": 0,
+        "kind": "QueryOrOtherReviewedCommand"
+      },
+      "identical_echo": null,
+      "delta_previous_out_ms": 516.095
+    },
+    {
+      "frame": 8,
+      "timestamp_utc": "2026-10-02T15:52:55.124037Z",
+      "timestamp_ns": 1790956375124037000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x85",
+      "direction": "IN",
+      "completed": true,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "12 00 00 00 59 00 01 00 06 00 05 ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "12 00",
+        "selector": 0,
+        "kind": "QueryOrOtherReviewedCommand"
+      }
+    },
+    {
+      "frame": 9,
+      "timestamp_utc": "2026-10-02T15:52:55.640155Z",
+      "timestamp_ns": 1790956375640155000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x0d",
+      "direction": "OUT",
+      "completed": false,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "12 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "12 00",
+        "selector": 0,
+        "kind": "QueryOrOtherReviewedCommand"
+      },
+      "identical_echo": null,
+      "delta_previous_out_ms": 516.951
+    },
+    {
+      "frame": 10,
+      "timestamp_utc": "2026-10-02T15:52:55.641039Z",
+      "timestamp_ns": 1790956375641039000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x85",
+      "direction": "IN",
+      "completed": true,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "12 00 00 00 59 00 01 00 06 00 05 ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "12 00",
+        "selector": 0,
+        "kind": "QueryOrOtherReviewedCommand"
+      }
+    },
+    {
+      "frame": 11,
+      "timestamp_utc": "2026-10-02T15:52:56.153271Z",
+      "timestamp_ns": 1790956376153271000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x0d",
+      "direction": "OUT",
+      "completed": false,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "12 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "12 00",
+        "selector": 0,
+        "kind": "QueryOrOtherReviewedCommand"
+      },
+      "identical_echo": null,
+      "delta_previous_out_ms": 513.116
+    },
+    {
+      "frame": 12,
+      "timestamp_utc": "2026-10-02T15:52:56.154175Z",
+      "timestamp_ns": 1790956376154175000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x85",
+      "direction": "IN",
+      "completed": true,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "12 00 00 00 59 00 01 00 06 00 05 ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "12 00",
+        "selector": 0,
+        "kind": "QueryOrOtherReviewedCommand"
+      }
+    },
+    {
+      "frame": 13,
+      "timestamp_utc": "2026-10-02T15:53:03.505456Z",
+      "timestamp_ns": 1790956383505456000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x0d",
+      "direction": "OUT",
+      "completed": false,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "51 54 00 00 12 00 02 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "51 54",
+        "selector": 0,
+        "kind": "PerKeyRt",
+        "wire": 18,
+        "sensitivity_raw": 2,
+        "continuous": 0,
+        "enabled": 1,
+        "verified_shape": true
+      },
+      "identical_echo": {
+        "frame": 14,
+        "delay_ms": 1.311
+      },
+      "delta_previous_out_ms": 7352.185
+    },
+    {
+      "frame": 14,
+      "timestamp_utc": "2026-10-02T15:53:03.506767Z",
+      "timestamp_ns": 1790956383506767000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x85",
+      "direction": "IN",
+      "completed": true,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "51 54 00 00 12 00 02 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "51 54",
+        "selector": 0,
+        "kind": "PerKeyRt",
+        "wire": 18,
+        "sensitivity_raw": 2,
+        "continuous": 0,
+        "enabled": 1,
+        "verified_shape": true
+      }
+    },
+    {
+      "frame": 15,
+      "timestamp_utc": "2026-10-02T15:53:03.510252Z",
+      "timestamp_ns": 1790956383510252000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x0d",
+      "direction": "OUT",
+      "completed": false,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "50 55 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "50 55",
+        "selector": 0,
+        "kind": "Apply",
+        "reserved_zero": true
+      },
+      "identical_echo": {
+        "frame": 16,
+        "delay_ms": 223.64
+      },
+      "delta_previous_out_ms": 4.796
+    },
+    {
+      "frame": 16,
+      "timestamp_utc": "2026-10-02T15:53:03.733892Z",
+      "timestamp_ns": 1790956383733892000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x85",
+      "direction": "IN",
+      "completed": true,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "50 55 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "50 55",
+        "selector": 0,
+        "kind": "Apply",
+        "reserved_zero": true
+      }
+    },
+    {
+      "frame": 17,
+      "timestamp_utc": "2026-10-02T15:53:04.015315Z",
+      "timestamp_ns": 1790956384015315000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x0d",
+      "direction": "OUT",
+      "completed": false,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "51 54 00 00 12 00 02 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "51 54",
+        "selector": 0,
+        "kind": "PerKeyRt",
+        "wire": 18,
+        "sensitivity_raw": 2,
+        "continuous": 0,
+        "enabled": 1,
+        "verified_shape": true
+      },
+      "identical_echo": {
+        "frame": 18,
+        "delay_ms": 1.585
+      },
+      "delta_previous_out_ms": 505.063
+    },
+    {
+      "frame": 18,
+      "timestamp_utc": "2026-10-02T15:53:04.016900Z",
+      "timestamp_ns": 1790956384016900000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x85",
+      "direction": "IN",
+      "completed": true,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "51 54 00 00 12 00 02 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "51 54",
+        "selector": 0,
+        "kind": "PerKeyRt",
+        "wire": 18,
+        "sensitivity_raw": 2,
+        "continuous": 0,
+        "enabled": 1,
+        "verified_shape": true
+      }
+    },
+    {
+      "frame": 19,
+      "timestamp_utc": "2026-10-02T15:53:29.116851Z",
+      "timestamp_ns": 1790956409116851000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x0d",
+      "direction": "OUT",
+      "completed": false,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "12 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "12 00",
+        "selector": 0,
+        "kind": "QueryOrOtherReviewedCommand"
+      },
+      "identical_echo": null,
+      "delta_previous_out_ms": 25101.536
+    },
+    {
+      "frame": 20,
+      "timestamp_utc": "2026-10-02T15:53:29.118097Z",
+      "timestamp_ns": 1790956409118097000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x85",
+      "direction": "IN",
+      "completed": true,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "12 00 00 00 59 00 01 00 06 00 05 ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "12 00",
+        "selector": 0,
+        "kind": "QueryOrOtherReviewedCommand"
+      }
+    },
+    {
+      "frame": 21,
+      "timestamp_utc": "2026-10-02T15:53:29.620254Z",
+      "timestamp_ns": 1790956409620254000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x0d",
+      "direction": "OUT",
+      "completed": false,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "12 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "12 00",
+        "selector": 0,
+        "kind": "QueryOrOtherReviewedCommand"
+      },
+      "identical_echo": null,
+      "delta_previous_out_ms": 503.403
+    },
+    {
+      "frame": 22,
+      "timestamp_utc": "2026-10-02T15:53:29.622103Z",
+      "timestamp_ns": 1790956409622103000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x85",
+      "direction": "IN",
+      "completed": true,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "12 00 00 00 59 00 01 00 06 00 05 ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "12 00",
+        "selector": 0,
+        "kind": "QueryOrOtherReviewedCommand"
+      }
+    },
+    {
+      "frame": 23,
+      "timestamp_utc": "2026-10-02T15:53:30.138345Z",
+      "timestamp_ns": 1790956410138345000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x0d",
+      "direction": "OUT",
+      "completed": false,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "12 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "12 00",
+        "selector": 0,
+        "kind": "QueryOrOtherReviewedCommand"
+      },
+      "identical_echo": null,
+      "delta_previous_out_ms": 518.091
+    },
+    {
+      "frame": 24,
+      "timestamp_utc": "2026-10-02T15:53:30.140108Z",
+      "timestamp_ns": 1790956410140108000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x85",
+      "direction": "IN",
+      "completed": true,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "12 00 00 00 59 00 01 00 06 00 05 ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "12 00",
+        "selector": 0,
+        "kind": "QueryOrOtherReviewedCommand"
+      }
+    },
+    {
+      "frame": 25,
+      "timestamp_utc": "2026-10-02T15:53:30.652881Z",
+      "timestamp_ns": 1790956410652881000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x0d",
+      "direction": "OUT",
+      "completed": false,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "12 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "12 00",
+        "selector": 0,
+        "kind": "QueryOrOtherReviewedCommand"
+      },
+      "identical_echo": null,
+      "delta_previous_out_ms": 514.536
+    },
+    {
+      "frame": 26,
+      "timestamp_utc": "2026-10-02T15:53:30.654242Z",
+      "timestamp_ns": 1790956410654242000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x85",
+      "direction": "IN",
+      "completed": true,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "12 00 00 00 59 00 01 00 06 00 05 ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "12 00",
+        "selector": 0,
+        "kind": "QueryOrOtherReviewedCommand"
+      }
+    },
+    {
+      "frame": 27,
+      "timestamp_utc": "2026-10-02T15:53:45.298389Z",
+      "timestamp_ns": 1790956425298389000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x0d",
+      "direction": "OUT",
+      "completed": false,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "12 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "12 00",
+        "selector": 0,
+        "kind": "QueryOrOtherReviewedCommand"
+      },
+      "identical_echo": null,
+      "delta_previous_out_ms": 14645.508
+    },
+    {
+      "frame": 28,
+      "timestamp_utc": "2026-10-02T15:53:45.300426Z",
+      "timestamp_ns": 1790956425300426000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x85",
+      "direction": "IN",
+      "completed": true,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "12 00 00 00 59 00 01 00 06 00 05 ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "12 00",
+        "selector": 0,
+        "kind": "QueryOrOtherReviewedCommand"
+      }
+    },
+    {
+      "frame": 29,
+      "timestamp_utc": "2026-10-02T15:53:49.456237Z",
+      "timestamp_ns": 1790956429456237000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x0d",
+      "direction": "OUT",
+      "completed": false,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "51 00 00 00 03 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "51 00",
+        "selector": 0,
+        "kind": "BankSelection",
+        "slot": 3
+      },
+      "identical_echo": {
+        "frame": 30,
+        "delay_ms": 97.875
+      },
+      "delta_previous_out_ms": 4157.848
+    },
+    {
+      "frame": 30,
+      "timestamp_utc": "2026-10-02T15:53:49.554112Z",
+      "timestamp_ns": 1790956429554112000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x85",
+      "direction": "IN",
+      "completed": true,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "51 00 00 00 03 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "51 00",
+        "selector": 0,
+        "kind": "BankSelection",
+        "slot": 3
+      }
+    },
+    {
+      "frame": 31,
+      "timestamp_utc": "2026-10-02T15:53:51.235820Z",
+      "timestamp_ns": 1790956431235820000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x0d",
+      "direction": "OUT",
+      "completed": false,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "51 00 00 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "51 00",
+        "selector": 0,
+        "kind": "BankSelection",
+        "slot": 1
+      },
+      "identical_echo": {
+        "frame": 32,
+        "delay_ms": 127.682
+      },
+      "delta_previous_out_ms": 1779.583
+    },
+    {
+      "frame": 32,
+      "timestamp_utc": "2026-10-02T15:53:51.363502Z",
+      "timestamp_ns": 1790956431363502000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x85",
+      "direction": "IN",
+      "completed": true,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "51 00 00 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "51 00",
+        "selector": 0,
+        "kind": "BankSelection",
+        "slot": 1
+      }
+    },
+    {
+      "frame": 33,
+      "timestamp_utc": "2026-10-02T15:54:45.296149Z",
+      "timestamp_ns": 1790956485296149000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x0d",
+      "direction": "OUT",
+      "completed": false,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "12 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "12 00",
+        "selector": 0,
+        "kind": "QueryOrOtherReviewedCommand"
+      },
+      "identical_echo": null,
+      "delta_previous_out_ms": 54060.329
+    },
+    {
+      "frame": 34,
+      "timestamp_utc": "2026-10-02T15:54:45.298060Z",
+      "timestamp_ns": 1790956485298060000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x85",
+      "direction": "IN",
+      "completed": true,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "12 00 00 00 59 00 01 00 06 08 01 ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "12 00",
+        "selector": 0,
+        "kind": "QueryOrOtherReviewedCommand"
+      }
+    },
+    {
+      "frame": 35,
+      "timestamp_utc": "2026-10-02T15:55:45.294956Z",
+      "timestamp_ns": 1790956545294956000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x0d",
+      "direction": "OUT",
+      "completed": false,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "12 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "12 00",
+        "selector": 0,
+        "kind": "QueryOrOtherReviewedCommand"
+      },
+      "identical_echo": null,
+      "delta_previous_out_ms": 59998.807
+    },
+    {
+      "frame": 36,
+      "timestamp_utc": "2026-10-02T15:55:45.296205Z",
+      "timestamp_ns": 1790956545296205000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x85",
+      "direction": "IN",
+      "completed": true,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "12 00 00 00 59 00 01 00 06 08 01 ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "12 00",
+        "selector": 0,
+        "kind": "QueryOrOtherReviewedCommand"
+      }
+    },
+    {
+      "frame": 37,
+      "timestamp_utc": "2026-10-02T15:56:45.303273Z",
+      "timestamp_ns": 1790956605303273000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x0d",
+      "direction": "OUT",
+      "completed": false,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "12 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "12 00",
+        "selector": 0,
+        "kind": "QueryOrOtherReviewedCommand"
+      },
+      "identical_echo": null,
+      "delta_previous_out_ms": 60008.317
+    },
+    {
+      "frame": 38,
+      "timestamp_utc": "2026-10-02T15:56:45.304336Z",
+      "timestamp_ns": 1790956605304336000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x85",
+      "direction": "IN",
+      "completed": true,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "12 00 00 00 59 00 01 00 06 08 01 ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "12 00",
+        "selector": 0,
+        "kind": "QueryOrOtherReviewedCommand"
+      }
+    },
+    {
+      "frame": 39,
+      "timestamp_utc": "2026-10-02T15:56:59.984617Z",
+      "timestamp_ns": 1790956619984617000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x0d",
+      "direction": "OUT",
+      "completed": false,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "51 54 00 00 12 00 01 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "51 54",
+        "selector": 0,
+        "kind": "PerKeyRt",
+        "wire": 18,
+        "sensitivity_raw": 1,
+        "continuous": 0,
+        "enabled": 1,
+        "verified_shape": true
+      },
+      "identical_echo": {
+        "frame": 40,
+        "delay_ms": 0.904
+      },
+      "delta_previous_out_ms": 14681.344
+    },
+    {
+      "frame": 40,
+      "timestamp_utc": "2026-10-02T15:56:59.985521Z",
+      "timestamp_ns": 1790956619985521000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x85",
+      "direction": "IN",
+      "completed": true,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "51 54 00 00 12 00 01 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "51 54",
+        "selector": 0,
+        "kind": "PerKeyRt",
+        "wire": 18,
+        "sensitivity_raw": 1,
+        "continuous": 0,
+        "enabled": 1,
+        "verified_shape": true
+      }
+    },
+    {
+      "frame": 41,
+      "timestamp_utc": "2026-10-02T15:56:59.988579Z",
+      "timestamp_ns": 1790956619988579000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x0d",
+      "direction": "OUT",
+      "completed": false,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "50 55 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "50 55",
+        "selector": 0,
+        "kind": "Apply",
+        "reserved_zero": true
+      },
+      "identical_echo": {
+        "frame": 42,
+        "delay_ms": 211.942
+      },
+      "delta_previous_out_ms": 3.962
+    },
+    {
+      "frame": 42,
+      "timestamp_utc": "2026-10-02T15:57:00.200521Z",
+      "timestamp_ns": 1790956620200521000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x85",
+      "direction": "IN",
+      "completed": true,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "50 55 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "50 55",
+        "selector": 0,
+        "kind": "Apply",
+        "reserved_zero": true
+      }
+    },
+    {
+      "frame": 43,
+      "timestamp_utc": "2026-10-02T15:57:00.493950Z",
+      "timestamp_ns": 1790956620493950000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x0d",
+      "direction": "OUT",
+      "completed": false,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "51 54 00 00 12 00 01 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "51 54",
+        "selector": 0,
+        "kind": "PerKeyRt",
+        "wire": 18,
+        "sensitivity_raw": 1,
+        "continuous": 0,
+        "enabled": 1,
+        "verified_shape": true
+      },
+      "identical_echo": {
+        "frame": 44,
+        "delay_ms": 1.704
+      },
+      "delta_previous_out_ms": 505.371
+    },
+    {
+      "frame": 44,
+      "timestamp_utc": "2026-10-02T15:57:00.495654Z",
+      "timestamp_ns": 1790956620495654000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x85",
+      "direction": "IN",
+      "completed": true,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "51 54 00 00 12 00 01 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "51 54",
+        "selector": 0,
+        "kind": "PerKeyRt",
+        "wire": 18,
+        "sensitivity_raw": 1,
+        "continuous": 0,
+        "enabled": 1,
+        "verified_shape": true
+      }
+    },
+    {
+      "frame": 45,
+      "timestamp_utc": "2026-10-02T15:57:00.996969Z",
+      "timestamp_ns": 1790956620996969000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x0d",
+      "direction": "OUT",
+      "completed": false,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "51 54 00 00 12 00 01 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "51 54",
+        "selector": 0,
+        "kind": "PerKeyRt",
+        "wire": 18,
+        "sensitivity_raw": 1,
+        "continuous": 0,
+        "enabled": 1,
+        "verified_shape": true
+      },
+      "identical_echo": {
+        "frame": 46,
+        "delay_ms": 1.693
+      },
+      "delta_previous_out_ms": 503.019
+    },
+    {
+      "frame": 46,
+      "timestamp_utc": "2026-10-02T15:57:00.998662Z",
+      "timestamp_ns": 1790956620998662000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x85",
+      "direction": "IN",
+      "completed": true,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "51 54 00 00 12 00 01 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "51 54",
+        "selector": 0,
+        "kind": "PerKeyRt",
+        "wire": 18,
+        "sensitivity_raw": 1,
+        "continuous": 0,
+        "enabled": 1,
+        "verified_shape": true
+      }
+    },
+    {
+      "frame": 47,
+      "timestamp_utc": "2026-10-02T15:57:01.511825Z",
+      "timestamp_ns": 1790956621511825000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x0d",
+      "direction": "OUT",
+      "completed": false,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "51 54 00 00 12 00 01 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "51 54",
+        "selector": 0,
+        "kind": "PerKeyRt",
+        "wire": 18,
+        "sensitivity_raw": 1,
+        "continuous": 0,
+        "enabled": 1,
+        "verified_shape": true
+      },
+      "identical_echo": {
+        "frame": 48,
+        "delay_ms": 0.843
+      },
+      "delta_previous_out_ms": 514.856
+    },
+    {
+      "frame": 48,
+      "timestamp_utc": "2026-10-02T15:57:01.512668Z",
+      "timestamp_ns": 1790956621512668000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x85",
+      "direction": "IN",
+      "completed": true,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "51 54 00 00 12 00 01 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "51 54",
+        "selector": 0,
+        "kind": "PerKeyRt",
+        "wire": 18,
+        "sensitivity_raw": 1,
+        "continuous": 0,
+        "enabled": 1,
+        "verified_shape": true
+      }
+    },
+    {
+      "frame": 49,
+      "timestamp_utc": "2026-10-02T15:57:04.152080Z",
+      "timestamp_ns": 1790956624152080000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x0d",
+      "direction": "OUT",
+      "completed": false,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "51 00 00 00 03 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "51 00",
+        "selector": 0,
+        "kind": "BankSelection",
+        "slot": 3
+      },
+      "identical_echo": {
+        "frame": 50,
+        "delay_ms": 99.124
+      },
+      "delta_previous_out_ms": 2640.255
+    },
+    {
+      "frame": 50,
+      "timestamp_utc": "2026-10-02T15:57:04.251204Z",
+      "timestamp_ns": 1790956624251204000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x85",
+      "direction": "IN",
+      "completed": true,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "51 00 00 00 03 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "51 00",
+        "selector": 0,
+        "kind": "BankSelection",
+        "slot": 3
+      }
+    },
+    {
+      "frame": 51,
+      "timestamp_utc": "2026-10-02T15:57:04.571796Z",
+      "timestamp_ns": 1790956624571796000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x0d",
+      "direction": "OUT",
+      "completed": false,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "51 00 00 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "51 00",
+        "selector": 0,
+        "kind": "BankSelection",
+        "slot": 1
+      },
+      "identical_echo": {
+        "frame": 52,
+        "delay_ms": 126.663
+      },
+      "delta_previous_out_ms": 419.716
+    },
+    {
+      "frame": 52,
+      "timestamp_utc": "2026-10-02T15:57:04.698459Z",
+      "timestamp_ns": 1790956624698459000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x85",
+      "direction": "IN",
+      "completed": true,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "51 00 00 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "51 00",
+        "selector": 0,
+        "kind": "BankSelection",
+        "slot": 1
+      }
+    },
+    {
+      "frame": 53,
+      "timestamp_utc": "2026-10-02T15:57:14.761907Z",
+      "timestamp_ns": 1790956634761907000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x0d",
+      "direction": "OUT",
+      "completed": false,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "12 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "12 00",
+        "selector": 0,
+        "kind": "QueryOrOtherReviewedCommand"
+      },
+      "identical_echo": null,
+      "delta_previous_out_ms": 10190.111
+    },
+    {
+      "frame": 54,
+      "timestamp_utc": "2026-10-02T15:57:14.762335Z",
+      "timestamp_ns": 1790956634762335000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x85",
+      "direction": "IN",
+      "completed": true,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "12 00 00 00 59 00 01 00 06 08 01 ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "12 00",
+        "selector": 0,
+        "kind": "QueryOrOtherReviewedCommand"
+      }
+    },
+    {
+      "frame": 55,
+      "timestamp_utc": "2026-10-02T15:57:15.266884Z",
+      "timestamp_ns": 1790956635266884000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x0d",
+      "direction": "OUT",
+      "completed": false,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "12 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "12 00",
+        "selector": 0,
+        "kind": "QueryOrOtherReviewedCommand"
+      },
+      "identical_echo": null,
+      "delta_previous_out_ms": 504.977
+    },
+    {
+      "frame": 56,
+      "timestamp_utc": "2026-10-02T15:57:15.267342Z",
+      "timestamp_ns": 1790956635267342000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x85",
+      "direction": "IN",
+      "completed": true,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "12 00 00 00 59 00 01 00 06 08 01 ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "12 00",
+        "selector": 0,
+        "kind": "QueryOrOtherReviewedCommand"
+      }
+    },
+    {
+      "frame": 57,
+      "timestamp_utc": "2026-10-02T15:57:15.771169Z",
+      "timestamp_ns": 1790956635771169000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x0d",
+      "direction": "OUT",
+      "completed": false,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "12 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "12 00",
+        "selector": 0,
+        "kind": "QueryOrOtherReviewedCommand"
+      },
+      "identical_echo": null,
+      "delta_previous_out_ms": 504.285
+    },
+    {
+      "frame": 58,
+      "timestamp_utc": "2026-10-02T15:57:15.772468Z",
+      "timestamp_ns": 1790956635772468000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x85",
+      "direction": "IN",
+      "completed": true,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "12 00 00 00 59 00 01 00 06 08 01 ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "12 00",
+        "selector": 0,
+        "kind": "QueryOrOtherReviewedCommand"
+      }
+    },
+    {
+      "frame": 59,
+      "timestamp_utc": "2026-10-02T15:57:16.274077Z",
+      "timestamp_ns": 1790956636274077000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x0d",
+      "direction": "OUT",
+      "completed": false,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "12 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "12 00",
+        "selector": 0,
+        "kind": "QueryOrOtherReviewedCommand"
+      },
+      "identical_echo": null,
+      "delta_previous_out_ms": 502.908
+    },
+    {
+      "frame": 60,
+      "timestamp_utc": "2026-10-02T15:57:16.275475Z",
+      "timestamp_ns": 1790956636275475000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x85",
+      "direction": "IN",
+      "completed": true,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "12 00 00 00 59 00 01 00 06 08 01 ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "12 00",
+        "selector": 0,
+        "kind": "QueryOrOtherReviewedCommand"
+      }
+    }
+  ],
+  "final_ui_slot": 5,
+  "final_basicinfo_slot": 1,
+  "slot5_baseline_valid": false,
+  "limitation": "Captured UI write under stale slot authority; edit-bank destination not established; no process attribution."
+}

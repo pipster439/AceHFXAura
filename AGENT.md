@@ -35,9 +35,19 @@ Use current code as the source of truth. Start with [README](README.md) and the 
 
 - Local Windows validation uses the installed/default supported CMake generator. Do not explicitly request VS2022 merely to mirror CI.
 - On a VS2026 machine, use VS2026 directly (for example, `-G "Visual Studio 18 2026"`).
-- GitHub Actions intentionally pins `windows-2022` / VS2022 as an independent compatibility gate; it does not dictate the local generator.
+- GitHub Actions uses the workflow's `windows-latest` hosted runner as an independent compatibility gate; it does not dictate the local generator.
 
 ## Candidate build versus local deployment
 
 - Build/test/package output must not implicitly overwrite checkout-root executables or clear the user's runtime cache.
 - Before deliberately replacing a local runtime, back up config/binaries and validate the actual config with the candidate daemon. Resolve migration-required records explicitly, then deploy compatible config and binaries together. Never leave a new binary paired with a known rejected config as a completed handoff.
+
+## Concurrent agent safety
+
+Other agents may modify the repository concurrently.
+
+- Never revert, overwrite, stash, or otherwise modify unrelated changes made by other agents.
+- Restrict edits and commits to files owned by the current task.
+- If unrelated concurrent changes are detected, preserve them and exclude them from the current patch.
+- If tests or validation include concurrent changes, explicitly state that the result reflects the integrated working-tree state rather than the current patch in isolation.
+- Before release validation, rerun the full validation suite from a clean committed tree containing the intended integrated changes.

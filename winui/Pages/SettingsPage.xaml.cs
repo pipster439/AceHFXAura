@@ -11,6 +11,8 @@ public sealed partial class SettingsPage : Page
 {
     private bool _loading = true;
     private CancellationTokenSource? _lifetime;
+    private string _asusStatusSummary = "ASUS 平台状态查询中";
+    private string _coolingStatusSummary = "散热只读状态尚未查询";
     public SettingsPage()
     {
         InitializeComponent();
@@ -28,6 +30,8 @@ public sealed partial class SettingsPage : Page
         _loading = true;
         _lifetime?.Cancel(); _lifetime?.Dispose(); _lifetime = new();
         _ = PollAsync(_lifetime.Token);
+        _ = RefreshAsusPlatformAsync(_lifetime.Token);
+        _ = PollCoolingAsync(_lifetime.Token);
         DaemonSupervisor.Instance.StatusChanged -= OnStatus;
         DaemonSupervisor.Instance.StatusChanged += OnStatus;
         VersionText.Text = "版本: v" + ClientSettings.Version;
@@ -61,6 +65,54 @@ public sealed partial class SettingsPage : Page
             }
         }
         catch (OperationCanceledException) { }
+    }
+
+    private async void RefreshAsusPlatform_Click(object sender, RoutedEventArgs e)
+    {
+        if (_lifetime is { IsCancellationRequested: false }) await RefreshAsusPlatformAsync(_lifetime.Token);
+    }
+    private async Task PollCoolingAsync(CancellationToken token)
+    {
+        try
+        {
+            while (!token.IsCancellationRequested)
+            {
+                var cooling = await App.AsusPlatform.GetCoolingAsync(token);
+                if (token.IsCancellationRequested || !IsLoaded) return;
+                _coolingStatusSummary = Platform.AsusPlatformDiagnostics.Describe(cooling);
+                UpdateAsusDiagnosticsText();
+                await Task.Delay(cooling.Error == AceHFX.AsusPlatform.PlatformError.None ? 1000 : 30000, token);
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) { ClientSettings.Log(ex); }
+    }
+    private void UpdateAsusDiagnosticsText() => AsusPlatformStatusText.Text = _asusStatusSummary + "\n\n" + _coolingStatusSummary;
+    private async Task RefreshAsusPlatformAsync(CancellationToken token)
+    {
+        RefreshAsusPlatformButton.IsEnabled = false;
+        try
+        {
+            var status = await App.AsusPlatform.GetStatusAsync(token);
+            if (!token.IsCancellationRequested && IsLoaded)
+            {
+                _asusStatusSummary = Platform.AsusPlatformDiagnostics.Describe(status);
+                UpdateAsusDiagnosticsText();
+            }
+            var aura = await App.AuraRuntime.DiscoverAsync(token);
+            if (!token.IsCancellationRequested && IsLoaded)
+            {
+                _asusStatusSummary = Platform.AsusPlatformDiagnostics.Describe(status) + "\n\n" + Platform.AsusPlatformDiagnostics.Describe(aura);
+                UpdateAsusDiagnosticsText();
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            ClientSettings.Log(ex);
+            if (!token.IsCancellationRequested && IsLoaded) AsusPlatformStatusText.Text = "ASUS 平台状态暂不可用";
+        }
+        finally { if (!token.IsCancellationRequested && IsLoaded) RefreshAsusPlatformButton.IsEnabled = true; }
     }
 
     private void ThemeComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)

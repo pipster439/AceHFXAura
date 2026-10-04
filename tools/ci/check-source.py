@@ -2,14 +2,21 @@
 from pathlib import Path
 import re
 import subprocess
+from asus_call_guards import verify_tree
 
 ROOT = Path(__file__).resolve().parents[2]
+verify_tree(ROOT)
 
 def require(condition, message):
     if not condition:
         raise SystemExit(message)
 
 tracked = subprocess.check_output(["git", "ls-files", "-z"], cwd=ROOT).decode().split("\0")
+# ABI headers retain required mutating slots; production worker translation units must never call them in M2.
+for worker_source in (ROOT / "src/AuraWorker").glob("*.cpp"):
+    worker_text = worker_source.read_text(encoding="utf-8")
+    require(not re.search(r"->\s*(?:SwitchMode|RequireTokenByType|RequireDeviceControlState|ReleaseControl|Apply|put_\w+|SetLedMatrix)\s*\(", worker_text),
+            f"M2 prohibited Aura ownership/RGB call in {worker_source.name}")
 require("config.json" not in tracked, "User config must not be tracked")
 require(not any(re.match(r"plugins/src/effect_(studio|test|adv)_.*\.cpp$", p) for p in tracked),
         "Generated plugin sources must not be tracked")

@@ -40,6 +40,11 @@ try {
         'guards'='guards.log'; 'diff-check'='diff-check.log'; 'frontend-dependencies'='frontend-install.log'
         'configure'='configure.log'; 'native-build'='native-build.log'; 'ctest-discovery'='ctest-discovery.log'
         'ctest'='ctest.log'; 'daemon-integration'='daemon-integration.log'; 'dotnet-test'='dotnet-test.log'
+        'asus-platform-test'='asus-platform-test.log'
+        'fan-typelib-validator-test'='fan-typelib-validator-test.log'
+        'aura-gate-a-software'='aura-gate-a-software.log'
+        'aura-enumeration-software'='aura-enumeration-software.log'
+        'aura-mta-triage-software'='aura-mta-triage-software.log'
         'winui-build'='winui-build.log'; 'frontend-test'='frontend-test.log'; 'frontend-build'='frontend-build.log'
     }
     foreach ($name in $planned.Keys) {
@@ -57,9 +62,44 @@ try {
             if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) { throw "Required tool missing: $tool" }
         }
         Invoke-CiCommand python @('-B', 'tools/ci/check-source.py')
+        Invoke-CiCommand python @('-B', 'tools/ci/test_fan_read_only.py')
         Invoke-CiCommand python @('-B', 'tools/ci/check-idle-test-ports.py')
     }
     Invoke-CiStage $summary $output 'diff-check' 'diff-check.log' { Invoke-CiCommand git @('diff', '--check') }
+    Invoke-CiStage $summary $output 'aura-gate-a-software' 'aura-gate-a-software.log' {
+        $gateBuild = Join-Path $build 'aura-gate-a-software'
+        Invoke-CiCommand python @('-B', '-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_aura_gate_a_guards.py', '-v')
+        Invoke-CiCommand cmake @('-S', 'tools/AuraOwnershipExperiment', '-B', $gateBuild, '-A', 'x64', '-DAURA_GATE_A_SOFTWARE_TESTS=ON')
+        # CI compiles/runs only the fake API tests. Never build/run the actual candidate here.
+        Invoke-CiCommand cmake @('--build', $gateBuild, '--config', $Configuration, '--target', 'AuraGateATests', 'AuraGateAOwnerFixture')
+        Invoke-CiCommand ctest @('--test-dir', $gateBuild, '-C', $Configuration, '--output-on-failure', '--no-tests=error',
+            '--output-junit', (Join-Path $output 'aura-gate-a-tests.xml'))
+    }
+    Invoke-CiStage $summary $output 'aura-enumeration-software' 'aura-enumeration-software.log' {
+        Invoke-CiCommand python @('-B', '-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_aura_enumeration_characterizer.py', '-v')
+        $characterizerBuild = Join-Path $build 'aura-enumeration-characterizer'
+        Invoke-CiCommand cmake @('-S', 'tools/AuraEnumerationCharacterizer', '-B', $characterizerBuild, '-A', 'x64')
+        # Build/validate the reduced ABI; do not execute COM discovery in software CI.
+        Invoke-CiCommand cmake @('--build', $characterizerBuild, '--config', $Configuration, '--target', 'AuraEnumerationCharacterizer')
+    }
+    Invoke-CiStage $summary $output 'aura-mta-triage-software' 'aura-mta-triage-software.log' {
+        Invoke-CiCommand python @('-B', '-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_aura_mta_triage.py', '-v')
+        $probeBuild = Join-Path $build 'mta-probe'
+        $debugBuild = Join-Path $build 'mta-debugger'
+        Invoke-CiCommand cmake @('-S', 'tools/AuraMtaCrashProbe', '-B', $probeBuild, '-A', 'x64')
+        Invoke-CiCommand cmake @('--build', $probeBuild, '--config', $Configuration)
+        Invoke-CiCommand cmake @('-S', 'tools/AuraMtaDebugLauncher', '-B', $debugBuild, '-A', 'x64')
+        Invoke-CiCommand cmake @('--build', $debugBuild, '--config', $Configuration)
+        # Software CI never starts a vendor COM trial.
+    }
+    Invoke-CiStage $summary $output 'lighting-backend-software' 'lighting-backend-software.log' {
+        Invoke-CiCommand python @('-B', '-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_lighting_backend_probe.py', '-v')
+        Invoke-CiCommand python @('-B', '-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_servicemediator_contract.py', '-v')
+        $lightingProbeBuild = Join-Path $build 'lighting-backend-probe'
+        Invoke-CiCommand cmake @('-S', 'tools/LightingBackendProbe', '-B', $lightingProbeBuild, '-A', 'x64')
+        # Compile only. Actual mediator/WDL/MMF observations are opt-in local research.
+        Invoke-CiCommand cmake @('--build', $lightingProbeBuild, '--config', $Configuration)
+    }
     # Required before configure, even with SkipFrontend: CMake registers real Studio fixture DLL tests.
     Invoke-CiStage $summary $output 'frontend-dependencies' 'frontend-install.log' {
         Push-Location frontend
@@ -108,6 +148,16 @@ try {
     }
     Invoke-CiStage $summary $output 'winui-build' 'winui-build.log' -Skip:$SkipWinUI -Action {
         Invoke-CiCommand dotnet @('build', 'winui/Aura.WinUI.csproj', '-c', $Configuration, '-p:Platform=x64', '--nologo')
+    }
+    Invoke-CiStage $summary $output 'asus-platform-test' 'asus-platform-test.log' {
+        Invoke-CiCommand dotnet @('test', 'tests/AsusPlatform.Tests/AsusPlatform.Tests.csproj', '-c', $Configuration,
+            '--nologo', '--filter', 'TestCategory!=DesktopSmoke', '--logger', 'trx;LogFileName=asus-platform.trx',
+            '--results-directory', $testResults)
+    }
+    Invoke-CiStage $summary $output 'fan-typelib-validator-test' 'fan-typelib-validator-test.log' {
+        Invoke-CiCommand dotnet @('test', 'tests/FanTypeLibValidator.Tests/FanTypeLibValidator.Tests.csproj', '-c', $Configuration,
+            '--nologo', '--filter', 'TestCategory!=OfflineMetadata', '--logger', 'trx;LogFileName=fan-typelib-validator.trx',
+            '--results-directory', $testResults)
     }
     Invoke-CiStage $summary $output 'frontend-test' 'frontend-test.log' -Skip:$SkipFrontend -Action {
         Push-Location frontend

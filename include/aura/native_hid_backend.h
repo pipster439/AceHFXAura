@@ -70,6 +70,7 @@ public:
 
     // Read-only transport guard; writes remain private to the backend/runtime.
     static bool IsSupportedOutputReport(const std::array<uint8_t, HID_REPORT_SIZE>& report);
+    static bool IsSupportedOutputReport(const uint8_t* report, size_t length);
 
     // Filter helper: check if device info matches target lighting endpoint
     static bool IsTargetLightingEndpoint(
@@ -89,6 +90,8 @@ private:
     // cannot be interleaved with another runtime operation or a lighting frame.
     static std::mutex& DeviceWriteMutex();
     bool SendReport(const std::array<uint8_t, HID_REPORT_SIZE>& report);
+    // DeviceWriteMutex held. Only the fixed12 00 query, never arbitrary reads/commands.
+    bool QueryBasicInfo(std::array<uint8_t, HID_REPORT_SIZE>& response);
     bool ProbeCurrentM605Transport() const; // read-only; DeviceWriteMutex held
     bool OpenDevice();
     static DWORD CALLBACK OnInterfaceNotification(HCMNOTIFICATION, PVOID context,

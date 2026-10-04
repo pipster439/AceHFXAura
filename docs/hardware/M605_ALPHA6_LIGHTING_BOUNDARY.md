@@ -1,5 +1,7 @@
 # M605 alpha.6 firmware lighting boundary
 
+> **HISTORICAL CHECKPOINT / SUPERSEDED for HardwareSlot ownership.** This document preserves alpha.6 HostManaged analog-lighting evidence and its restrictions. Alpha.7 HardwareSlot firmware-bank ownership, Direct RGB suppression and physical acceptance are recorded in [current release closure](../release/HARDWARE_SLOT_RELEASE_CLOSURE.md). This does not authorize custom firmware effect replay or hardware-bank authoring.
+
 AceHFXAura alpha.6 keeps firmware-side Hardware Analog as an experimental capability with a prerequisite. The normal Magnetic page cannot establish the prerequisite and disables its Apply control while Aura renders Direct RGB. This is a product safety decision, not a claim that the firmware feature is broken.
 
 ## Verified

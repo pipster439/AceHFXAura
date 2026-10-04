@@ -47,6 +47,7 @@ const char* Reason(DeviceProfileDecisionReason reason) {
     return names[static_cast<size_t>(reason)];
 }
 template<class T> Json Optional(const std::optional<T>& value) { return value ? Json(*value) : Json(nullptr); }
+bool ControlSurface(const std::optional<std::string>& process) { return process && *process == "aura.exe"; }
 }
 
 Json DeviceProfileAutomationConfig::DefaultJson() {
@@ -145,6 +146,15 @@ void DeviceProfileBindingEngine::Observe(const std::string& value) {
     const auto process = NormalizeForeground(value);
     std::lock_guard<std::mutex> lock(mutex_);
     if (observed_at_ && process == observed_) return;
+    // Only the immediately preceding stable external context can be carried
+    // through Aura. Unknown/transient intervening input never licenses history.
+    if (ControlSurface(process)) {
+        control_surface_anchor_ = observed_ == committed_foreground_ && committed_foreground_ &&
+            !ControlSurface(committed_foreground_) ? committed_foreground_ : std::nullopt;
+        control_surface_entered_at_ = clock_();
+    } else {
+        control_surface_anchor_.reset(); control_surface_entered_at_.reset();
+    }
     ++foreground_observation_sequence_;
     observed_ = process; observed_at_ = clock_(); pending_ = true;
 }
@@ -153,10 +163,10 @@ DeviceProfileAutomationDecision DeviceProfileBindingEngine::ResolveLocked() cons
     if (!document_available_) { decision.reason = DeviceProfileDecisionReason::ProfileDocumentUnavailable; return decision; }
     if (!configuration_available_) { decision.reason = DeviceProfileDecisionReason::AutomationConfigurationUnavailable; return decision; }
     if (!config_.enabled) { decision.reason = DeviceProfileDecisionReason::AutomationDisabled; return decision; }
-    if (!committed_foreground_) { decision.reason = DeviceProfileDecisionReason::NoForeground; return decision; }
-    if (hold_foreground_ && hold_foreground_ == committed_foreground_) {
+    if (hold_active_) {
         decision.reason = DeviceProfileDecisionReason::ManualHold; return decision;
     }
+    if (!committed_foreground_) { decision.reason = DeviceProfileDecisionReason::NoForeground; return decision; }
     for (const auto& rule : config_.bindings) if (rule.enabled && rule.process_name == *committed_foreground_) {
         decision.profile_id = rule.profile_id; decision.rule_id = rule.rule_id;
         decision.kind = profile_ids_.count(rule.profile_id) ? DeviceProfileDecisionKind::Match : DeviceProfileDecisionKind::InvalidDecision;
@@ -184,18 +194,34 @@ bool DeviceProfileBindingEngine::Advance() {
     if (!observed_at_ || (pending_ && now - *observed_at_ < StabilityMs)) return false;
     if (!pending_ && !reevaluate_) return false;
     committed_foreground_ = observed_; stable_at_ = now; pending_ = false; reevaluate_ = false;
-    // Unknown focus cannot clear a session hold. Only a stable known change can.
-    if (hold_foreground_ && committed_foreground_ && hold_foreground_ != committed_foreground_) hold_foreground_.reset();
+    // Aura is transparent for manual override lifecycle, but ordinary matching
+    // (including explicit aura.exe bindings) is otherwise unchanged.
+    if (committed_foreground_ && !ControlSurface(committed_foreground_)) {
+        last_external_foreground_ = committed_foreground_;
+        if (hold_active_) {
+            if (!hold_foreground_) {
+                hold_foreground_ = committed_foreground_; hold_anchor_source_ = "FirstStableExternal";
+            } else if (hold_foreground_ != committed_foreground_) {
+                hold_active_ = false; hold_foreground_.reset(); hold_anchor_source_.clear();
+            }
+        }
+    }
     return CommitLocked(ResolveLocked(), now);
 }
 void DeviceProfileBindingEngine::NotifyManualProfileAction() {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (!observed_) return;
     ++manual_action_sequence_;
-    hold_foreground_ = observed_;
+    hold_active_ = true; hold_foreground_.reset(); hold_anchor_source_ = "AwaitingStableExternal";
+    const auto now = clock_();
+    if (observed_ && !ControlSurface(observed_) && !pending_ && observed_ == committed_foreground_) {
+        hold_foreground_ = committed_foreground_; hold_anchor_source_ = "CurrentStableExternal";
+    } else if (ControlSurface(observed_) && control_surface_anchor_ && control_surface_entered_at_ &&
+        now - *control_surface_entered_at_ <= ControlSurfaceAnchorFreshnessMs) {
+        hold_foreground_ = control_surface_anchor_; hold_anchor_source_ = "ControlSurfacePreviousStableExternal";
+    }
     DeviceProfileAutomationDecision hold; hold.foreground = observed_;
     hold.reason = DeviceProfileDecisionReason::ManualHold;
-    CommitLocked(std::move(hold), clock_());
+    CommitLocked(std::move(hold), now);
 }
 Json DeviceProfileBindingEngine::Snapshot() const {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -214,7 +240,12 @@ Json DeviceProfileBindingEngine::Snapshot() const {
         {"foreground_observation_sequence", foreground_observation_sequence_},
         {"committed_foreground_process", Optional(committed_foreground_)}, {"foreground_stable_at", Optional(stable_at_)},
         {"debounce_pending", pending_}, {"debounce_ms", StabilityMs}, {"evaluation_state", pending_ ? "Debouncing" : Reason(decision_.reason)},
-        {"manual_hold", hold_foreground_.has_value()}, {"manual_hold_foreground", Optional(hold_foreground_)},
+        {"manual_hold", hold_active_}, {"manual_hold_foreground", Optional(hold_foreground_)},
+        {"manual_hold_anchor", Optional(hold_foreground_)}, {"manual_hold_pending_anchor", hold_active_ && !hold_foreground_},
+        {"manual_hold_source", hold_active_ ? Json("ManualProfileActivation") : Json(nullptr)},
+        {"manual_hold_anchor_source", hold_active_ ? Json(hold_anchor_source_) : Json(nullptr)},
+        {"last_external_foreground", Optional(last_external_foreground_)},
+        {"control_surface_foreground", ControlSurface(observed_) ? Optional(observed_) : Json(nullptr)},
         {"resolved_profile_id", Optional(decision_.profile_id)}, {"matched_rule_id", Optional(decision_.rule_id)},
         {"decision_kind", Kind(decision_.kind)}, {"decision_reason", Reason(decision_.reason)},
         {"suppression_reason", decision_.reason == DeviceProfileDecisionReason::ManualHold ? Json("ManualHold") : Json(nullptr)},

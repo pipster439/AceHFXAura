@@ -1,0 +1,10 @@
+#pragma once
+// Rebuild/review after ABI, analysis or installed SDK drift. No runtime configuration enables other values.
+inline constexpr char ReviewedAbiSha256[] = "@AURA_ABI_HASH@";
+inline constexpr char ReviewedAnalysisSha256[] = "@AURA_REVIEW_HASH@";
+inline constexpr char ReviewedSdkSha256[] = "0a94593c8c7f4e1af99abed0afe2803a6d615318ebe96d85529eb232f6a8b0af";
+inline constexpr bool ReviewedReleaseValueKnown = true;
+inline constexpr unsigned ReviewedReleaseValue = 0;
+// MTA dry run now has a nonempty cached collection. Current vendor release internally clears colors/Apply.
+// Remains closed until a revised, explicitly approved release-side-effect review and candidate build.
+inline constexpr bool ReviewedGateAExecutionEnabled = false;

@@ -1758,7 +1758,39 @@ bool TestRemovalDuringSettleAndOfflineRecovery() {
 }
 }
 
+bool TestHardwareSlotProtocol() {
+    using namespace aura::m605;
+    for (uint8_t slot : {1,5,6}) {
+        Report captured{}; captured[1]=0x51; captured[5]=slot;
+        auto actual=BuildSelectHardwareProfileSlot(slot);
+        if (!actual || *actual!=captured || !aura::NativeHidBackend::IsSupportedOutputReport(*actual)) return false;
+        for (size_t i=0;i<65;++i) if (i!=1 && i!=2 && i!=5) {
+            auto bad=*actual; bad[i]=1;
+            if (aura::NativeHidBackend::IsSupportedOutputReport(bad)) return false;
+        }
+        if (aura::NativeHidBackend::IsSupportedOutputReport(actual->data(),64) ||
+            aura::NativeHidBackend::IsSupportedOutputReport(actual->data(),66)) return false;
+    }
+    for (uint8_t bad : {0,7,255}) {
+        if (BuildSelectHardwareProfileSlot(bad)) return false;
+        Report r{};r[1]=0x51;r[5]=bad;
+        if (aura::NativeHidBackend::IsSupportedOutputReport(r)) return false;
+    }
+    // Actual completed IN frames4 and8 from slot5 power persistence capture.
+    for (auto head : {std::array<uint8_t,13>{0,0x12,0,0,0,0x59,0,1,0,6,8,1,0xff},
+                      std::array<uint8_t,13>{0,0x12,0,0,0,0x59,0,1,0,6,0,5,0xff}}) {
+        Report r{};std::copy(head.begin(),head.end(),r.begin());
+        if (ParseBasicInfoActiveSlot(r.data(),65)!=r[11] || ParseBasicInfoActiveSlot(r.data(),64)) return false;
+        for (size_t i : {size_t(0),size_t(1),size_t(2),size_t(3),size_t(4),size_t(9),size_t(11)}) {
+            auto bad=r;bad[i]=0xfe; if(ParseBasicInfoActiveSlot(bad.data(),65)) return false;
+        }
+    }
+    auto query=BuildBasicInfoQuery(); Report expected{};expected[1]=0x12;
+    return query==expected && aura::NativeHidBackend::IsSupportedOutputReport(query) && !ParseBasicInfoActiveSlot(nullptr,65);
+}
+
 int main() {
+    if (!TestHardwareSlotProtocol()) { std::cerr << "hardware slot protocol failed\n"; return 1; }
     using namespace aura::m605;
     static_assert(std::tuple_size<Report>::value == 65);
     if (!TestExhaustiveVerifiedMapping()) return 1;

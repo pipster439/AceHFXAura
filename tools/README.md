@@ -1,6 +1,6 @@
 # Developer and research tools
 
-- `package_release.py`: legacy C++ launcher packaging; see [limitations](../docs/development/PACKAGING.md). Root batch/PowerShell wrappers invoke this same implementation.
+- `package_release.py`: official self-contained WinUI x64 ZIP packaging; root wrappers invoke the same entrypoint. Only explicit `--legacy` selects the historical C++ launcher. See [packaging](../docs/development/PACKAGING.md).
 - `gui_calibrator.py` / `run_gui_calibrator.bat`: interactive hardware calibration. Uses shared `py/aura_hal.py` and can open `lightbar_probe.py`.
 - `lightbar_probe.py` / `run_lightbar_probe.bat`: retained HAL-era Light Bar research, with GUI and diagnostic CLI. These can interact with real hardware/services; they are not unattended CI tests.
 - `set_per_key.py`: manual per-key HAL diagnostic.

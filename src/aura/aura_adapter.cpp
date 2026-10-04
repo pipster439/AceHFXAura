@@ -611,6 +611,11 @@ LONG AuraAdapter::CallSetSingleSafe(void* pDev, void* buffer) {
 }
 
 bool AuraAdapter::PushFrame(const FrameBuffer& frame) {
+    if (frame_admission_) return frame_admission_([&] { return PushFrameAdmitted(frame); });
+    return PushFrameAdmitted(frame);
+}
+
+bool AuraAdapter::PushFrameAdmitted(const FrameBuffer& frame) {
     if (dry_run_) {
         dry_run_frame_count_++;
         if (dry_run_frame_count_ % 25 == 1) { // 约每秒打印一次当前计算出的帧特征
@@ -739,6 +744,15 @@ bool AuraAdapter::ForceReset() {
 }
 
 bool AuraAdapter::CheckReconnect() {
+    if (state_ == AdapterState::Connected && !IsConnected()) {
+        // Passive interface removal still drives reconnect when frame writes
+        // are suppressed by firmware ownership. Never send a probe frame.
+        state_ = AdapterState::Disconnected;
+        ReleaseHardwareInternal();
+        current_reconnect_interval_ms_ = 1500;
+        reconnect_attempts_ = 0;
+        last_reconnect_attempt_ = std::chrono::steady_clock::now();
+    }
     if (dry_run_ || state_ == AdapterState::Connected) {
         return true;
     }

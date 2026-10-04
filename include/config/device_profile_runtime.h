@@ -34,6 +34,9 @@ public:
     void RecordManualGlobalBaselineLocked(const std::string& field, const Json& value);
     Json State();
     Json Diagnostics(); // pure cached read: no presence probe, mutation, or HID operation
+    Json RefreshHardwareSlot(); // explicit read-only device query, no selector/reapply
+    bool WithAuraLightingOwnership(const std::function<bool()>& write_frame);
+    void ObserveHardwareSlot(); // bounded daemon tick, never selects/reclaims
     bool ObserveAutomationForeground(const std::string& process_name); // decisions ONLY
     Json AutomationAdmissionSnapshot() const; // cached token, not write permission
     Json ActivateAutomationDecision(const Json& token, const std::function<bool()>& stopping);
@@ -73,6 +76,10 @@ private:
     Json ActivateLocked(const std::string& id, const std::string& reason,
         const Json& temporary, const std::function<bool()>& cancelled,
         const std::function<bool()>& admission = {});
+    Json ActivateHardwareSlotLocked(const Json& profile, const std::string& reason,
+        const std::function<bool()>& cancelled, const std::function<bool()>& admission);
+    Json HardwareSlotSnapshotLocked() const;
+    void ReconcileHardwareSlotLocked();
     bool AutomationTokenFreshLocked(const Json& token) const;
     Json AutomationDecisionSnapshotCached() const; // binding/coordinator caches only; no gate required
     void InvalidateLocked();
@@ -94,6 +101,10 @@ private:
     std::function<MagneticHostProfile()> host_profile_;
     std::function<bool()> available_;
     DeviceProfileBindingEngine binding_engine_; // read-only decision subsystem, no actuator
+    DeviceProfileBindingEngine::Clock observation_clock_;
+    std::optional<int64_t> last_slot_observation_ms_;
+    bool firmware_lighting_owned_ = false; // persists across drift/disconnect
+    uint64_t hardware_slot_selector_count_ = 0; // actual submitted selectors, not attempts
     std::function<Json()> coordinator_snapshot_; // installed before worker/startup
     const DaemonProcessIdentity process_identity_;
     bool automation_configuration_available_ = true;
@@ -106,6 +117,8 @@ private:
     bool rt_submission_valid_ = false;
     uint64_t mutation_revision_ = 0;
     uint64_t session_generation_ = 0;
+    std::optional<uint64_t> slot_observation_generation_; // first observation/reconnect, plus bounded daemon observations
+    std::optional<uint8_t> observed_bank_; // magnetic prior/shadow expires when a different bank is observed
     std::string last_reason_;
     Json last_outcome_;
     Json last_activation_diagnostics_; // bounded to one activation; not runtime truth

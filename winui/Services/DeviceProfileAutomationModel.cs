@@ -100,7 +100,7 @@ public sealed class DeviceProfileAutomationModel(IProfileControlClient client)
         !IsAvailable ? "无法读取自动切换状态" : Decision switch {
         { ConfigurationAvailable: false } => "自动切换配置暂不可用，请更新后台服务。",
         { Enabled: false } => "自动切换已关闭",
-        { ManualHold: true, DecisionReason: "ManualHold" } => "已暂停自动匹配。你刚刚手动选择了配置文件；切换到其他前台程序后自动匹配将恢复。",
+        { ManualHold: true, DecisionReason: "ManualHold" } => "已暂停自动匹配。你刚刚手动选择了配置文件；切换到其他程序（不包括 Aura）并保持前台后，自动匹配将恢复。",
         { DebouncePending: true } => "等待前台程序稳定…",
         { DecisionReason: "InvalidTargetProfile" } => "此规则或后备选项引用的配置文件已不存在",
         { DecisionKind: "Fallback" } => $"无匹配规则，将使用 {WouldSelect}",

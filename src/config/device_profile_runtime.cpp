@@ -17,6 +17,8 @@
 namespace aura {
 namespace {
 using Json = nlohmann::json;
+std::string DiagnosticError(const std::string& error);
+Json DiagnosticOperations(Json operations);
 Json HardwareGateJson(const HardwareRtGateObservation& gate) {
     return {{"state", HardwareRtGateName(gate.state)},
         {"source", "USB status notification; MI_02 Report ID 03 event 76"},
@@ -170,7 +172,7 @@ void PreserveMagneticExtensions(Json& magnetic, const Json& prior) {
     }
 }
 void PreserveProfileExtensions(Json& next, const Json& old) {
-    PreserveUnknown(next, old, {"schema_version", "id", "name", "magnetic", "lighting", "automation"});
+    PreserveUnknown(next, old, {"schema_version", "id", "name", "magnetic", "lighting", "automation", "activation_backend", "hardware_slot"});
     if (next.contains("lighting") && old.contains("lighting"))
         PreserveUnknown(next["lighting"], old.at("lighting"), {"legacy_effect_reference", "ownership"});
     if (next.contains("magnetic") && old.contains("magnetic"))
@@ -328,6 +330,13 @@ void DeviceProfileRuntime::Validate(const Json& doc) {
             !ids.insert(CanonicalGuid(profile.at("id").get<std::string>())).second)
             throw ProfileError(422, "Invalid Profile identity or lighting schema");
         ValidateMagnetic(profile.at("magnetic"));
+        const auto backend = profile.value("activation_backend", Json("host_managed"));
+        if (backend != "host_managed" && backend != "hardware_slot")
+            throw ProfileError(422, "Unsupported Profile activation backend");
+        if (backend == "hardware_slot" && (!profile.contains("hardware_slot") ||
+            !profile.at("hardware_slot").is_number_integer() ||
+            profile.at("hardware_slot").get<int64_t>() < 1 || profile.at("hardware_slot").get<int64_t>() > 5))
+            throw ProfileError(422, "Hardware Profile slot must be1..5; slot6 is reserved");
     }
     if (!ids.count(CanonicalGuid(doc.at("selected_profile_id").get<std::string>())))
         throw ProfileError(422, "Selected Profile not found");
@@ -345,6 +354,7 @@ DeviceProfileRuntime::Json DeviceProfileRuntime::DefaultDocument(const std::file
     }
     const auto id = NewGuid();
     Json profile = {{"schema_version", 1}, {"id", id}, {"name", "Desktop"},
+        {"activation_backend", "host_managed"}, {"hardware_slot", nullptr},
         {"magnetic", {{"global_actuation_mm", nullptr}, {"global_deadzone", nullptr},
             {"global_rapid_trigger", nullptr}, {"keys", Json::array()}}},
         {"lighting", {{"legacy_effect_reference", reference}, {"ownership", "LegacyUnmanaged"}}},
@@ -360,7 +370,10 @@ DeviceProfileRuntime::DeviceProfileRuntime(std::filesystem::path path,
     std::function<MagneticHostProfile()> host_profile, std::function<bool()> available,
     DeviceProfileBindingEngine::Clock decision_clock, DaemonProcessIdentity process_identity)
     : path_(std::move(path)), device_(device), mutation_gate_(mutation_gate),
-      host_profile_(std::move(host_profile)), available_(std::move(available)), binding_engine_(std::move(decision_clock)),
+      host_profile_(std::move(host_profile)), available_(std::move(available)), binding_engine_(decision_clock),
+      observation_clock_(decision_clock ? std::move(decision_clock) : DeviceProfileBindingEngine::Clock([] {
+          return std::chrono::duration_cast<std::chrono::milliseconds>(
+              std::chrono::steady_clock::now().time_since_epoch()).count(); })),
       process_identity_(std::move(process_identity)) {
     session_generation_ = device_.GetSessionGeneration();
     try {
@@ -385,6 +398,39 @@ DeviceProfileRuntime::DeviceProfileRuntime(std::filesystem::path path,
     if (load_error_.empty()) MigrateLegacyRtLocked();
     if (load_error_.empty()) TrackDeclaredFootprintLocked();
     RefreshAutomationConfigurationLocked();
+    if (load_error_.empty()) firmware_lighting_owned_ =
+        HardwareSlotSnapshotLocked().at("profile_activation_backend") == "hardware_slot";
+}
+
+bool DeviceProfileRuntime::WithAuraLightingOwnership(const std::function<bool()>& write_frame) {
+    // Same lock order as activation: mutation gate, then DeviceWriteMutex in
+    // the frame writer. No frame can race past successful bank selection.
+    std::lock_guard<std::mutex> gate(mutation_gate_);
+    return !firmware_lighting_owned_ && write_frame();
+}
+
+void DeviceProfileRuntime::ObserveHardwareSlot() {
+    std::unique_lock<std::mutex> gate(mutation_gate_, std::try_to_lock);
+    if (!gate.owns_lock() || !load_error_.empty()) return;
+    const auto now = observation_clock_();
+    if (last_slot_observation_ms_ && now - *last_slot_observation_ms_ < 10000) return;
+    if (HardwareSlotSnapshotLocked().at("profile_activation_backend") != "hardware_slot" ||
+        !automation_configuration_available_ ||
+        !document_.at("device_profile_automation").value("enabled", false) || !available_()) return;
+    if (device_.GetHealth() != M605RuntimeHealth::Clean || device_.IsPersistentSafetyQuarantined()) return;
+    // Reserve the interval even if a query fails. No retry burst or reclaim.
+    last_slot_observation_ms_ = now;
+    SynchronizeGenerationLocked();
+    if (slot_observation_generation_ != session_generation_) {
+        StateLocked(); // one reconnect observation, never a selector
+    } else {
+        const auto result = device_.QueryHardwareProfileSlot();
+        SynchronizeGenerationLocked();
+        slot_observation_generation_ = session_generation_;
+        last_slot_observation_ms_ = observation_clock_();
+        if (!result.success) { if (active_ || !dirty_) ++mutation_revision_; InvalidateLocked(); }
+        ReconcileHardwareSlotLocked();
+    }
 }
 void DeviceProfileRuntime::RefreshAutomationConfigurationLocked() {
     std::set<std::string> ids;
@@ -511,6 +557,7 @@ DeviceProfileRuntime::Json DeviceProfileRuntime::ActivateAutomationDecision(
 }
 void DeviceProfileRuntime::TrackDeclaredFootprintLocked() {
     for (const auto& profile : document_.at("profiles")) {
+        if (profile.value("activation_backend", std::string("host_managed")) == "hardware_slot") continue;
         const auto& magnetic = profile.at("magnetic");
         if (magnetic.contains("global_actuation_mm") &&
             !magnetic.at("global_actuation_mm").is_null()) {
@@ -593,6 +640,90 @@ DeviceProfileRuntime::Json DeviceProfileRuntime::EffectiveBaselineLocked() const
 }
 DeviceProfileRuntime::Json DeviceProfileRuntime::StateLocked() {
     SynchronizeGenerationLocked();
+    // Lazy reconnect observation on the existing state-read path. At most one
+    // attempt per transport generation, never a selector or automatic reapply.
+    if (load_error_.empty() && HardwareSlotSnapshotLocked().at("profile_activation_backend") == "hardware_slot" &&
+        slot_observation_generation_ != session_generation_ && available_()) {
+        const auto result = device_.QueryHardwareProfileSlot();
+        SynchronizeGenerationLocked();
+        slot_observation_generation_ = session_generation_;
+        last_slot_observation_ms_ = observation_clock_();
+        ReconcileHardwareSlotLocked();
+        if (result.success && HardwareSlotSnapshotLocked().at("hardware_slot_match") == true &&
+            device_.GetHealth() == M605RuntimeHealth::Clean && !device_.IsPersistentSafetyQuarantined()) {
+            active_ = document_.at("selected_profile_id").get<std::string>(); dirty_ = false;
+            last_outcome_ = {{"outcome", "confirmed"}, {"error", ""}}; // observation is not a manual success event
+        } else InvalidateLocked();
+        ++mutation_revision_;
+    }
+    ReconcileHardwareSlotLocked();
+    return StateSnapshotLocked();
+}
+
+DeviceProfileRuntime::Json DeviceProfileRuntime::HardwareSlotSnapshotLocked() const {
+    const auto observed = device_.GetHardwareSlotObservation();
+    Json desired = nullptr, backend = nullptr;
+    if (load_error_.empty()) for (const auto& p : document_.at("profiles"))
+        if (p.at("id") == document_.at("selected_profile_id")) {
+            backend = p.value("activation_backend", Json("host_managed"));
+            if (backend == "hardware_slot") desired = p.at("hardware_slot");
+        }
+    const bool current = observed.session_generation == device_.GetSessionGeneration();
+    const Json actual = current && observed.observed_slot ? Json(*observed.observed_slot) : Json(nullptr);
+    Json last_select = last_activation_diagnostics_.is_object() &&
+        last_activation_diagnostics_.value("kind", "") == "HardwareSlot" ? last_activation_diagnostics_ : Json(nullptr);
+    if (last_select.is_object()) {
+        last_select["error"] = DiagnosticError(last_select.at("error").get<std::string>());
+        last_select["operations"] = DiagnosticOperations(last_select.at("operations"));
+    }
+    return {{"profile_activation_backend", backend}, {"desired_hardware_slot", desired},
+        {"observed_hardware_slot", actual}, {"hardware_slot_match", desired.is_null() || actual.is_null() ?
+            Json(nullptr) : Json(desired == actual)}, {"slot_observation_time", actual.is_null() ? Json(nullptr) : Json(observed.observed_at_utc)},
+        {"source", "BasicInfo"}, {"last_slot_select", last_select},
+        {"lighting_owner", firmware_lighting_owned_ ? "FirmwareBank" : "AuraDirectRgb"},
+        {"selector_count", hardware_slot_selector_count_},
+        {"external_drift_observation", {{"interval_ms", 10000}, {"auto_reclaim", false},
+            {"last_attempt_monotonic_ms", last_slot_observation_ms_ ? Json(*last_slot_observation_ms_) : Json(nullptr)}}},
+        {"last_slot_query", {{"success", !actual.is_null()}, {"query_count", observed.query_count},
+            {"timing_ms", observed.total_ms}, {"error", DiagnosticError(observed.error)}}}};
+}
+void DeviceProfileRuntime::ReconcileHardwareSlotLocked() {
+    if (!load_error_.empty()) return;
+    const auto slot = HardwareSlotSnapshotLocked();
+    if (!slot.at("observed_hardware_slot").is_null()) {
+        const auto actual = slot.at("observed_hardware_slot").get<uint8_t>();
+        if (observed_bank_ && *observed_bank_ != actual) {
+            rt_prior_.clear(); rt_prior_source_.clear(); rt_submission_valid_ = false;
+            InvalidateLocked(); ++mutation_revision_;
+        }
+        observed_bank_ = actual;
+    }
+    if (!active_) return;
+    if (slot.at("profile_activation_backend") == "hardware_slot" &&
+        slot.at("hardware_slot_match") != true) { InvalidateLocked(); ++mutation_revision_; }
+}
+DeviceProfileRuntime::Json DeviceProfileRuntime::RefreshHardwareSlot() {
+    std::lock_guard<std::mutex> gate(mutation_gate_);
+    if (!load_error_.empty()) throw ProfileError(503, load_error_);
+    const auto before_active = active_;
+    const auto before_dirty = dirty_;
+    const bool available = available_();
+    const auto queried = available ? device_.QueryHardwareProfileSlot() : HardwareSlotResult{};
+    if (!queried.success) InvalidateLocked();
+    SynchronizeGenerationLocked();
+    if (available) {
+        slot_observation_generation_ = session_generation_;
+        last_slot_observation_ms_ = observation_clock_();
+    }
+    ReconcileHardwareSlotLocked();
+    // Reconnect/query can confirm the already selected slot, but never select it.
+    const auto slot = HardwareSlotSnapshotLocked();
+    if (queried.success && slot.at("profile_activation_backend") == "hardware_slot" && slot.at("hardware_slot_match") == true &&
+        device_.GetHealth() == M605RuntimeHealth::Clean && !device_.IsPersistentSafetyQuarantined()) {
+        active_ = document_.at("selected_profile_id").get<std::string>(); dirty_ = false;
+        last_outcome_ = {{"outcome", "confirmed"}, {"error", ""}};
+    }
+    if (before_active != active_ || before_dirty != dirty_) ++mutation_revision_;
     return StateSnapshotLocked();
 }
 DeviceProfileRuntime::Json DeviceProfileRuntime::StateSnapshotLocked() const {
@@ -606,11 +737,13 @@ DeviceProfileRuntime::Json DeviceProfileRuntime::StateSnapshotLocked() const {
         {"runtime_revision", mutation_revision_}, {"mutation_revision", mutation_revision_},
         {"m605_session_generation", session_generation_},
         {"hardware_rt_gate", HardwareGateJson(device_.GetHardwareRtGateObservation())},
+        {"hardware_slot_status", HardwareSlotSnapshotLocked()},
         {"last_activation_reason", last_reason_.empty() ? Json(nullptr) : Json(last_reason_)},
         {"last_apply_outcome", last_outcome_.is_null() ? Json(nullptr) : last_outcome_},
         {"applied_intent_source", "SessionApplied host submission; not firmware readback"},
         {"global_defaults", document_.at("global_defaults")},
-        {"effective_global_defaults", EffectiveBaselineLocked()},
+        {"effective_global_defaults", HardwareSlotSnapshotLocked().at("profile_activation_backend") == "hardware_slot" ?
+            document_.at("global_defaults") : EffectiveBaselineLocked()},
         {"legacy_rt_migration", legacy_rt_migration_},
         {"import_warning", import_warning_.empty() ? Json(nullptr) : Json(import_warning_)}};
 }
@@ -795,7 +928,8 @@ DeviceProfileRuntime::Json DeviceProfileRuntime::Diagnostics() {
     // Effective status covers known submitted keys (including restorations). Unmanaged firmware
     // state and external writers are not observed by this feature.
     std::optional<bool> submitted_enabled;
-    if (active_ && !dirty_ && device.session_generation == session_generation_ &&
+    if (HardwareSlotSnapshotLocked().at("profile_activation_backend") != "hardware_slot" &&
+        active_ && !dirty_ && device.session_generation == session_generation_ &&
         device.health == M605RuntimeHealth::Clean && !device.persistent_safety_quarantine) {
         submitted_enabled = false;
         for (const auto& [key, rt] : device.session_applied.per_key_rapid_trigger)
@@ -817,6 +951,7 @@ DeviceProfileRuntime::Json DeviceProfileRuntime::Diagnostics() {
     std::snprintf(timestamp, sizeof(timestamp), "%04u-%02u-%02uT%02u:%02u:%02u.%03uZ",
         captured.wYear, captured.wMonth, captured.wDay, captured.wHour, captured.wMinute, captured.wSecond, captured.wMilliseconds);
     return {{"status", "ok"}, {"api_version", 1}, {"diagnostic_schema_version", 1},
+        {"hardware_slot_status", HardwareSlotSnapshotLocked()},
         {"captured_at_utc", timestamp},
         {"daemon", {{"product_version", AURA_PRODUCT_VERSION}, {"profile_api_version", 1},
             {"process_instance_id", process_identity_.process_instance_id}, {"started_at_utc", process_identity_.started_at_utc}}},
@@ -1376,6 +1511,59 @@ bool DeviceProfileRuntime::Matches(const Operation& op, const M605AppliedRuntime
     return false;
 }
 
+DeviceProfileRuntime::Json DeviceProfileRuntime::ActivateHardwareSlotLocked(const Json& profile,
+    const std::string& reason, const std::function<bool()>& cancelled,
+    const std::function<bool()>& admission) {
+    const auto requested = profile.at("hardware_slot").get<uint8_t>();
+    // Conservative on failed/deferred selection too: don't paint over firmware
+    // while this mode is pending. Only a successful HostManaged apply resumes.
+    firmware_lighting_owned_ = true;
+    HardwareSlotResult slot;
+    slot.requested_slot = requested;
+    const auto fresh = [&] { return !cancelled() && (!admission || admission()); };
+    const char* outcome = "failed";
+    InvalidateLocked();
+    if (!available_()) { outcome = "deferred"; slot.error = "Hardware device unavailable"; }
+    else if (!fresh()) { outcome = "stale"; slot.error = "StaleDecisionBeforeSubmission"; }
+    else {
+        slot = device_.SelectHardwareProfileSlot(requested, fresh);
+        if (slot.selector_sent) ++hardware_slot_selector_count_;
+        SynchronizeGenerationLocked();
+        slot_observation_generation_ = session_generation_;
+        // No magnetic intent can remain authoritative across a bank selection.
+        last_slot_observation_ms_ = observation_clock_();
+        if (slot.selector_sent || (slot.observed_slot && observed_bank_ && slot.observed_slot != observed_bank_)) {
+            applied_.clear(); rt_prior_.clear(); rt_prior_source_.clear(); rt_submission_valid_ = false;
+        }
+        if (slot.success && slot.observed_slot == requested && slot.session_generation == session_generation_) {
+            outcome = "succeeded";
+            active_ = profile.at("id").get<std::string>(); dirty_ = false;
+            observed_bank_ = requested;
+        } else if (!fresh() && !slot.selector_sent) outcome = "stale";
+    }
+    ++mutation_revision_;
+    last_outcome_ = {{"outcome", outcome}, {"error", slot.error}, {"prior_intent_resubmitted", false}};
+    const Json timing = {{"total_ms", slot.total_ms}, {"query_count", slot.query_count},
+        {"executed_operation_count", slot.selector_sent ? 1 : 0}, {"m605_transactions", 0}};
+    last_plan_diagnostics_ = {{"profile_id", profile.at("id")}, {"activation_backend", "hardware_slot"},
+        {"operations", Json::array()}, {"effective_target", Json::array()}, {"preflight_errors", Json::array()},
+        {"operation_count", 0}, {"actuation_ownership", nullptr}, {"rapid_trigger_management", nullptr}};
+    const Json operations = slot.selector_sent ? Json::array({{{"kind", "HardwareSlot"},
+        {"identity", "HardwareSlot:" + std::to_string(requested)}, {"logical_id", 0},
+        {"succeeded", slot.success}, {"error", slot.error}}}) : Json::array();
+    last_activation_diagnostics_ = {{"kind", "HardwareSlot"}, {"reason", reason}, {"outcome", outcome},
+        {"error", slot.error}, {"requested_slot", requested},
+        {"observed_slot", slot.observed_slot ? Json(*slot.observed_slot) : Json(nullptr)},
+        {"selector_sent", slot.selector_sent}, {"verification_result", slot.success ? "confirmed" : "unconfirmed"},
+        {"operations", operations}, {"plan", Json::array()}, {"effective_target", Json::array()},
+        {"resolved_baseline_at_planning", nullptr}, {"timing", timing},
+        {"session_generation", session_generation_}, {"mutation_revision", mutation_revision_}};
+    auto result = StateSnapshotLocked();
+    result["outcome"] = outcome; result["error"] = slot.error;
+    result["operations"] = operations; result["timing"] = timing;
+    return result;
+}
+
 DeviceProfileRuntime::Json DeviceProfileRuntime::ActivateLocked(const std::string& id,
     const std::string& reason, const Json& temporary, const std::function<bool()>& cancelled,
     const std::function<bool()>& admission) {
@@ -1391,6 +1579,8 @@ DeviceProfileRuntime::Json DeviceProfileRuntime::ActivateLocked(const std::strin
         [&](const Json& item) { return SameGuid(item.at("id"), id); });
     if (profile == document_.at("profiles").end()) throw ProfileError(404, "Profile not found");
     const Json selected_profile = *profile;
+    if (selected_profile.value("activation_backend", std::string("host_managed")) == "hardware_slot" && !temporary.is_null())
+        throw ProfileError(422, "Hardware slot activation does not accept magnetic overrides");
     if (!temporary.is_null()) ValidateMagnetic(temporary);
     const auto canonical_id = selected_profile.at("id").get<std::string>();
     if (!SameGuid(document_.at("selected_profile_id"), canonical_id)) {
@@ -1407,6 +1597,10 @@ DeviceProfileRuntime::Json DeviceProfileRuntime::ActivateLocked(const std::strin
     if (reason == "Manual") binding_engine_.NotifyManualProfileAction();
     last_reason_ = reason;
     SynchronizeGenerationLocked();
+    if (selected_profile.value("activation_backend", std::string("host_managed")) == "hardware_slot") {
+        if (!temporary.is_null()) throw ProfileError(422, "Hardware slot activation does not accept magnetic overrides");
+        return ActivateHardwareSlotLocked(selected_profile, reason, cancelled, admission);
+    }
     Json outcomes = Json::array();
     bool resubmitted = false;
     const auto finish = [&](const char* outcome, std::string error) {
@@ -1670,6 +1864,7 @@ DeviceProfileRuntime::Json DeviceProfileRuntime::ActivateLocked(const std::strin
     dirty_ = false;
     rt_submission_valid_ = true;
     session_generation_ = observed_generation;
+    firmware_lighting_owned_ = false;
     return finish("succeeded", "");
 }
 
@@ -1802,6 +1997,11 @@ void DeviceProfileRuntime::RegisterRoutes(httplib::Server& server) {
     });
     server.Get("/api/device-profiles/diagnostics", [this, query](const httplib::Request& req, httplib::Response& res) {
         query(req, res, [this] { return Json{{"status", "ok"}, {"api_version", 1}, {"diagnostics", Diagnostics()}}; });
+    });
+    server.Post("/api/device-profiles/hardware-slot/refresh", [this, query](const httplib::Request& req, httplib::Response& res) {
+        // Explicit query only. Ordinary GET/polling and diagnostics remain pure cached reads.
+        if (!ValidRequest(req, res)) return;
+        query(req, res, [this] { return RefreshHardwareSlot(); });
     });
     server.Get("/api/device-profiles/automation", [this, query](const httplib::Request& req, httplib::Response& res) {
         query(req, res, [this] {

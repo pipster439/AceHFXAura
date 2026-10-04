@@ -18,7 +18,7 @@
         <StackPanel x:Name="PageContent" Spacing="18" MaxWidth="1420">
             <StackPanel Spacing="4">
                 <TextBlock Text="配置文件" Style="{ThemeResource TitleTextBlockStyle}" />
-                <TextBlock Text="一套配置文件，保存一套期望的键盘磁轴设置。编辑后先保存，再应用到键盘。"
+            <TextBlock Text="配置文件可管理磁轴设置，或选择由 ASUS 软件配置的板载槽位。编辑后先保存，再应用到键盘。"
                            TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
             </StackPanel>
 
@@ -57,7 +57,7 @@
             <Grid x:Name="SelectorGrid" ColumnSpacing="12" RowSpacing="8">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                 <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                <ComboBox x:Name="ProfilePicker" Header="浏览与切换配置文件"
+                <ComboBox x:Name="ProfilePicker" Header="浏览配置文件"
                           PlaceholderText="选择配置文件" DisplayMemberPath="Label"
                           HorizontalAlignment="Stretch" SelectionChanged="ProfilePicker_SelectionChanged"
                           AutomationProperties.AutomationId="ProfilePicker" />
@@ -113,6 +113,30 @@
                     <Button x:Name="DiscardDraftButton" Content="放弃草稿并使用最新版本"
                             Click="DiscardDraftButton_Click" Visibility="Collapsed" HorizontalAlignment="Left" />
 
+                    <controls:SettingsCard Header="激活方式" IsClickEnabled="False">
+                        <ComboBox x:Name="ActivationBackendPicker" SelectionChanged="ActivationBackendPicker_SelectionChanged"
+                                  AutomationProperties.Name="配置文件激活方式" AutomationProperties.AutomationId="ProfileActivationBackend">
+                            <x:String>Aura 管理磁轴设置</x:String>
+                            <x:String>板载配置槽位</x:String>
+                        </ComboBox>
+                    </controls:SettingsCard>
+                    <StackPanel x:Name="HardwareSlotPanel" Spacing="10" Visibility="Collapsed">
+                        <ComboBox x:Name="HardwareSlotPicker" Header="目标板载槽位" PlaceholderText="选择配置文件 1–5"
+                                  SelectionChanged="HardwareSlotPicker_SelectionChanged" AutomationProperties.AutomationId="ProfileHardwareSlot">
+                            <x:String>配置文件 1</x:String><x:String>配置文件 2</x:String><x:String>配置文件 3</x:String>
+                            <x:String>配置文件 4</x:String><x:String>配置文件 5</x:String>
+                        </ComboBox>
+                        <TextBlock Text="切换到此配置文件时，Aura只会激活键盘中的对应板载配置。板载配置的按键、磁轴和固件灯效内容请在 ASUS Gear Link / Armoury Crate 中编辑。"
+                                   TextWrapping="Wrap" />
+                        <TextBlock Text="此槽位仍可被 Gear Link、Armoury Crate 或键盘硬件切换修改。Aura不会覆盖槽位内容。板载模式下 Aura 停止灯光帧输出，由键盘呈现板载灯效。"
+                                   TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <TextBlock x:Name="HardwareSlotStateText" TextWrapping="Wrap" />
+                        <InfoBar x:Name="HardwareSlotWarning" Severity="Warning" IsClosable="False"
+                                 Message="键盘当前槽位与此配置的目标不同；板载配置可能已被其它软件或硬件操作更改。Aura不会自动抢回槽位。" />
+                        <Button Content="读取当前槽位" Click="HardwareSlotRefresh_Click" HorizontalAlignment="Left"
+                                AutomationProperties.AutomationId="ProfileRefreshHardwareSlot" />
+                    </StackPanel>
+                    <StackPanel x:Name="HostManagedEditor" Spacing="16">
                     <TextBlock Text="全局磁轴设置" Style="{ThemeResource SubtitleTextBlockStyle}" />
                     <TextBlock Text="覆盖整个配置文件的基础值；关闭自定义时使用全局默认值。"
                                TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
@@ -248,12 +272,24 @@
                             <TextBlock Text="与自定义 DKS 互斥；按压、抬起灵敏度可独立设置。" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                             <StackPanel x:Name="KeyRtFields" Spacing="6" HorizontalAlignment="Left">
                             <TextBlock x:Name="KeyRtSelectionText" TextWrapping="Wrap" />
-                            <ToggleSwitch x:Name="KeyRtCustom" OnContent="管理所选按键" OffContent="不设置所选按键" Tag="k_rt" Toggled="OverrideToggle_Toggled" />
+                            <Button x:Name="ConfigureRtKeysButton" Click="ConfigureRtKeys_Click" HorizontalAlignment="Stretch">
+                                <TextBlock Text="配置所选按键的快速触发" TextWrapping="Wrap" />
+                            </Button>
                             <TextBlock x:Name="KeyRtSource" Style="{ThemeResource CaptionTextBlockStyle}"
                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                             <TextBlock Text="启用所选按键的快速触发" TextWrapping="Wrap" />
                             <ToggleSwitch x:Name="KeyRtEnabled" OnContent="开启" OffContent="关闭" AutomationProperties.Name="启用所选按键的快速触发"
                                           Toggled="KeyRtEnabled_Toggled" />
+                            <InfoBar x:Name="RtDksAuthoringBar" Severity="Warning" IsOpen="False" IsClosable="False" />
+                            <StackPanel Spacing="6">
+                                <Button x:Name="SetRtKeysStandardButton" Click="SetRtKeysStandard_Click" HorizontalAlignment="Stretch">
+                                    <TextBlock Text="将所选按键设为标准模式" TextWrapping="Wrap" />
+                                </Button>
+                                <Button x:Name="KeepDksDisableRtButton" Click="KeepDksDisableRt_Click" HorizontalAlignment="Stretch">
+                                    <TextBlock Text="保留 DKS，关闭冲突按键的快速触发" TextWrapping="Wrap" />
+                                </Button>
+                            </StackPanel>
+                            <TextBlock Text="这些操作仅修改配置文件草稿；保存不会写入键盘。标准模式会替换所选按键的 DKS 动作。" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" />
                             <TextBlock Text="按压灵敏度" /><Slider x:Name="KeyPressSlider" Tag="k_press" ValueChanged="ValueSlider_Changed" AutomationProperties.Name="所选按键快速触发按压灵敏度" />
                             <TextBlock x:Name="KeyPressValue" HorizontalAlignment="Right" />
                             <TextBlock Text="抬起灵敏度" /><Slider x:Name="KeyReleaseSlider" Tag="k_release" ValueChanged="ValueSlider_Changed" AutomationProperties.Name="所选按键快速触发抬起灵敏度" />
@@ -270,7 +306,7 @@
                                     <TextBlock Text="此键 DKS" Style="{ThemeResource BodyStrongTextBlockStyle}" />
                                     <StackPanel x:Name="DksFields" Spacing="8" HorizontalAlignment="Left">
                                     <ComboBox x:Name="DksMode" Header="行为" SelectionChanged="DksMode_SelectionChanged">
-                                        <ComboBoxItem Content="使用配置文件默认值" />
+                                        <ComboBoxItem Content="不管理 DKS（不代表标准模式）" />
                                         <ComboBoxItem Content="标准按键行为" />
                                         <ComboBoxItem Content="自定义四段动作" />
                                     </ComboBox>
@@ -287,13 +323,14 @@
                         </controls:SettingsExpander.Items>
                     </controls:SettingsExpander>
 
+                    </StackPanel>
                     <TextBlock Text="其他配置" Style="{ThemeResource SubtitleTextBlockStyle}" />
                     <controls:SettingsCard Header="关联的 Aura 灯效配置"
                                            Description="完整灯效联动将在后续版本加入。"
                                            IsClickEnabled="False">
                         <TextBlock x:Name="LightingReferenceText" Text="未关联" TextWrapping="Wrap" />
                     </controls:SettingsCard>
-                    <controls:SettingsCard Header="自动切换" Description="按前台程序配置匹配规则；自动应用到键盘尚未启用。"
+                    <controls:SettingsCard Header="自动切换" Description="按前台程序配置匹配规则，自动激活对应配置文件。"
                                            IsClickEnabled="False">
                         <Button Content="管理程序规则" Click="Automation_Click" AutomationProperties.AutomationId="ProfileAutomationEditor" />
                     </controls:SettingsCard>

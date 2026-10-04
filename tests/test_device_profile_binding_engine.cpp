@@ -154,11 +154,52 @@ void ContextAndPureRead() {
     CHECK(f.engine.Snapshot().at("hardware_block_reason") == "PhaseHardwareActivationDisabled");
     CHECK(f.engine.Snapshot().at("decision_sequence") == before.at("decision_sequence"));
 }
+void ControlSurfaceOverrideContext() {
+    Fixture f; auto config = Config(); config["bindings"][0]["process_name"] = "notepad.exe";
+    config["bindings"].push_back(Rule(R2, "aura.exe", Desktop)); f.Configure(config);
+    CHECK(f.Commit("notepad.exe").at("resolved_profile_id") == Cs2);
+    CHECK(f.Commit("aura.exe").at("matched_rule_id") == R2); // rule remains supported
+    f.engine.NotifyManualProfileAction();
+    const auto held = f.engine.Snapshot();
+    CHECK(held.at("manual_hold_anchor") == "notepad.exe");
+    CHECK(held.at("manual_hold_source") == "ManualProfileActivation");
+    for (const auto* name : {"aura.exe", "notepad.exe", "notepad.exe", "aura.exe", "", "notepad.exe"}) {
+        CHECK(f.Commit(name).at("manual_hold") == true);
+        CHECK(f.engine.Snapshot().at("resolved_profile_id").is_null());
+    }
+    f.Commit("aura.exe"); f.engine.Observe("charmap.exe"); f.now += 499; f.engine.Advance();
+    CHECK(f.engine.Snapshot().at("manual_hold") == true);
+    f.now++; f.engine.Advance(); CHECK(f.engine.Snapshot().at("manual_hold") == false);
+    CHECK(f.engine.Snapshot().at("resolved_profile_id") == Desktop);
+    CHECK(f.Commit("notepad.exe").at("resolved_profile_id") == Cs2);
+}
+void UnknownAndStaleControlSurfaceAnchor() {
+    for (int mode = 0; mode < 3; ++mode) {
+        Fixture f;
+        if (mode) f.Commit("cs2.exe");
+        if (mode == 2) f.Commit(""); // intervening unresolved foreground is not trusted history
+        f.Commit("aura.exe");
+        if (mode == 1) f.now += Engine::ControlSurfaceAnchorFreshnessMs + 1;
+        f.engine.NotifyManualProfileAction();
+        CHECK(f.engine.Snapshot().at("manual_hold_pending_anchor") == true);
+        CHECK(f.engine.Snapshot().at("manual_action_sequence") == 1);
+        CHECK(f.Commit("").at("manual_hold") == true);
+        CHECK(f.Commit("cs2.exe").at("manual_hold_anchor") == "cs2.exe");
+        CHECK(f.engine.Snapshot().at("resolved_profile_id").is_null());
+        CHECK(f.Commit("explorer.exe").at("manual_hold") == false);
+    }
+    Fixture immediate; immediate.Commit("cs2.exe"); immediate.engine.Observe("aura.exe");
+    immediate.engine.NotifyManualProfileAction(); // UI action can arrive before 500 ms Aura commit
+    CHECK(immediate.engine.Snapshot().at("manual_hold_anchor") == "cs2.exe");
+    CHECK(immediate.Commit("aura.exe").at("manual_hold") == true);
+    CHECK(immediate.Commit("cs2.exe").at("manual_hold") == true);
+}
 }
 int main() {
     const std::pair<const char*, void(*)()> tests[] = {{"normalization_startup", NormalizationAndStartup},
         {"resolution", Resolution}, {"tie_dedup", TieAndSameTarget}, {"debounce_hold", ChurnAndManualHold},
-        {"schema_extensions", SchemaAndExtensions}, {"context_pure_read", ContextAndPureRead}};
+        {"schema_extensions", SchemaAndExtensions}, {"context_pure_read", ContextAndPureRead},
+        {"control_surface_override", ControlSurfaceOverrideContext}, {"unknown_stale_anchor", UnknownAndStaleControlSurfaceAnchor}};
     int failures = 0;
     for (const auto& [name, test] : tests) try { test(); } catch (const std::exception& ex) {
         ++failures; std::cerr << name << ": " << ex.what() << '\n';

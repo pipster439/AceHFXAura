@@ -4,7 +4,7 @@ Aura 是面向 **ROG Falchion Ace HFX** 的高性能独立 Windows 灯光控制�
 
 当前 alpha 版本号以仓库根目录的 [`VERSION`](VERSION) 为单一事实源；核心能力与已知限制见 [`CHANGELOG.md`](CHANGELOG.md)。
 
-当前 alpha.4 开发线把 WinUI 推进为发行入口，并提供原生 Game Integration。继续复用 alpha.3 的 Native HID、Automation v2、GSI 与 Studio publication 语义，不扩展硬件控制协议。自动化测试与真机验收是不同证据；alpha.4 候选的桌面交互、键盘与 CS2 验收仍须单独完成。详见 [文档索引](docs/README.md) 和 [当前架构](docs/architecture/README.md)。
+当前 `0.1.0-alpha.7` 已完成 package candidate 验收，正在最终源码冻结；尚未正式发布。WinUI 为发行入口，沿用 Native HID、Automation v2、GSI 与 Studio publication 语义。HardwareSlot 使用已存在的板载槽位，不提供隐藏 bank authoring。自动化测试、hosted CI 与真机验收分别记录；最新状态和已知限制见 [release closure](docs/release/HARDWARE_SLOT_RELEASE_CLOSURE.md)、[package candidate](docs/release/PACKAGE_CANDIDATE_AUDIT.md) 与 [文档索引](docs/README.md)。
 
 ## 硬件后端架构 (Hardware Backends)
 

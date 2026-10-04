@@ -94,6 +94,22 @@ void HoldLifecycle() {
     f.Stable("cs2.exe"); CHECK(f.activations.size() == 3);
     Fixture restarted; restarted.Stable("cs2.exe"); CHECK(restarted.engine.Snapshot()["manual_hold"] == false);
 }
+void ControlSurfaceHoldAndOldToken() {
+    Fixture f; f.config["bindings"][0]["process_name"] = "notepad.exe";
+    f.config["fallback_profile_id"] = nullptr; f.Configure();
+    f.Stable("notepad.exe"); CHECK(f.activations.size() == 1);
+    f.Stable("aura.exe"); f.engine.NotifyManualProfileAction();
+    const auto count = f.activations.size();
+    for (const auto* name : {"aura.exe", "notepad.exe", "notepad.exe", "", "aura.exe", "notepad.exe"}) {
+        f.Stable(name); CHECK(f.activations.size() == count);
+    }
+    f.Stable("charmap.exe"); CHECK(f.engine.Snapshot().at("manual_hold") == false);
+    f.Stable("notepad.exe"); CHECK(f.activations.size() == count + 1);
+    Fixture race;
+    race.before = [&] { race.engine.Observe("aura.exe"); race.engine.NotifyManualProfileAction(); };
+    race.Stable("cs2.exe"); CHECK(race.activations.empty());
+    CHECK(race.coordinator.Snapshot().at("activation_outcome") == "stale");
+}
 void RetryOutcomesAndHealthWake() {
     Fixture f; f.outcome = "deferred"; f.Stable("cs2.exe"); CHECK(f.activations.size() == 1);
     for (int i = 0; i < 100; ++i) f.coordinator.Tick(); CHECK(f.activations.size() == 1);
@@ -146,7 +162,7 @@ void DiagnosticsPureRead() {
 int main() {
     const std::pair<const char*, void(*)()> tests[] = {
         {"startup_churn_dedup_A_B_A", StartupChurnAndDedup}, {"no_hidden_fallback", NoHiddenFallback},
-        {"freshness_races", FreshnessRechecked}, {"manual_hold", HoldLifecycle},
+        {"freshness_races", FreshnessRechecked}, {"manual_hold", HoldLifecycle}, {"control_surface_hold_race", ControlSurfaceHoldAndOldToken},
         {"retry_outcomes_health_wake", RetryOutcomesAndHealthWake}, {"selection_revision_consumed", SelectionRevisionConsumed},
         {"single_flight_shutdown", SingleFlightAndShutdown}, {"diagnostic_purity", DiagnosticsPureRead}};
     int failures = 0;

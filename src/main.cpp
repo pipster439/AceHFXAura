@@ -602,6 +602,13 @@ int main(int argc, char* argv[]) {
         std::filesystem::absolute(config_path).parent_path() / "device-profiles.json",
         std::filesystem::absolute(config_path));
     if (!dry_run) magnetic_service.StartHardwareRtGateObservation();
+    adapter.SetFrameAdmission([&](const std::function<bool()>& writer) {
+        return magnetic_service.WithProfileLightingOwnership(writer);
+    });
+    struct FrameAdmissionScope {
+        aura::AuraAdapter& adapter;
+        ~FrameAdmissionScope() { adapter.Shutdown(); adapter.SetFrameAdmission({}); }
+    } frame_admission_scope{adapter}; // destroy before magnetic_service, including unwind
     if (!dry_run) magnetic_service.StartDeviceProfileAutomation();
     aura::GsiAdapter gsi_adapter;
     gsi_adapter.SetInstanceId(instance_id);
@@ -834,6 +841,8 @@ int main(int argc, char* argv[]) {
         }
 
         web_supervisor.SetSuppressed(automation.suppress_web_ui);
+
+        magnetic_service.ObserveHardwareSlot(); // bounded10s read-only drift observation
 
         // 零分配计算当前帧 (包含 GSI 原子读取与瞬态事件叠加)
         effect_engine.Tick(frame_buf, keymap, &gsi_adapter.GetState());

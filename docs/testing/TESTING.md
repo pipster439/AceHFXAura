@@ -41,12 +41,35 @@ cmake --build build --config Release
 ctest --test-dir build -C Release --output-on-failure
 python -B -m unittest discover -s tests -p "test_*.py" -v
 dotnet test tests/Aura.Tests/Aura.Tests.csproj -c Release
+dotnet test tests/AsusPlatform.Tests/AsusPlatform.Tests.csproj -c Release
 dotnet build winui/Aura.WinUI.csproj -c Release -p:Platform=x64
 cd frontend
 npm ci
 npm test
 npm run build
 ```
+
+ASUS platform M1 tests do not activate vendor COM or change hardware. Software tests
+cover protocol parsing/dispatch, serialization, evidence semantics and authentication
+policy. `DesktopSmoke` cases additionally exercise real local Windows pipes/process
+tokens and require a logged-on user session; CI excludes them explicitly. Service
+installation, medium-integrity production client IPC, actual logoff/shutdown and
+different-user OS ACL denial are separate acceptance evidence. See
+[ASUS platform M1](../architecture/ASUS_PLATFORM_PHASE3_M1.md).
+
+[ASUS platform M2](../architecture/ASUS_PLATFORM_PHASE3_M2.md) adds native worker software fixtures
+for crash/hang/framing, nullable enumeration evidence, topology and logical lease recovery. They use
+synthetic adapters/data and call no vendor COM. Parent-death Job Object coverage is DesktopSmoke.
+Real host read-only enumeration is explicit through `tools/AuraDiagnostics`; it is not a CI fixture.
+Ownership, RGB output and vendor service changes remain excluded. See the
+[separately gated ownership plan](AURA_OWNERSHIP_EXPERIMENT.md).
+
+M2.5 adds standalone `tools/AuraOwnershipExperiment` core/fake tests and
+`test_aura_gate_a_guards.py`; shared CI builds/runs only software tests. The actual native adapter is
+excluded from those test executables and normal product publish. Source policy allows ownership call
+sites only in the dedicated adapter, bans public token/RGB/fan write surfaces, and pins the canonical ABI.
+See [Gate A runbook](AURA_GATE_A_RUNBOOK.md): current reviewed execution gate remains closed because
+MTA baseline is nonempty and vendor ReleaseControl has internal RGB reset/Apply behavior.
 
 Python discovery includes release/launcher checks that require a freshly packaged legacy `dist/Aura.exe`; absent or stale artifacts are not cleanup regressions and must be reported. Do not run packaging merely to satisfy these checks without accounting for its runtime-cache side effects. CI runs isolated Web/daemon entrypoint classes and `test_automation_{v2,authoring,effect,reload,retrigger}_daemon` against `AURA_BIN_DIR`; the reload suite requires MSVC and generated Studio fixtures. `test_aura_hal`, `test_lightbar_probe` and `test_gsi_dictionary_blocks` are additional local helper suites. Tests may skip daemon lifecycle cases when a real instance occupies the shared mutex or ports.
 
@@ -55,3 +78,22 @@ CTest registers plugin runtime/ABI, runtime status, lighting service, GSI rules,
 `test_com.cpp` and `test_diag_hook.cpp` remain CMake-built manual diagnostics, not CTest tests. The latter is interactive. `test_cs2_gsi.py` sends to live ports 19897/19898 and is an opt-in integration tool, not isolated CI. Do not run live probes or hardware calibration against a user's session as an automated check.
 
 [Historical M1/M5 harnesses](../../tests/archive/README.md) are retained outside default discovery. `tests/reference_models/` remains non-production evidence. Neither is included in current coverage claims.
+
+## HardwareSlot closure
+
+`run-hardware-slot-smoke.ps1 -AllowHardwareWrites -SlotA 5 -SlotB 1`
+uses the canonical shared runner. Foreground discovery must observe each actual
+process, and Program A must be stable before temporary rules are installed.
+Stable-stage dedup compares the accepted decision identity and actual selector
+counter; query-confirmed same-slot observations may increment attempt diagnostics
+without becoming duplicate writes. An extra selector still fails. The finally
+path restores only the installed revisioned rules, preserving fallback and
+refusing to overwrite concurrent edits.
+
+Mock coverage includes startup/frame/exit ownership suppression, ownership return
+after successful HostManaged activation, bounded drift observation and timeout
+rate limiting. Physical gates separately prove ManualHold, reconnect with no
+automatic selector, and firmware lighting restoration with zero C0 81 submissions.
+The privacy-filtered collector counts target Direct RGB OUT submissions without
+retaining their RGB/key bodies. A body omitted from a capture is not by itself
+proof of zero submissions; use its accompanying privacy manifest counter.

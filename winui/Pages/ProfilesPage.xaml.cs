@@ -17,6 +17,9 @@ public sealed partial class ProfilesPage : Page
     private static extern short GetKeyState(int virtualKey);
 
     private readonly ProfilePageModel _model;
+    private readonly ProfileNoticePresentation _noticePresentation = new();
+    private readonly DispatcherTimer _noticeTimer = new() { Interval = TimeSpan.FromSeconds(6) };
+    private long _noticeTimerSequence;
     private readonly Dictionary<ushort, (Button Button, TextBlock Marker)> _keys = [];
     private readonly List<Canvas> _keyRows = [];
     private readonly HashSet<ushort> _selectedKeys = [];
@@ -48,13 +51,20 @@ public sealed partial class ProfilesPage : Page
         BuildKeyboard();
         BuildDksEditor();
         PageLayout.Attach(this, PageScroll, PageContent, Reflow, maxWidth: 1420);
-        PageLayout.Notification(this, NoticeBar);
+        _noticeTimer.Tick += (_, _) => {
+            _noticeTimer.Stop();
+            if (ProfileNoticePresentation.CanExpire(_noticeTimerSequence, _model.NoticeSequence, _model.NoticeKind))
+                NoticeBar.IsOpen = false;
+        };
+        NoticeBar.RegisterPropertyChangedCallback(InfoBar.IsOpenProperty, (_, _) => {
+            if (!NoticeBar.IsOpen) _noticeTimer.Stop();
+        });
         _statusTimer.Tick += async (_, _) => {
             if (_statusRefreshing || _statusCancellation is null) return;
             _statusRefreshing = true;
             try {
-                await _model.RefreshHardwareRtGateAsync(_statusCancellation.Token);
-                HardwareRtGateBar.Message = _model.HardwareRtGateText;
+                await _model.LoadAsync(_statusCancellation.Token);
+                if (!_model.IsBusy && !_statusCancellation.IsCancellationRequested) Render();
             }
             catch (OperationCanceledException) { }
             finally { _statusRefreshing = false; }
@@ -66,7 +76,10 @@ public sealed partial class ProfilesPage : Page
             try { await _model.LoadAsync(token); if (!token.IsCancellationRequested) { Render(); _statusTimer.Start(); } }
             catch (OperationCanceledException) { }
         };
-        Unloaded += (_, _) => { _statusTimer.Stop(); _statusCancellation?.Cancel(); };
+        Unloaded += (_, _) => {
+            _statusTimer.Stop(); _noticeTimer.Stop(); _statusCancellation?.Cancel();
+            if (_model.NoticeKind == ProfileNoticeKind.Success) NoticeBar.IsOpen = false;
+        };
         ActualThemeChanged += (_, _) => RenderKeyboard();
         _rendering = false;
         Render();
@@ -179,8 +192,9 @@ public sealed partial class ProfilesPage : Page
         }
     }
 
-    private void Render()
+    internal void Render()
     {
+        _model.ReconcileDraftValidationNotice();
         HardwareRtGateBar.Message = _model.HardwareRtGateText;
         _rendering = true;
         try {
@@ -200,8 +214,20 @@ public sealed partial class ProfilesPage : Page
             DetailsButton.Visibility = (_model.State is ProfilePageState.ApplyFailed or
                 ProfilePageState.DocumentUnavailable) &&
                 !string.IsNullOrWhiteSpace(_model.ApplyDetails) ? Visibility.Visible : Visibility.Collapsed;
-            NoticeBar.IsOpen = !string.IsNullOrWhiteSpace(_model.Notice);
-            NoticeBar.Message = _model.Notice;
+            if (_noticePresentation.Accept(_model.NoticeSequence)) {
+                _noticeTimer.Stop();
+                NoticeBar.Message = _model.Notice;
+                NoticeBar.Severity = _model.NoticeKind switch {
+                    ProfileNoticeKind.Success => InfoBarSeverity.Success,
+                    ProfileNoticeKind.Warning => InfoBarSeverity.Warning,
+                    ProfileNoticeKind.Error => InfoBarSeverity.Error,
+                    _ => InfoBarSeverity.Informational
+                };
+                NoticeBar.IsOpen = !string.IsNullOrWhiteSpace(_model.Notice);
+                if (NoticeBar.IsOpen && _model.NoticeKind == ProfileNoticeKind.Success) {
+                    _noticeTimerSequence = _model.NoticeSequence; _noticeTimer.Start();
+                }
+            }
             DraftValidationBar.Message = _model.DraftValidationText;
             DraftValidationBar.IsOpen = !string.IsNullOrWhiteSpace(DraftValidationBar.Message);
             RapidTriggerValidationBar.Message = string.Join(Environment.NewLine,
@@ -211,12 +237,6 @@ public sealed partial class ProfilesPage : Page
                 _model.RapidTriggerIssues.Where(i => i.LogicalId is not null).Select(i => i.Message));
             KeyRtValidationBar.IsOpen = !string.IsNullOrWhiteSpace(KeyRtValidationBar.Message);
             RtKeySetSummary.Text = _model.RapidTriggerSelectionSummary;
-            NoticeBar.Severity = _model.NoticeKind switch {
-                ProfileNoticeKind.Success => InfoBarSeverity.Success,
-                ProfileNoticeKind.Warning => InfoBarSeverity.Warning,
-                ProfileNoticeKind.Error => InfoBarSeverity.Error,
-                _ => InfoBarSeverity.Informational
-            };
             ConflictBar.IsOpen = _model.HasConflict;
             DiscardDraftButton.Visibility = _model.HasConflict ? Visibility.Visible : Visibility.Collapsed;
             var available = snapshot is not null && _model.State is not
@@ -238,13 +258,27 @@ public sealed partial class ProfilesPage : Page
                         (active ? " · 已应用" : "");
                     return new ProfileChoice(profile, label);
                 }).ToList();
-                ProfilePicker.ItemsSource = choices;
-                ProfilePicker.SelectedItem = choices.FirstOrDefault(choice => choice.Profile.Id == _model.EditingId);
+                // Status polling must not rebuild an open native picker on
+                // every tick when only revision/runtime diagnostics changed.
+                var existing = ProfilePicker.ItemsSource as List<ProfileChoice>;
+                if (existing is null || !existing.Select(c => (c.Profile.Id, c.Label))
+                    .SequenceEqual(choices.Select(c => (c.Profile.Id, c.Label))))
+                    ProfilePicker.ItemsSource = choices;
+                var displayed = (List<ProfileChoice>)ProfilePicker.ItemsSource;
+                ProfilePicker.SelectedItem = displayed.FirstOrDefault(choice => choice.Profile.Id == _model.EditingId);
             }
             EditorSurface.IsEnabled = available && draft is not null && !_model.IsBusy;
-            EditorName.Text = draft is null ? "磁轴配置" : $"{draft.Name} · 磁轴配置";
+            EditorName.Text = draft is null ? "配置文件" : $"{draft.Name} · {(_model.IsHardwareSlotDraft ? "板载槽位" : "磁轴配置")}";
+            ActivationBackendPicker.SelectedIndex = _model.IsHardwareSlotDraft ? 1 : 0;
+            HardwareSlotPicker.SelectedIndex = _model.IsHardwareSlotDraft && draft?.HardwareSlot is >= 1 and <= 5 ? draft.HardwareSlot.Value - 1 : -1;
+            HostManagedEditor.Visibility = _model.IsHardwareSlotDraft ? Visibility.Collapsed : Visibility.Visible;
+            HardwareSlotPanel.Visibility = _model.IsHardwareSlotDraft ? Visibility.Visible : Visibility.Collapsed;
+            HardwareSlotStateText.Text = _model.HardwareSlotText;
+            HardwareSlotWarning.IsOpen = _model.HardwareSlotMismatch;
+            ApplyButton.Content = _model.IsHardwareSlotDraft ? "激活板载槽位" : "应用到键盘";
             DraftStateText.Text = _model.HasConflict ? "草稿与最新版本冲突，请先处理冲突。" :
                 _model.HasUnsavedChanges ? "有尚未保存的草稿更改。" :
+                _model.IsHardwareSlotDraft ? "编辑只影响 Aura 草稿；激活时仅切换板载槽位，不改写槽位内容。" :
                 draft?.Id == snapshot?.SelectedProfileId ? "已保存；应用会提交当前选择的配置。" :
                 "正在编辑另一个配置文件；应用会切换当前选择。";
             SaveButton.IsEnabled = available && !_model.IsBusy && _model.HasUnsavedChanges && !_model.HasConflict &&
@@ -254,7 +288,7 @@ public sealed partial class ProfilesPage : Page
             SelectAllRtButton.IsEnabled = available && !_model.IsBusy;
             ContextName.Text = _model.EditingName;
             ContextState.Text = _model.StateTitle;
-            ContextOverrides.Text = $"逐键覆盖：{_model.OverrideCount} 个";
+            ContextOverrides.Text = _model.IsHardwareSlotDraft ? _model.HardwareSlotText : $"逐键覆盖：{_model.OverrideCount} 个";
             ApplyDetailsText.Text = string.IsNullOrWhiteSpace(_model.ApplyDetails) ? "尚无应用记录" : _model.ApplyDetails;
             LightingReferenceText.Text = string.IsNullOrWhiteSpace(draft?.Lighting.LegacyEffectReference) ?
                 "未关联" : draft.Lighting.LegacyEffectReference;
@@ -321,18 +355,26 @@ public sealed partial class ProfilesPage : Page
         var rt = first?.RapidTrigger;
         var dks = first?.Dks;
         var has = ids.Length > 0;
-        KeyActCustom.IsEnabled = KeyDzCustom.IsEnabled = KeyRtCustom.IsEnabled = has;
+        KeyActCustom.IsEnabled = KeyDzCustom.IsEnabled = has;
         KeyActCustom.IsOn = has && keys.All(k => k?.ActuationMm is not null);
         KeyDzCustom.IsOn = has && keys.All(k => k?.Deadzone is not null);
-        KeyRtCustom.IsOn = has && keys.All(k => k?.RapidTrigger is not null);
+        var allRtManaged = has && keys.All(k => k?.RapidTrigger is not null);
+        ConfigureRtKeysButton.Visibility = allRtManaged ? Visibility.Collapsed : Visibility.Visible;
+        ConfigureRtKeysButton.IsEnabled = has && !_model.IsBusy;
         KeyActSource.Text = KeyActCustom.IsOn ? "自定义覆盖" :
             baseline?.GlobalActuationMm is double a ? $"使用配置文件默认值：{a:F1} mm" :
             defaults?.GlobalActuationMm is double ga ? $"使用全局默认值：{ga:F1} mm" : "使用配置文件默认值";
         KeyDzSource.Text = KeyDzCustom.IsOn ? "自定义覆盖" : "使用配置文件默认值";
         KeyRtSelectionText.Text = ids.Length == 0 ? "请在键盘图中选择按键。" :
             $"已选择 {ids.Length} 个按键。" + (ids.Length > 1 ? "下方显示首键草稿值，改动会批量更新全部所选按键。" : "");
-        KeyRtSource.Text = KeyRtCustom.IsOn ? "所选按键由此配置文件设置。关闭快速触发会保存明确的禁用设置。" :
-            "不设置所选按键。移除已有设置会尝试恢复原有手动配置；若原设置未知，应用会提示无法恢复。";
+        KeyRtSource.Text = allRtManaged ? "所选按键由此配置文件管理。关闭快速触发仅保存禁用状态，保留参数和管理权。" :
+            "部分或全部所选按键尚未配置。开始配置后可开启或关闭快速触发；已有按键设置保持不变。";
+        RtDksAuthoringBar.Message = _model.RtDksAuthoringText(ids);
+        RtDksAuthoringBar.IsOpen = RtDksAuthoringBar.Message.Length > 0;
+        SetRtKeysStandardButton.Visibility = RtDksAuthoringBar.IsOpen ? Visibility.Visible : Visibility.Collapsed;
+        SetRtKeysStandardButton.IsEnabled = has && !_model.IsBusy;
+        KeepDksDisableRtButton.Visibility = ids.Any(id => _model.RtConflictingDksKeys.Contains(id)) ? Visibility.Visible : Visibility.Collapsed;
+        KeepDksDisableRtButton.IsEnabled = has && !_model.IsBusy;
         KeyActSlider.Value = act ?? baseline?.GlobalActuationMm ?? defaults?.GlobalActuationMm ?? 1.0;
         KeyTopSlider.Value = dz?.TopMm ?? baseline?.GlobalDeadzone?.TopMm ?? defaults?.GlobalDeadzone?.TopMm ?? 0;
         KeyBottomSlider.Value = dz?.BottomMm ?? baseline?.GlobalDeadzone?.BottomMm ?? defaults?.GlobalDeadzone?.BottomMm ?? 0.1;
@@ -341,8 +383,8 @@ public sealed partial class ProfilesPage : Page
         KeyReleaseSlider.Value = rt?.ReleaseMm ?? 0.4;
         KeyActSlider.IsEnabled = has && KeyActCustom.IsOn;
         KeyTopSlider.IsEnabled = KeyBottomSlider.IsEnabled = has && KeyDzCustom.IsOn;
-        KeyRtEnabled.IsEnabled = has && KeyRtCustom.IsOn;
-        KeyPressSlider.IsEnabled = KeyReleaseSlider.IsEnabled = has && KeyRtCustom.IsOn && KeyRtEnabled.IsOn;
+        KeyRtEnabled.IsEnabled = allRtManaged;
+        KeyPressSlider.IsEnabled = KeyReleaseSlider.IsEnabled = allRtManaged && KeyRtEnabled.IsOn;
         KeyActValue.Text = Mm(KeyActSlider.Value); KeyTopValue.Text = Mm(KeyTopSlider.Value);
         KeyBottomValue.Text = Mm(KeyBottomSlider.Value); KeyPressValue.Text = Mm(KeyPressSlider.Value);
         KeyReleaseValue.Text = Mm(KeyReleaseSlider.Value);
@@ -406,8 +448,8 @@ public sealed partial class ProfilesPage : Page
         if (_rendering || ProfilePicker.SelectedItem is not ProfileChoice profileChoice ||
             profileChoice.Profile.Id == _model.EditingId) return;
         var selected = profileChoice.Profile;
-        if (_model.HasConflict) { Render(); return; }
-        if (_model.HasUnsavedChanges) {
+
+        if (_model.HasUnsavedChanges || _model.HasConflict) {
             var choice = await ConfirmDraftAsync();
             if (choice == ContentDialogResult.None) { Render(); return; }
             if (choice == ContentDialogResult.Primary && !await _model.SaveAsync()) { Render(); return; }
@@ -415,7 +457,7 @@ public sealed partial class ProfilesPage : Page
         }
         if (_model.Edit(selected.Id)) {
             _selectedKeys.Clear();
-            await _model.ApplyAsync(selected.Id);
+            // Browsing edits desired content; Apply is a separate explicit command.
         }
         Render();
     }
@@ -462,7 +504,6 @@ public sealed partial class ProfilesPage : Page
             Math.Round(KeyActSlider.Value, 1) : null; break;
         case "k_dz": foreach (var id in _selectedKeys) Key(id).Deadzone = toggle.IsOn ?
             new ProfileDeadzone(Math.Round(KeyTopSlider.Value, 1), Math.Round(KeyBottomSlider.Value, 1)) : null; break;
-        case "k_rt": _model.SetRapidTriggerDraftForKeys(_selectedKeys, toggle.IsOn ? KeyRtValue() : null); break;
         }
         PruneKeys(); Render();
     }
@@ -513,9 +554,31 @@ public sealed partial class ProfilesPage : Page
     private void KeyRtEnabled_Toggled(object sender, RoutedEventArgs e)
     {
         if (_rendering) return;
-        _model.SetRapidTriggerDraftForKeys(_selectedKeys.Where(id =>
-            _model.Draft?.Magnetic.Keys.Any(k => k.LogicalId == id && k.RapidTrigger is not null) == true), KeyRtValue());
+        _model.SetRapidTriggerEnabledForKeys(_selectedKeys, KeyRtEnabled.IsOn);
         Render();
+    }
+    private void ConfigureRtKeys_Click(object sender, RoutedEventArgs e)
+    {
+        _model.ConfigureRapidTriggerDraftForKeys(_selectedKeys, KeyRtValue()); Render();
+    }
+    private async void SetRtKeysStandard_Click(object sender, RoutedEventArgs e)
+    {
+        var ids = _selectedKeys.Order().ToArray();
+        var editingId = _model.EditingId;
+        if (_model.IsBusy || ids.Length == 0) return;
+        var conflicts = ids.Count(id => _model.DraftDksForKey(id) is { Standard: false });
+        if (conflicts > 0) {
+            var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = "替换所选按键的 DKS 动作？",
+                Content = new TextBlock { Text = $"此操作会将所选按键中的 {conflicts} 个 DKS 配置替换为标准模式，保留快速触发设置。仅修改草稿；应用后才写入键盘。", TextWrapping = TextWrapping.Wrap },
+                PrimaryButtonText = "设为标准模式", CloseButtonText = "取消", DefaultButton = ContentDialogButton.Close };
+            if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+        }
+        if (_model.EditingId != editingId) return;
+        _model.SetSelectedKeysStandard(ids); Render();
+    }
+    private void KeepDksDisableRt_Click(object sender, RoutedEventArgs e)
+    {
+        _model.KeepDksAndDisableRt(_selectedKeys.ToArray()); Render();
     }
     private void DksMode_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -551,6 +614,18 @@ public sealed partial class ProfilesPage : Page
     private async void RetryApplyButton_Click(object sender, RoutedEventArgs e) { await _model.ApplyAsync(_model.Snapshot?.SelectedProfileId); Render(); }
     private async void SaveButton_Click(object sender, RoutedEventArgs e) { await _model.SaveAsync(); Render(); }
     private async void ApplyButton_Click(object sender, RoutedEventArgs e) { await _model.ApplyAsync(); Render(); }
+    private void ActivationBackendPicker_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_rendering || ActivationBackendPicker.SelectedIndex < 0) return;
+        _model.SetActivationBackend(ActivationBackendPicker.SelectedIndex == 1 ? "hardware_slot" : "host_managed"); Render();
+    }
+    private void HardwareSlotPicker_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_rendering || !_model.IsHardwareSlotDraft || _model.Draft is null || HardwareSlotPicker.SelectedIndex < 0) return;
+        _model.Draft.HardwareSlot = HardwareSlotPicker.SelectedIndex + 1; Render();
+    }
+    private async void HardwareSlotRefresh_Click(object sender, RoutedEventArgs e)
+    { await _model.RefreshHardwareSlotAsync(); Render(); }
     private void KeepDraftButton_Click(object sender, RoutedEventArgs e) { _model.KeepDraftAfterConflict(); Render(); }
     private void DiscardDraftButton_Click(object sender, RoutedEventArgs e) { _model.DiscardDraft(); Render(); }
 

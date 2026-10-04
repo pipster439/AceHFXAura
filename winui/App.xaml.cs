@@ -13,6 +13,10 @@ public partial class App : Application
     public static Window? MainWindowInstance => _window;
     // Transport only. The daemon is the sole Profile document/runtime owner.
     public static IProfileControlClient ProfileClient { get; } = new ProfileControlClient();
+    public static AceHFX.AsusPlatform.IAsusPlatform AsusPlatform { get; } =
+        new AceHFX.AsusPlatform.AsusPlatform(new AceHFX.AsusPlatform.Ipc.AceHfxServiceClient());
+    public static AceHFX.AsusPlatform.Aura.IAuraBackend AuraRuntime { get; } =
+        new AceHFX.AsusPlatform.Aura.AuraRuntimeBackend();
 
     private static readonly object _activationLock = new();
     private static bool _hasPendingActivation = false;

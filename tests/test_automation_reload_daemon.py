@@ -39,14 +39,18 @@ class TestAutomationReloadDaemon(unittest.TestCase):
             path.write_text(json.dumps(config), encoding="utf-8")
             env = get_isolated_env(directory)
             env["AURA_LIFECYCLE_FIXTURE_TRACE"] = str(root / "trace.txt")
+            env["AURA_LIFECYCLE_FIXTURE_EVENTS"] = str(root / "fixture-events.jsonl")
+            output = (root / "daemon.log").open("w", encoding="utf-8")
             proc = subprocess.Popen([str(binary), "--dry-run", "--config", str(path), "--keymap", KEYMAP_FILE],
-                cwd=root, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                cwd=root, env=env, stdout=output, stderr=subprocess.STDOUT)
             try:
                 deadline = time.monotonic() + 8
                 while True:
                     self.assertIsNone(proc.poll(), "daemon exited at startup")
                     try:
-                        if request(19897, "/api/runtime/status")[0] == 200:
+                        status, data, _ = request(19897, "/api/runtime/status")
+                        if (status == 200 and data.get("identity", {}).get("process_id") == proc.pid
+                                and data.get("runtime", {}).get("dry_run") is True):
                             break
                     except OSError:
                         pass
@@ -56,6 +60,7 @@ class TestAutomationReloadDaemon(unittest.TestCase):
                 yield root, binary.parent, path
             finally:
                 terminate_proc(proc)
+                output.close()
 
     def test_cosmetic_reload_and_plugin_swap_preserve_old_transient(self):
         def rule(id, mode):
@@ -71,29 +76,88 @@ class TestAutomationReloadDaemon(unittest.TestCase):
             for r in cfg["orchestration"]["rules"]:
                 r["action"]["effect"]["name"] = str(dll)
         with self.daemon(config, prepare) as (root, binaries, path):
+            def wait_for(predicate, description):
+                deadline = time.monotonic() + 4
+                while True:
+                    value = predicate()
+                    if value:
+                        return value
+                    if time.monotonic() >= deadline:
+                        self.fail(f"Timed out waiting for {description}; events={events()}")
+                    time.sleep(.01)  # Poll a specific owner/lifecycle event, not an observation window.
+            def events():
+                journal = root / "fixture-events.jsonl"
+                if not journal.exists():
+                    return []
+                # The DLL appends one complete line per event. Ignore an unfinished final write.
+                return [json.loads(line) for line in journal.read_text().splitlines(keepends=True)
+                        if line.endswith("\n")]
+            def rendered(marker):
+                return {e["instance"] for e in events() if e["event"] == "render" and e["marker"] == marker}
+            def destroyed(marker, instance):
+                return any(e["event"] == "destroyed" and e["marker"] == marker
+                           and e["instance"] == instance for e in events())
+            def renders_after(index, marker, instance):
+                return sum(e["event"] == "render" and e["marker"] == marker and e["instance"] == instance
+                           for e in events()[index:])
             def packet(kills):
-                self.assertEqual(request(19897, "/gsi", {"player": {"state": {"health": 10, "round_kills": kills}}})[0], 200)
-                time.sleep(.1)
+                # --dry-run protects hardware, not the live GSI listener. Use the existing
+                # owner-thread simulation queue so a running CS2 cannot overwrite this fixture.
+                status, queued, _ = request(19897, "/api/gsi/simulation", {
+                    "enabled": True, "heartbeat": True, "foreground_process": "cs2.exe",
+                    "health": 10, "round_kills": kills})
+                self.assertEqual(status, 202)
+                wait_for(lambda: request(19897, "/api/gsi/simulation")[1]["applied_sequence"] >= queued["sequence"],
+                         "simulation command applied by render owner")
             def trace():
                 return (root / "trace.txt").read_text() if (root / "trace.txt").exists() else ""
-            packet(0); packet(1)
+            def load_count():
+                return (root / "daemon.log").read_text(encoding="utf-8", errors="replace").count("成功加载配置文件:")
+            packet(0)
+            old_persistent = next(iter(wait_for(lambda: rendered(200), "old persistent render")))
+            packet(1)
+            old_shot = next(iter(wait_for(lambda: rendered(200) - {old_persistent}, "old one-shot render")))
             old_count = trace().count("old_render")
             self.assertGreater(old_count, 0)
+            loaded = load_count()
             config["orchestration"]["rules"][0]["description"] = "cosmetic"
             temporary = root / "next.json"
             temporary.write_text(json.dumps(config), encoding="utf-8"); os.replace(temporary, path)
-            time.sleep(.15)
+            wait_for(lambda: load_count() > loaded, "cosmetic config accepted")
+            index = len(events())
+            wait_for(lambda: renders_after(index, 200, old_shot), "same old one-shot after cosmetic reload")
+            self.assertFalse(destroyed(200, old_shot), "cosmetic edit cancelled old shot")
+            self.assertFalse(destroyed(200, old_persistent), "cosmetic edit replaced persistent instance")
             self.assertGreater(trace().count("old_render"), old_count)
+            # Permanent regression for the previously uncontrolled input: a valid external
+            # packet would make health < 15 false without exclusive fixture input ownership.
+            self.assertEqual(request(19897, "/gsi", {"player": {"state": {"health": 100, "round_kills": 1}}})[0], 200)
+            self.assertEqual(request(19897, "/api/gsi/simulation")[1]["payload"]["player"]["state"]["health"], 10)
             shutil.copy2(binaries / "automation_reload_new.dll", root / "live.dll")
             self.assertEqual(request(19897, "/api/plugin/reload", {"name": str(root / "live.dll")})[0], 200)
-            before = trace(); time.sleep(.15); after = trace()
+            before = trace()
+            new_persistent = next(iter(wait_for(lambda: rendered(100), "new generation persistent render")))
+            index = len(events())
+            wait_for(lambda: renders_after(index, 200, old_shot) and renders_after(index, 100, new_persistent),
+                     "new persistent and original old one-shot rendering together")
+            wait_for(lambda: destroyed(200, old_persistent), "old persistent retirement")
+            self.assertFalse(destroyed(200, old_shot), "DLL reload cancelled old shot")
+            self.assertEqual(rendered(100), {new_persistent}, "duplicate new persistent instances")
+            after = trace()
             self.assertGreater(after.count("old_render"), before.count("old_render"), "old transient cancelled by DLL reload")
             self.assertGreater(after.count("new_render"), before.count("new_render"), "persistent did not swap to new DLL")
             config["orchestration"]["rules"][0]["action"]["priority"] = 99
             temporary.write_text(json.dumps(config), encoding="utf-8"); os.replace(temporary, path)
-            time.sleep(.15); before = trace(); time.sleep(.1); after = trace()
+            wait_for(lambda: destroyed(200, old_shot), "semantic edit cancellation of original shot")
+            retirement = next(e for e in events() if e["event"] == "destroyed" and e["marker"] == 200
+                              and e["instance"] == old_shot)
+            self.assertLess(retirement["elapsed"], 10000, "old shot finished naturally instead of being cancelled")
+            before = trace(); index = len(events())
+            wait_for(lambda: renders_after(index, 100, new_persistent) >= 2, "render ticks after semantic cancellation")
+            after = trace()
             self.assertEqual(after.count("old_render"), before.count("old_render"), "semantic edit did not cancel old shot")
             self.assertGreater(after.count("new_render"), before.count("new_render"))
+            self.assertEqual(rendered(100), {new_persistent}, "semantic edit duplicated persistent instance")
 
     def test_studio_publication_failures_retain_applied_pair(self):
         config = {"default_profile": "demo", "profiles": {"demo": {"type": "plugin", "plugin_name": "placeholder"}}, "rules": [],

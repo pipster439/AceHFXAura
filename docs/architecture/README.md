@@ -1,5 +1,10 @@
 # Current architecture
 
+[ASUS platform Phase 3 M1](ASUS_PLATFORM_PHASE3_M1.md) adds independent read-only
+capability discovery and authenticated AceHFXService IPC. Its
+[security model](ASUS_PLATFORM_SECURITY.md) defines the privileged broker boundary;
+the existing keyboard and user-session daemon paths remain authoritative.
+
 The current development line contains native Lighting controls and accepted Automation v2 through Stage 6. See [Automation v2](AUTOMATION_V2.md) for authoring, lifecycle, retrigger and reconciliation semantics. This describes source behavior, not a claim of physical acceptance.
 
 The [alpha.7 Profile Engine core](PROFILE_ENGINE.md) documents device profile desired state, apply ordering, migration, and hardware evidence limits. Its profiles are distinct from the existing lighting recipes.
@@ -26,6 +31,14 @@ WinUI Studio (WebView2) / browser ── HTTP 19898 ── aura_web_ui
 - Automation authoring uses the Web Studio V2 Blockly editor. The daemon owns the read-only effect catalog projection and isolated GSI simulation source; no separate native Application Rules editor remains.
 
 [Studio semantics](../studio/STUDIO_WORKFLOW.md), [hardware evidence](../hardware/README.md), and [packaging limitations](../development/PACKAGING.md) are maintained separately.
+
+[ASUS Phase 3 M2](ASUS_PLATFORM_PHASE3_M2.md) isolates read-only Aura enumeration in a native
+worker; [runtime containment](AURA_RUNTIME_ARCHITECTURE.md) and the
+[ownership approval plan](../testing/AURA_OWNERSHIP_EXPERIMENT.md) keep hardware changes gated.
+
+[M2.8 alternative Aura backend selection](AURA_BACKEND_SELECTION.md) verifies medium-user
+LightingService metadata discovery without AuraSdk enumeration. RGB output/restoration remain
+unqualified; [alternative write prerequisites](../testing/AURA_ALTERNATIVE_WRITE_GATE.md) are runbook only.
 
 The [RT hardware gate contract](../hardware/M605_RT_HARDWARE_GATE.md) separates
 passively observed physical switch state from Profile desired per-key RT and

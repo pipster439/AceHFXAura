@@ -1,0 +1,18 @@
+<Project>
+  <PropertyGroup>
+    <AuraWorkerSource>$(MSBuildThisFileDirectory).</AuraWorkerSource>
+    <AuraWorkerBuild>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\build\aura-worker-$(MSBuildProjectName)-$(Configuration)'))</AuraWorkerBuild>
+  </PropertyGroup>
+  <Target Name="BuildAuraWorker" BeforeTargets="Build" Condition="'$(OS)' == 'Windows_NT'">
+    <Exec Command="cmake -S &quot;$(AuraWorkerSource)&quot; -B &quot;$(AuraWorkerBuild)&quot; -A x64 -DAURA_WORKER_FIXTURES=OFF" />
+    <Exec Command="cmake --build &quot;$(AuraWorkerBuild)&quot; --config $(Configuration) --target AuraWorker" />
+    <Copy SourceFiles="$(AuraWorkerBuild)\$(Configuration)\AuraWorker.exe" DestinationFolder="$(TargetDir)" />
+  </Target>
+  <Target Name="PublishAuraWorker" AfterTargets="ComputeFilesToPublish">
+    <ItemGroup>
+      <ResolvedFileToPublish Include="$(AuraWorkerBuild)\$(Configuration)\AuraWorker.exe">
+        <RelativePath>AuraWorker.exe</RelativePath><CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      </ResolvedFileToPublish>
+    </ItemGroup>
+  </Target>
+</Project>

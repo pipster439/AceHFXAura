@@ -1,0 +1,7186 @@
+{
+  "extractionApi": "ITypeLib/ITypeInfo; REGKIND_NONE; metadata only",
+  "functions": [
+    {
+      "dispid": 1610612736,
+      "invokeKind": 1,
+      "name": "QueryInterface",
+      "parameterCount": 2,
+      "parameters": [
+        {
+          "flags": 1,
+          "vt": 26
+        },
+        {
+          "flags": 2,
+          "vt": 26
+        }
+      ],
+      "returnVt": 24,
+      "vtableByteOffset": 0
+    },
+    {
+      "dispid": 1610612737,
+      "invokeKind": 1,
+      "name": "AddRef",
+      "parameterCount": 0,
+      "parameters": [],
+      "returnVt": 19,
+      "vtableByteOffset": 8
+    },
+    {
+      "dispid": 1610612738,
+      "invokeKind": 1,
+      "name": "Release",
+      "parameterCount": 0,
+      "parameters": [],
+      "returnVt": 19,
+      "vtableByteOffset": 16
+    },
+    {
+      "dispid": 1610678272,
+      "invokeKind": 1,
+      "name": "GetTypeInfoCount",
+      "parameterCount": 1,
+      "parameters": [
+        {
+          "flags": 2,
+          "vt": 26
+        }
+      ],
+      "returnVt": 24,
+      "vtableByteOffset": 24
+    },
+    {
+      "dispid": 1610678273,
+      "invokeKind": 1,
+      "name": "GetTypeInfo",
+      "parameterCount": 3,
+      "parameters": [
+        {
+          "flags": 1,
+          "vt": 23
+        },
+        {
+          "flags": 1,
+          "vt": 19
+        },
+        {
+          "flags": 2,
+          "vt": 26
+        }
+      ],
+      "returnVt": 24,
+      "vtableByteOffset": 32
+    },
+    {
+      "dispid": 1610678274,
+      "invokeKind": 1,
+      "name": "GetIDsOfNames",
+      "parameterCount": 5,
+      "parameters": [
+        {
+          "flags": 1,
+          "vt": 26
+        },
+        {
+          "flags": 1,
+          "vt": 26
+        },
+        {
+          "flags": 1,
+          "vt": 23
+        },
+        {
+          "flags": 1,
+          "vt": 19
+        },
+        {
+          "flags": 2,
+          "vt": 26
+        }
+      ],
+      "returnVt": 24,
+      "vtableByteOffset": 40
+    },
+    {
+      "dispid": 1610678275,
+      "invokeKind": 1,
+      "name": "Invoke",
+      "parameterCount": 8,
+      "parameters": [
+        {
+          "flags": 1,
+          "vt": 3
+        },
+        {
+          "flags": 1,
+          "vt": 26
+        },
+        {
+          "flags": 1,
+          "vt": 19
+        },
+        {
+          "flags": 1,
+          "vt": 18
+        },
+        {
+          "flags": 1,
+          "vt": 26
+        },
+        {
+          "flags": 2,
+          "vt": 26
+        },
+        {
+          "flags": 2,
+          "vt": 26
+        },
+        {
+          "flags": 2,
+          "vt": 26
+        }
+      ],
+      "returnVt": 24,
+      "vtableByteOffset": 48
+    },
+    {
+      "dispid": 2,
+      "invokeKind": 2,
+      "name": "Controls",
+      "parameterCount": 0,
+      "parameters": [],
+      "returnVt": 26,
+      "vtableByteOffset": 56
+    },
+    {
+      "dispid": 3,
+      "invokeKind": 2,
+      "name": "ConstraintType",
+      "parameterCount": 0,
+      "parameters": [],
+      "returnVt": 2,
+      "vtableByteOffset": 64
+    },
+    {
+      "dispid": 4,
+      "invokeKind": 2,
+      "name": "MaxStepTime",
+      "parameterCount": 0,
+      "parameters": [],
+      "returnVt": 19,
+      "vtableByteOffset": 72
+    },
+    {
+      "dispid": 5,
+      "invokeKind": 2,
+      "name": "MaxTolerance",
+      "parameterCount": 0,
+      "parameters": [],
+      "returnVt": 19,
+      "vtableByteOffset": 80
+    },
+    {
+      "dispid": 6,
+      "invokeKind": 2,
+      "name": "IsSIOSupportedRPM",
+      "parameterCount": 0,
+      "parameters": [],
+      "returnVt": 11,
+      "vtableByteOffset": 88
+    },
+    {
+      "dispid": 7,
+      "invokeKind": 2,
+      "name": "RpmPerstep",
+      "parameterCount": 0,
+      "parameters": [],
+      "returnVt": 19,
+      "vtableByteOffset": 96
+    },
+    {
+      "dispid": 8,
+      "invokeKind": 2,
+      "name": "RpmSmoothFreq",
+      "parameterCount": 0,
+      "parameters": [],
+      "returnVt": 19,
+      "vtableByteOffset": 104
+    },
+    {
+      "dispid": 9,
+      "invokeKind": 2,
+      "name": "OneSencitiveSupported",
+      "parameterCount": 0,
+      "parameters": [],
+      "returnVt": 11,
+      "vtableByteOffset": 112
+    },
+    {
+      "dispid": 10,
+      "invokeKind": 2,
+      "name": "IsSupportFanStop",
+      "parameterCount": 0,
+      "parameters": [],
+      "returnVt": 11,
+      "vtableByteOffset": 120
+    },
+    {
+      "dispid": 11,
+      "invokeKind": 2,
+      "name": "FanServiceVersion",
+      "parameterCount": 0,
+      "parameters": [],
+      "returnVt": 19,
+      "vtableByteOffset": 128
+    },
+    {
+      "dispid": 12,
+      "invokeKind": 2,
+      "name": "AIFanCpuTemperature",
+      "parameterCount": 1,
+      "parameters": [
+        {
+          "flags": 1,
+          "vt": 3
+        }
+      ],
+      "returnVt": 19,
+      "vtableByteOffset": 136
+    },
+    {
+      "dispid": 13,
+      "invokeKind": 2,
+      "name": "AIFanCpuTempIn",
+      "parameterCount": 1,
+      "parameters": [
+        {
+          "flags": 1,
+          "vt": 3
+        }
+      ],
+      "returnVt": 19,
+      "vtableByteOffset": 144
+    },
+    {
+      "dispid": 14,
+      "invokeKind": 4,
+      "name": "AIFanMinDuty",
+      "parameterCount": 2,
+      "parameters": [
+        {
+          "flags": 1,
+          "vt": 19
+        },
+        {
+          "flags": 1,
+          "vt": 19
+        }
+      ],
+      "returnVt": 24,
+      "vtableByteOffset": 152
+    },
+    {
+      "dispid": 15,
+      "invokeKind": 2,
+      "name": "FanCount",
+      "parameterCount": 0,
+      "parameters": [],
+      "returnVt": 19,
+      "vtableByteOffset": 160
+    },
+    {
+      "dispid": 16,
+      "invokeKind": 2,
+      "name": "AIFanEntryTemp",
+      "parameterCount": 1,
+      "parameters": [
+        {
+          "flags": 1,
+          "vt": 3
+        }
+      ],
+      "returnVt": 19,
+      "vtableByteOffset": 168
+    },
+    {
+      "dispid": 17,
+      "invokeKind": 4,
+      "name": "SetCriticalPoint",
+      "parameterCount": 2,
+      "parameters": [
+        {
+          "flags": 1,
+          "vt": 3
+        },
+        {
+          "flags": 1,
+          "vt": 3
+        }
+      ],
+      "returnVt": 24,
+      "vtableByteOffset": 176
+    },
+    {
+      "dispid": 18,
+      "invokeKind": 2,
+      "name": "IsCPUZSupport",
+      "parameterCount": 0,
+      "parameters": [],
+      "returnVt": 11,
+      "vtableByteOffset": 184
+    },
+    {
+      "dispid": 19,
+      "invokeKind": 2,
+      "name": "IsCPUZ_GPU",
+      "parameterCount": 0,
+      "parameters": [],
+      "returnVt": 11,
+      "vtableByteOffset": 192
+    },
+    {
+      "dispid": 20,
+      "invokeKind": 2,
+      "name": "IsCPUZ_DDR",
+      "parameterCount": 0,
+      "parameters": [],
+      "returnVt": 11,
+      "vtableByteOffset": 200
+    },
+    {
+      "dispid": 21,
+      "invokeKind": 2,
+      "name": "IsCPUZ_M2",
+      "parameterCount": 0,
+      "parameters": [],
+      "returnVt": 11,
+      "vtableByteOffset": 208
+    },
+    {
+      "dispid": 22,
+      "invokeKind": 2,
+      "name": "getGPUMaxTemp",
+      "parameterCount": 0,
+      "parameters": [],
+      "returnVt": 3,
+      "vtableByteOffset": 216
+    },
+    {
+      "dispid": 23,
+      "invokeKind": 2,
+      "name": "getDDRMaxTemp",
+      "parameterCount": 0,
+      "parameters": [],
+      "returnVt": 3,
+      "vtableByteOffset": 224
+    },
+    {
+      "dispid": 24,
+      "invokeKind": 2,
+      "name": "getM2MaxTemp",
+      "parameterCount": 0,
+      "parameters": [],
+      "returnVt": 3,
+      "vtableByteOffset": 232
+    },
+    {
+      "dispid": 25,
+      "invokeKind": 2,
+      "name": "IsCPUZInitialized",
+      "parameterCount": 0,
+      "parameters": [],
+      "returnVt": 3,
+      "vtableByteOffset": 240
+    },
+    {
+      "dispid": 26,
+      "invokeKind": 2,
+      "name": "GetAic2Temp",
+      "parameterCount": 1,
+      "parameters": [
+        {
+          "flags": 1,
+          "vt": 19
+        }
+      ],
+      "returnVt": 19,
+      "vtableByteOffset": 248
+    },
+    {
+      "dispid": 27,
+      "invokeKind": 4,
+      "name": "SetAic2FanDuty",
+      "parameterCount": 2,
+      "parameters": [
+        {
+          "flags": 1,
+          "vt": 19
+        },
+        {
+          "flags": 1,
+          "vt": 19
+        }
+      ],
+      "returnVt": 24,
+      "vtableByteOffset": 256
+    },
+    {
+      "dispid": 28,
+      "invokeKind": 1,
+      "name": "SetAiSuiteRequestDDR5",
+      "parameterCount": 0,
+      "parameters": [],
+      "returnVt": 24,
+      "vtableByteOffset": 264
+    },
+    {
+      "dispid": 29,
+      "invokeKind": 2,
+      "name": "GetAic2Rpm",
+      "parameterCount": 0,
+      "parameters": [],
+      "returnVt": 19,
+      "vtableByteOffset": 272
+    },
+    {
+      "dispid": 30,
+      "invokeKind": 2,
+      "name": "IsMBIFSupportAC",
+      "parameterCount": 0,
+      "parameters": [],
+      "returnVt": 11,
+      "vtableByteOffset": 280
+    },
+    {
+      "dispid": 31,
+      "invokeKind": 2,
+      "name": "IsSupport_10_point",
+      "parameterCount": 0,
+      "parameters": [],
+      "returnVt": 11,
+      "vtableByteOffset": 288
+    },
+    {
+      "dispid": 32,
+      "invokeKind": 2,
+      "name": "IsRYUJIN3plugin",
+      "parameterCount": 0,
+      "parameters": [],
+      "returnVt": 11,
+      "vtableByteOffset": 296
+    },
+    {
+      "dispid": 33,
+      "invokeKind": 2,
+      "name": "Additional_Func",
+      "parameterCount": 1,
+      "parameters": [
+        {
+          "flags": 1,
+          "vt": 3
+        }
+      ],
+      "returnVt": 19,
+      "vtableByteOffset": 304
+    },
+    {
+      "dispid": 34,
+      "invokeKind": 2,
+      "name": "getNumberOfCurvePoint",
+      "parameterCount": 0,
+      "parameters": [],
+      "returnVt": 3,
+      "vtableByteOffset": 312
+    }
+  ],
+  "libraryGuid": "{DF5522FB-119C-428D-A62E-8BFE4A2FBC9B}",
+  "loadHresult": 0,
+  "major": 1,
+  "minor": 0,
+  "path": "C:/Program Files (x86)/ASUS/AsusFanControlService/2.05.06/AsusFanControlService.exe",
+  "typeInfoHresult": 0,
+  "types": [
+    {
+      "functions": [
+        {
+          "callConvention": 4,
+          "dispid": 1,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "OnFanSettingChange",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "fanCtrlId",
+              "order": 0,
+              "type": {
+                "vt": 3
+              },
+              "vt": 3
+            }
+          ],
+          "returnType": {
+            "vt": 25
+          },
+          "returnVt": 25,
+          "vtableByteOffset": 0
+        }
+      ],
+      "guid": "{6F71C865-D228-4B2A-9B8B-C4F979EA8998}",
+      "inheritedInterfaces": [
+        {
+          "flags": 0,
+          "guid": "{00020400-0000-0000-C000-000000000046}",
+          "hresult": 0,
+          "index": 0,
+          "name": "IDispatch"
+        }
+      ],
+      "name": "_IFanControlManagerEvents",
+      "typeAttrHresult": 0,
+      "typeFlags": 4096,
+      "typeKind": 4
+    },
+    {
+      "functions": [
+        {
+          "callConvention": 4,
+          "dispid": 1610612736,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "QueryInterface",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 2,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "riid",
+              "order": 0,
+              "type": {
+                "element": {
+                  "guid": "{00000000-0000-0000-0000-000000000000}",
+                  "name": "GUID",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 2,
+              "name": "ppvObj",
+              "order": 1,
+              "type": {
+                "element": {
+                  "element": {
+                    "vt": 24
+                  },
+                  "vt": 26
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 0
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610612737,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "AddRef",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 8
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610612738,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "Release",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 16
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610678272,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "GetTypeInfoCount",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 2,
+              "name": "pctinfo",
+              "order": 0,
+              "type": {
+                "element": {
+                  "vt": 23
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 24
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610678273,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "GetTypeInfo",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 3,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "itinfo",
+              "order": 0,
+              "type": {
+                "vt": 23
+              },
+              "vt": 23
+            },
+            {
+              "flags": 1,
+              "name": "lcid",
+              "order": 1,
+              "type": {
+                "vt": 19
+              },
+              "vt": 19
+            },
+            {
+              "flags": 2,
+              "name": "pptinfo",
+              "order": 2,
+              "type": {
+                "element": {
+                  "element": {
+                    "vt": 24
+                  },
+                  "vt": 26
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 32
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610678274,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "GetIDsOfNames",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 5,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "riid",
+              "order": 0,
+              "type": {
+                "element": {
+                  "guid": "{00000000-0000-0000-0000-000000000000}",
+                  "name": "GUID",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 1,
+              "name": "rgszNames",
+              "order": 1,
+              "type": {
+                "element": {
+                  "element": {
+                    "vt": 16
+                  },
+                  "vt": 26
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 1,
+              "name": "cNames",
+              "order": 2,
+              "type": {
+                "vt": 23
+              },
+              "vt": 23
+            },
+            {
+              "flags": 1,
+              "name": "lcid",
+              "order": 3,
+              "type": {
+                "vt": 19
+              },
+              "vt": 19
+            },
+            {
+              "flags": 2,
+              "name": "rgdispid",
+              "order": 4,
+              "type": {
+                "element": {
+                  "vt": 3
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 40
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610678275,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "Invoke",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 8,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "dispidMember",
+              "order": 0,
+              "type": {
+                "vt": 3
+              },
+              "vt": 3
+            },
+            {
+              "flags": 1,
+              "name": "riid",
+              "order": 1,
+              "type": {
+                "element": {
+                  "guid": "{00000000-0000-0000-0000-000000000000}",
+                  "name": "GUID",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 1,
+              "name": "lcid",
+              "order": 2,
+              "type": {
+                "vt": 19
+              },
+              "vt": 19
+            },
+            {
+              "flags": 1,
+              "name": "wFlags",
+              "order": 3,
+              "type": {
+                "vt": 18
+              },
+              "vt": 18
+            },
+            {
+              "flags": 1,
+              "name": "pdispparams",
+              "order": 4,
+              "type": {
+                "element": {
+                  "guid": "{00000000-0000-0000-0000-000000000000}",
+                  "name": "DISPPARAMS",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 2,
+              "name": "pvarResult",
+              "order": 5,
+              "type": {
+                "element": {
+                  "vt": 12
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 2,
+              "name": "pexcepinfo",
+              "order": 6,
+              "type": {
+                "element": {
+                  "guid": "{00000000-0000-0000-0000-000000000000}",
+                  "name": "EXCEPINFO",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 2,
+              "name": "puArgErr",
+              "order": 7,
+              "type": {
+                "element": {
+                  "vt": 23
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 48
+        },
+        {
+          "callConvention": 4,
+          "dispid": -4,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "_NewEnum",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 13
+          },
+          "returnVt": 13,
+          "vtableByteOffset": 56
+        },
+        {
+          "callConvention": 4,
+          "dispid": 2,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "Count",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 3
+          },
+          "returnVt": 3,
+          "vtableByteOffset": 64
+        },
+        {
+          "callConvention": 4,
+          "dispid": 0,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "Item",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "index",
+              "order": 0,
+              "type": {
+                "vt": 3
+              },
+              "vt": 3
+            }
+          ],
+          "returnType": {
+            "element": {
+              "guid": "{D20E7B8F-C878-4538-B624-9BC08FE7D54F}",
+              "name": "IFanControl",
+              "referenceHresult": 0,
+              "vt": 29
+            },
+            "vt": 26
+          },
+          "returnVt": 26,
+          "vtableByteOffset": 72
+        }
+      ],
+      "guid": "{05F22B4C-27D5-4488-A7EE-B712FE447426}",
+      "inheritedInterfaces": [
+        {
+          "flags": 0,
+          "guid": "{00020400-0000-0000-C000-000000000046}",
+          "hresult": 0,
+          "index": 0,
+          "name": "IDispatch"
+        }
+      ],
+      "name": "IFanControlCollection",
+      "typeAttrHresult": 0,
+      "typeFlags": 4288,
+      "typeKind": 4
+    },
+    {
+      "functions": [
+        {
+          "callConvention": 4,
+          "dispid": 1610612736,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "QueryInterface",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 2,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "riid",
+              "order": 0,
+              "type": {
+                "element": {
+                  "guid": "{00000000-0000-0000-0000-000000000000}",
+                  "name": "GUID",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 2,
+              "name": "ppvObj",
+              "order": 1,
+              "type": {
+                "element": {
+                  "element": {
+                    "vt": 24
+                  },
+                  "vt": 26
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 0
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610612737,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "AddRef",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 8
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610612738,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "Release",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 16
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610678272,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "GetTypeInfoCount",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 2,
+              "name": "pctinfo",
+              "order": 0,
+              "type": {
+                "element": {
+                  "vt": 23
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 24
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610678273,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "GetTypeInfo",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 3,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "itinfo",
+              "order": 0,
+              "type": {
+                "vt": 23
+              },
+              "vt": 23
+            },
+            {
+              "flags": 1,
+              "name": "lcid",
+              "order": 1,
+              "type": {
+                "vt": 19
+              },
+              "vt": 19
+            },
+            {
+              "flags": 2,
+              "name": "pptinfo",
+              "order": 2,
+              "type": {
+                "element": {
+                  "element": {
+                    "vt": 24
+                  },
+                  "vt": 26
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 32
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610678274,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "GetIDsOfNames",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 5,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "riid",
+              "order": 0,
+              "type": {
+                "element": {
+                  "guid": "{00000000-0000-0000-0000-000000000000}",
+                  "name": "GUID",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 1,
+              "name": "rgszNames",
+              "order": 1,
+              "type": {
+                "element": {
+                  "element": {
+                    "vt": 16
+                  },
+                  "vt": 26
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 1,
+              "name": "cNames",
+              "order": 2,
+              "type": {
+                "vt": 23
+              },
+              "vt": 23
+            },
+            {
+              "flags": 1,
+              "name": "lcid",
+              "order": 3,
+              "type": {
+                "vt": 19
+              },
+              "vt": 19
+            },
+            {
+              "flags": 2,
+              "name": "rgdispid",
+              "order": 4,
+              "type": {
+                "element": {
+                  "vt": 3
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 40
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610678275,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "Invoke",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 8,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "dispidMember",
+              "order": 0,
+              "type": {
+                "vt": 3
+              },
+              "vt": 3
+            },
+            {
+              "flags": 1,
+              "name": "riid",
+              "order": 1,
+              "type": {
+                "element": {
+                  "guid": "{00000000-0000-0000-0000-000000000000}",
+                  "name": "GUID",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 1,
+              "name": "lcid",
+              "order": 2,
+              "type": {
+                "vt": 19
+              },
+              "vt": 19
+            },
+            {
+              "flags": 1,
+              "name": "wFlags",
+              "order": 3,
+              "type": {
+                "vt": 18
+              },
+              "vt": 18
+            },
+            {
+              "flags": 1,
+              "name": "pdispparams",
+              "order": 4,
+              "type": {
+                "element": {
+                  "guid": "{00000000-0000-0000-0000-000000000000}",
+                  "name": "DISPPARAMS",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 2,
+              "name": "pvarResult",
+              "order": 5,
+              "type": {
+                "element": {
+                  "vt": 12
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 2,
+              "name": "pexcepinfo",
+              "order": 6,
+              "type": {
+                "element": {
+                  "guid": "{00000000-0000-0000-0000-000000000000}",
+                  "name": "EXCEPINFO",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 2,
+              "name": "puArgErr",
+              "order": 7,
+              "type": {
+                "element": {
+                  "vt": 23
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 48
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "Id",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 56
+        },
+        {
+          "callConvention": 4,
+          "dispid": 2,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "Name",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 8
+          },
+          "returnVt": 8,
+          "vtableByteOffset": 64
+        },
+        {
+          "callConvention": 4,
+          "dispid": 3,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "DutyCycle",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 17
+          },
+          "returnVt": 17,
+          "vtableByteOffset": 72
+        },
+        {
+          "callConvention": 4,
+          "dispid": 3,
+          "functionKind": 4,
+          "invokeKind": 4,
+          "memberKind": "PROPERTYPUT",
+          "name": "DutyCycle",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "",
+              "order": 0,
+              "type": {
+                "vt": 17
+              },
+              "vt": 17
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 80
+        },
+        {
+          "callConvention": 4,
+          "dispid": 4,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "Profiles",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "element": {
+              "guid": "{8CAF0DBE-D1E1-42A4-B0EC-1B365CF50982}",
+              "name": "IFanProfileCollection",
+              "referenceHresult": 0,
+              "vt": 29
+            },
+            "vt": 26
+          },
+          "returnVt": 26,
+          "vtableByteOffset": 88
+        },
+        {
+          "callConvention": 4,
+          "dispid": 5,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "ApplyFanCurve",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "FanCurve",
+              "order": 0,
+              "type": {
+                "element": {
+                  "guid": "{E6BB07B4-F360-45AF-814E-EB0D12D55BEC}",
+                  "name": "IFanCurve",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 96
+        },
+        {
+          "callConvention": 4,
+          "dispid": 6,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "NormalizeFanCurve",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "FanCurve",
+              "order": 0,
+              "type": {
+                "element": {
+                  "guid": "{E6BB07B4-F360-45AF-814E-EB0D12D55BEC}",
+                  "name": "IFanCurve",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 104
+        },
+        {
+          "callConvention": 4,
+          "dispid": 7,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "StartupProfileIndex",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 112
+        },
+        {
+          "callConvention": 4,
+          "dispid": 7,
+          "functionKind": 4,
+          "invokeKind": 4,
+          "memberKind": "PROPERTYPUT",
+          "name": "StartupProfileIndex",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "",
+              "order": 0,
+              "type": {
+                "vt": 19
+              },
+              "vt": 19
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 120
+        },
+        {
+          "callConvention": 4,
+          "dispid": 8,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "ApplyIndex",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "index",
+              "order": 0,
+              "type": {
+                "vt": 3
+              },
+              "vt": 3
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 128
+        },
+        {
+          "callConvention": 4,
+          "dispid": 9,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "CalculatedDuty",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "Temperature",
+              "order": 0,
+              "type": {
+                "vt": 17
+              },
+              "vt": 17
+            }
+          ],
+          "returnType": {
+            "vt": 17
+          },
+          "returnVt": 17,
+          "vtableByteOffset": 136
+        },
+        {
+          "callConvention": 4,
+          "dispid": 10,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "MinimalDuty",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 17
+          },
+          "returnVt": 17,
+          "vtableByteOffset": 144
+        },
+        {
+          "callConvention": 4,
+          "dispid": 11,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "EcMode",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 3
+          },
+          "returnVt": 3,
+          "vtableByteOffset": 152
+        },
+        {
+          "callConvention": 4,
+          "dispid": 11,
+          "functionKind": 4,
+          "invokeKind": 4,
+          "memberKind": "PROPERTYPUT",
+          "name": "EcMode",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "",
+              "order": 0,
+              "type": {
+                "vt": 3
+              },
+              "vt": 3
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 160
+        },
+        {
+          "callConvention": 4,
+          "dispid": 12,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "ThermalWeights",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "element": {
+              "guid": "{2DFEAC64-E8E8-437E-8662-25F7AA4B0CE0}",
+              "name": "IThermalWeights",
+              "referenceHresult": 0,
+              "vt": 29
+            },
+            "vt": 26
+          },
+          "returnVt": 26,
+          "vtableByteOffset": 168
+        },
+        {
+          "callConvention": 4,
+          "dispid": 12,
+          "functionKind": 4,
+          "invokeKind": 4,
+          "memberKind": "PROPERTYPUT",
+          "name": "ThermalWeights",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "",
+              "order": 0,
+              "type": {
+                "element": {
+                  "guid": "{2DFEAC64-E8E8-437E-8662-25F7AA4B0CE0}",
+                  "name": "IThermalWeights",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 176
+        },
+        {
+          "callConvention": 4,
+          "dispid": 13,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "CurrentFanCurve",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "element": {
+              "guid": "{E6BB07B4-F360-45AF-814E-EB0D12D55BEC}",
+              "name": "IFanCurve",
+              "referenceHresult": 0,
+              "vt": 29
+            },
+            "vt": 26
+          },
+          "returnVt": 26,
+          "vtableByteOffset": 184
+        },
+        {
+          "callConvention": 4,
+          "dispid": 14,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "DisplayName",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 8
+          },
+          "returnVt": 8,
+          "vtableByteOffset": 192
+        },
+        {
+          "callConvention": 4,
+          "dispid": 14,
+          "functionKind": 4,
+          "invokeKind": 4,
+          "memberKind": "PROPERTYPUT",
+          "name": "DisplayName",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "",
+              "order": 0,
+              "type": {
+                "vt": 8
+              },
+              "vt": 8
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 200
+        },
+        {
+          "callConvention": 4,
+          "dispid": 15,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "StepUpTime",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 208
+        },
+        {
+          "callConvention": 4,
+          "dispid": 15,
+          "functionKind": 4,
+          "invokeKind": 4,
+          "memberKind": "PROPERTYPUT",
+          "name": "StepUpTime",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "",
+              "order": 0,
+              "type": {
+                "vt": 19
+              },
+              "vt": 19
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 216
+        },
+        {
+          "callConvention": 4,
+          "dispid": 16,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "StepDownTime",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 224
+        },
+        {
+          "callConvention": 4,
+          "dispid": 16,
+          "functionKind": 4,
+          "invokeKind": 4,
+          "memberKind": "PROPERTYPUT",
+          "name": "StepDownTime",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "",
+              "order": 0,
+              "type": {
+                "vt": 19
+              },
+              "vt": 19
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 232
+        },
+        {
+          "callConvention": 4,
+          "dispid": 17,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "TempTolerance",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 240
+        },
+        {
+          "callConvention": 4,
+          "dispid": 17,
+          "functionKind": 4,
+          "invokeKind": 4,
+          "memberKind": "PROPERTYPUT",
+          "name": "TempTolerance",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "",
+              "order": 0,
+              "type": {
+                "vt": 19
+              },
+              "vt": 19
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 248
+        },
+        {
+          "callConvention": 4,
+          "dispid": 18,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "EnableRpmMode",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "value",
+              "order": 0,
+              "type": {
+                "vt": 11
+              },
+              "vt": 11
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 256
+        },
+        {
+          "callConvention": 4,
+          "dispid": 19,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "IsRpmMode",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 11
+          },
+          "returnVt": 11,
+          "vtableByteOffset": 264
+        },
+        {
+          "callConvention": 4,
+          "dispid": 20,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "RpmTolerance",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 272
+        },
+        {
+          "callConvention": 4,
+          "dispid": 20,
+          "functionKind": 4,
+          "invokeKind": 4,
+          "memberKind": "PROPERTYPUT",
+          "name": "RpmTolerance",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "",
+              "order": 0,
+              "type": {
+                "vt": 19
+              },
+              "vt": 19
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 280
+        },
+        {
+          "callConvention": 4,
+          "dispid": 21,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "EcFanStop",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 11
+          },
+          "returnVt": 11,
+          "vtableByteOffset": 288
+        },
+        {
+          "callConvention": 4,
+          "dispid": 21,
+          "functionKind": 4,
+          "invokeKind": 4,
+          "memberKind": "PROPERTYPUT",
+          "name": "EcFanStop",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "",
+              "order": 0,
+              "type": {
+                "vt": 11
+              },
+              "vt": 11
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 296
+        },
+        {
+          "callConvention": 4,
+          "dispid": 22,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "StepUnit",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 304
+        },
+        {
+          "callConvention": 4,
+          "dispid": 22,
+          "functionKind": 4,
+          "invokeKind": 4,
+          "memberKind": "PROPERTYPUT",
+          "name": "StepUnit",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "",
+              "order": 0,
+              "type": {
+                "vt": 19
+              },
+              "vt": 19
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 312
+        },
+        {
+          "callConvention": 4,
+          "dispid": 23,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "T1DelayTime",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 320
+        },
+        {
+          "callConvention": 4,
+          "dispid": 23,
+          "functionKind": 4,
+          "invokeKind": 4,
+          "memberKind": "PROPERTYPUT",
+          "name": "T1DelayTime",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "",
+              "order": 0,
+              "type": {
+                "vt": 19
+              },
+              "vt": 19
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 328
+        },
+        {
+          "callConvention": 4,
+          "dispid": 24,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "StepUnitSupported",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 336
+        },
+        {
+          "callConvention": 4,
+          "dispid": 25,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "WeightsSupported",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 344
+        },
+        {
+          "callConvention": 4,
+          "dispid": 26,
+          "functionKind": 4,
+          "invokeKind": 4,
+          "memberKind": "PROPERTYPUT",
+          "name": "StepUnitButNotSave",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "",
+              "order": 0,
+              "type": {
+                "vt": 19
+              },
+              "vt": 19
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 352
+        },
+        {
+          "callConvention": 4,
+          "dispid": 27,
+          "functionKind": 4,
+          "invokeKind": 4,
+          "memberKind": "PROPERTYPUT",
+          "name": "StepUpTimeButNotSave",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "",
+              "order": 0,
+              "type": {
+                "vt": 19
+              },
+              "vt": 19
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 360
+        },
+        {
+          "callConvention": 4,
+          "dispid": 28,
+          "functionKind": 4,
+          "invokeKind": 4,
+          "memberKind": "PROPERTYPUT",
+          "name": "StepDownTimeButNotSave",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "",
+              "order": 0,
+              "type": {
+                "vt": 19
+              },
+              "vt": 19
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 368
+        },
+        {
+          "callConvention": 4,
+          "dispid": 29,
+          "functionKind": 4,
+          "invokeKind": 4,
+          "memberKind": "PROPERTYPUT",
+          "name": "T1DelayTimeButNotSave",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "",
+              "order": 0,
+              "type": {
+                "vt": 19
+              },
+              "vt": 19
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 376
+        },
+        {
+          "callConvention": 4,
+          "dispid": 31,
+          "functionKind": 4,
+          "invokeKind": 4,
+          "memberKind": "PROPERTYPUT",
+          "name": "RpmToleranceButNotSave",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "",
+              "order": 0,
+              "type": {
+                "vt": 19
+              },
+              "vt": 19
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 384
+        },
+        {
+          "callConvention": 4,
+          "dispid": 32,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "EnableRpmModeButNotSave",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "value",
+              "order": 0,
+              "type": {
+                "vt": 11
+              },
+              "vt": 11
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 392
+        },
+        {
+          "callConvention": 4,
+          "dispid": 33,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "ApplyFanCurveButNotSave",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "FanCurve",
+              "order": 0,
+              "type": {
+                "element": {
+                  "guid": "{E6BB07B4-F360-45AF-814E-EB0D12D55BEC}",
+                  "name": "IFanCurve",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 400
+        },
+        {
+          "callConvention": 4,
+          "dispid": 34,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "IsSencitiveSupported",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 408
+        },
+        {
+          "callConvention": 4,
+          "dispid": 35,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "SetFanDuty",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "FanCurve",
+              "order": 0,
+              "type": {
+                "element": {
+                  "guid": "{E6BB07B4-F360-45AF-814E-EB0D12D55BEC}",
+                  "name": "IFanCurve",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 416
+        },
+        {
+          "callConvention": 4,
+          "dispid": 36,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "RefreshFanCurve",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 424
+        },
+        {
+          "callConvention": 4,
+          "dispid": 37,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "EnableManualMode",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "value",
+              "order": 0,
+              "type": {
+                "vt": 11
+              },
+              "vt": 11
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 432
+        },
+        {
+          "callConvention": 4,
+          "dispid": 38,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "FanSourceIndex",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 440
+        },
+        {
+          "callConvention": 4,
+          "dispid": 38,
+          "functionKind": 4,
+          "invokeKind": 4,
+          "memberKind": "PROPERTYPUT",
+          "name": "FanSourceIndex",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "",
+              "order": 0,
+              "type": {
+                "vt": 19
+              },
+              "vt": 19
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 448
+        },
+        {
+          "callConvention": 4,
+          "dispid": 39,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "MultiFanSource",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "element": {
+              "guid": "{B55B8BF0-5886-4BE8-BCDB-001B8CABCEB0}",
+              "name": "IMultiFanSource",
+              "referenceHresult": 0,
+              "vt": 29
+            },
+            "vt": 26
+          },
+          "returnVt": 26,
+          "vtableByteOffset": 456
+        },
+        {
+          "callConvention": 4,
+          "dispid": 40,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "SaveRpmTargetDuty",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "duty",
+              "order": 0,
+              "type": {
+                "vt": 17
+              },
+              "vt": 17
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 464
+        },
+        {
+          "callConvention": 4,
+          "dispid": 41,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "AIFanECRegister",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "index",
+              "order": 0,
+              "type": {
+                "vt": 19
+              },
+              "vt": 19
+            }
+          ],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 472
+        },
+        {
+          "callConvention": 4,
+          "dispid": 42,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "ECBank",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "index",
+              "order": 0,
+              "type": {
+                "vt": 19
+              },
+              "vt": 19
+            }
+          ],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 480
+        },
+        {
+          "callConvention": 4,
+          "dispid": 43,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "IsEQModeSupported",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "index",
+              "order": 0,
+              "type": {
+                "vt": 19
+              },
+              "vt": 19
+            }
+          ],
+          "returnType": {
+            "vt": 11
+          },
+          "returnVt": 11,
+          "vtableByteOffset": 488
+        },
+        {
+          "callConvention": 4,
+          "dispid": 44,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "Bank",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "index",
+              "order": 0,
+              "type": {
+                "vt": 19
+              },
+              "vt": 19
+            }
+          ],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 496
+        }
+      ],
+      "guid": "{D20E7B8F-C878-4538-B624-9BC08FE7D54F}",
+      "inheritedInterfaces": [
+        {
+          "flags": 0,
+          "guid": "{00020400-0000-0000-C000-000000000046}",
+          "hresult": 0,
+          "index": 0,
+          "name": "IDispatch"
+        }
+      ],
+      "name": "IFanControl",
+      "typeAttrHresult": 0,
+      "typeFlags": 4288,
+      "typeKind": 4
+    },
+    {
+      "functions": [
+        {
+          "callConvention": 4,
+          "dispid": 1610612736,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "QueryInterface",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 2,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "riid",
+              "order": 0,
+              "type": {
+                "element": {
+                  "guid": "{00000000-0000-0000-0000-000000000000}",
+                  "name": "GUID",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 2,
+              "name": "ppvObj",
+              "order": 1,
+              "type": {
+                "element": {
+                  "element": {
+                    "vt": 24
+                  },
+                  "vt": 26
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 0
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610612737,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "AddRef",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 8
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610612738,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "Release",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 16
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610678272,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "GetTypeInfoCount",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 2,
+              "name": "pctinfo",
+              "order": 0,
+              "type": {
+                "element": {
+                  "vt": 23
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 24
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610678273,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "GetTypeInfo",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 3,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "itinfo",
+              "order": 0,
+              "type": {
+                "vt": 23
+              },
+              "vt": 23
+            },
+            {
+              "flags": 1,
+              "name": "lcid",
+              "order": 1,
+              "type": {
+                "vt": 19
+              },
+              "vt": 19
+            },
+            {
+              "flags": 2,
+              "name": "pptinfo",
+              "order": 2,
+              "type": {
+                "element": {
+                  "element": {
+                    "vt": 24
+                  },
+                  "vt": 26
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 32
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610678274,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "GetIDsOfNames",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 5,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "riid",
+              "order": 0,
+              "type": {
+                "element": {
+                  "guid": "{00000000-0000-0000-0000-000000000000}",
+                  "name": "GUID",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 1,
+              "name": "rgszNames",
+              "order": 1,
+              "type": {
+                "element": {
+                  "element": {
+                    "vt": 16
+                  },
+                  "vt": 26
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 1,
+              "name": "cNames",
+              "order": 2,
+              "type": {
+                "vt": 23
+              },
+              "vt": 23
+            },
+            {
+              "flags": 1,
+              "name": "lcid",
+              "order": 3,
+              "type": {
+                "vt": 19
+              },
+              "vt": 19
+            },
+            {
+              "flags": 2,
+              "name": "rgdispid",
+              "order": 4,
+              "type": {
+                "element": {
+                  "vt": 3
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 40
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610678275,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "Invoke",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 8,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "dispidMember",
+              "order": 0,
+              "type": {
+                "vt": 3
+              },
+              "vt": 3
+            },
+            {
+              "flags": 1,
+              "name": "riid",
+              "order": 1,
+              "type": {
+                "element": {
+                  "guid": "{00000000-0000-0000-0000-000000000000}",
+                  "name": "GUID",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 1,
+              "name": "lcid",
+              "order": 2,
+              "type": {
+                "vt": 19
+              },
+              "vt": 19
+            },
+            {
+              "flags": 1,
+              "name": "wFlags",
+              "order": 3,
+              "type": {
+                "vt": 18
+              },
+              "vt": 18
+            },
+            {
+              "flags": 1,
+              "name": "pdispparams",
+              "order": 4,
+              "type": {
+                "element": {
+                  "guid": "{00000000-0000-0000-0000-000000000000}",
+                  "name": "DISPPARAMS",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 2,
+              "name": "pvarResult",
+              "order": 5,
+              "type": {
+                "element": {
+                  "vt": 12
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 2,
+              "name": "pexcepinfo",
+              "order": 6,
+              "type": {
+                "element": {
+                  "guid": "{00000000-0000-0000-0000-000000000000}",
+                  "name": "EXCEPINFO",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 2,
+              "name": "puArgErr",
+              "order": 7,
+              "type": {
+                "element": {
+                  "vt": 23
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 48
+        },
+        {
+          "callConvention": 4,
+          "dispid": -4,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "_NewEnum",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 13
+          },
+          "returnVt": 13,
+          "vtableByteOffset": 56
+        },
+        {
+          "callConvention": 4,
+          "dispid": 2,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "Count",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 3
+          },
+          "returnVt": 3,
+          "vtableByteOffset": 64
+        },
+        {
+          "callConvention": 4,
+          "dispid": 0,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "Item",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "index",
+              "order": 0,
+              "type": {
+                "vt": 3
+              },
+              "vt": 3
+            }
+          ],
+          "returnType": {
+            "element": {
+              "guid": "{DDC814D3-118A-4BC7-9E0D-8C96599E922C}",
+              "name": "IFanProfile",
+              "referenceHresult": 0,
+              "vt": 29
+            },
+            "vt": 26
+          },
+          "returnVt": 26,
+          "vtableByteOffset": 72
+        },
+        {
+          "callConvention": 4,
+          "dispid": 4,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "Current",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 80
+        },
+        {
+          "callConvention": 4,
+          "dispid": 5,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "SaveUserProfile",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "FanCurve",
+              "order": 0,
+              "type": {
+                "element": {
+                  "guid": "{E6BB07B4-F360-45AF-814E-EB0D12D55BEC}",
+                  "name": "IFanCurve",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 88
+        }
+      ],
+      "guid": "{8CAF0DBE-D1E1-42A4-B0EC-1B365CF50982}",
+      "inheritedInterfaces": [
+        {
+          "flags": 0,
+          "guid": "{00020400-0000-0000-C000-000000000046}",
+          "hresult": 0,
+          "index": 0,
+          "name": "IDispatch"
+        }
+      ],
+      "name": "IFanProfileCollection",
+      "typeAttrHresult": 0,
+      "typeFlags": 4288,
+      "typeKind": 4
+    },
+    {
+      "functions": [
+        {
+          "callConvention": 4,
+          "dispid": 1610612736,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "QueryInterface",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 2,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "riid",
+              "order": 0,
+              "type": {
+                "element": {
+                  "guid": "{00000000-0000-0000-0000-000000000000}",
+                  "name": "GUID",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 2,
+              "name": "ppvObj",
+              "order": 1,
+              "type": {
+                "element": {
+                  "element": {
+                    "vt": 24
+                  },
+                  "vt": 26
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 0
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610612737,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "AddRef",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 8
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610612738,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "Release",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 16
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610678272,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "GetTypeInfoCount",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 2,
+              "name": "pctinfo",
+              "order": 0,
+              "type": {
+                "element": {
+                  "vt": 23
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 24
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610678273,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "GetTypeInfo",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 3,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "itinfo",
+              "order": 0,
+              "type": {
+                "vt": 23
+              },
+              "vt": 23
+            },
+            {
+              "flags": 1,
+              "name": "lcid",
+              "order": 1,
+              "type": {
+                "vt": 19
+              },
+              "vt": 19
+            },
+            {
+              "flags": 2,
+              "name": "pptinfo",
+              "order": 2,
+              "type": {
+                "element": {
+                  "element": {
+                    "vt": 24
+                  },
+                  "vt": 26
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 32
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610678274,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "GetIDsOfNames",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 5,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "riid",
+              "order": 0,
+              "type": {
+                "element": {
+                  "guid": "{00000000-0000-0000-0000-000000000000}",
+                  "name": "GUID",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 1,
+              "name": "rgszNames",
+              "order": 1,
+              "type": {
+                "element": {
+                  "element": {
+                    "vt": 16
+                  },
+                  "vt": 26
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 1,
+              "name": "cNames",
+              "order": 2,
+              "type": {
+                "vt": 23
+              },
+              "vt": 23
+            },
+            {
+              "flags": 1,
+              "name": "lcid",
+              "order": 3,
+              "type": {
+                "vt": 19
+              },
+              "vt": 19
+            },
+            {
+              "flags": 2,
+              "name": "rgdispid",
+              "order": 4,
+              "type": {
+                "element": {
+                  "vt": 3
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 40
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610678275,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "Invoke",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 8,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "dispidMember",
+              "order": 0,
+              "type": {
+                "vt": 3
+              },
+              "vt": 3
+            },
+            {
+              "flags": 1,
+              "name": "riid",
+              "order": 1,
+              "type": {
+                "element": {
+                  "guid": "{00000000-0000-0000-0000-000000000000}",
+                  "name": "GUID",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 1,
+              "name": "lcid",
+              "order": 2,
+              "type": {
+                "vt": 19
+              },
+              "vt": 19
+            },
+            {
+              "flags": 1,
+              "name": "wFlags",
+              "order": 3,
+              "type": {
+                "vt": 18
+              },
+              "vt": 18
+            },
+            {
+              "flags": 1,
+              "name": "pdispparams",
+              "order": 4,
+              "type": {
+                "element": {
+                  "guid": "{00000000-0000-0000-0000-000000000000}",
+                  "name": "DISPPARAMS",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 2,
+              "name": "pvarResult",
+              "order": 5,
+              "type": {
+                "element": {
+                  "vt": 12
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 2,
+              "name": "pexcepinfo",
+              "order": 6,
+              "type": {
+                "element": {
+                  "guid": "{00000000-0000-0000-0000-000000000000}",
+                  "name": "EXCEPINFO",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 2,
+              "name": "puArgErr",
+              "order": 7,
+              "type": {
+                "element": {
+                  "vt": 23
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 48
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "Name",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 8
+          },
+          "returnVt": 8,
+          "vtableByteOffset": 56
+        },
+        {
+          "callConvention": 4,
+          "dispid": 2,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "Type",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 3
+          },
+          "returnVt": 3,
+          "vtableByteOffset": 64
+        },
+        {
+          "callConvention": 4,
+          "dispid": 3,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "Id",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 72
+        },
+        {
+          "callConvention": 4,
+          "dispid": 4,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "FanCurve",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "element": {
+              "guid": "{E6BB07B4-F360-45AF-814E-EB0D12D55BEC}",
+              "name": "IFanCurve",
+              "referenceHresult": 0,
+              "vt": 29
+            },
+            "vt": 26
+          },
+          "returnVt": 26,
+          "vtableByteOffset": 80
+        }
+      ],
+      "guid": "{DDC814D3-118A-4BC7-9E0D-8C96599E922C}",
+      "inheritedInterfaces": [
+        {
+          "flags": 0,
+          "guid": "{00020400-0000-0000-C000-000000000046}",
+          "hresult": 0,
+          "index": 0,
+          "name": "IDispatch"
+        }
+      ],
+      "name": "IFanProfile",
+      "typeAttrHresult": 0,
+      "typeFlags": 4288,
+      "typeKind": 4
+    },
+    {
+      "functions": [
+        {
+          "callConvention": 4,
+          "dispid": 1610612736,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "QueryInterface",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 2,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "riid",
+              "order": 0,
+              "type": {
+                "element": {
+                  "guid": "{00000000-0000-0000-0000-000000000000}",
+                  "name": "GUID",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 2,
+              "name": "ppvObj",
+              "order": 1,
+              "type": {
+                "element": {
+                  "element": {
+                    "vt": 24
+                  },
+                  "vt": 26
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 0
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610612737,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "AddRef",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 8
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610612738,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "Release",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 16
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610678272,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "GetTypeInfoCount",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 2,
+              "name": "pctinfo",
+              "order": 0,
+              "type": {
+                "element": {
+                  "vt": 23
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 24
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610678273,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "GetTypeInfo",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 3,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "itinfo",
+              "order": 0,
+              "type": {
+                "vt": 23
+              },
+              "vt": 23
+            },
+            {
+              "flags": 1,
+              "name": "lcid",
+              "order": 1,
+              "type": {
+                "vt": 19
+              },
+              "vt": 19
+            },
+            {
+              "flags": 2,
+              "name": "pptinfo",
+              "order": 2,
+              "type": {
+                "element": {
+                  "element": {
+                    "vt": 24
+                  },
+                  "vt": 26
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 32
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610678274,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "GetIDsOfNames",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 5,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "riid",
+              "order": 0,
+              "type": {
+                "element": {
+                  "guid": "{00000000-0000-0000-0000-000000000000}",
+                  "name": "GUID",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 1,
+              "name": "rgszNames",
+              "order": 1,
+              "type": {
+                "element": {
+                  "element": {
+                    "vt": 16
+                  },
+                  "vt": 26
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 1,
+              "name": "cNames",
+              "order": 2,
+              "type": {
+                "vt": 23
+              },
+              "vt": 23
+            },
+            {
+              "flags": 1,
+              "name": "lcid",
+              "order": 3,
+              "type": {
+                "vt": 19
+              },
+              "vt": 19
+            },
+            {
+              "flags": 2,
+              "name": "rgdispid",
+              "order": 4,
+              "type": {
+                "element": {
+                  "vt": 3
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 40
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610678275,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "Invoke",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 8,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "dispidMember",
+              "order": 0,
+              "type": {
+                "vt": 3
+              },
+              "vt": 3
+            },
+            {
+              "flags": 1,
+              "name": "riid",
+              "order": 1,
+              "type": {
+                "element": {
+                  "guid": "{00000000-0000-0000-0000-000000000000}",
+                  "name": "GUID",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 1,
+              "name": "lcid",
+              "order": 2,
+              "type": {
+                "vt": 19
+              },
+              "vt": 19
+            },
+            {
+              "flags": 1,
+              "name": "wFlags",
+              "order": 3,
+              "type": {
+                "vt": 18
+              },
+              "vt": 18
+            },
+            {
+              "flags": 1,
+              "name": "pdispparams",
+              "order": 4,
+              "type": {
+                "element": {
+                  "guid": "{00000000-0000-0000-0000-000000000000}",
+                  "name": "DISPPARAMS",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 2,
+              "name": "pvarResult",
+              "order": 5,
+              "type": {
+                "element": {
+                  "vt": 12
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 2,
+              "name": "pexcepinfo",
+              "order": 6,
+              "type": {
+                "element": {
+                  "guid": "{00000000-0000-0000-0000-000000000000}",
+                  "name": "EXCEPINFO",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 2,
+              "name": "puArgErr",
+              "order": 7,
+              "type": {
+                "element": {
+                  "vt": 23
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 48
+        },
+        {
+          "callConvention": 4,
+          "dispid": -4,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "_NewEnum",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 13
+          },
+          "returnVt": 13,
+          "vtableByteOffset": 56
+        },
+        {
+          "callConvention": 4,
+          "dispid": 2,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "Count",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 3
+          },
+          "returnVt": 3,
+          "vtableByteOffset": 64
+        },
+        {
+          "callConvention": 4,
+          "dispid": 0,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "Item",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "index",
+              "order": 0,
+              "type": {
+                "vt": 3
+              },
+              "vt": 3
+            }
+          ],
+          "returnType": {
+            "element": {
+              "guid": "{C3C24163-FC1B-431F-978D-44A9FBAC34EC}",
+              "name": "IFanCurvePoint",
+              "referenceHresult": 0,
+              "vt": 29
+            },
+            "vt": 26
+          },
+          "returnVt": 26,
+          "vtableByteOffset": 72
+        },
+        {
+          "callConvention": 4,
+          "dispid": 3,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "AddPoint",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 2,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "x",
+              "order": 0,
+              "type": {
+                "vt": 3
+              },
+              "vt": 3
+            },
+            {
+              "flags": 1,
+              "name": "y",
+              "order": 1,
+              "type": {
+                "vt": 3
+              },
+              "vt": 3
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 80
+        }
+      ],
+      "guid": "{E6BB07B4-F360-45AF-814E-EB0D12D55BEC}",
+      "inheritedInterfaces": [
+        {
+          "flags": 0,
+          "guid": "{00020400-0000-0000-C000-000000000046}",
+          "hresult": 0,
+          "index": 0,
+          "name": "IDispatch"
+        }
+      ],
+      "name": "IFanCurve",
+      "typeAttrHresult": 0,
+      "typeFlags": 4288,
+      "typeKind": 4
+    },
+    {
+      "functions": [
+        {
+          "callConvention": 4,
+          "dispid": 1610612736,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "QueryInterface",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 2,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "riid",
+              "order": 0,
+              "type": {
+                "element": {
+                  "guid": "{00000000-0000-0000-0000-000000000000}",
+                  "name": "GUID",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 2,
+              "name": "ppvObj",
+              "order": 1,
+              "type": {
+                "element": {
+                  "element": {
+                    "vt": 24
+                  },
+                  "vt": 26
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 0
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610612737,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "AddRef",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 8
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610612738,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "Release",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 16
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610678272,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "GetTypeInfoCount",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 2,
+              "name": "pctinfo",
+              "order": 0,
+              "type": {
+                "element": {
+                  "vt": 23
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 24
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610678273,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "GetTypeInfo",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 3,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "itinfo",
+              "order": 0,
+              "type": {
+                "vt": 23
+              },
+              "vt": 23
+            },
+            {
+              "flags": 1,
+              "name": "lcid",
+              "order": 1,
+              "type": {
+                "vt": 19
+              },
+              "vt": 19
+            },
+            {
+              "flags": 2,
+              "name": "pptinfo",
+              "order": 2,
+              "type": {
+                "element": {
+                  "element": {
+                    "vt": 24
+                  },
+                  "vt": 26
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 32
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610678274,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "GetIDsOfNames",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 5,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "riid",
+              "order": 0,
+              "type": {
+                "element": {
+                  "guid": "{00000000-0000-0000-0000-000000000000}",
+                  "name": "GUID",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 1,
+              "name": "rgszNames",
+              "order": 1,
+              "type": {
+                "element": {
+                  "element": {
+                    "vt": 16
+                  },
+                  "vt": 26
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 1,
+              "name": "cNames",
+              "order": 2,
+              "type": {
+                "vt": 23
+              },
+              "vt": 23
+            },
+            {
+              "flags": 1,
+              "name": "lcid",
+              "order": 3,
+              "type": {
+                "vt": 19
+              },
+              "vt": 19
+            },
+            {
+              "flags": 2,
+              "name": "rgdispid",
+              "order": 4,
+              "type": {
+                "element": {
+                  "vt": 3
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 40
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610678275,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "Invoke",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 8,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "dispidMember",
+              "order": 0,
+              "type": {
+                "vt": 3
+              },
+              "vt": 3
+            },
+            {
+              "flags": 1,
+              "name": "riid",
+              "order": 1,
+              "type": {
+                "element": {
+                  "guid": "{00000000-0000-0000-0000-000000000000}",
+                  "name": "GUID",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 1,
+              "name": "lcid",
+              "order": 2,
+              "type": {
+                "vt": 19
+              },
+              "vt": 19
+            },
+            {
+              "flags": 1,
+              "name": "wFlags",
+              "order": 3,
+              "type": {
+                "vt": 18
+              },
+              "vt": 18
+            },
+            {
+              "flags": 1,
+              "name": "pdispparams",
+              "order": 4,
+              "type": {
+                "element": {
+                  "guid": "{00000000-0000-0000-0000-000000000000}",
+                  "name": "DISPPARAMS",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 2,
+              "name": "pvarResult",
+              "order": 5,
+              "type": {
+                "element": {
+                  "vt": 12
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 2,
+              "name": "pexcepinfo",
+              "order": 6,
+              "type": {
+                "element": {
+                  "guid": "{00000000-0000-0000-0000-000000000000}",
+                  "name": "EXCEPINFO",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 2,
+              "name": "puArgErr",
+              "order": 7,
+              "type": {
+                "element": {
+                  "vt": 23
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 48
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "Temperature",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 3
+          },
+          "returnVt": 3,
+          "vtableByteOffset": 56
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1,
+          "functionKind": 4,
+          "invokeKind": 4,
+          "memberKind": "PROPERTYPUT",
+          "name": "Temperature",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "",
+              "order": 0,
+              "type": {
+                "vt": 3
+              },
+              "vt": 3
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 64
+        },
+        {
+          "callConvention": 4,
+          "dispid": 2,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "Speed",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 3
+          },
+          "returnVt": 3,
+          "vtableByteOffset": 72
+        },
+        {
+          "callConvention": 4,
+          "dispid": 2,
+          "functionKind": 4,
+          "invokeKind": 4,
+          "memberKind": "PROPERTYPUT",
+          "name": "Speed",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "",
+              "order": 0,
+              "type": {
+                "vt": 3
+              },
+              "vt": 3
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 80
+        }
+      ],
+      "guid": "{C3C24163-FC1B-431F-978D-44A9FBAC34EC}",
+      "inheritedInterfaces": [
+        {
+          "flags": 0,
+          "guid": "{00020400-0000-0000-C000-000000000046}",
+          "hresult": 0,
+          "index": 0,
+          "name": "IDispatch"
+        }
+      ],
+      "name": "IFanCurvePoint",
+      "typeAttrHresult": 0,
+      "typeFlags": 4288,
+      "typeKind": 4
+    },
+    {
+      "functions": [
+        {
+          "callConvention": 4,
+          "dispid": 1610612736,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "QueryInterface",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 2,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "riid",
+              "order": 0,
+              "type": {
+                "element": {
+                  "guid": "{00000000-0000-0000-0000-000000000000}",
+                  "name": "GUID",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 2,
+              "name": "ppvObj",
+              "order": 1,
+              "type": {
+                "element": {
+                  "element": {
+                    "vt": 24
+                  },
+                  "vt": 26
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 0
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610612737,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "AddRef",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 8
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610612738,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "Release",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 16
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610678272,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "GetTypeInfoCount",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 2,
+              "name": "pctinfo",
+              "order": 0,
+              "type": {
+                "element": {
+                  "vt": 23
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 24
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610678273,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "GetTypeInfo",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 3,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "itinfo",
+              "order": 0,
+              "type": {
+                "vt": 23
+              },
+              "vt": 23
+            },
+            {
+              "flags": 1,
+              "name": "lcid",
+              "order": 1,
+              "type": {
+                "vt": 19
+              },
+              "vt": 19
+            },
+            {
+              "flags": 2,
+              "name": "pptinfo",
+              "order": 2,
+              "type": {
+                "element": {
+                  "element": {
+                    "vt": 24
+                  },
+                  "vt": 26
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 32
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610678274,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "GetIDsOfNames",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 5,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "riid",
+              "order": 0,
+              "type": {
+                "element": {
+                  "guid": "{00000000-0000-0000-0000-000000000000}",
+                  "name": "GUID",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 1,
+              "name": "rgszNames",
+              "order": 1,
+              "type": {
+                "element": {
+                  "element": {
+                    "vt": 16
+                  },
+                  "vt": 26
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 1,
+              "name": "cNames",
+              "order": 2,
+              "type": {
+                "vt": 23
+              },
+              "vt": 23
+            },
+            {
+              "flags": 1,
+              "name": "lcid",
+              "order": 3,
+              "type": {
+                "vt": 19
+              },
+              "vt": 19
+            },
+            {
+              "flags": 2,
+              "name": "rgdispid",
+              "order": 4,
+              "type": {
+                "element": {
+                  "vt": 3
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 40
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610678275,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "Invoke",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 8,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "dispidMember",
+              "order": 0,
+              "type": {
+                "vt": 3
+              },
+              "vt": 3
+            },
+            {
+              "flags": 1,
+              "name": "riid",
+              "order": 1,
+              "type": {
+                "element": {
+                  "guid": "{00000000-0000-0000-0000-000000000000}",
+                  "name": "GUID",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 1,
+              "name": "lcid",
+              "order": 2,
+              "type": {
+                "vt": 19
+              },
+              "vt": 19
+            },
+            {
+              "flags": 1,
+              "name": "wFlags",
+              "order": 3,
+              "type": {
+                "vt": 18
+              },
+              "vt": 18
+            },
+            {
+              "flags": 1,
+              "name": "pdispparams",
+              "order": 4,
+              "type": {
+                "element": {
+                  "guid": "{00000000-0000-0000-0000-000000000000}",
+                  "name": "DISPPARAMS",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 2,
+              "name": "pvarResult",
+              "order": 5,
+              "type": {
+                "element": {
+                  "vt": 12
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 2,
+              "name": "pexcepinfo",
+              "order": 6,
+              "type": {
+                "element": {
+                  "guid": "{00000000-0000-0000-0000-000000000000}",
+                  "name": "EXCEPINFO",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 2,
+              "name": "puArgErr",
+              "order": 7,
+              "type": {
+                "element": {
+                  "vt": 23
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 48
+        },
+        {
+          "callConvention": 4,
+          "dispid": -4,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "_NewEnum",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 13
+          },
+          "returnVt": 13,
+          "vtableByteOffset": 56
+        },
+        {
+          "callConvention": 4,
+          "dispid": 0,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "Item",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "index",
+              "order": 0,
+              "type": {
+                "vt": 3
+              },
+              "vt": 3
+            }
+          ],
+          "returnType": {
+            "vt": 3
+          },
+          "returnVt": 3,
+          "vtableByteOffset": 64
+        },
+        {
+          "callConvention": 4,
+          "dispid": 0,
+          "functionKind": 4,
+          "invokeKind": 4,
+          "memberKind": "PROPERTYPUT",
+          "name": "Item",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 2,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "index",
+              "order": 0,
+              "type": {
+                "vt": 3
+              },
+              "vt": 3
+            },
+            {
+              "flags": 1,
+              "name": "",
+              "order": 1,
+              "type": {
+                "vt": 3
+              },
+              "vt": 3
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 72
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "Count",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 3
+          },
+          "returnVt": 3,
+          "vtableByteOffset": 80
+        },
+        {
+          "callConvention": 4,
+          "dispid": 2,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "Save",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 88
+        },
+        {
+          "callConvention": 4,
+          "dispid": 3,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "ApplyButNotSave",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 96
+        }
+      ],
+      "guid": "{2DFEAC64-E8E8-437E-8662-25F7AA4B0CE0}",
+      "inheritedInterfaces": [
+        {
+          "flags": 0,
+          "guid": "{00020400-0000-0000-C000-000000000046}",
+          "hresult": 0,
+          "index": 0,
+          "name": "IDispatch"
+        }
+      ],
+      "name": "IThermalWeights",
+      "typeAttrHresult": 0,
+      "typeFlags": 4288,
+      "typeKind": 4
+    },
+    {
+      "functions": [
+        {
+          "callConvention": 4,
+          "dispid": 1610612736,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "QueryInterface",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 2,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "riid",
+              "order": 0,
+              "type": {
+                "element": {
+                  "guid": "{00000000-0000-0000-0000-000000000000}",
+                  "name": "GUID",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 2,
+              "name": "ppvObj",
+              "order": 1,
+              "type": {
+                "element": {
+                  "element": {
+                    "vt": 24
+                  },
+                  "vt": 26
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 0
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610612737,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "AddRef",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 8
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610612738,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "Release",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 16
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610678272,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "GetTypeInfoCount",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 2,
+              "name": "pctinfo",
+              "order": 0,
+              "type": {
+                "element": {
+                  "vt": 23
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 24
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610678273,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "GetTypeInfo",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 3,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "itinfo",
+              "order": 0,
+              "type": {
+                "vt": 23
+              },
+              "vt": 23
+            },
+            {
+              "flags": 1,
+              "name": "lcid",
+              "order": 1,
+              "type": {
+                "vt": 19
+              },
+              "vt": 19
+            },
+            {
+              "flags": 2,
+              "name": "pptinfo",
+              "order": 2,
+              "type": {
+                "element": {
+                  "element": {
+                    "vt": 24
+                  },
+                  "vt": 26
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 32
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610678274,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "GetIDsOfNames",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 5,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "riid",
+              "order": 0,
+              "type": {
+                "element": {
+                  "guid": "{00000000-0000-0000-0000-000000000000}",
+                  "name": "GUID",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 1,
+              "name": "rgszNames",
+              "order": 1,
+              "type": {
+                "element": {
+                  "element": {
+                    "vt": 16
+                  },
+                  "vt": 26
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 1,
+              "name": "cNames",
+              "order": 2,
+              "type": {
+                "vt": 23
+              },
+              "vt": 23
+            },
+            {
+              "flags": 1,
+              "name": "lcid",
+              "order": 3,
+              "type": {
+                "vt": 19
+              },
+              "vt": 19
+            },
+            {
+              "flags": 2,
+              "name": "rgdispid",
+              "order": 4,
+              "type": {
+                "element": {
+                  "vt": 3
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 40
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610678275,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "Invoke",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 8,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "dispidMember",
+              "order": 0,
+              "type": {
+                "vt": 3
+              },
+              "vt": 3
+            },
+            {
+              "flags": 1,
+              "name": "riid",
+              "order": 1,
+              "type": {
+                "element": {
+                  "guid": "{00000000-0000-0000-0000-000000000000}",
+                  "name": "GUID",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 1,
+              "name": "lcid",
+              "order": 2,
+              "type": {
+                "vt": 19
+              },
+              "vt": 19
+            },
+            {
+              "flags": 1,
+              "name": "wFlags",
+              "order": 3,
+              "type": {
+                "vt": 18
+              },
+              "vt": 18
+            },
+            {
+              "flags": 1,
+              "name": "pdispparams",
+              "order": 4,
+              "type": {
+                "element": {
+                  "guid": "{00000000-0000-0000-0000-000000000000}",
+                  "name": "DISPPARAMS",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 2,
+              "name": "pvarResult",
+              "order": 5,
+              "type": {
+                "element": {
+                  "vt": 12
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 2,
+              "name": "pexcepinfo",
+              "order": 6,
+              "type": {
+                "element": {
+                  "guid": "{00000000-0000-0000-0000-000000000000}",
+                  "name": "EXCEPINFO",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 2,
+              "name": "puArgErr",
+              "order": 7,
+              "type": {
+                "element": {
+                  "vt": 23
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 48
+        },
+        {
+          "callConvention": 4,
+          "dispid": -4,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "_NewEnum",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 13
+          },
+          "returnVt": 13,
+          "vtableByteOffset": 56
+        },
+        {
+          "callConvention": 4,
+          "dispid": 0,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "Item",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "index",
+              "order": 0,
+              "type": {
+                "vt": 3
+              },
+              "vt": 3
+            }
+          ],
+          "returnType": {
+            "vt": 3
+          },
+          "returnVt": 3,
+          "vtableByteOffset": 64
+        },
+        {
+          "callConvention": 4,
+          "dispid": 0,
+          "functionKind": 4,
+          "invokeKind": 4,
+          "memberKind": "PROPERTYPUT",
+          "name": "Item",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 2,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "index",
+              "order": 0,
+              "type": {
+                "vt": 3
+              },
+              "vt": 3
+            },
+            {
+              "flags": 1,
+              "name": "",
+              "order": 1,
+              "type": {
+                "vt": 3
+              },
+              "vt": 3
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 72
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "Count",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 3
+          },
+          "returnVt": 3,
+          "vtableByteOffset": 80
+        },
+        {
+          "callConvention": 4,
+          "dispid": 2,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "Save",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 88
+        },
+        {
+          "callConvention": 4,
+          "dispid": 3,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "ApplyButNotSave",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 96
+        },
+        {
+          "callConvention": 4,
+          "dispid": 4,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "Clear",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 104
+        },
+        {
+          "callConvention": 4,
+          "dispid": 5,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "Add",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "index",
+              "order": 0,
+              "type": {
+                "vt": 3
+              },
+              "vt": 3
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 112
+        }
+      ],
+      "guid": "{B55B8BF0-5886-4BE8-BCDB-001B8CABCEB0}",
+      "inheritedInterfaces": [
+        {
+          "flags": 0,
+          "guid": "{00020400-0000-0000-C000-000000000046}",
+          "hresult": 0,
+          "index": 0,
+          "name": "IDispatch"
+        }
+      ],
+      "name": "IMultiFanSource",
+      "typeAttrHresult": 0,
+      "typeFlags": 4288,
+      "typeKind": 4
+    },
+    {
+      "functions": [
+        {
+          "callConvention": 4,
+          "dispid": 1610612736,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "QueryInterface",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 2,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "riid",
+              "order": 0,
+              "type": {
+                "element": {
+                  "guid": "{00000000-0000-0000-0000-000000000000}",
+                  "name": "GUID",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 2,
+              "name": "ppvObj",
+              "order": 1,
+              "type": {
+                "element": {
+                  "element": {
+                    "vt": 24
+                  },
+                  "vt": 26
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 0
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610612737,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "AddRef",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 8
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610612738,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "Release",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 16
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610678272,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "GetTypeInfoCount",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 2,
+              "name": "pctinfo",
+              "order": 0,
+              "type": {
+                "element": {
+                  "vt": 23
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 24
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610678273,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "GetTypeInfo",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 3,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "itinfo",
+              "order": 0,
+              "type": {
+                "vt": 23
+              },
+              "vt": 23
+            },
+            {
+              "flags": 1,
+              "name": "lcid",
+              "order": 1,
+              "type": {
+                "vt": 19
+              },
+              "vt": 19
+            },
+            {
+              "flags": 2,
+              "name": "pptinfo",
+              "order": 2,
+              "type": {
+                "element": {
+                  "element": {
+                    "vt": 24
+                  },
+                  "vt": 26
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 32
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610678274,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "GetIDsOfNames",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 5,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "riid",
+              "order": 0,
+              "type": {
+                "element": {
+                  "guid": "{00000000-0000-0000-0000-000000000000}",
+                  "name": "GUID",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 1,
+              "name": "rgszNames",
+              "order": 1,
+              "type": {
+                "element": {
+                  "element": {
+                    "vt": 16
+                  },
+                  "vt": 26
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 1,
+              "name": "cNames",
+              "order": 2,
+              "type": {
+                "vt": 23
+              },
+              "vt": 23
+            },
+            {
+              "flags": 1,
+              "name": "lcid",
+              "order": 3,
+              "type": {
+                "vt": 19
+              },
+              "vt": 19
+            },
+            {
+              "flags": 2,
+              "name": "rgdispid",
+              "order": 4,
+              "type": {
+                "element": {
+                  "vt": 3
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 40
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610678275,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "Invoke",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 8,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "dispidMember",
+              "order": 0,
+              "type": {
+                "vt": 3
+              },
+              "vt": 3
+            },
+            {
+              "flags": 1,
+              "name": "riid",
+              "order": 1,
+              "type": {
+                "element": {
+                  "guid": "{00000000-0000-0000-0000-000000000000}",
+                  "name": "GUID",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 1,
+              "name": "lcid",
+              "order": 2,
+              "type": {
+                "vt": 19
+              },
+              "vt": 19
+            },
+            {
+              "flags": 1,
+              "name": "wFlags",
+              "order": 3,
+              "type": {
+                "vt": 18
+              },
+              "vt": 18
+            },
+            {
+              "flags": 1,
+              "name": "pdispparams",
+              "order": 4,
+              "type": {
+                "element": {
+                  "guid": "{00000000-0000-0000-0000-000000000000}",
+                  "name": "DISPPARAMS",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 2,
+              "name": "pvarResult",
+              "order": 5,
+              "type": {
+                "element": {
+                  "vt": 12
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 2,
+              "name": "pexcepinfo",
+              "order": 6,
+              "type": {
+                "element": {
+                  "guid": "{00000000-0000-0000-0000-000000000000}",
+                  "name": "EXCEPINFO",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 2,
+              "name": "puArgErr",
+              "order": 7,
+              "type": {
+                "element": {
+                  "vt": 23
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 48
+        },
+        {
+          "callConvention": 4,
+          "dispid": -4,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "_NewEnum",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 13
+          },
+          "returnVt": 13,
+          "vtableByteOffset": 56
+        },
+        {
+          "callConvention": 4,
+          "dispid": 2,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "Count",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 3
+          },
+          "returnVt": 3,
+          "vtableByteOffset": 64
+        },
+        {
+          "callConvention": 4,
+          "dispid": 0,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "Item",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "index",
+              "order": 0,
+              "type": {
+                "vt": 3
+              },
+              "vt": 3
+            }
+          ],
+          "returnType": {
+            "element": {
+              "guid": "{C3C24163-FC1B-431F-978D-44A9FBAC34EC}",
+              "name": "IFanCurvePoint",
+              "referenceHresult": 0,
+              "vt": 29
+            },
+            "vt": 26
+          },
+          "returnVt": 26,
+          "vtableByteOffset": 72
+        },
+        {
+          "callConvention": 4,
+          "dispid": 3,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "AddPoint",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 2,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "x",
+              "order": 0,
+              "type": {
+                "vt": 3
+              },
+              "vt": 3
+            },
+            {
+              "flags": 1,
+              "name": "y",
+              "order": 1,
+              "type": {
+                "vt": 3
+              },
+              "vt": 3
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 80
+        },
+        {
+          "callConvention": 4,
+          "dispid": 4,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "FanCurve",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "element": {
+              "guid": "{E6BB07B4-F360-45AF-814E-EB0D12D55BEC}",
+              "name": "IFanCurve",
+              "referenceHresult": 0,
+              "vt": 29
+            },
+            "vt": 26
+          },
+          "returnVt": 26,
+          "vtableByteOffset": 88
+        }
+      ],
+      "guid": "{A7808A8A-F1E3-4E7B-96DA-1C51545EE988}",
+      "inheritedInterfaces": [
+        {
+          "flags": 0,
+          "guid": "{00020400-0000-0000-C000-000000000046}",
+          "hresult": 0,
+          "index": 0,
+          "name": "IDispatch"
+        }
+      ],
+      "name": "IDualModeFanCurve",
+      "typeAttrHresult": 0,
+      "typeFlags": 4288,
+      "typeKind": 4
+    },
+    {
+      "functions": [],
+      "guid": "{14083C53-B8E7-48E4-9320-811F3478C4A4}",
+      "inheritedInterfaces": [
+        {
+          "flags": 1,
+          "guid": "{BB327645-E3EC-4B7D-90EE-67FCB949E584}",
+          "hresult": 0,
+          "index": 0,
+          "name": "IFanControlManager"
+        },
+        {
+          "flags": 3,
+          "guid": "{6F71C865-D228-4B2A-9B8B-C4F979EA8998}",
+          "hresult": 0,
+          "index": 1,
+          "name": "_IFanControlManagerEvents"
+        }
+      ],
+      "name": "FanControlManager",
+      "typeAttrHresult": 0,
+      "typeFlags": 2,
+      "typeKind": 5
+    },
+    {
+      "functions": [
+        {
+          "callConvention": 4,
+          "dispid": 1610612736,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "QueryInterface",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 2,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "riid",
+              "order": 0,
+              "type": {
+                "element": {
+                  "guid": "{00000000-0000-0000-0000-000000000000}",
+                  "name": "GUID",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 2,
+              "name": "ppvObj",
+              "order": 1,
+              "type": {
+                "element": {
+                  "element": {
+                    "vt": 24
+                  },
+                  "vt": 26
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 0
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610612737,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "AddRef",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 8
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610612738,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "Release",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 16
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610678272,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "GetTypeInfoCount",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 2,
+              "name": "pctinfo",
+              "order": 0,
+              "type": {
+                "element": {
+                  "vt": 23
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 24
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610678273,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "GetTypeInfo",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 3,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "itinfo",
+              "order": 0,
+              "type": {
+                "vt": 23
+              },
+              "vt": 23
+            },
+            {
+              "flags": 1,
+              "name": "lcid",
+              "order": 1,
+              "type": {
+                "vt": 19
+              },
+              "vt": 19
+            },
+            {
+              "flags": 2,
+              "name": "pptinfo",
+              "order": 2,
+              "type": {
+                "element": {
+                  "element": {
+                    "vt": 24
+                  },
+                  "vt": 26
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 32
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610678274,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "GetIDsOfNames",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 5,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "riid",
+              "order": 0,
+              "type": {
+                "element": {
+                  "guid": "{00000000-0000-0000-0000-000000000000}",
+                  "name": "GUID",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 1,
+              "name": "rgszNames",
+              "order": 1,
+              "type": {
+                "element": {
+                  "element": {
+                    "vt": 16
+                  },
+                  "vt": 26
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 1,
+              "name": "cNames",
+              "order": 2,
+              "type": {
+                "vt": 23
+              },
+              "vt": 23
+            },
+            {
+              "flags": 1,
+              "name": "lcid",
+              "order": 3,
+              "type": {
+                "vt": 19
+              },
+              "vt": 19
+            },
+            {
+              "flags": 2,
+              "name": "rgdispid",
+              "order": 4,
+              "type": {
+                "element": {
+                  "vt": 3
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 40
+        },
+        {
+          "callConvention": 4,
+          "dispid": 1610678275,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "Invoke",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 8,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "dispidMember",
+              "order": 0,
+              "type": {
+                "vt": 3
+              },
+              "vt": 3
+            },
+            {
+              "flags": 1,
+              "name": "riid",
+              "order": 1,
+              "type": {
+                "element": {
+                  "guid": "{00000000-0000-0000-0000-000000000000}",
+                  "name": "GUID",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 1,
+              "name": "lcid",
+              "order": 2,
+              "type": {
+                "vt": 19
+              },
+              "vt": 19
+            },
+            {
+              "flags": 1,
+              "name": "wFlags",
+              "order": 3,
+              "type": {
+                "vt": 18
+              },
+              "vt": 18
+            },
+            {
+              "flags": 1,
+              "name": "pdispparams",
+              "order": 4,
+              "type": {
+                "element": {
+                  "guid": "{00000000-0000-0000-0000-000000000000}",
+                  "name": "DISPPARAMS",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 2,
+              "name": "pvarResult",
+              "order": 5,
+              "type": {
+                "element": {
+                  "vt": 12
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 2,
+              "name": "pexcepinfo",
+              "order": 6,
+              "type": {
+                "element": {
+                  "guid": "{00000000-0000-0000-0000-000000000000}",
+                  "name": "EXCEPINFO",
+                  "referenceHresult": 0,
+                  "vt": 29
+                },
+                "vt": 26
+              },
+              "vt": 26
+            },
+            {
+              "flags": 2,
+              "name": "puArgErr",
+              "order": 7,
+              "type": {
+                "element": {
+                  "vt": 23
+                },
+                "vt": 26
+              },
+              "vt": 26
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 48
+        },
+        {
+          "callConvention": 4,
+          "dispid": 2,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "Controls",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "element": {
+              "guid": "{05F22B4C-27D5-4488-A7EE-B712FE447426}",
+              "name": "IFanControlCollection",
+              "referenceHresult": 0,
+              "vt": 29
+            },
+            "vt": 26
+          },
+          "returnVt": 26,
+          "vtableByteOffset": 56
+        },
+        {
+          "callConvention": 4,
+          "dispid": 3,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "ConstraintType",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 2
+          },
+          "returnVt": 2,
+          "vtableByteOffset": 64
+        },
+        {
+          "callConvention": 4,
+          "dispid": 4,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "MaxStepTime",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 72
+        },
+        {
+          "callConvention": 4,
+          "dispid": 5,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "MaxTolerance",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 80
+        },
+        {
+          "callConvention": 4,
+          "dispid": 6,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "IsSIOSupportedRPM",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 11
+          },
+          "returnVt": 11,
+          "vtableByteOffset": 88
+        },
+        {
+          "callConvention": 4,
+          "dispid": 7,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "RpmPerstep",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 96
+        },
+        {
+          "callConvention": 4,
+          "dispid": 8,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "RpmSmoothFreq",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 104
+        },
+        {
+          "callConvention": 4,
+          "dispid": 9,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "OneSencitiveSupported",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 11
+          },
+          "returnVt": 11,
+          "vtableByteOffset": 112
+        },
+        {
+          "callConvention": 4,
+          "dispid": 10,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "IsSupportFanStop",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 11
+          },
+          "returnVt": 11,
+          "vtableByteOffset": 120
+        },
+        {
+          "callConvention": 4,
+          "dispid": 11,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "FanServiceVersion",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 128
+        },
+        {
+          "callConvention": 4,
+          "dispid": 12,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "AIFanCpuTemperature",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "index",
+              "order": 0,
+              "type": {
+                "vt": 3
+              },
+              "vt": 3
+            }
+          ],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 136
+        },
+        {
+          "callConvention": 4,
+          "dispid": 13,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "AIFanCpuTempIn",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "index",
+              "order": 0,
+              "type": {
+                "vt": 3
+              },
+              "vt": 3
+            }
+          ],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 144
+        },
+        {
+          "callConvention": 4,
+          "dispid": 14,
+          "functionKind": 4,
+          "invokeKind": 4,
+          "memberKind": "PROPERTYPUT",
+          "name": "AIFanMinDuty",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 2,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "fanIdx",
+              "order": 0,
+              "type": {
+                "vt": 19
+              },
+              "vt": 19
+            },
+            {
+              "flags": 1,
+              "name": "",
+              "order": 1,
+              "type": {
+                "vt": 19
+              },
+              "vt": 19
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 152
+        },
+        {
+          "callConvention": 4,
+          "dispid": 15,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "FanCount",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 160
+        },
+        {
+          "callConvention": 4,
+          "dispid": 16,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "AIFanEntryTemp",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "index",
+              "order": 0,
+              "type": {
+                "vt": 3
+              },
+              "vt": 3
+            }
+          ],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 168
+        },
+        {
+          "callConvention": 4,
+          "dispid": 17,
+          "functionKind": 4,
+          "invokeKind": 4,
+          "memberKind": "PROPERTYPUT",
+          "name": "SetCriticalPoint",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 2,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "index",
+              "order": 0,
+              "type": {
+                "vt": 3
+              },
+              "vt": 3
+            },
+            {
+              "flags": 1,
+              "name": "",
+              "order": 1,
+              "type": {
+                "vt": 3
+              },
+              "vt": 3
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 176
+        },
+        {
+          "callConvention": 4,
+          "dispid": 18,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "IsCPUZSupport",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 11
+          },
+          "returnVt": 11,
+          "vtableByteOffset": 184
+        },
+        {
+          "callConvention": 4,
+          "dispid": 19,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "IsCPUZ_GPU",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 11
+          },
+          "returnVt": 11,
+          "vtableByteOffset": 192
+        },
+        {
+          "callConvention": 4,
+          "dispid": 20,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "IsCPUZ_DDR",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 11
+          },
+          "returnVt": 11,
+          "vtableByteOffset": 200
+        },
+        {
+          "callConvention": 4,
+          "dispid": 21,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "IsCPUZ_M2",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 11
+          },
+          "returnVt": 11,
+          "vtableByteOffset": 208
+        },
+        {
+          "callConvention": 4,
+          "dispid": 22,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "getGPUMaxTemp",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 3
+          },
+          "returnVt": 3,
+          "vtableByteOffset": 216
+        },
+        {
+          "callConvention": 4,
+          "dispid": 23,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "getDDRMaxTemp",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 3
+          },
+          "returnVt": 3,
+          "vtableByteOffset": 224
+        },
+        {
+          "callConvention": 4,
+          "dispid": 24,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "getM2MaxTemp",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 3
+          },
+          "returnVt": 3,
+          "vtableByteOffset": 232
+        },
+        {
+          "callConvention": 4,
+          "dispid": 25,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "IsCPUZInitialized",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 3
+          },
+          "returnVt": 3,
+          "vtableByteOffset": 240
+        },
+        {
+          "callConvention": 4,
+          "dispid": 26,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "GetAic2Temp",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "addr",
+              "order": 0,
+              "type": {
+                "vt": 19
+              },
+              "vt": 19
+            }
+          ],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 248
+        },
+        {
+          "callConvention": 4,
+          "dispid": 27,
+          "functionKind": 4,
+          "invokeKind": 4,
+          "memberKind": "PROPERTYPUT",
+          "name": "SetAic2FanDuty",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 2,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "index",
+              "order": 0,
+              "type": {
+                "vt": 19
+              },
+              "vt": 19
+            },
+            {
+              "flags": 1,
+              "name": "",
+              "order": 1,
+              "type": {
+                "vt": 19
+              },
+              "vt": 19
+            }
+          ],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 256
+        },
+        {
+          "callConvention": 4,
+          "dispid": 28,
+          "functionKind": 4,
+          "invokeKind": 1,
+          "memberKind": "FUNC",
+          "name": "SetAiSuiteRequestDDR5",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 24
+          },
+          "returnVt": 24,
+          "vtableByteOffset": 264
+        },
+        {
+          "callConvention": 4,
+          "dispid": 29,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "GetAic2Rpm",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 272
+        },
+        {
+          "callConvention": 4,
+          "dispid": 30,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "IsMBIFSupportAC",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 11
+          },
+          "returnVt": 11,
+          "vtableByteOffset": 280
+        },
+        {
+          "callConvention": 4,
+          "dispid": 31,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "IsSupport_10_point",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 11
+          },
+          "returnVt": 11,
+          "vtableByteOffset": 288
+        },
+        {
+          "callConvention": 4,
+          "dispid": 32,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "IsRYUJIN3plugin",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 11
+          },
+          "returnVt": 11,
+          "vtableByteOffset": 296
+        },
+        {
+          "callConvention": 4,
+          "dispid": 33,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "Additional_Func",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 1,
+          "parameters": [
+            {
+              "flags": 1,
+              "name": "index",
+              "order": 0,
+              "type": {
+                "vt": 3
+              },
+              "vt": 3
+            }
+          ],
+          "returnType": {
+            "vt": 19
+          },
+          "returnVt": 19,
+          "vtableByteOffset": 304
+        },
+        {
+          "callConvention": 4,
+          "dispid": 34,
+          "functionKind": 4,
+          "invokeKind": 2,
+          "memberKind": "PROPERTYGET",
+          "name": "getNumberOfCurvePoint",
+          "namesHresult": 0,
+          "optionalParameterCount": 0,
+          "parameterCount": 0,
+          "parameters": [],
+          "returnType": {
+            "vt": 3
+          },
+          "returnVt": 3,
+          "vtableByteOffset": 312
+        }
+      ],
+      "guid": "{BB327645-E3EC-4B7D-90EE-67FCB949E584}",
+      "inheritedInterfaces": [
+        {
+          "flags": 0,
+          "guid": "{00020400-0000-0000-C000-000000000046}",
+          "hresult": 0,
+          "index": 0,
+          "name": "IDispatch"
+        }
+      ],
+      "name": "IFanControlManager",
+      "typeAttrHresult": 0,
+      "typeFlags": 4288,
+      "typeKind": 4
+    }
+  ]
+}

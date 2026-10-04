@@ -9,6 +9,52 @@ namespace Aura.Tests;
 public sealed class ProfileControlClientTests
 {
     [TestMethod]
+    public async Task HardwareSlotRefreshIsExplicitPostAndActivationRetainsRevisionGuard()
+    {
+        var capture = new Capture { ReplyOverride = "{\"status\":\"ok\",\"api_version\":1,\"hardware_slot_status\":{\"desired_hardware_slot\":5,\"observed_hardware_slot\":1,\"hardware_slot_match\":false,\"source\":\"BasicInfo\"}}" };
+        var client = new ProfileControlClient(new HttpClient(capture));
+        var observed = await client.RefreshHardwareSlotAsync();
+        Assert.AreEqual("/api/device-profiles/hardware-slot/refresh", capture.Calls.Single().Path);
+        Assert.AreEqual(1, observed.HardwareSlotStatus!.ObservedHardwareSlot);
+        Assert.IsFalse(observed.HardwareSlotStatus.HardwareSlotMatch);
+        capture.Calls.Clear();
+        await client.ActivateAsync(Guid.NewGuid(), ProfileActivationReason.Manual, 17);
+        using var request = JsonDocument.Parse(capture.Calls.Single().Body);
+        Assert.AreEqual(17, request.RootElement.GetProperty("expected_revision").GetInt64());
+    }
+    [TestMethod]
+    public async Task Key1026DisabledRtActualUpdatePayloadAndCanonicalResponseRetainObject()
+    {
+        var profile = new DeviceProfile { Name = "Managed disabled RT fixture" };
+        profile.Magnetic.Keys.Add(new ProfileKey { LogicalId = 1026,
+            RapidTrigger = new(false, 0.5, 1.5, true) { Extensions = new() {
+                ["continuous"] = JsonSerializer.SerializeToElement(false),
+                ["opaque_rt"] = JsonSerializer.SerializeToElement(new { preserve = 42 }) } },
+            Dks = new(1, 3.6, Enumerable.Range(0, 4).Select(_ => new ProfileDksSlot()).ToList(), true) });
+        var capture = new Capture { ReplyOverride = JsonSerializer.Serialize(new ProfileApiResponse {
+            Status = "ok", ApiVersion = 1, DocumentRevision = 12, SelectedProfileId = profile.Id,
+            Profile = profile.Clone(), Profiles = [profile.Clone()] }, ProfileJson.Options) };
+        var client = new ProfileControlClient(new HttpClient(capture));
+        var result = await client.UpdateAsync(profile.Clone(), 11);
+        using var body = JsonDocument.Parse(capture.Calls.Single().Body);
+        var key = body.RootElement.GetProperty("profile").GetProperty("magnetic").GetProperty("keys")[0];
+        var rt = key.GetProperty("rapid_trigger");
+        Assert.AreEqual(1026, key.GetProperty("logical_id").GetInt32());
+        Assert.IsFalse(rt.GetProperty("enabled").GetBoolean());
+        Assert.AreEqual(0.5, rt.GetProperty("press_mm").GetDouble());
+        Assert.AreEqual(1.5, rt.GetProperty("release_mm").GetDouble());
+        Assert.AreEqual(42, rt.GetProperty("opaque_rt").GetProperty("preserve").GetInt32());
+        Assert.IsTrue(key.GetProperty("dks").GetProperty("standard").GetBoolean());
+        Assert.IsFalse(result.Profile!.Magnetic.Keys.Single().RapidTrigger!.Enabled);
+        Assert.AreEqual(42, result.Profile.Magnetic.Keys.Single().RapidTrigger!.Extensions!["opaque_rt"].GetProperty("preserve").GetInt32());
+        Assert.AreEqual(11, body.RootElement.GetProperty("expected_revision").GetInt64());
+        Assert.AreEqual("/api/device-profiles/update", capture.Calls.Single().Path);
+        if (Environment.GetEnvironmentVariable("AURA_RT_PIPELINE_TRACE_DIR") is { Length: > 0 } directory) {
+            Directory.CreateDirectory(directory);
+            File.WriteAllText(Path.Combine(directory, "key-1026-http-update.json"), capture.Calls.Single().Body);
+        }
+    }
+    [TestMethod]
     public async Task HardwareGateIsTypedCachedGetOnly()
     {
         var handler = new Capture { ReplyOverride = "{\"status\":\"ok\",\"api_version\":1,\"hardware_rt_gate\":{\"state\":\"off\",\"observation_sequence\":12,\"input_session_generation\":2}}" };

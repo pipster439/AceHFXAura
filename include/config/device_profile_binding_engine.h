@@ -62,6 +62,8 @@ public:
     void NotifyManualProfileAction(); // accepted explicit Manual selection ONLY
     Json Snapshot() const; // pure read: does not advance clock/debounce or evaluate
     static constexpr int64_t StabilityMs = 500;
+    // Candidate freshness at acceptance only; an established hold NEVER expires.
+    static constexpr int64_t ControlSurfaceAnchorFreshnessMs = 30000;
 
 private:
     DeviceProfileAutomationDecision ResolveLocked() const;
@@ -78,6 +80,10 @@ private:
     DeviceProfileDecisionContext context_;
     std::optional<int64_t> context_timestamp_ms_;
     std::optional<std::string> observed_, committed_foreground_, hold_foreground_;
+    std::optional<std::string> last_external_foreground_, control_surface_anchor_;
+    std::optional<int64_t> control_surface_entered_at_;
+    bool hold_active_ = false;
+    std::string hold_anchor_source_;
     std::optional<int64_t> observed_at_, stable_at_;
     bool pending_ = false, reevaluate_ = true;
     DeviceProfileAutomationDecision decision_;

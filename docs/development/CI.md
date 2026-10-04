@@ -21,13 +21,17 @@ Windows App SDK、NuGet 和 npm dependencies 继续由现有项目/lockfile决�
 
 1. Repository/source/daemon-only Profile ownership、migration guards；检测固定测试端口空闲。
 2. `git diff --check`。
-3. `frontend/npm ci`。必须在 configure 前执行，以注册 Studio 生成 DLL 的永久回归。
-4. 全新 CMake configure → 默认 ALL_BUILD（包含测试和 fixture DLL）→ Release。
-5. CTest JSON discovery → 全部注册测试；缺少关键永久 suite 时失败，不按固定数量验收。
-6. 既有 WebUI / daemon **dry-run**、Lighting Automation v2、GSI contract/dictionary integration。
-7. Aura.Tests（排除明确的 DesktopSmoke；配置 mock、客户端、迁移、P4B 测试正常运行）。
-8. WinUI x64 Release build。
-9. npm test 与 frontend production build。Vite output 重定向到本次 build 下，避免改动 tracked `web/index.html`。
+3. Gate A fake API regression、enumeration ABI compile、MTA triage compile 与 lighting-backend software tests/compile；不执行 vendor COM/hardware trial。
+4. `frontend/npm ci`。必须在 configure 前执行，以注册 Studio 生成 DLL 的永久回归。
+5. 全新 CMake configure → 默认 ALL_BUILD（包含测试和 fixture DLL）→ Release。
+6. CTest JSON discovery → 全部注册测试；缺少关键永久 suite 时失败，不按固定数量验收。
+7. 既有 WebUI / daemon **dry-run**、Lighting Automation v2、GSI contract/dictionary integration。
+8. Aura.Tests（排除明确的 DesktopSmoke；配置 mock、客户端、迁移、P4B 测试正常运行）。
+9. WinUI x64 Release build（运行前正常退出会锁住 build output 的开发版 Aura）。
+10. AsusPlatform.Tests 与隔离的 FanTypeLibValidator.Tests（排除 OfflineMetadata；不读取已安装 vendor TypeLib 或激活 COM）。
+11. npm test 与 frontend production build。Vite output 重定向到本次 build 下，避免改动 tracked `web/index.html`。
+
+当前完整 summary 为18个 required stages（包括新增 Fan TypeLib validator）；以实际 stage registry 全部 passed、complete_required_run=true 和0 NOT RUN验收，不固定复用旧17阶段结果。
 
 本轮未把桌面像素、包装包、USB capture、物理键盘行为放入 required software CI。
 原 workflow 中的打包/包验收不再混入普通 CI；发行验收继续按
@@ -102,7 +106,17 @@ pwsh ./tools/hardware/run-profile-automation-smoke.ps1
 
 ```powershell
 pwsh ./tools/hardware/run-profile-automation-smoke.ps1 `
-  -AllowHardwareWrites -ProfileA '<GUID>' -ProfileB '<GUID>'
+  -ProfileA "Desktop" `
+  -ProfileB "Gaming" `
+  -AllowHardwareWrites
+```
+
+也仍支持直接传入稳定 GUID：
+
+```powershell
+pwsh ./tools/hardware/run-profile-automation-smoke.ps1 `
+  -ProfileA '<GUID>' -ProfileB '<GUID>' `
+  -AllowHardwareWrites
 ```
 
 daemon 必须已运行、M605 Clean、无 quarantine，两个 Profile 必须已由用户审查；
@@ -110,18 +124,31 @@ daemon 必须已运行、M605 Clean、无 quarantine，两个 Profile 必须已�
 HardwareWrites 无论 CI还是GITHUB_ACTIONS 为true都拒绝（非false/0的非空marker也保守拒绝）。
 DaemonUrl只接受本地HTTP origin。脚本绝不启动/停止 Aura或daemon。
 
+测试程序默认：
+- Program A：`notepad.exe`
+- Program B：`charmap.exe`（Character Map，替代了可能被用户卸载的 `mspaint.exe`）
+支持通过 `-ProgramA` / `-ProgramB` 覆盖。若两个程序解析为相同 basename 或任一程序找不到，在任何配置变更前拒绝执行。
+
+Profile 解析规则（通过 daemon Profile API canonical state，不直接读用户文件）：
+- 若为合法 GUID：查找并验证该 GUID 当前存在，不存在则报错。
+- 若为名称：按名称大小写不敏感精确全词匹配（不进行子串、前缀或模糊匹配）。
+- 重名 profile（如存在大小写不同重名）必须 fail closed，提示 ambiguous 并列出 name + GUID。
+- 找不到 profile 时报错并列出可用 profile 名称，不 dump 完整原始 JSON。
+- Profile A 与 Profile B 解析为同一 GUID 时拒绝执行。
+- 在任何 hardware write 前输出 Hardware smoke plan（程序、Profile 名称与 GUID、切换序列）。
+
 脚本先 GET automation，保留整个原配置（含 extensions）在内存，用最新expected_revision
-原子添加最高优先级 Notepad/Paint GUID bindings 并启用 automation；fallback、已有规则不变。
+原子添加最高优先级 Notepad/Charmap bindings 并启用 automation；fallback、已有规则不变。
 已有相同程序的最高优先级规则会拒绝测试。配置保存可能立刻产生自动硬件Apply，
 所以**仅显式AllowHardwareWrites**进入此路径。
 
-提示用户依次聚焦真实 `notepad.exe → mspaint.exe → notepad.exe`。
+提示用户依次聚焦真实 `notepad.exe → charmap.exe → notepad.exe`。
 Start-Process仅打开应用；Win32 GetForegroundWindow核实真正的basename，不存PID/path。
 观察本机foreground稳定750ms（>500msdebounce）且 daemon decision/selected/active/dirty
 一致，再持续1.2秒确认decision_sequence与activation_attempt不重复。
 每阶段最多一次activation；无法取得foreground/超时、quarantine、generation变更或daemon
 重启都会失败，不伪造PASS。默认每阶段120秒，可按实际RT长计划调整。
-本工具不关闭Notepad/Paint（可能有用户未保存内容）。
+本工具不关闭Notepad/Charmap（可能有用户未保存内容）。
 
 finally使用最新revision恢复原automation，先比较当前配置确实仍是本工具安装的版本；
 不覆盖并发用户修改。恢复后重新GET确认。失败明确输出RESTORE FAILED并保留summary中的
@@ -130,13 +157,13 @@ temporary_rule_ids和original_automation_enabled，供用户通过UI/API检查�
 恢复配置后现有daemon可能按原规则/fallback重新选择；harness不冒充恢复原物理键盘状态。
 网络timeout可能发生在commit之后，finally仍会检查/恢复，不假定请求失败就未写入。
 
-输出：`before.json`、`notepad-a.json`、`paint-b.json`、`notepad-return-a.json`、
-`final.json`、hardware-smoke-summary及同名zip。仅allowlisted字段，包含process_instance_id、
+输出：`before.json`、`notepad-a.json`、`charmap-b.json`、`notepad-return-a.json`、
+`final.json`、hardware-smoke-summary及同名zip。Summary 中记录 profile_a/b（requested、resolved_name、resolved_id）以及 program_a/b（requested、observed_foreground），不记录可执行文件全路径。仅allowlisted字段，包含process_instance_id、
 foreground basename、decision/attempt、selected/active/dirty、revision、quarantine、generation、UTC。
 不导出原配置、PID、路径、raw HID或USBcapture。
 
 `-ManualHold`是可选人工stage，要求观察真正的Manual动作、同一Notepad identity hold、
-foreground稳定时不被抢回；再Paint→Notepad验证恢复。不调用假Manual通知。
+foreground稳定时不被抢回；再Charmap→Notepad验证恢复。不调用假Manual通知。
 注意：切到Aura窗口Apply通常会改变foreground identity，可能无法得到Notepad hold；
 脚本此时明确失败，而不会模拟或绕过已有语义。软件ManualHold合同由mock/integration长期覆盖。
 

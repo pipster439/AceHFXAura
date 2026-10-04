@@ -1,0 +1,17 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+  </Configurations>
+  <Folder Name="/Platform/">
+    <Project Path="src/AsusPlatform/AsusPlatform.csproj" />
+    <Project Path="src/AceHFXService/AceHFXService.csproj" />
+    <Project Path="src/AceHFXFanWorker/AceHFXFanWorker.csproj" />
+  </Folder>
+  <Folder Name="/Tests/">
+    <Project Path="tests/Aura.Tests/Aura.Tests.csproj" />
+    <Project Path="tests/AsusPlatform.Tests/AsusPlatform.Tests.csproj" />
+    <Project Path="tests/FanTypeLibValidator.Tests/FanTypeLibValidator.Tests.csproj" />
+  </Folder>
+  <Folder Name="/Tools/"><Project Path="tools/AuraDiagnostics/AuraDiagnostics.csproj" /></Folder>
+  <Project Path="winui/Aura.WinUI.csproj" />
+</Solution>

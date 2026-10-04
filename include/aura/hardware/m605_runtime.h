@@ -16,6 +16,7 @@
 #include <thread>
 #include <utility>
 #include <vector>
+#include <functional>
 
 namespace aura {
 
@@ -32,6 +33,7 @@ public:
     virtual bool Connect() = 0;
     virtual bool WriteStage(const Report& report) = 0;
     virtual bool WriteApply(const Report& report) = 0;
+    virtual bool QueryBasicInfo(Report&) { return false; } // unsupported seams fail closed
     virtual void Disconnect() = 0;
     virtual std::string GetLastError() const = 0;
 };
@@ -56,6 +58,15 @@ public:
 } // namespace m605::detail
 
 struct M605RuntimeTestAccess;
+
+struct HardwareSlotResult {
+    bool success = false, selector_sent = false;
+    std::optional<uint8_t> requested_slot, observed_slot;
+    uint64_t session_generation = 0;
+    unsigned query_count = 0;
+    double total_ms = 0;
+    std::string observed_at_utc, error;
+};
 
 enum class M605RuntimeHealth {
     Clean,
@@ -226,6 +237,11 @@ public:
     M605DiagnosticSnapshot GetDiagnosticSnapshot() const;
     void ObserveHardwareRtGate(const HardwareRtGateObservation& observation);
     HardwareRtGateObservation GetHardwareRtGateObservation() const;
+    // Independent unstaged operation: no Apply and no magnetic settle waits.
+    HardwareSlotResult SelectHardwareProfileSlot(uint8_t slot,
+        const std::function<bool()>& admission = [] { return true; });
+    HardwareSlotResult QueryHardwareProfileSlot(); // explicit refresh only, never diagnostics GET
+    HardwareSlotResult GetHardwareSlotObservation() const; // cached, pure read
 
 private:
     friend struct M605RuntimeTestAccess;
@@ -265,6 +281,8 @@ private:
     bool EnsureTransportReady(M605TimingSnapshot& timing); // DeviceWriteMutex held
     void DiscardStaleTransport(); // DeviceWriteMutex held
     void MarkIndeterminate(std::string cause);
+    HardwareSlotResult RunHardwareSlot(std::optional<uint8_t> requested,
+        const std::function<bool()>& admission);
     void RecordSessionTransitionLocked(const char* reason); // mutex_ held; diagnostics only
     static void ResolveCancelled(std::queue<Job>& cancelled);
 
@@ -289,6 +307,7 @@ private:
     uint64_t last_failed_generation_ = 0;
     M605TimingSnapshot timing_;
     std::string last_error_;
+    HardwareSlotResult hardware_slot_observation_;
     std::thread worker_;
 };
 

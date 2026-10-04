@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup><PackageReference Include="MSTest" Version="4.0.2" /></ItemGroup>
+  <ItemGroup><Using Include="Microsoft.VisualStudio.TestTools.UnitTesting" /></ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\AsusPlatform\AsusPlatform.csproj" />
+    <ProjectReference Include="..\..\src\AceHFXService\AceHFXService.csproj" />
+    <ProjectReference Include="..\AuraWorkerHostFixture\AuraWorkerHostFixture.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="../FanWorkerFixture/FanWorkerFixture.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+  <Import Project="..\..\src\AuraWorker\AuraWorker.targets" />
+  <Target Name="BuildAuraWorkerFixture" AfterTargets="BuildAuraWorker">
+    <Exec Command="cmake -S &quot;$(AuraWorkerSource)&quot; -B &quot;$(AuraWorkerBuild)-fixtures&quot; -A x64 -DAURA_WORKER_FIXTURES=ON" />
+    <Exec Command="cmake --build &quot;$(AuraWorkerBuild)-fixtures&quot; --config $(Configuration) --target AuraWorkerFixture" />
+    <Copy SourceFiles="$(AuraWorkerBuild)-fixtures\$(Configuration)\AuraWorkerFixture.exe" DestinationFolder="$(TargetDir)" />
+  </Target>
+  <Target Name="CopyAuraWorkerHostFixture" AfterTargets="Build">
+    <ItemGroup><_HostFixture Include="..\AuraWorkerHostFixture\bin\$(Configuration)\net10.0-windows10.0.26100.0\*" /></ItemGroup>
+    <Copy SourceFiles="@(_HostFixture)" DestinationFolder="$(TargetDir)host-fixture" />
+  </Target>
+  <Target Name="CopyFanWorkerFixture" AfterTargets="Build">
+    <ItemGroup><_FanFixture Include="../FanWorkerFixture/bin/$(Configuration)/$(TargetFramework)/*" /></ItemGroup>
+    <Copy SourceFiles="@(_FanFixture)" DestinationFolder="$(TargetDir)fan-fixture" />
+  </Target>
+</Project>

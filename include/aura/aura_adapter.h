@@ -55,6 +55,11 @@ public:
 
     // Push a frame to the hardware (maps frame LEDs to padded hardware table)
     bool PushFrame(const FrameBuffer& frame);
+    // Daemon installs a gate before streaming starts. Applies to shutdown black
+    // frames too; rejection is ownership, not a transport failure.
+    void SetFrameAdmission(std::function<bool(const std::function<bool()>&)> admission) {
+        frame_admission_ = std::move(admission);
+    }
 
     // Forces a reset / blackout to clear any dirty state from prior crashes
     bool ForceReset();
@@ -76,7 +81,8 @@ public:
     std::string GetLastHardwareError() const { return last_hardware_error_; }
 
     AdapterState GetState() const { return state_; }
-    bool IsConnected() const { return state_ == AdapterState::Connected; }
+    bool IsConnected() const { return state_ == AdapterState::Connected &&
+        (active_backend_ != HardwareBackend::NativeHid || (native_hid_ && native_hid_->IsConnected())); }
     bool IsDryRun() const { return dry_run_; }
     uint64_t GetReconnectIntervalMs() const { return current_reconnect_interval_ms_; }
     size_t GetReconnectAttempts() const { return reconnect_attempts_; }
@@ -86,6 +92,8 @@ public:
     static std::vector<uint8_t> GeneratePaddedHardwareTable(const Keymap* keymap);
 
 private:
+    bool PushFrameAdmitted(const FrameBuffer& frame);
+    std::function<bool(const std::function<bool()>&)> frame_admission_;
     bool ConnectHardwareInternal();
     bool ConnectNativeHidInternal();
     bool ConnectLegacyHalInternal();

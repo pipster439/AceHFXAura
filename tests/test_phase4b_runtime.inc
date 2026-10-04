@@ -20,7 +20,7 @@ struct Phase4BFixture {
     int64_t now = 0; std::atomic<bool> available{true};
     int attempts = 0;
     std::function<void()> before_admission;
-    Phase4BFixture(bool rt = false) {
+    Phase4BFixture(bool rt = false, const char* process = "cs2.exe", bool hardware = false) {
         static std::atomic<int> serial{0};
         folder = std::filesystem::temp_directory_path() / ("aura-phase4b-" + std::to_string(GetCurrentProcessId()) + "-" + std::to_string(++serial));
         std::filesystem::create_directories(folder); path = folder / "device-profiles.json";
@@ -29,12 +29,17 @@ struct Phase4BFixture {
         doc["profiles"][0]["magnetic"]["global_actuation_mm"] = 1.0;
         doc["profiles"][1]["magnetic"]["global_actuation_mm"] = 4.0;
         auto config = aura::DeviceProfileAutomationConfig::DefaultJson(); config["enabled"] = true; config["fallback_profile_id"] = A;
-        config["bindings"] = Json::array({{{"rule_id", C}, {"process_name", "cs2.exe"}, {"profile_id", B}, {"enabled", true}, {"priority", 100}}});
+        config["bindings"] = Json::array({{{"rule_id", C}, {"process_name", process}, {"profile_id", B}, {"enabled", true}, {"priority", 100}}});
         doc["device_profile_automation"] = config;
+        if (hardware) {
+            doc["profiles"][0]["activation_backend"] = "hardware_slot"; doc["profiles"][0]["hardware_slot"] = 1;
+            doc["profiles"][1]["activation_backend"] = "hardware_slot"; doc["profiles"][1]["hardware_slot"] = 5;
+        }
         if (rt) doc["profiles"][1]["magnetic"]["keys"] = Json::array({{{"logical_id", 0x0701},
             {"rapid_trigger", {{"enabled", true}, {"press_mm", 0.5}, {"release_mm", 1.5}, {"separate_mode", true}}}}});
         Write(path, doc);
         auto transport = std::make_unique<Io>(); io = transport.get();
+        io->basic_supported = hardware;
         auto settle = std::make_unique<Wait>(); wait = settle.get();
         device = aura::M605RuntimeTestAccess::Create(std::move(transport), std::move(settle), std::make_unique<Latch>(latch));
         aura::MagneticHostProfile host; host.global_rt_press_raw = 4; host.global_rt_release_raw = 4; host.per_key_rt_list_known = true;
@@ -73,6 +78,35 @@ bool TestPhase4BApplyAndNoDuplicate() {
     const auto selected = Json::parse(std::ifstream(f.path));
     std::cout << "P4B A/B/A activations=3 duplicate=0 diagnostic_side_effects=0\n";
     return selected.at("selected_profile_id") == B && selected.at("global_defaults").at("global_actuation_mm") == 1.0;
+}
+bool TestPhase4BControlSurfaceHold() {
+    Phase4BFixture f(false, "notepad.exe");
+    Json timeline = Json::array();
+    const auto record = [&](const char* label) {
+        auto d = f.profiles->Diagnostics();
+        timeline.push_back({{"step", label}, {"timestamp_ms", f.now},
+            {"automation", d.at("automation")}, {"runtime", d.at("runtime")},
+            {"last_activation", d.at("last_activation")}, {"automation_attempts", f.attempts},
+            {"mock_hid_stages", f.io->stages}});
+    };
+    f.Stable("notepad.exe"); record("automatic-context-profile-succeeded");
+    const auto old_token = f.profiles->AutomationAdmissionSnapshot();
+    f.Stable("aura.exe"); record("control-surface");
+    const auto manual = f.profiles->ActivateProfile(A, "Manual", f.profiles->State().at("document_revision"));
+    record("manual-other-profile-succeeded");
+    const int attempts = f.attempts, stages = f.io->stages;
+    const auto stale = f.profiles->ActivateAutomationDecision(old_token, [] { return false; });
+    if (stale.at("outcome") != "stale" || f.io->stages != stages) return false;
+    f.Stable("notepad.exe"); record("return-notepad");
+    for (const auto* name : {"aura.exe", "notepad.exe", "", "notepad.exe"}) f.Stable(name);
+    const bool retained = manual.at("outcome") == "succeeded" && f.attempts == attempts && f.io->stages == stages &&
+        f.profiles->State().at("active_profile_id") == A &&
+        f.profiles->Diagnostics().at("automation").at("manual_hold") == true;
+    f.Stable("aura.exe"); f.Stable("charmap.exe"); record("different-stable-external");
+    const bool cleared = !f.profiles->Diagnostics().at("automation").at("manual_hold").get<bool>();
+    f.Stable("notepad.exe"); record("automatic-context-resumed");
+    WritePhase4BDiagnosticFixture("control-surface-timeline.mock.json", {{"timeline", timeline}});
+    return retained && cleared && f.profiles->State().at("active_profile_id") == B;
 }
 bool TestPhase4BDeferredAndSafety() {
     Phase4BFixture f; f.available = false; f.Stable("cs2.exe");

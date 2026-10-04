@@ -1,0 +1,545 @@
+{
+  "schema_version": 1,
+  "source_sha256": "ca97e95cb181168b28f1c73b61cf0c3549d445fbeea64f7d0d5130d142d98741",
+  "firmware": "1.00.59",
+  "evidence": "OFFICIAL USB CAPTURE; retained privacy-filtered frames; not physical acceptance",
+  "records": [
+    {
+      "frame": 7,
+      "timestamp_utc": "2026-10-02T09:36:31.687460Z",
+      "interface": 1,
+      "endpoint": "0x0d",
+      "payload_hex": "51 00 00 00 03 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "51 00",
+        "selector": 0,
+        "kind": "BankSelection",
+        "slot": 3
+      },
+      "identical_echo": {
+        "frame": 8,
+        "delay_ms": 41.709
+      }
+    },
+    {
+      "frame": 48,
+      "timestamp_utc": "2026-10-02T09:37:09.200879Z",
+      "interface": 1,
+      "endpoint": "0x0d",
+      "payload_hex": "51 50 00 00 0b 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "51 50",
+        "selector": 0,
+        "kind": "CommonActuation",
+        "wire": null,
+        "raw": 11
+      },
+      "identical_echo": {
+        "frame": 49,
+        "delay_ms": 0.892
+      }
+    },
+    {
+      "frame": 70,
+      "timestamp_utc": "2026-10-02T09:37:21.967182Z",
+      "interface": 1,
+      "endpoint": "0x0d",
+      "payload_hex": "51 4f 00 00 1f 00 14 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "51 4f",
+        "selector": 0,
+        "kind": "KeyActuation",
+        "wire": 31,
+        "raw": 20
+      },
+      "identical_echo": {
+        "frame": 71,
+        "delay_ms": 0.621
+      }
+    },
+    {
+      "frame": 90,
+      "timestamp_utc": "2026-10-02T09:37:29.975246Z",
+      "interface": 1,
+      "endpoint": "0x0d",
+      "payload_hex": "51 58 00 00 02 02 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "51 58",
+        "selector": 0,
+        "kind": "CommonDeadzone",
+        "wire": null,
+        "bottom_raw": 2,
+        "top_raw": 2
+      },
+      "identical_echo": {
+        "frame": 91,
+        "delay_ms": 0.541
+      }
+    },
+    {
+      "frame": 112,
+      "timestamp_utc": "2026-10-02T09:37:40.587395Z",
+      "interface": 1,
+      "endpoint": "0x0d",
+      "payload_hex": "51 59 00 00 32 00 02 04 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "51 59",
+        "selector": 0,
+        "kind": "KeyDeadzone",
+        "wire": 50,
+        "bottom_raw": 2,
+        "top_raw": 4
+      },
+      "identical_echo": {
+        "frame": 113,
+        "delay_ms": 0.644
+      }
+    },
+    {
+      "frame": 136,
+      "timestamp_utc": "2026-10-02T09:38:06.527349Z",
+      "interface": 1,
+      "endpoint": "0x0d",
+      "payload_hex": "51 54 00 00 12 00 02 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "51 54",
+        "selector": 0,
+        "kind": "PerKeyRt",
+        "wire": 18,
+        "sensitivity_raw": 2,
+        "continuous": 0,
+        "enabled": 1,
+        "verified_shape": true
+      },
+      "identical_echo": {
+        "frame": 137,
+        "delay_ms": 1.024
+      }
+    },
+    {
+      "frame": 150,
+      "timestamp_utc": "2026-10-02T09:38:14.838944Z",
+      "interface": 1,
+      "endpoint": "0x0d",
+      "payload_hex": "51 54 01 00 12 00 02 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "51 54",
+        "selector": 1,
+        "kind": "PerKeyRt",
+        "wire": 18,
+        "sensitivity_raw": 2,
+        "continuous": 0,
+        "enabled": 1,
+        "verified_shape": true
+      },
+      "identical_echo": {
+        "frame": 151,
+        "delay_ms": 1.409
+      }
+    },
+    {
+      "frame": 152,
+      "timestamp_utc": "2026-10-02T09:38:14.841773Z",
+      "interface": 1,
+      "endpoint": "0x0d",
+      "payload_hex": "51 54 02 00 12 00 02 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "51 54",
+        "selector": 2,
+        "kind": "PerKeyRt",
+        "wire": 18,
+        "sensitivity_raw": 2,
+        "continuous": 0,
+        "enabled": 1,
+        "verified_shape": true
+      },
+      "identical_echo": {
+        "frame": 153,
+        "delay_ms": 0.589
+      }
+    },
+    {
+      "frame": 228,
+      "timestamp_utc": "2026-10-02T09:39:27.488985Z",
+      "interface": 1,
+      "endpoint": "0x0d",
+      "payload_hex": "51 23 31 00 0a 24 31 00 f8 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "51 23",
+        "selector": 49,
+        "kind": "DksSlot",
+        "wire": 49,
+        "start_raw": 10,
+        "end_raw": 36,
+        "target_wire": 49,
+        "positions_packed": 248,
+        "slot": 1
+      },
+      "identical_echo": {
+        "frame": 229,
+        "delay_ms": 2.109
+      }
+    },
+    {
+      "frame": 296,
+      "timestamp_utc": "2026-10-02T09:40:39.403366Z",
+      "interface": 1,
+      "endpoint": "0x0d",
+      "payload_hex": "51 2c 00 00 ff 64 00 ff ff 00 ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "51 2c",
+        "selector": 0,
+        "kind": "LightingParameters",
+        "effect_id": 0,
+        "effect": "Static",
+        "chunk_countdown": 0
+      },
+      "identical_echo": {
+        "frame": 297,
+        "delay_ms": 1.328
+      }
+    },
+    {
+      "frame": 401,
+      "timestamp_utc": "2026-10-02T09:41:50.411085Z",
+      "interface": 1,
+      "endpoint": "0x0d",
+      "payload_hex": "51 2c 01 00 1e 64 00 ff ff ff ff 00 ff ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "51 2c",
+        "selector": 1,
+        "kind": "LightingParameters",
+        "effect_id": 1,
+        "effect": "Breathing",
+        "chunk_countdown": 0
+      },
+      "identical_echo": {
+        "frame": 402,
+        "delay_ms": 1.37
+      }
+    },
+    {
+      "frame": 552,
+      "timestamp_utc": "2026-10-02T09:42:34.981462Z",
+      "interface": 1,
+      "endpoint": "0x0d",
+      "payload_hex": "51 2c 04 02 3e 64 00 00 64 07 0c f5 00 ff 19 00 06 ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "51 2c",
+        "selector": 516,
+        "kind": "LightingParameters",
+        "effect_id": 4,
+        "effect": "Rainbow",
+        "chunk_countdown": 2
+      },
+      "identical_echo": {
+        "frame": 553,
+        "delay_ms": 1.307
+      }
+    },
+    {
+      "frame": 554,
+      "timestamp_utc": "2026-10-02T09:42:34.983060Z",
+      "interface": 1,
+      "endpoint": "0x0d",
+      "payload_hex": "51 2c 04 01 25 00 fa ff 32 01 ff 00 3e ff f6 00 4b ff 78 07 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "51 2c",
+        "selector": 260,
+        "kind": "LightingParameters",
+        "effect_id": 4,
+        "effect": "Rainbow",
+        "chunk_countdown": 1
+      },
+      "identical_echo": {
+        "frame": 555,
+        "delay_ms": 0.71
+      }
+    },
+    {
+      "frame": 556,
+      "timestamp_utc": "2026-10-02T09:42:34.984173Z",
+      "interface": 1,
+      "endpoint": "0x0d",
+      "payload_hex": "51 2c 04 00 57 ff 00 0d 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "51 2c",
+        "selector": 4,
+        "kind": "LightingParameters",
+        "effect_id": 4,
+        "effect": "Rainbow",
+        "chunk_countdown": 0
+      },
+      "identical_echo": {
+        "frame": 557,
+        "delay_ms": 0.596
+      }
+    },
+    {
+      "frame": 558,
+      "timestamp_utc": "2026-10-02T09:42:34.985339Z",
+      "interface": 1,
+      "endpoint": "0x0d",
+      "payload_hex": "51 2c 03 00 0f 64 00 ff ff ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "51 2c",
+        "selector": 3,
+        "kind": "LightingParameters",
+        "effect_id": 3,
+        "effect": "Reactive",
+        "chunk_countdown": 0
+      },
+      "identical_echo": {
+        "frame": 559,
+        "delay_ms": 1.434
+      }
+    },
+    {
+      "frame": 560,
+      "timestamp_utc": "2026-10-02T09:42:34.987224Z",
+      "interface": 1,
+      "endpoint": "0x0d",
+      "payload_hex": "51 2c 05 02 64 64 00 00 02 07 0c f5 00 ff 19 00 06 ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "51 2c",
+        "selector": 517,
+        "kind": "LightingParameters",
+        "effect_id": 5,
+        "effect": "Ripple",
+        "chunk_countdown": 2
+      },
+      "identical_echo": {
+        "frame": 561,
+        "delay_ms": 0.552
+      }
+    },
+    {
+      "frame": 562,
+      "timestamp_utc": "2026-10-02T09:42:34.988345Z",
+      "interface": 1,
+      "endpoint": "0x0d",
+      "payload_hex": "51 2c 05 01 25 00 fa ff 32 01 ff 00 3e ff f6 00 4b ff 78 07 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "51 2c",
+        "selector": 261,
+        "kind": "LightingParameters",
+        "effect_id": 5,
+        "effect": "Ripple",
+        "chunk_countdown": 1
+      },
+      "identical_echo": {
+        "frame": 563,
+        "delay_ms": 1.426
+      }
+    },
+    {
+      "frame": 564,
+      "timestamp_utc": "2026-10-02T09:42:34.990145Z",
+      "interface": 1,
+      "endpoint": "0x0d",
+      "payload_hex": "51 2c 05 00 57 ff 00 0d 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "51 2c",
+        "selector": 5,
+        "kind": "LightingParameters",
+        "effect_id": 5,
+        "effect": "Ripple",
+        "chunk_countdown": 0
+      },
+      "identical_echo": {
+        "frame": 565,
+        "delay_ms": 0.622
+      }
+    },
+    {
+      "frame": 566,
+      "timestamp_utc": "2026-10-02T09:42:34.991233Z",
+      "interface": 1,
+      "endpoint": "0x0d",
+      "payload_hex": "51 2c 06 00 0f 64 00 ff ff ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "51 2c",
+        "selector": 6,
+        "kind": "LightingParameters",
+        "effect_id": 6,
+        "effect": "StarryNight",
+        "chunk_countdown": 0
+      },
+      "identical_echo": {
+        "frame": 567,
+        "delay_ms": 0.536
+      }
+    },
+    {
+      "frame": 568,
+      "timestamp_utc": "2026-10-02T09:42:34.992289Z",
+      "interface": 1,
+      "endpoint": "0x0d",
+      "payload_hex": "51 2c 07 01 0f 64 00 02 00 fe f6 00 01 ff 05 00 e4 ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "51 2c",
+        "selector": 263,
+        "kind": "LightingParameters",
+        "effect_id": 7,
+        "effect": "Quicksand",
+        "chunk_countdown": 1
+      },
+      "identical_echo": {
+        "frame": 569,
+        "delay_ms": 1.477
+      }
+    },
+    {
+      "frame": 570,
+      "timestamp_utc": "2026-10-02T09:42:34.994501Z",
+      "interface": 1,
+      "endpoint": "0x0d",
+      "payload_hex": "51 2c 07 00 11 05 ff f5 00 ff ff 00 0e 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "51 2c",
+        "selector": 7,
+        "kind": "LightingParameters",
+        "effect_id": 7,
+        "effect": "Quicksand",
+        "chunk_countdown": 0
+      },
+      "identical_echo": {
+        "frame": 571,
+        "delay_ms": 1.316
+      }
+    },
+    {
+      "frame": 572,
+      "timestamp_utc": "2026-10-02T09:42:34.996280Z",
+      "interface": 1,
+      "endpoint": "0x0d",
+      "payload_hex": "51 2c 08 00 0a 64 00 ff ff ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "51 2c",
+        "selector": 8,
+        "kind": "LightingParameters",
+        "effect_id": 8,
+        "effect": "Current",
+        "chunk_countdown": 0
+      },
+      "identical_echo": {
+        "frame": 573,
+        "delay_ms": 1.612
+      }
+    },
+    {
+      "frame": 574,
+      "timestamp_utc": "2026-10-02T09:42:34.998392Z",
+      "interface": 1,
+      "endpoint": "0x0d",
+      "payload_hex": "51 2c 09 00 14 64 00 ff ff ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "51 2c",
+        "selector": 9,
+        "kind": "LightingParameters",
+        "effect_id": 9,
+        "effect": "RainDrop",
+        "chunk_countdown": 0
+      },
+      "identical_echo": {
+        "frame": 575,
+        "delay_ms": 1.404
+      }
+    },
+    {
+      "frame": 576,
+      "timestamp_utc": "2026-10-02T09:42:35.000974Z",
+      "interface": 1,
+      "endpoint": "0x0d",
+      "payload_hex": "51 2c 02 00 1f 64 10 ff ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "51 2c",
+        "selector": 2,
+        "kind": "LightingParameters",
+        "effect_id": 2,
+        "effect": "ColorCycle",
+        "chunk_countdown": 0
+      },
+      "identical_echo": {
+        "frame": 577,
+        "delay_ms": 0.798
+      }
+    },
+    {
+      "frame": 308,
+      "timestamp_utc": "2026-10-02T09:40:42.116947Z",
+      "interface": 1,
+      "endpoint": "0x0d",
+      "payload_hex": "51 2d 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "51 2d",
+        "selector": 0,
+        "kind": "AnalogLighting",
+        "effect_id": 0,
+        "enabled": 0
+      },
+      "identical_echo": {
+        "frame": 309,
+        "delay_ms": 2.143
+      }
+    },
+    {
+      "frame": 46,
+      "timestamp_utc": "2026-10-02T09:37:09.080405Z",
+      "interface": 1,
+      "endpoint": "0x0d",
+      "payload_hex": "50 55 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "50 55",
+        "selector": 0,
+        "kind": "Apply",
+        "reserved_zero": true
+      },
+      "identical_echo": {
+        "frame": 47,
+        "delay_ms": 105.365
+      }
+    },
+    {
+      "frame": 20,
+      "timestamp_utc": "2026-10-02T09:36:58.264324Z",
+      "interface": 1,
+      "endpoint": "0x0d",
+      "payload_hex": "51 31 00 00 03 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "51 31",
+        "selector": 0,
+        "kind": "PollingRateWrite",
+        "rate_index": 3
+      },
+      "identical_echo": {
+        "frame": 21,
+        "delay_ms": 1.616
+      }
+    },
+    {
+      "frame": 224,
+      "timestamp_utc": "2026-10-02T09:39:14.079856Z",
+      "interface": 2,
+      "endpoint": "0x8c",
+      "payload_hex": "03 76 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "kind": "HardwareRtGate",
+        "report_id": 3,
+        "state": "off"
+      }
+    },
+    {
+      "frame": 225,
+      "timestamp_utc": "2026-10-02T09:39:15.462993Z",
+      "interface": 2,
+      "endpoint": "0x8c",
+      "payload_hex": "03 76 00 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "kind": "HardwareRtGate",
+        "report_id": 3,
+        "state": "on"
+      }
+    }
+  ]
+}

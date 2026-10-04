@@ -1,0 +1,14 @@
+#pragma once
+#include <windows.h>
+#include <oaidl.h>
+#include <third_party/json.hpp>
+namespace mediator {
+// Verified AsRogAuraServiceLib identifiers. No vendor vtable or setter declaration.
+inline constexpr GUID ClassId={0x95775dc4,0x77aa,0x4e94,{0x8c,0xf6,0x68,0x26,0x7e,0xef,0x18,0x56}};
+inline constexpr GUID InterfaceId={0x76c92a6b,0xb131,0x4df9,{0x9d,0x24,0xcc,0xd6,0x01,0x4e,0xfb,0x5f}};
+inline constexpr GUID LibraryId={0x61e8c91a,0xc37e,0x4831,{0x87,0xc0,0x2f,0xbd,0x8c,0x5a,0x85,0xd5}};
+std::wstring LibraryPath();
+nlohmann::json LibraryMetadata();
+bool VerifyReadOnlyContract();
+void QueryMetadata(IDispatch* service);
+}

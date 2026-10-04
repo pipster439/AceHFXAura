@@ -9,7 +9,7 @@ authority. Selected/active/dirty stay Runtime truth.
 | Disabled / configuration unavailable | WaitingForDecision | none; no reset |
 | No match without fallback | WaitingForDecision | none; keep current |
 | Invalid target / deleted target | TargetMissing | none; no lower rule/fallback |
-| ManualHold | WaitingForDecision | none until stable known foreground change |
+| ManualHold | WaitingForDecision | none until different stable external foreground; Aura/unknown retain hold |
 | Stable Match / explicit Fallback | Preflight → Activating | existing Runtime after final gate/safety/freshness checks |
 | Consumed successful identity | retained result / Idle | no duplicate call |
 | Fully submitted clean target | no-op | zero operations after Runtime checks |

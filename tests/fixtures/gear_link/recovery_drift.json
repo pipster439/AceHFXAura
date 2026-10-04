@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "source_sha256": "1609e8faf9be1b660ab19d3558497f95d0b2755b033289fda7580b50310f6511",
+  "firmware": "1.00.59",
+  "frame_namespace": "retained capture frames",
+  "records": [
+    {
+      "frame": 11,
+      "timestamp_utc": "2026-10-02T13:25:53.481351Z",
+      "timestamp_ns": 1790947553481351000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x0d",
+      "direction": "OUT",
+      "completed": false,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "51 00 00 00 03 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "51 00",
+        "selector": 0,
+        "kind": "BankSelection",
+        "slot": 3
+      },
+      "identical_echo": {
+        "frame": 12,
+        "delay_ms": 98.785
+      },
+      "delta_previous_out_ms": 52396.077
+    },
+    {
+      "frame": 13,
+      "timestamp_utc": "2026-10-02T13:25:54.696271Z",
+      "timestamp_ns": 1790947554696271000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x0d",
+      "direction": "OUT",
+      "completed": false,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "51 00 00 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "51 00",
+        "selector": 0,
+        "kind": "BankSelection",
+        "slot": 1
+      },
+      "identical_echo": {
+        "frame": 14,
+        "delay_ms": 127.137
+      },
+      "delta_previous_out_ms": 1214.92
+    },
+    {
+      "frame": 16,
+      "timestamp_utc": "2026-10-02T13:26:01.029978Z",
+      "timestamp_ns": 1790947561029978000,
+      "usb_bus": 4,
+      "usb_address": 11,
+      "interface": 1,
+      "endpoint": "0x85",
+      "direction": "IN",
+      "completed": true,
+      "status": 0,
+      "payload_length": 64,
+      "payload_hex": "12 00 00 00 59 00 01 00 06 08 01 ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "decoded": {
+        "opcode": "12 00",
+        "selector": 0,
+        "kind": "QueryOrOtherReviewedCommand"
+      }
+    }
+  ],
+  "operator_confirmation": "没有操作",
+  "sender_attribution": "NOT VERIFIED"
+}

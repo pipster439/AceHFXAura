@@ -34,6 +34,7 @@ cmake-build-*/
 *.vcxproj.user
 *.sln
 *.slnx
+!/Aura.slnx
 *.suo
 *.user
 *.VC.db
@@ -122,3 +123,21 @@ ORIGINAL_REQUEST.md
 /*_report.md
 /*_report*.md
 /*_summary.md
+
+# Original local alpha.7 checkpoints are curated under docs/release and docs/archive.
+/ASUS_COMMAND9_RELEASE_CLOSURE.md
+/FRESH_AP_BARE_SELECTOR_FINAL.md
+/FRESH_AP_BARE_SELECTOR_RESULT.md
+/FRESH_AP_BARE_SELECTOR_RETEST_STATUS.md
+/FRESH_AP_CONNECTED_RETEST_RESULT.md
+/HARDWARE_SLOT_OFFICIAL_CONTROL.md
+/HARDWARE_SLOT_PHYSICAL_ACCEPTANCE.md
+/HARDWARE_SLOT_RELEASE_CLOSURE.md
+/HARDWARE_SLOT_SEQUENCE_DELTA.md
+/PLUGIN_RELOAD_ROOT_CAUSE.md
+/PROFILE_DRIFT_SENDER_ATTRIBUTION.md
+
+# Raw USB captures and checkout-root private profile state stay local.
+*.pcap
+*.pcapng
+/device-profiles.json

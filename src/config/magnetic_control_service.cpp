@@ -186,6 +186,13 @@ bool MagneticControlService::ObserveDeviceProfileForeground(const std::string& n
     return changed;
 }
 
+void MagneticControlService::ObserveHardwareSlot() {
+    if (profiles_) profiles_->ObserveHardwareSlot();
+}
+bool MagneticControlService::WithProfileLightingOwnership(const std::function<bool()>& write_frame) {
+    return profiles_ ? profiles_->WithAuraLightingOwnership(write_frame) : write_frame();
+}
+
 bool MagneticControlService::HardwareAvailable() const {
     if (!status_store_) return false;
     const auto status = status_store_->GetSnapshot();

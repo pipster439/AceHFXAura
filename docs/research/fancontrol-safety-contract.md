@@ -1,0 +1,15 @@
+# Fan safety contract — M3.0
+
+**F1 is blocked; no write is implemented.** Config identification alone does not authorize a physical target. CPU Fan is conservatively CriticalCpu; pumps are CoolingCritical; chassis labels are only proposals until stable runtime/config/header mapping and real RPM are verified. Unknown/critical/CPU_OPT-only sensors cannot become the default first target.
+
+Minimum-duty evidence is incomplete. Current FanInfo PWM/DC minimum fields are 255 and FanStore curves contain raw 255 speeds; they are not a safe minimum proof or a validated percentage conversion. Earlier research's 102 minimum is not current enforcement evidence. Zero must never be inferred to mean safe stop. Per-channel critical override, minimum RPM, fan-stop restrictions and service-side fail-safe after client death remain unknown.
+
+Targeted static fanInterface.dll trace (hash/offsets in fan-restore-contract.json): ChangeManualModeByRpm selects Controls.Item, branches by capability/threshold and sends EnableManualMode true/false. It does not capture an original profile transaction. ApplyFanCurveButNotSave obtains profile curve, mutates points and invokes the actual method string ApplyFanCurve; wrapper naming does not prove non-persistence. Error branches log/assert and sometimes continue. RefreshFanCurve is a METHOD, deliberately absent from the read worker. ConstantFanControl/FixedRpm destructor performs bounded waits, internal flags and handle cleanup; no explicit original-profile restore is established. Nested/transitive cleanup is not proven as a restore.
+
+Service current-curve getter copies a cached vector and can fall back to profile state. A future original snapshot must be complete, current, scoped and replayable; these conditions are not established. EnableManualMode(false) is not automatically restoring the immediately previous mode/profile. Ordinary COM release is not a safe/default-mode contract. Killing a child is not a fan fail-safe.
+
+Future FanControlLease design (not executable): LeaseId, OwnerPid/Sid/SessionId, FanWorkerPid, ChannelStableId, OriginalMode, OriginalProfile/Curve, CreatedAt, LastHeartbeat, ExpiresAt. A write owner must outlive UI disappearance long enough for autonomous bounded restore, but protection also needs vendor-supported service-side safe/default behavior on owner death. M3's kill-on-job-close worker must not be reused as this proof.
+
+Future abort conditions include reviewed temperature limits, unexpected RPM drop/zero, COM timeout, broker/owner disconnect and failed restore/post-check. Attempt a **proven** vendor-safe restore once, then RECOVERY_REQUIRED if unconfirmed. No raw emergency SIO/EC writes, alternate API, repeated experiment, vendor restart or reboot. This policy is currently conceptual because live telemetry, thresholds and restore/default contract are missing.
+
+Evidence levels are separate: current TypeLib metadata verified; reduced getter ABI compiled; host getter execution not verified; topology ConfigExact only; write semantics partially static; write behavior and physical response not validated. No absence of a crash is thermal safety proof.

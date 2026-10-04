@@ -54,6 +54,13 @@ bool ValidateOpenedEndpoint(HANDLE handle, const std::wstring& path) {
 
 bool IsAllowedOutputReport(const std::array<uint8_t, HID_REPORT_SIZE>& report) {
     if (report[0] != 0) return false;
+    if (report[1] == 0x51 && report[2] == 0x00) {
+        return report[3] == 0 && report[4] == 0 && report[5] >= 1 && report[5] <= 6 &&
+            std::all_of(report.begin() + 6, report.end(), [](uint8_t b) { return b == 0; });
+    }
+    if (report[1] == 0x12 && report[2] == 0x00) {
+        return std::all_of(report.begin() + 3, report.end(), [](uint8_t b) { return b == 0; });
+    }
     if (report[1] == 0xc0 && report[2] == 0x81) {
         const uint16_t count = static_cast<uint16_t>(report[3] | (report[4] << 8));
         constexpr size_t kHeaderBytes = 5;
@@ -155,7 +162,7 @@ NativeHidBackend::~NativeHidBackend() {
 }
 
 bool NativeHidBackend::IsConnected() const {
-    return validated_target_ && hDevice_ != INVALID_HANDLE_VALUE && hEvent_ != nullptr;
+    return validated_target_ && hDevice_ != INVALID_HANDLE_VALUE && hEvent_ != nullptr && !interface_changed_.load();
 }
 
 bool NativeHidBackend::ProbeCurrentM605Transport() const {
@@ -437,6 +444,59 @@ bool NativeHidBackend::OpenDevice() {
     }
     LOG_INFO("[+] Native HID backend connected (VID=0x0B05, PID=0x1B7E, UsagePage=0xFF00, Usage=0x0001, Endpoint=MI_01, backend=native_hid)");
     return true;
+}
+
+bool NativeHidBackend::QueryBasicInfo(std::array<uint8_t, HID_REPORT_SIZE>& response) {
+    response = {};
+    if (!validated_target_ || !IsConnected() || !ProbeCurrentM605Transport()) {
+        last_error_ = "BasicInfo requires a current validated M605 handle"; return false;
+    }
+    // Discard previous echoes/status on this handle so an old12 00 cannot
+    // validate a new selector. This never changes keyboard configuration.
+    if (!HidD_FlushQueue(hDevice_)) {
+        last_error_ = "BasicInfo input queue flush failed"; return false;
+    }
+    std::array<uint8_t, HID_REPORT_SIZE> query{}; query[1] = 0x12;
+    if (!SendReport(query)) return false;
+    HANDLE event = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!event) { last_error_ = "BasicInfo read event unavailable"; return false; }
+    const auto deadline = GetTickCount64() + 100;
+    bool result = false;
+    do {
+        OVERLAPPED overlapped{}; overlapped.hEvent = event;
+        ResetEvent(event);
+        DWORD received = 0;
+        BOOL ready = ReadFile(hDevice_, response.data(), HID_REPORT_SIZE, &received, &overlapped);
+        if (!ready && ::GetLastError() == ERROR_IO_PENDING) {
+            const auto now = GetTickCount64();
+            const DWORD remaining = now >= deadline ? 0 : static_cast<DWORD>(deadline - now);
+            if (WaitForSingleObject(event, remaining) != WAIT_OBJECT_0) {
+                CancelIoEx(hDevice_, &overlapped);
+                // Always reclaim this exact overlapped request before its stack
+                // buffer/event is released, as on the existing write path.
+                GetOverlappedResult(hDevice_, &overlapped, &received, TRUE);
+                last_error_ = "BasicInfo query timeout";
+                break;
+            }
+            ready = GetOverlappedResult(hDevice_, &overlapped, &received, FALSE);
+        }
+        if (!ready || received != HID_REPORT_SIZE) {
+            last_error_ = "BasicInfo read failed or wrong report length"; break;
+        }
+        if (response[0] == 0 && response[1] == 0x12 && response[2] == 0) {
+            result = true; break; // Typed parser still validates active slot.
+        }
+    } while (GetTickCount64() < deadline);
+    CloseHandle(event);
+    if (!result && last_error_.empty()) last_error_ = "BasicInfo response unavailable";
+    return result;
+}
+
+bool NativeHidBackend::IsSupportedOutputReport(const uint8_t* report, size_t length) {
+    if (!report || length != HID_REPORT_SIZE) return false;
+    std::array<uint8_t, HID_REPORT_SIZE> fixed{};
+    std::copy_n(report, length, fixed.begin());
+    return IsSupportedOutputReport(fixed);
 }
 
 bool NativeHidBackend::SendReport(const std::array<uint8_t, HID_REPORT_SIZE>& report) {

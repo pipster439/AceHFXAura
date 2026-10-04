@@ -4,6 +4,22 @@
 
 namespace aura::m605 {
 
+std::optional<Report> BuildSelectHardwareProfileSlot(uint8_t slot) {
+    if (slot < 1 || slot > 6) return std::nullopt;
+    Report report{};
+    report[1] = 0x51; report[2] = 0x00; report[5] = slot;
+    return report;
+}
+Report BuildBasicInfoQuery() {
+    Report report{}; report[1] = 0x12; return report;
+}
+std::optional<uint8_t> ParseBasicInfoActiveSlot(const uint8_t* r, size_t n) {
+    if (!r || n != 65 || r[0] != 0 || r[1] != 0x12 || r[2] != 0 ||
+        r[3] != 0 || r[4] != 0 || r[9] != 6 || r[11] < 1 || r[11] > 6)
+        return std::nullopt;
+    return r[11]; // No interpretation of firmware configuration/unknown fields.
+}
+
 namespace {
 std::optional<uint8_t> ScaleMillimeters(double millimeters, double min_mm,
                                          double max_mm, int min_raw, int max_raw) {

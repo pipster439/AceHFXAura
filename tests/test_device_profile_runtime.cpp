@@ -31,15 +31,30 @@ struct Io : aura::m605::detail::Transport {
     int stages = 0, connects = 0;
     mutable int presence_probes = 0;
     int fail_at_stage = -1;
+    bool basic_supported = false, basic_timeout = false, basic_malformed = false, selector_changes_slot = true;
+    uint8_t hardware_slot = 1;
+    int basic_queries = 0, applies = 0;
+    std::function<void()> after_basic;
+    bool QueryBasicInfo(aura::m605::Report& report) override {
+        ++basic_queries;
+        if (!basic_supported || basic_timeout) return false;
+        report = {}; report[1] = basic_malformed ? 0x13 : 0x12;
+        report[5] = 0x59; report[7] = 1; report[9] = 6; report[11] = hardware_slot; report[12] = 0xff;
+        if (after_basic) after_basic();
+        return true;
+    }
     bool IsConnected() const override { return connected; }
     bool IsCurrentSession() const override { ++presence_probes; return current_session; }
     bool Connect() override { connected = true; current_session = true; ++connects; return true; }
     std::vector<aura::m605::Report> reports;
     bool WriteStage(const aura::m605::Report& report) override {
         reports.push_back(report);
-        return ++stages != fail_at_stage;
+        const bool success = ++stages != fail_at_stage;
+        if (success && basic_supported && selector_changes_slot && report[1] == 0x51 && report[2] == 0)
+            hardware_slot = report[5];
+        return success;
     }
-    bool WriteApply(const aura::m605::Report&) override { return true; }
+    bool WriteApply(const aura::m605::Report&) override { ++applies; return true; }
     void Disconnect() override { connected = false; }
     std::string error = "mock transport failure";
     std::string GetLastError() const override { return error; }
@@ -796,6 +811,182 @@ bool TestRtSessionAndSafetyEdges() {
     auto changed=apply(temp,[&]{if(transport->stages>before)transport->current_session=false;return false;});
     if(changed.at("outcome")!="failed" || !changed.at("active_profile_id").is_null() || changed.at("dirty")!=true)return done(false);
     return done(true);
+}
+
+bool TestKey1026ManagedDisabledPipeline() {
+    constexpr uint16_t key_id = 1026;
+    auto doc = Document(); doc["global_defaults"]["global_actuation_mm"] = nullptr;
+    for (auto& p : doc["profiles"]) p["magnetic"] = {{"global_actuation_mm", nullptr},
+        {"global_deadzone", nullptr}, {"global_rapid_trigger", nullptr}, {"keys", Json::array()}};
+    Json standard = {{"standard", true}, {"start_mm", 1.0}, {"end_mm", 3.6}, {"slots", Json::array()}};
+    for (int i = 0; i < 4; ++i) standard["slots"].push_back({{"target", {{"kind", "DefaultSentinel"}}},
+        {"down_start", "Inactive"}, {"down_end", "Inactive"}, {"up_start", "Inactive"}, {"up_end", "Inactive"}});
+    doc["profiles"][0]["magnetic"]["keys"].push_back({{"logical_id", key_id}, {"dks", standard},
+        {"rapid_trigger", {{"enabled", false}, {"press_mm", 0.5}, {"release_mm", 1.5},
+            {"separate_mode", true}, {"continuous", false}, {"opaque_rt", {{"preserve", 42}}}}}});
+    const auto folder = std::filesystem::temp_directory_path() / ("aura-disabled-1026-" + std::to_string(GetTickCount64()));
+    std::filesystem::create_directories(folder); const auto path = folder / "device-profiles.json"; Write(path, doc);
+    auto io = std::make_unique<Io>(); auto* transport = io.get();
+    auto runtime = aura::M605RuntimeTestAccess::Create(std::move(io), std::make_unique<Wait>(),
+        std::make_unique<Latch>(std::make_shared<LatchState>()));
+    std::mutex gate;
+    aura::DeviceProfileRuntime profiles(path, {}, *runtime, gate, [] { return aura::MagneticHostProfile{}; }, [] { return true; });
+    httplib::Server server; profiles.RegisterRoutes(server);
+    const int port = server.bind_to_any_port("127.0.0.1"); if (port <= 0) { runtime->Stop(); return false; }
+    std::thread worker([&] { server.listen_after_bind(); }); httplib::Client client("127.0.0.1", port);
+    bool okay = true; Json trace = Json::object();
+    const auto disabled_key = [&](const Json& key) {
+        return key.at("logical_id") == key_id && key.at("dks").at("standard") == true &&
+            key.at("rapid_trigger").is_object() && key.at("rapid_trigger").at("enabled") == false &&
+            key.at("rapid_trigger").at("press_mm") == 0.5 && key.at("rapid_trigger").at("release_mm") == 1.5 &&
+            key.at("rapid_trigger").at("opaque_rt").at("preserve") == 42;
+    };
+    auto loaded = client.Get("/api/device-profiles");
+    if (!loaded || loaded->status != 200) okay = false;
+    else { trace["document_after_load"] = Json::parse(loaded->body)["profiles"][0]["magnetic"]["keys"][0];
+        okay = disabled_key(trace["document_after_load"]) && okay; }
+    const auto update = [&](Json p) {
+        auto response = client.Post("/api/device-profiles/update", Json{{"profile_id", A}, {"profile", p},
+            {"expected_revision", profiles.State().at("document_revision")}}.dump(), "application/json");
+        if (!response || response->status != 200) return false;
+        const auto canonical = Json::parse(response->body)["profile"]["magnetic"]["keys"][0];
+        const auto persisted = Json::parse(std::ifstream(path))["profiles"][0]["magnetic"]["keys"][0];
+        trace["canonical_updates"].push_back({{"canonical", canonical}, {"persisted", persisted}});
+        if (canonical.at("rapid_trigger").is_object() && canonical.at("rapid_trigger").at("enabled") == false) {
+            trace["canonical_after_save"] = canonical;
+            trace["persisted_after_save"] = persisted;
+        }
+        return true;
+    };
+    const auto activate = [&] { return profiles.ActivateProfile(A, "Manual", profiles.State().at("document_revision")); };
+    const auto disable_target = [&](const Json& diagnostics) {
+        bool rt_found = false, dks_found = false;
+        for (const auto& op : diagnostics.at("last_plan").at("effective_target")) {
+            if (op.at("identity") == "RapidTrigger:1026") rt_found =
+                op.at("kind") == "PerKeyRtDisabledState" && op.at("value").at("enabled") == false && op.at("restore") == false;
+            if (op.at("identity") == "Dks:1026") dks_found = op.at("kind") == "DksStandard";
+            if (op.at("restore") == true) return false;
+        }
+        return rt_found && dks_found;
+    };
+    auto p = doc["profiles"][0]; p["name"] = "Disabled saved/reloaded fixture";
+    okay = update(p) && okay;
+    okay = disabled_key(trace.at("canonical_after_save")) && disabled_key(trace.at("persisted_after_save")) && okay;
+    const auto first = activate(); auto diagnostics = profiles.Diagnostics();
+    trace["first_apply"] = first; trace["first_effective_target"] = diagnostics.at("last_plan").at("effective_target");
+    okay = first.at("outcome") == "succeeded" && disable_target(diagnostics) && okay;
+    auto before = transport->stages;
+    okay = activate().at("outcome") == "succeeded" && transport->stages == before && okay;
+    p["magnetic"]["keys"][0]["rapid_trigger"]["enabled"] = true;
+    okay = update(p) && activate().at("outcome") == "succeeded" && okay;
+    p["magnetic"]["keys"][0]["rapid_trigger"]["enabled"] = false;
+    okay = update(p) && okay; before = transport->stages;
+    const auto disabled = activate(); diagnostics = profiles.Diagnostics();
+    trace["enabled_to_disabled_apply"] = disabled;
+    trace["planner_input_effective_target"] = diagnostics.at("last_plan").at("effective_target");
+    okay = okay && disabled.at("outcome") == "succeeded" && disable_target(diagnostics) &&
+        transport->stages == before + 2 && transport->reports[before][9] == 0 && transport->reports[before + 1][9] == 0 &&
+        !runtime->GetAppliedRuntimeState().per_key_rapid_trigger.at(key_id).enabled;
+    before = transport->stages;
+    okay = activate().at("outcome") == "succeeded" && transport->stages == before && okay;
+    // True unmanage remains a removal, even alongside explicit Standard.
+    p["magnetic"]["keys"][0]["rapid_trigger"] = nullptr;
+    okay = update(p) && okay; const auto blocked = activate();
+    trace["explicit_unmanage_unknown_prior"] = blocked;
+    okay = okay && blocked.at("outcome") == "failed" && transport->stages == before &&
+        blocked.at("error").get<std::string>().find("RT prior state unknown; cannot remove management for key 1026") != std::string::npos;
+    if (const auto* directory = std::getenv("AURA_RT_PIPELINE_TRACE_DIR")) {
+        std::filesystem::create_directories(directory);
+        Write(std::filesystem::path(directory) / "key-1026-daemon-runtime.json", trace);
+    }
+    if (!okay) std::cerr << "key 1026 pipeline: " << trace.dump() << '\n';
+    server.stop(); worker.join(); runtime->Stop(); std::error_code error; std::filesystem::remove_all(folder, error);
+    return okay;
+}
+
+bool TestRtExplicitStandardAuthoring() {
+    auto doc = Document();
+    doc["global_defaults"]["global_actuation_mm"] = nullptr;
+    for (auto& profile : doc["profiles"]) profile["magnetic"] = {
+        {"global_actuation_mm", nullptr}, {"global_deadzone", nullptr},
+        {"global_rapid_trigger", nullptr}, {"keys", Json::array()}};
+    auto& keys = doc["profiles"][0]["magnetic"]["keys"];
+    keys.push_back({{"logical_id", 0x0701}, {"rapid_trigger", {
+        {"enabled", true}, {"press_mm", 0.5}, {"release_mm", 1.5}, {"separate_mode", true}}}});
+    aura::MagneticHostProfile host;
+    // Absence and explicit null are both Unknown, never inferred Standard.
+    if (!DirectCase(doc, host, "RT needs known Standard DKS")) { std::cerr << "Absent DKS did not block RT\n"; return false; }
+    keys[0]["dks"] = nullptr;
+    if (!DirectCase(doc, host, "RT needs known Standard DKS")) { std::cerr << "Null DKS did not block RT\n"; return false; }
+    Json standard = {{"standard", true}, {"start_mm", 1.0}, {"end_mm", 3.6}, {"slots", Json::array()}};
+    for (int i = 0; i < 4; ++i) standard["slots"].push_back({{"target", {{"kind", "DefaultSentinel"}}},
+        {"down_start", "Inactive"}, {"down_end", "Inactive"}, {"up_start", "Inactive"}, {"up_end", "Inactive"}});
+    keys[0]["dks"] = standard;
+    // A persisted individually valid baseline DKS + Profile RT reaches planner
+    // conflict preflight; a same-object conflict is already rejected by schema.
+    auto conflict = doc; conflict["profiles"][0]["magnetic"]["keys"][0]["dks"] = nullptr;
+    auto custom = standard; custom["standard"] = false;
+    conflict["global_defaults"]["keys"].push_back({{"logical_id", 0x0701}, {"dks", custom}});
+    if (!DirectCase(conflict, host, "DKS and RT conflict")) { std::cerr << "Baseline DKS conflict did not block RT\n"; return false; }
+    const auto folder = std::filesystem::temp_directory_path() / ("aura-rt-standard-authoring-" + std::to_string(GetTickCount64()));
+    std::filesystem::create_directories(folder); const auto path = folder / "device-profiles.json"; Write(path, doc);
+    auto io = std::make_unique<Io>(); auto* transport = io.get();
+    auto runtime = aura::M605RuntimeTestAccess::Create(std::move(io), std::make_unique<Wait>(),
+        std::make_unique<Latch>(std::make_shared<LatchState>()));
+    std::mutex gate;
+    aura::DeviceProfileRuntime profiles(path, {}, *runtime, gate, [host] { return host; }, [] { return true; });
+    const auto result = profiles.ActivateProfile(A, "Manual", profiles.State().at("document_revision"));
+    const auto& operations = result.at("operations");
+    bool okay = result.at("outcome") == "succeeded" && operations.size() == 3 &&
+        operations[0].at("kind") == "DksStandard" &&
+        operations[1].at("kind") == "PerKeyRtPress" && operations[2].at("kind") == "PerKeyRtRelease" &&
+        // Existing DKS Standard is one transaction with four verified stages;
+        // each independent RT selector is one stage/transaction.
+        transport->stages == 6 && result.at("timing").at("m605_transactions") == 3 &&
+        runtime->GetAppliedRuntimeState().per_key_dks.at(0x0701).standard_runtime_configuration;
+    if (!okay) std::cerr << "Explicit Standard plan: " << result.dump() << '\n';
+    httplib::Server server; profiles.RegisterRoutes(server);
+    const int port = server.bind_to_any_port("127.0.0.1");
+    if (port <= 0) { runtime->Stop(); return false; }
+    std::thread worker([&] { server.listen_after_bind(); }); httplib::Client client("127.0.0.1", port);
+    const auto update = [&](const Json& magnetic) {
+        auto p = doc["profiles"][0]; p["magnetic"] = magnetic;
+        auto response = client.Post("/api/device-profiles/update", Json{{"profile_id", A}, {"profile", p},
+            {"expected_revision", profiles.State().at("document_revision")}}.dump(), "application/json");
+        return response && response->status == 200;
+    };
+    auto magnetic = doc["profiles"][0]["magnetic"];
+    auto& key = magnetic["keys"][0]; key["rapid_trigger"]["enabled"] = false;
+    key["rapid_trigger"]["continuous"] = false; key["rapid_trigger"]["opaque_rt"] = {{"keep", 42}};
+    key["dks"] = custom;
+    okay = update(magnetic) && okay;
+    const auto before = transport->stages;
+    const auto disabled_dks = profiles.ActivateProfile(A, "Manual", profiles.State().at("document_revision"));
+    const auto& disabled_ops = disabled_dks.at("operations");
+    okay = okay && disabled_dks.at("outcome") == "succeeded" && disabled_ops.size() == 3 &&
+        disabled_ops[0].at("kind") == "PerKeyRtPress" && disabled_ops[1].at("kind") == "PerKeyRtRelease" &&
+        disabled_ops[2].at("kind") == "DksSet" && transport->stages == before + 6 &&
+        transport->reports[before][2] == 0x54 && transport->reports[before][9] == 0 &&
+        transport->reports[before + 1][2] == 0x54 && transport->reports[before + 1][9] == 0 &&
+        !runtime->GetAppliedRuntimeState().per_key_rapid_trigger.at(0x0701).enabled;
+    if (!okay) std::cerr << "Managed disabled DKS plan: " << disabled_dks.dump() << '\n';
+    const auto persisted = Json::parse(std::ifstream(path))["profiles"][0]["magnetic"]["keys"][0]["rapid_trigger"];
+    okay = okay && persisted.at("enabled") == false && persisted.at("press_mm") == 0.5 &&
+        persisted.at("release_mm") == 1.5 && persisted.at("opaque_rt").at("keep") == 42;
+    const auto after = transport->stages;
+    okay = profiles.ActivateProfile(A, "Manual", profiles.State().at("document_revision")).at("outcome") == "succeeded" &&
+        transport->stages == after && okay;
+    key["dks"] = standard;
+    okay = update(magnetic) && okay;
+    const auto standard_disabled = profiles.ActivateProfile(A, "Manual", profiles.State().at("document_revision"));
+    okay = okay && standard_disabled.at("outcome") == "succeeded" && standard_disabled.at("operations").size() == 1 &&
+        standard_disabled.at("operations")[0].at("kind") == "DksStandard";
+    const auto final_stages = transport->stages;
+    okay = profiles.ActivateProfile(A, "Manual", profiles.State().at("document_revision")).at("outcome") == "succeeded" &&
+        transport->stages == final_stages && okay;
+    server.stop(); worker.join();
+    runtime->Stop(); std::error_code error; std::filesystem::remove_all(folder, error);
+    return okay;
 }
 
 bool TestGuards() {
@@ -1691,8 +1882,10 @@ bool TestHardwareRtGateIsolation(bool enabled) {
 }
 
 #include "test_phase4b_runtime.inc"
+#include "test_hardware_slot_runtime.inc"
 #include "test_legacy_rt_migration.inc"
 int main() {
+    if (!TestHardwareSlotRuntime()) { std::cerr << "hardware slot runtime failed\n"; return 1; }
     const std::pair<const char*, bool(*)()> cases[] = {{"cutover", Test},
         {"legacy_rt_conversion", TestLegacyMigrationConversion},
         {"legacy_rt_idempotence_absent", TestLegacyMigrationIdempotence},
@@ -1707,6 +1900,7 @@ int main() {
         {"legacy_rt_explicit_activation", TestLegacyMigrationExplicitActivation},
         {"legacy_rt_p4b_integration", TestLegacyMigrationP4BIntegration},
         {"phase4b_apply_no_duplicate", TestPhase4BApplyAndNoDuplicate},
+        {"phase4b_control_surface_hold", TestPhase4BControlSurfaceHold},
         {"phase4b_deferred_safety", TestPhase4BDeferredAndSafety},
         {"phase4b_already_active_noop", TestPhase4BAlreadyActiveNoOp},
         {"phase4b_stale_churn_return", TestPhase4BStaleChurnReturn},
@@ -1741,6 +1935,8 @@ int main() {
         {"all_key_failure", [] { return TestAllKeyFailure(2); }},
         {"exception_failure", [] { return TestAllKeyFailure(3); }},
         {"rt_inheritance", TestRapidTriggerInheritance},
+        {"rt_explicit_standard_authoring", TestRtExplicitStandardAuthoring},
+        {"rt_key_1026_disabled_pipeline", TestKey1026ManagedDisabledPipeline},
         {"failed_manual_baseline", TestFailedManualGlobalWriteRetainsBaseline},
         {"timing_breakdown", TestTimingBreakdown},
         {"rt_session_safety_edges", TestRtSessionAndSafetyEdges},

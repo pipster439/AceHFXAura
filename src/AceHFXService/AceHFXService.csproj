@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <Version>$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)..\..\VERSION').Trim())</Version>
+  </PropertyGroup>
+  <ItemGroup><ProjectReference Include="../AceHFXFanWorker/AceHFXFanWorker.csproj" ReferenceOutputAssembly="false" /></ItemGroup>
+  <Target Name="CopyFanWorker" AfterTargets="Build">
+    <MSBuild Projects="../AceHFXFanWorker/AceHFXFanWorker.csproj" Targets="GetTargetPath"
+      Properties="Configuration=$(Configuration);Platform=$(Platform);RuntimeIdentifier=$(RuntimeIdentifier)">
+      <Output TaskParameter="TargetOutputs" ItemName="_FanWorkerTarget" />
+    </MSBuild>
+    <PropertyGroup><_FanWorkerDirectory>$([System.IO.Path]::GetDirectoryName('@(_FanWorkerTarget)'))</_FanWorkerDirectory></PropertyGroup>
+    <ItemGroup><_FanWorkerFiles Include="$(_FanWorkerDirectory)/AceHFXFanWorker*" /></ItemGroup>
+    <Copy SourceFiles="@(_FanWorkerFiles)" DestinationFolder="$(TargetDir)" />
+  </Target>
+  <Target Name="PublishFanWorker" AfterTargets="Publish">
+    <MSBuild Projects="../AceHFXFanWorker/AceHFXFanWorker.csproj" Targets="Publish"
+      Properties="Configuration=$(Configuration);RuntimeIdentifier=$(RuntimeIdentifier);SelfContained=$(SelfContained);PublishDir=$(PublishDir)" />
+  </Target>
+  <ItemGroup><ProjectReference Include="..\AsusPlatform\AsusPlatform.csproj" /></ItemGroup>
+</Project>

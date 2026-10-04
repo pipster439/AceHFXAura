@@ -1,6 +1,8 @@
-# alpha.4 WinUI packaging
+# WinUI packaging
 
 `package_release.bat` and `package_release.ps1` forward to `tools/package_release.py`. The default pipeline produces an unpackaged, self-contained **Windows 11 x64 WinUI ZIP**. `Aura.exe` is the GUI, never a daemon candidate. `--legacy` retains the historical C++ launcher under `dist/legacy/` for engineering use only.
+
+Public ZIP metadata uses package-only `DebugType=None`, `DebugSymbols=false`, `IncludeSourceRevisionInInformationalVersion=false` and the version read from `VERSION`. No PDB or local development path belongs in the public package. Exact ProductVersion verification rejects a Git suffix; ordinary developer builds retain their existing debug policy.
 
 ## Build and output
 

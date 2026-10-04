@@ -10,6 +10,8 @@ public sealed class DeviceProfile
     public int SchemaVersion { get; set; } = 1;
     public Guid Id { get; set; } = Guid.NewGuid();
     public string Name { get; set; } = "New profile";
+    public string ActivationBackend { get; set; } = "host_managed";
+    public int? HardwareSlot { get; set; }
     public ProfileMagnetic Magnetic { get; set; } = new();
     public ProfileLighting Lighting { get; set; } = new();
     public ProfileAutomationBinding? Automation { get; set; }
@@ -143,7 +145,12 @@ public static class ProfileValidator
             !document.Profiles.Any(p => p.Id == document.SelectedProfileId))
             throw new InvalidDataException("Duplicate profile ID or missing selected profile.");
         ValidateMagnetic(document.GlobalDefaults);
-        foreach (var profile in document.Profiles) ValidateMagnetic(profile.Magnetic);
+        foreach (var profile in document.Profiles) {
+            if (profile.ActivationBackend is not ("host_managed" or "hardware_slot") ||
+                profile.ActivationBackend == "hardware_slot" && profile.HardwareSlot is not (>= 1 and <= 5))
+                throw new InvalidDataException("Invalid activation backend or hardware slot (expected 1–5).");
+            ValidateMagnetic(profile.Magnetic);
+        }
     }
 
     private static void ValidateMagnetic(ProfileMagnetic magnetic)

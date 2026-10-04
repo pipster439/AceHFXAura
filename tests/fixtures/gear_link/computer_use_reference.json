@@ -1,0 +1,439 @@
+{
+  "schema_version": 1,
+  "evidence": "Actual retained USBPcap records; not synthetic status replies or writer attribution",
+  "firmware_boundary": "1.00.59",
+  "fixtures": [
+    {
+      "case": "preflight_profile5",
+      "source_sha256": "fb86f185ebf91ed2744f35e8498d25ea523741db0b080b1027ed4c021d7e89fa",
+      "records": [
+        {
+          "frame": 4,
+          "timestamp_utc": "2026-10-02T10:46:21.782507Z",
+          "interface": 1,
+          "direction": "IN",
+          "completed": true,
+          "status": 0,
+          "payload_hex": "12 00 00 00 59 00 01 00 06 00 06 ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
+        },
+        {
+          "frame": 5,
+          "timestamp_utc": "2026-10-02T10:46:52.149081Z",
+          "interface": 1,
+          "direction": "OUT",
+          "completed": false,
+          "status": 0,
+          "payload_hex": "51 00 00 00 05 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
+        },
+        {
+          "frame": 12,
+          "timestamp_utc": "2026-10-02T10:46:52.286273Z",
+          "interface": 1,
+          "direction": "IN",
+          "completed": true,
+          "status": 0,
+          "payload_hex": "12 00 00 00 59 00 01 00 06 00 05 ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
+        },
+        {
+          "frame": 16,
+          "timestamp_utc": "2026-10-02T10:46:52.796398Z",
+          "interface": 1,
+          "direction": "IN",
+          "completed": true,
+          "status": 0,
+          "payload_hex": "12 00 00 00 59 00 01 00 06 00 05 ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
+        }
+      ],
+      "expected": {
+        "schema_version": 1,
+        "expected_test_slot": 5,
+        "unexpected_bank_selections": [],
+        "device_bank_observations": [
+          {
+            "frame": 4,
+            "timestamp_utc": "2026-10-02T10:46:21.782507Z",
+            "profile_count": 6,
+            "active_slot": 6,
+            "lighting_effect": 0
+          },
+          {
+            "frame": 12,
+            "timestamp_utc": "2026-10-02T10:46:52.286273Z",
+            "profile_count": 6,
+            "active_slot": 5,
+            "lighting_effect": 0
+          },
+          {
+            "frame": 16,
+            "timestamp_utc": "2026-10-02T10:46:52.796398Z",
+            "profile_count": 6,
+            "active_slot": 5,
+            "lighting_effect": 0
+          }
+        ],
+        "scope": "no_unexpected_selection_observed",
+        "caveats": [
+          "Absence of a selection is not proof of bank ownership.",
+          "USBPcap does not attribute a command to a host process.",
+          "BasicInfo reads active bank, not every bank setting."
+        ]
+      }
+    },
+    {
+      "case": "persistence_actuation",
+      "source_sha256": "31407101c6a79303a27e0bcb71ab23506797ad1184d56c27242e4880a9d79420",
+      "records": [
+        {
+          "frame": 4,
+          "timestamp_utc": "2026-10-02T10:56:21.784912Z",
+          "interface": 1,
+          "direction": "IN",
+          "completed": true,
+          "status": 0,
+          "payload_hex": "12 00 00 00 59 00 01 00 06 00 05 ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
+        },
+        {
+          "frame": 6,
+          "timestamp_utc": "2026-10-02T10:57:21.787057Z",
+          "interface": 1,
+          "direction": "IN",
+          "completed": true,
+          "status": 0,
+          "payload_hex": "12 00 00 00 59 00 01 00 06 00 05 ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
+        },
+        {
+          "frame": 7,
+          "timestamp_utc": "2026-10-02T10:58:04.846383Z",
+          "interface": 1,
+          "direction": "OUT",
+          "completed": false,
+          "status": 0,
+          "payload_hex": "51 00 00 00 03 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
+        },
+        {
+          "frame": 9,
+          "timestamp_utc": "2026-10-02T10:58:13.813542Z",
+          "interface": 1,
+          "direction": "OUT",
+          "completed": false,
+          "status": 0,
+          "payload_hex": "51 00 00 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
+        },
+        {
+          "frame": 12,
+          "timestamp_utc": "2026-10-02T10:58:21.781685Z",
+          "interface": 1,
+          "direction": "IN",
+          "completed": true,
+          "status": 0,
+          "payload_hex": "12 00 00 00 59 00 01 00 06 08 01 ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
+        },
+        {
+          "frame": 14,
+          "timestamp_utc": "2026-10-02T10:59:21.781699Z",
+          "interface": 1,
+          "direction": "IN",
+          "completed": true,
+          "status": 0,
+          "payload_hex": "12 00 00 00 59 00 01 00 06 08 01 ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
+        },
+        {
+          "frame": 16,
+          "timestamp_utc": "2026-10-02T11:00:21.782838Z",
+          "interface": 1,
+          "direction": "IN",
+          "completed": true,
+          "status": 0,
+          "payload_hex": "12 00 00 00 59 00 01 00 06 08 01 ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
+        }
+      ],
+      "expected": {
+        "schema_version": 1,
+        "expected_test_slot": 5,
+        "unexpected_bank_selections": [
+          {
+            "frame": 7,
+            "timestamp_utc": "2026-10-02T10:58:04.846383Z",
+            "slot": 3
+          },
+          {
+            "frame": 9,
+            "timestamp_utc": "2026-10-02T10:58:13.813542Z",
+            "slot": 1
+          }
+        ],
+        "device_bank_observations": [
+          {
+            "frame": 4,
+            "timestamp_utc": "2026-10-02T10:56:21.784912Z",
+            "profile_count": 6,
+            "active_slot": 5,
+            "lighting_effect": 0
+          },
+          {
+            "frame": 6,
+            "timestamp_utc": "2026-10-02T10:57:21.787057Z",
+            "profile_count": 6,
+            "active_slot": 5,
+            "lighting_effect": 0
+          },
+          {
+            "frame": 12,
+            "timestamp_utc": "2026-10-02T10:58:21.781685Z",
+            "profile_count": 6,
+            "active_slot": 1,
+            "lighting_effect": 8
+          },
+          {
+            "frame": 14,
+            "timestamp_utc": "2026-10-02T10:59:21.781699Z",
+            "profile_count": 6,
+            "active_slot": 1,
+            "lighting_effect": 8
+          },
+          {
+            "frame": 16,
+            "timestamp_utc": "2026-10-02T11:00:21.782838Z",
+            "profile_count": 6,
+            "active_slot": 1,
+            "lighting_effect": 8
+          }
+        ],
+        "scope": "contaminated",
+        "caveats": [
+          "Absence of a selection is not proof of bank ownership.",
+          "USBPcap does not attribute a command to a host process.",
+          "BasicInfo reads active bank, not every bank setting."
+        ]
+      }
+    },
+    {
+      "case": "persistence_deadzone",
+      "source_sha256": "43a769d090b71d38bb3e6c443d0b2dbc584afcbd464de8273ce7a2f97d7c6cab",
+      "records": [
+        {
+          "frame": 3,
+          "timestamp_utc": "2026-10-02T11:01:07.479725Z",
+          "interface": 1,
+          "direction": "OUT",
+          "completed": false,
+          "status": 0,
+          "payload_hex": "51 00 00 00 03 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
+        },
+        {
+          "frame": 5,
+          "timestamp_utc": "2026-10-02T11:01:07.898585Z",
+          "interface": 1,
+          "direction": "OUT",
+          "completed": false,
+          "status": 0,
+          "payload_hex": "51 00 00 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
+        },
+        {
+          "frame": 7,
+          "timestamp_utc": "2026-10-02T11:01:12.090014Z",
+          "interface": 1,
+          "direction": "OUT",
+          "completed": false,
+          "status": 0,
+          "payload_hex": "51 00 00 00 03 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
+        },
+        {
+          "frame": 9,
+          "timestamp_utc": "2026-10-02T11:01:12.399362Z",
+          "interface": 1,
+          "direction": "OUT",
+          "completed": false,
+          "status": 0,
+          "payload_hex": "51 00 00 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
+        },
+        {
+          "frame": 11,
+          "timestamp_utc": "2026-10-02T11:01:14.583404Z",
+          "interface": 1,
+          "direction": "OUT",
+          "completed": false,
+          "status": 0,
+          "payload_hex": "51 00 00 00 03 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
+        },
+        {
+          "frame": 24,
+          "timestamp_utc": "2026-10-02T11:01:20.330308Z",
+          "interface": 1,
+          "direction": "OUT",
+          "completed": false,
+          "status": 0,
+          "payload_hex": "51 00 00 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
+        },
+        {
+          "frame": 27,
+          "timestamp_utc": "2026-10-02T11:01:21.787726Z",
+          "interface": 1,
+          "direction": "IN",
+          "completed": true,
+          "status": 0,
+          "payload_hex": "12 00 00 00 59 00 01 00 06 08 01 ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
+        },
+        {
+          "frame": 72,
+          "timestamp_utc": "2026-10-02T11:02:21.777054Z",
+          "interface": 1,
+          "direction": "OUT",
+          "completed": false,
+          "status": 0,
+          "payload_hex": "51 00 00 00 03 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
+        },
+        {
+          "frame": 74,
+          "timestamp_utc": "2026-10-02T11:02:21.791479Z",
+          "interface": 1,
+          "direction": "IN",
+          "completed": true,
+          "status": 0,
+          "payload_hex": "12 00 00 00 59 00 01 00 06 03 03 ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
+        },
+        {
+          "frame": 76,
+          "timestamp_utc": "2026-10-02T11:02:23.175152Z",
+          "interface": 1,
+          "direction": "OUT",
+          "completed": false,
+          "status": 0,
+          "payload_hex": "51 00 00 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
+        }
+      ],
+      "expected": {
+        "schema_version": 1,
+        "expected_test_slot": 5,
+        "unexpected_bank_selections": [
+          {
+            "frame": 3,
+            "timestamp_utc": "2026-10-02T11:01:07.479725Z",
+            "slot": 3
+          },
+          {
+            "frame": 5,
+            "timestamp_utc": "2026-10-02T11:01:07.898585Z",
+            "slot": 1
+          },
+          {
+            "frame": 7,
+            "timestamp_utc": "2026-10-02T11:01:12.090014Z",
+            "slot": 3
+          },
+          {
+            "frame": 9,
+            "timestamp_utc": "2026-10-02T11:01:12.399362Z",
+            "slot": 1
+          },
+          {
+            "frame": 11,
+            "timestamp_utc": "2026-10-02T11:01:14.583404Z",
+            "slot": 3
+          },
+          {
+            "frame": 24,
+            "timestamp_utc": "2026-10-02T11:01:20.330308Z",
+            "slot": 1
+          },
+          {
+            "frame": 72,
+            "timestamp_utc": "2026-10-02T11:02:21.777054Z",
+            "slot": 3
+          },
+          {
+            "frame": 76,
+            "timestamp_utc": "2026-10-02T11:02:23.175152Z",
+            "slot": 1
+          }
+        ],
+        "device_bank_observations": [
+          {
+            "frame": 27,
+            "timestamp_utc": "2026-10-02T11:01:21.787726Z",
+            "profile_count": 6,
+            "active_slot": 1,
+            "lighting_effect": 8
+          },
+          {
+            "frame": 74,
+            "timestamp_utc": "2026-10-02T11:02:21.791479Z",
+            "profile_count": 6,
+            "active_slot": 3,
+            "lighting_effect": 3
+          }
+        ],
+        "scope": "contaminated",
+        "caveats": [
+          "Absence of a selection is not proof of bank ownership.",
+          "USBPcap does not attribute a command to a host process.",
+          "BasicInfo reads active bank, not every bank setting."
+        ]
+      }
+    },
+    {
+      "case": "persistence_rt",
+      "source_sha256": "04ffe0151ff0b5d65bd5a6ba0a099bb6c40117d5550e322edf75167f2b3d1e25",
+      "records": [
+        {
+          "frame": 16,
+          "timestamp_utc": "2026-10-02T11:03:21.785007Z",
+          "interface": 1,
+          "direction": "IN",
+          "completed": true,
+          "status": 0,
+          "payload_hex": "12 00 00 00 59 00 01 00 06 08 01 ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
+        },
+        {
+          "frame": 53,
+          "timestamp_utc": "2026-10-02T11:04:00.077916Z",
+          "interface": 1,
+          "direction": "OUT",
+          "completed": false,
+          "status": 0,
+          "payload_hex": "51 00 00 00 03 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
+        },
+        {
+          "frame": 55,
+          "timestamp_utc": "2026-10-02T11:04:01.121828Z",
+          "interface": 1,
+          "direction": "OUT",
+          "completed": false,
+          "status": 0,
+          "payload_hex": "51 00 00 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
+        }
+      ],
+      "expected": {
+        "schema_version": 1,
+        "expected_test_slot": 5,
+        "unexpected_bank_selections": [
+          {
+            "frame": 53,
+            "timestamp_utc": "2026-10-02T11:04:00.077916Z",
+            "slot": 3
+          },
+          {
+            "frame": 55,
+            "timestamp_utc": "2026-10-02T11:04:01.121828Z",
+            "slot": 1
+          }
+        ],
+        "device_bank_observations": [
+          {
+            "frame": 16,
+            "timestamp_utc": "2026-10-02T11:03:21.785007Z",
+            "profile_count": 6,
+            "active_slot": 1,
+            "lighting_effect": 8
+          }
+        ],
+        "scope": "contaminated",
+        "caveats": [
+          "Absence of a selection is not proof of bank ownership.",
+          "USBPcap does not attribute a command to a host process.",
+          "BasicInfo reads active bank, not every bank setting."
+        ]
+      }
+    }
+  ]
+}

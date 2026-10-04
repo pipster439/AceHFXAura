@@ -1,5 +1,6 @@
 #include "aura/hardware/m605_runtime.h"
 #include <chrono>
+#include <cstdio>
 #include <utility>
 #include <windows.h>
 
@@ -14,6 +15,7 @@ public:
     bool Connect() override { return backend_.Connect(); }
     bool WriteStage(const m605::Report& report) override { return backend_.SendReport(report); }
     bool WriteApply(const m605::Report& report) override { return backend_.SendReport(report); }
+    bool QueryBasicInfo(m605::Report& response) override { return backend_.QueryBasicInfo(response); }
     void Disconnect() override { backend_.Disconnect(); }
     std::string GetLastError() const override { return backend_.GetLastError(); }
 
@@ -658,6 +660,98 @@ bool M605Runtime::PrepareTransportSession() {
     }
     M605TimingSnapshot ignored;
     return EnsureTransportReady(ignored);
+}
+
+HardwareSlotResult M605Runtime::SelectHardwareProfileSlot(uint8_t slot,
+    const std::function<bool()>& admission) {
+    if (!m605::BuildSelectHardwareProfileSlot(slot)) {
+        HardwareSlotResult result; result.error = "Invalid hardware slot; expected1..6";
+        return result;
+    }
+    return RunHardwareSlot(slot, admission);
+}
+HardwareSlotResult M605Runtime::QueryHardwareProfileSlot() {
+    return RunHardwareSlot(std::nullopt, [] { return true; });
+}
+HardwareSlotResult M605Runtime::GetHardwareSlotObservation() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto result = hardware_slot_observation_;
+    if (result.session_generation != session_generation_ || health_ != M605RuntimeHealth::Clean) {
+        result.observed_slot.reset(); result.success = false;
+    }
+    return result;
+}
+HardwareSlotResult M605Runtime::RunHardwareSlot(std::optional<uint8_t> requested,
+    const std::function<bool()>& admission) {
+    const auto started = Clock::now();
+    HardwareSlotResult result; result.requested_slot = requested;
+    std::lock_guard<std::mutex> stop_lock(stop_mutex_);
+    std::lock_guard<std::mutex> device_lock(NativeHidBackend::DeviceWriteMutex());
+    const auto finish = [&] {
+        result.total_ms = Milliseconds(started);
+        std::lock_guard<std::mutex> lock(mutex_);
+        result.session_generation = session_generation_;
+        if (hardware_slot_observation_.observed_slot && result.observed_slot &&
+            hardware_slot_observation_.observed_slot != result.observed_slot) applied_state_ = {};
+        hardware_slot_observation_ = result;
+        if (!result.success) last_error_ = result.error; else last_error_.clear();
+        return result;
+    };
+    bool permitted;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        permitted = !stopping_ && health_ == M605RuntimeHealth::Clean && queue_.empty() &&
+            !safety_latch_->IsQuarantined();
+    }
+    if (!permitted) { result.error = "M605 unhealthy, busy or safety quarantined"; return finish(); }
+    M605TimingSnapshot ignored;
+    if (!EnsureTransportReady(ignored)) { result.error = GetLastError(); return finish(); }
+    const auto generation = GetSessionGeneration();
+    const auto query = [&] {
+        m605::Report report{}; ++result.query_count;
+        if (!transport_->IsCurrentSession() || !transport_->QueryBasicInfo(report) || !transport_->IsCurrentSession()) {
+            result.observed_slot.reset(); result.error = "BasicInfo unavailable: " + transport_->GetLastError(); return false;
+        }
+        result.observed_slot = m605::ParseBasicInfoActiveSlot(report.data(), report.size());
+        if (!result.observed_slot) { result.error = "Malformed BasicInfo active slot"; return false; }
+        SYSTEMTIME time{}; GetSystemTime(&time); char text[40]{};
+        std::snprintf(text, sizeof(text), "%04u-%02u-%02uT%02u:%02u:%02u.%03uZ",
+            time.wYear,time.wMonth,time.wDay,time.wHour,time.wMinute,time.wSecond,time.wMilliseconds);
+        result.observed_at_utc = text;
+        return true;
+    };
+    if (!query()) return finish();
+    if (!admission()) { result.error = "StaleDecisionBeforeSubmission"; return finish(); }
+    if (!requested || result.observed_slot == requested) { result.success = true; return finish(); }
+    // A bank switch invalidates all host magnetic submission knowledge even
+    // if its write/verification subsequently fails. It is not a staged write.
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        applied_state_ = {};
+    }
+    if (!transport_->IsCurrentSession() || !admission()) {
+        result.error = "Stale hardware slot admission/session"; return finish();
+    }
+    result.selector_sent = true;
+    if (!transport_->WriteStage(*m605::BuildSelectHardwareProfileSlot(*requested))) {
+        result.observed_slot.reset(); result.error = "Hardware selector write failed: " + transport_->GetLastError();
+        return finish();
+    }
+    // Captured valid selections: observable at100.199/100.460/100.880ms;
+    // nearby official selections observed within141.652ms. Initial100ms,
+    // then up to3 query windows100ms each with100ms spacing: <=600ms
+    // policy budget plus connect/write/cancellation. No210/400ms Apply waits.
+    for (unsigned i=0; i<3; ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        if (!query()) return finish();
+        if (GetSessionGeneration() != generation) {
+            result.observed_slot.reset();
+            result.error = "Hardware slot transport generation changed"; return finish();
+        }
+        if (result.observed_slot == requested) { result.success = true; return finish(); }
+    }
+    result.error = "Hardware slot verification mismatch";
+    return finish();
 }
 
 void M605Runtime::MarkIndeterminate(std::string cause) {

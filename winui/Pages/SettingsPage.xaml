@@ -33,6 +33,14 @@
             </StackPanel>
             <StackPanel Spacing="8">
                 <TextBlock Text="核心服务" Style="{ThemeResource SubtitleTextBlockStyle}" />
+                <controls:SettingsExpander Header="ASUS 平台状态" Description="只读检测组件与特权代理状态" IsExpanded="False" AutomationProperties.AutomationId="AsusPlatformExpander">
+                    <Button x:Name="RefreshAsusPlatformButton" Content="刷新" Click="RefreshAsusPlatform_Click" AutomationProperties.AutomationId="RefreshAsusPlatform" />
+                    <controls:SettingsExpander.Items>
+                        <controls:SettingsCard IsClickEnabled="False" ContentAlignment="Vertical" HorizontalContentAlignment="Stretch">
+                            <TextBlock x:Name="AsusPlatformStatusText" Text="尚未检测" TextWrapping="Wrap" AutomationProperties.AutomationId="AsusPlatformStatus" />
+                        </controls:SettingsCard>
+                    </controls:SettingsExpander.Items>
+                </controls:SettingsExpander>
                 <controls:SettingsExpander x:Name="CoreSettingsExpander" Header="服务状态" Description="查看连接状态和运行时信息" IsExpanded="False">
                     <controls:SettingsExpander.HeaderIcon><SymbolIcon Symbol="World" /></controls:SettingsExpander.HeaderIcon>
                     <TextBlock x:Name="DaemonStatusDetailText" Text="正在检测…" TextWrapping="Wrap" />

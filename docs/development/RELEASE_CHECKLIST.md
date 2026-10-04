@@ -1,4 +1,6 @@
-# alpha.4 release checklist — WinUI desktop entry
+# Release checklist — WinUI desktop entry
+
+Alpha.7 current acceptance records: [release closure](../release/HARDWARE_SLOT_RELEASE_CLOSURE.md) and [package candidate](../release/PACKAGE_CANDIDATE_AUDIT.md). Candidate PASS is not final release approval. Exact final commit hosted CI, clean rebuild and final runtime acceptance are distinct gates.
 
 Version source: [`VERSION`](../../VERSION). A generated ZIP is a candidate, not approval to publish. Record the candidate SHA-256, commit/patch, Windows version and test date. Never substitute dry-run tests for physical results.
 
@@ -37,7 +39,7 @@ Version source: [`VERSION`](../../VERSION). A generated ZIP is a candidate, not 
 - [ ] Rapid navigation and back/Settings/titlebar selection remain synchronized; background page work stops. Repeated Studio navigation retains one WebView/editor and its draft.
 - [ ] WebView2 absent: actionable install link/error; installed: Studio loads. Suppress web: core/Home/Lighting/GSI continue; Studio reports web unavailability and recovers without discarding a retained draft automatically.
 
-## alpha.4 UI polish gates
+## Inherited WinUI UI polish gates
 
 - [ ] Global FPS GET/PATCH tests cover default 25, boundaries 10/100, invalid integers/types/unknown fields, revision 409, atomic failure, unrelated fields and profile overrides, and actual daemon hot reload.
 - [ ] FPS dialog resolves dirty lighting via save/discard/cancel. Failed draft save prevents the global write; global conflict rereads configuration and remains visible. Runtime FPS is labeled a target, never a measurement.

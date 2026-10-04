@@ -3,10 +3,17 @@
 #include <array>
 #include <cstdint>
 #include <optional>
+#include <cstddef>
 
 namespace aura::m605 {
 
 using Report = std::array<uint8_t, 65>;
+
+// Official 51 00: selector/layer/reserved fixed zero, slot at vendor offset4.
+// Slot6 is reserved/default; the Profile product layer permits only1..5.
+std::optional<Report> BuildSelectHardwareProfileSlot(uint8_t slot);
+Report BuildBasicInfoQuery();
+std::optional<uint8_t> ParseBasicInfoActiveSlot(const uint8_t* report, size_t length);
 
 enum class DksTriggerState : uint8_t {
     Inactive = 0, Tap = 1, Release = 2, Hold = 3
