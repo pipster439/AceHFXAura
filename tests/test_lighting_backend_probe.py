@@ -118,6 +118,7 @@ class LightingBackendProbeTests(unittest.TestCase):
         self.assertFalse(model.choose_backend([ready])['executableWriteGate'])
 
     def test_real_fixture_worker_timeout_and_malformed_output(self):
+        (ROOT / 'audit_artifacts').mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(dir=ROOT / 'audit_artifacts') as tmp:
             out = Path(tmp) / 'fixture.jsonl'
             r = run.supervise([sys.executable, '-c', 'import time;time.sleep(2)'], out, .1)
@@ -126,6 +127,18 @@ class LightingBackendProbeTests(unittest.TestCase):
             self.assertTrue(r['malformedOrExcessiveOutput'])
             r = run.supervise([sys.executable, '-c', 'import sys;sys.stdout.buffer.write(b"x"*(5*1024*1024))'], out, 2)
             self.assertTrue(r['malformedOrExcessiveOutput']); self.assertEqual(r['records'], [])
+
+    def test_fixture_worker_creates_scratch_directory_on_fresh_checkout(self):
+        scratch = ROOT / 'audit_artifacts'
+        scratch.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=scratch) as tmp:
+            fresh = Path(tmp) / 'clean-checkout'
+            fresh.mkdir()
+            self.assertFalse((fresh / 'audit_artifacts').exists())
+            with patch.dict(globals(), {'ROOT': fresh}), patch.object(run, 'ROOT', fresh):
+                self.test_real_fixture_worker_timeout_and_malformed_output()
+            self.assertTrue((fresh / 'audit_artifacts').is_dir())
+            self.assertEqual(list((fresh / 'audit_artifacts').iterdir()), [])
 
     def test_source_guards_and_immutable_dispatch_allowlist(self):
         for symbol in ('SwitchMode', 'ReleaseControl', 'SetLedMatrix', 'Apply', 'put_Color', 'FromIdAsync', 'SetColors', 'CreateFileMappingW', 'SetEvent', 'FILE_MAP_WRITE', 'DeviceIoControl'):
