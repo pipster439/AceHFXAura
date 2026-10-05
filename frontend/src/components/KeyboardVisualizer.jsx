@@ -18,7 +18,8 @@ export default function KeyboardVisualizer({
   onToggleKeySelection,
   bgColor,
   fpsVal = 25,
-  blocklyFrame
+  blocklyFrame,
+  localSimulation = false
 }) {
   const containerRef = useRef(null);
   const blocklyFrameRef = useRef(blocklyFrame);
@@ -53,6 +54,7 @@ export default function KeyboardVisualizer({
   }, []);
 
   const triggerKeyAction = (keyName) => {
+    if (localSimulation) return;
     if (activeTab === 'perkey') {
       onToggleKeySelection(keyName);
       return;
@@ -87,6 +89,7 @@ export default function KeyboardVisualizer({
 
   // 全局物理按键捕获
   useEffect(() => {
+    if (localSimulation) return;
     const handleKeyDown = (e) => {
       if (['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) return;
       const keyName = CODE_TO_KEY_MAP[e.code] || (e.key ? e.key.toUpperCase() : null);
@@ -114,7 +117,7 @@ export default function KeyboardVisualizer({
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [activeTab]);
+  }, [activeTab, localSimulation]);
 
   // 60 FPS 动态帧仿真与节能挂起
   useEffect(() => {

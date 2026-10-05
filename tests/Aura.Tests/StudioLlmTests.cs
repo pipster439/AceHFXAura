@@ -105,10 +105,12 @@ public class StudioLlmTests
     [TestMethod]
     public void AssistantContextAndReplyAreStrictAndSecretFiltered() {
         var context = JsonSerializer.Serialize(new { intent = "modify", name = "fixture", publication = new { mode = "continuous", fade_out_ms = 0 },
+            capabilities = new { schema_version = 1, inputs = Array.Empty<string>(), outputs = new[] { "keyboard_rgb" }, features = new[] { "simulation_supported" }, gsi_fields = Array.Empty<string>(), diagnostics = Array.Empty<string>() },
             nodes = new[] { new { node_id = "n0", type = "math_number", parent = "color_rgb", input = "R", value = 0, min = 0, max = 255 } },
             presets = new[] { new { id = "template_smooth_breath", name = "模板", description = "双色", tags = new[] { "光效" }, required_inputs = Array.Empty<string>(), capabilities = new[] { "blockly" } } }, diagnostic = "", diagnostic_kind = "none" });
         var safe = StudioAssistantContracts.Context(context, Secret + @" C:\Users\fixture\test", Secret);
         Assert.DoesNotContain(Secret, safe); Assert.DoesNotContain("Users", safe);
+        Assert.ThrowsExactly<StudioLlmException>(() => StudioAssistantContracts.Context(context.Replace("keyboard_rgb", "hid_write"), "prompt", Secret));
         Assert.ThrowsExactly<StudioLlmException>(() => StudioAssistantContracts.Context(context.Replace("\"intent\":\"modify\"", "\"intent\":\"publish\""), "prompt", Secret));
         Assert.ThrowsExactly<StudioLlmException>(() => StudioAssistantContracts.Context(context.Replace("\"name\":\"fixture\"", "\"name\":\"../file\""), "prompt", Secret));
         var reply = "{\"action\":\"propose\",\"summary\":\"调整\",\"preset\":null,\"edits\":[{\"node_id\":\"n0\",\"value\":2}]}";

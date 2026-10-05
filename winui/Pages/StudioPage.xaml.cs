@@ -84,6 +84,7 @@ public sealed partial class StudioPage : Page
                 return;
             }
             await StudioWebView.EnsureCoreWebView2Async();
+            if (!_initialized) await StudioWebView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync("sessionStorage.removeItem('aura-effect-draft');");
             if (_closed || !_active) return;
 #if DEBUG
             StudioWebView.CoreWebView2.Settings.AreDevToolsEnabled = true;
@@ -108,9 +109,10 @@ public sealed partial class StudioPage : Page
     private void PostAssistant(object message) {
         if (!_closed && StudioWebView.CoreWebView2 != null) StudioWebView.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(message));
     }
-    private void StudioMessageReceived(CoreWebView2 sender, CoreWebView2WebMessageReceivedEventArgs args)
+    private async void StudioMessageReceived(CoreWebView2 sender, CoreWebView2WebMessageReceivedEventArgs args)
     {
         if (_closed || !StudioShellModel.TrustedSource(args.Source)) return;
+        if (await ReceivePersistenceAsync(args.WebMessageAsJson)) return;
         if (ReceiveAssistantMessage(args.WebMessageAsJson)) return;
         if (!_shell.Receive(args.WebMessageAsJson)) return;
         ProjectStatus.Text = $"{_shell.Name} · {_shell.Lifecycle}";
@@ -123,15 +125,45 @@ public sealed partial class StudioPage : Page
         SaveCommand.IsEnabled = PreviewCommand.IsEnabled = BuildCommand.IsEnabled = PublishCommand.IsEnabled = enabled;
         _settingProjects = true;
         try {
-            if (RecentProjects.ItemsSource is not IReadOnlyList<string> current || !current.SequenceEqual(_shell.Projects)) RecentProjects.ItemsSource = _shell.Projects;
+            var projects = PersistentProjects();
+            if (RecentProjects.ItemsSource is not IReadOnlyList<string> current || !current.SequenceEqual(projects)) RecentProjects.ItemsSource = projects;
             if (RecentProjects.SelectedItem as string != _shell.Name) RecentProjects.SelectedItem = _shell.Name;
         }
         finally { _settingProjects = false; }
     }
+    private StudioRecentStore? _recentStore;
+    private string? _lastRecentProject;
+    private IReadOnlyList<string> PersistentProjects() {
+        // Do not prune the saved list from an unloaded catalog or Automation page.
+        if (_shell.WorkType != "effect" || _shell.Projects.Count == 0) return _shell.Projects;
+        try {
+            _recentStore ??= new(RuntimeLayoutResolver.DataRoot);
+            var opened = _shell.WorkType == "effect" && _shell.Projects.Contains(_shell.Name) && _lastRecentProject != _shell.Name ? _shell.Name : null;
+            _lastRecentProject = _shell.Name;
+            return _recentStore.Order(_shell.Projects, opened);
+        } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or StudioPersistenceException) {
+            PostStorage(new { type = "studio_storage_status", name = _shell.Name, text = "最近工程记录不可用；现有工程仍可打开。" });
+            return _shell.Projects;
+        }
+    }
+    private void ClearRecent_Click(object sender, RoutedEventArgs args) {
+        try {
+            (_recentStore ??= new(RuntimeLayoutResolver.DataRoot)).Clear();
+            _settingProjects = true;
+            try { RecentProjects.ItemsSource = _shell.Projects; RecentProjects.SelectedItem = _shell.Name; }
+            finally { _settingProjects = false; }
+            PostStorage(new { type = "studio_storage_status", name = _shell.Name, text = "最近工程记录已清除。" });
+        } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or StudioPersistenceException) {
+            PostStorage(new { type = "studio_storage_status", name = _shell.Name, text = "最近工程记录未能清除。" });
+        }
+    }
     private void StudioCommand_Click(object sender, RoutedEventArgs args)
     {
         if (sender is AppBarButton { Tag: string command } && !_closed && _initialized)
+        {
+            if (command == "bench") { AiPanel.Visibility = Visibility.Collapsed; AdaptAssistant(); }
             StudioWebView.CoreWebView2.PostWebMessageAsJson(StudioShellModel.Command(command));
+        }
     }
     private void ProjectSelection_Changed(object sender, SelectionChangedEventArgs args)
     {

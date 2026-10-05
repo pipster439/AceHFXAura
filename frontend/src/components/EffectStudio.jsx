@@ -1,4 +1,4 @@
-import { assistantContext, parseProposal, StudioProposalSession, loadAiSnapshot } from '../utils/studioAssistant.js';
+import { assistantContext, parseProposal, StudioProposalSession, loadAiSnapshot, validateCandidate } from '../utils/studioAssistant.js';
 import { listenStudioCommands, postStudioState } from '../utils/studioHost.js';
 import { normalizePublication } from '../blockly/publication.js';
 import { stageEffect, buildEffect, effectConfig, getEffectLifecycleStatus, fetchPublishReadiness } from '../utils/applyEffect.js';
@@ -10,6 +10,9 @@ import { DEFAULT_INJECT_OPTIONS } from '../blockly/theme';
 import { EFFECT_STUDIO_TOOLBOX } from '../blockly/toolboxes';
 import { CppTranspiler } from '../blockly/cppTranspiler';
 import { JsTranspiler, PREVIEW_68_KEYS } from '../blockly/jsTranspiler';
+import TestBench from './StudioTestBench';
+import { createStudioStorage, durableStudioDraft } from '../utils/studioStorage.js';
+import { CAPABILITY_LABELS, CAPABILITY_DIAGNOSTICS, deriveEffectCapabilities } from '../utils/effectCapabilities.js';
 import { EFFECT_PRESETS } from '../blockly/presets';
 import { 
   Play, 
@@ -42,6 +45,54 @@ export default function EffectStudio({
 }) {
   const aiRequestRef = useRef(null);
   const aiSessionRef = useRef(new StudioProposalSession());
+  const [benchOpen, setBenchOpen] = useState(false);
+  const storageRef = useRef(null); const observedRef = useRef(null); const observeSequence = useRef(0);
+  const configLoadedRef = useRef(!!config); const aiApplyingRef = useRef(false);
+  const [storageStatus, setStorageStatus] = useState(''); const [recovery, setRecovery] = useState(null);
+  const [snapshots, setSnapshots] = useState([]); const [snapshotId, setSnapshotId] = useState('');
+  const [capabilityManifest, setCapabilityManifest] = useState(null);
+  const currentDraft = () => ({ name: effectNameRef.current, publication: publicationRef.current, json: Blockly.serialization.workspaces.save(workspaceRef.current) });
+  const openBench = () => { if (!isCompiling && workspaceRef.current) { setIsPlaying(false); setBenchOpen(true); } };
+  const queueDraft = () => {
+    if (embedded && observedRef.current === effectNameRef.current && workspaceRef.current)
+      storageRef.current?.request('autosave', currentDraft()).then(r => setStorageStatus(r.text)).catch(e => setStorageStatus(e.message));
+  };
+  const observeDraft = () => {
+    if (!embedded || !storageRef.current || !config) return;
+    const name = effectNameRef.current, seq = ++observeSequence.current; observedRef.current = null;
+    setRecovery(null); setSnapshots([]); setSnapshotId('');
+    try {
+      storageRef.current.request('observe', durableStudioDraft(config, name)).then(r => {
+        if (seq !== observeSequence.current) return;
+        observedRef.current = name; setRecovery(r.recovery); setSnapshots(r.snapshots || []);
+        if (!r.recovery) queueDraft(); else { setIsPlaying(false); setBenchOpen(false); setStorageStatus('可恢复草稿：由你决定恢复或放弃。'); }
+      }).catch(e => setStorageStatus(e.message));
+    } catch (e) { setStorageStatus(e.message); }
+  };
+  const checkpointDraft = async reason => {
+    if (!embedded) throw new Error('发布前快照需要 Aura 桌面宿主。');
+    const result = await storageRef.current.request('snapshot', currentDraft(), { reason }); setSnapshots(result.snapshots || []);
+  };
+  const restoreDraft = async (operation, extra = {}) => {
+    if (isCompiling) return;
+    setIsCompiling(true);
+    try {
+      const result = await storageRef.current.request(operation, currentDraft(), extra);
+      const draft = result.draft; if (draft.name !== effectNameRef.current) throw new Error('恢复工程与当前工程不一致');
+      // Validate before replacing the current draft; no config/publish call.
+      validateCandidate(draft);
+      setIsPlaying(false); setBenchOpen(false); loadAiSnapshot(workspaceRef.current, draft.json);
+      publicationRef.current = normalizePublication(draft.publication); setPublication(publicationRef.current);
+      compiledJsRef.current = JsTranspiler.compile(workspaceRef.current, publicationRef.current);
+      setRecovery(null); aiSessionRef.current = new StudioProposalSession(); queueDraft(); setStorageStatus('已恢复至草稿；尚未保存或发布。');
+      if (aiRequestRef.current) window.chrome?.webview?.postMessage({ type: 'studio_ai_applied', request_id: aiRequestRef.current.id, text: '快照已恢复为草稿；发布状态保持不变。', undo: false });
+    } catch (e) { setStorageStatus(e.message); }
+    finally { setIsCompiling(false); }
+  };
+  const discardRecovery = async () => {
+    try { await storageRef.current.request('discard', currentDraft()); setRecovery(null); setStorageStatus('可恢复草稿已放弃。'); }
+    catch (e) { setStorageStatus(e.message); }
+  };
   const blocklyDivRef = useRef(null);
   const workspaceRef = useRef(null);
   useLayoutEffect(() => { if (overlayOpen) return dismissForOverlay(workspaceRef.current); }, [overlayOpen]);
@@ -108,6 +159,7 @@ export default function EffectStudio({
   // 初始化 Blockly 画布
   useEffect(() => {
     registerCustomBlocks();
+    if (embedded) storageRef.current = createStudioStorage(window.chrome?.webview, m => { if (m.name === effectNameRef.current) setStorageStatus(m.text); });
     if (!blocklyDivRef.current) return;
 
     const ws = Blockly.inject(blocklyDivRef.current, {
@@ -135,6 +187,7 @@ export default function EffectStudio({
 
     const onWorkspaceChange = (event) => {
       if (event?.isUiEvent) return;
+      setCapabilityManifest(deriveEffectCapabilities(currentDraft()));
       try {
         compiledJsRef.current = JsTranspiler.compile(ws, publicationRef.current);
         previewClockRef.current = { elapsed: 0, last: null };
@@ -144,10 +197,12 @@ export default function EffectStudio({
         compiledJsRef.current = null;
         setEditError(err.message);
       }
+      if (event?.recordUndo !== false && event) queueDraft();
     };
 
     ws.addChangeListener(onWorkspaceChange);
     onWorkspaceChange();
+    observeDraft();
 
     const handleResize = () => Blockly.svgResize(ws);
     window.addEventListener('resize', handleResize);
@@ -160,15 +215,19 @@ export default function EffectStudio({
       try { if (!legacyWorkspaceBlockedRef.current) sessionStorage.setItem('aura-effect-draft', JSON.stringify({ name: effectNameRef.current, publication: publicationRef.current, json: Blockly.serialization.workspaces.save(ws) })); } catch {}
       ws.dispose();
       workspaceRef.current = null;
+      storageRef.current?.dispose(); storageRef.current = null;
     };
   }, []);
 
   // 当 activeEffectName 从外部改变时载入
   useEffect(() => {
-    if (activeEffectName && activeEffectName !== effectNameRef.current && workspaceRef.current) {
+    if (activeEffectName && workspaceRef.current && (activeEffectName !== effectNameRef.current || !configLoadedRef.current && config)) {
+      configLoadedRef.current = !!config;
+      setBenchOpen(false);
       const effectData = config?.blockly_effects?.[activeEffectName];
       publicationRef.current = normalizePublication(effectData?.publication); setPublication(publicationRef.current);
-      workspaceRef.current.clear();
+      Blockly.Events.disable();
+      try { workspaceRef.current.clear();
       if (effectData?.blockly_json) {
         try { loadSafeWorkspaceJson(effectData.blockly_json, workspaceRef.current); legacyWorkspaceBlockedRef.current = false; setLegacyWorkspaceError(null); }
         catch (err) { legacyWorkspaceBlockedRef.current = true; setLegacyWorkspaceError(err.message); }
@@ -176,9 +235,12 @@ export default function EffectStudio({
         legacyWorkspaceBlockedRef.current = false;
         setLegacyWorkspaceError(null);
       }
+      } finally { Blockly.Events.enable(); }
       setBuildResult('尚未构建'); setPluginLoadStatus(effectData?.applied_plugin_name ? '已有发布记录' : '未发布');
       setEffectName(activeEffectName);
       effectNameRef.current = activeEffectName;
+      setCapabilityManifest(deriveEffectCapabilities(currentDraft()));
+      observeDraft();
     }
   }, [activeEffectName, config]);
 
@@ -198,6 +260,7 @@ export default function EffectStudio({
         compiledJsRef.current = JsTranspiler.compile(workspaceRef.current, publication);
         previewClockRef.current = { elapsed: 0, last: null };
       }
+    queueDraft();
   }, [effectName, publication]);
 
   // 25~60 FPS 实时渲染循环
@@ -295,6 +358,7 @@ export default function EffectStudio({
   const saveWorkspace = async (apply) => {
     if (!workspaceRef.current || !onSaveConfig || isCompiling) return;
     if (legacyWorkspaceError) { showToast?.(legacyWorkspaceError, 'error'); return; }
+    if (recovery) { showToast?.('请先恢复或放弃可恢复草稿。', 'error'); return; }
     const name = effectName.trim();
     if (!/^[a-zA-Z_][a-zA-Z0-9_]{0,47}$/.test(name)) {
       showToast?.('名称需以字母或下划线开头，最多 48 个字符', 'error'); return;
@@ -304,12 +368,14 @@ export default function EffectStudio({
       const json = Blockly.serialization.workspaces.save(workspaceRef.current);
       let build;
       if (apply) {
+        if (embedded) await checkpointDraft('before_publish');
         setBuildResult('正在构建并发布…'); setPluginLoadStatus('等待发布确认'); setCompilerLog('正在准备发布光效…');
         build = await stageEffect(name, workspaceRef.current, CppTranspiler, setCompilerLog, publication);
       }
       const next = effectConfig(config, name, json, build, publication);
       const ok = await onSaveConfig(next, apply ? config : undefined);
       if (!ok) throw new Error('配置保存失败，请重试；原有运行版本保留');
+      if (embedded) { const result = await storageRef.current.request('saved', currentDraft()); setStorageStatus(result.text); setSnapshots(result.snapshots || []); }
       setCompilerSuccess(true);
       if (apply) { setBuildResult('构建通过'); setPluginLoadStatus('daemon 已确认加载'); }
       if (apply) setIsPlaying(false);
@@ -330,28 +396,29 @@ export default function EffectStudio({
   };
   useEffect(() => embedded ? listenStudioCommands(window.chrome?.webview, {
     save: () => saveWorkspace(false), publish: () => { if (!editError) saveWorkspace(true); },
-    build: handleBuild, preview: () => { if (!isCompiling) setIsPlaying(v => !v); },
+    build: handleBuild, bench: openBench, preview: () => { if (!isCompiling && !benchOpen) setIsPlaying(v => !v); },
     details: () => setIsCodeModalOpen(true),
     validate: () => {
       try { CppTranspiler.transpile(effectName, workspaceRef.current, publication); JsTranspiler.compile(workspaceRef.current, publication); setEditError(null); }
       catch (err) { setEditError(err.message); }
     }
-  }) : undefined, [embedded, effectName, publication, config, isCompiling, editError, legacyWorkspaceError]);
+  }) : undefined, [embedded, effectName, publication, config, isCompiling, editError, legacyWorkspaceError, benchOpen, recovery]);
   useEffect(() => {
     onShellState?.({ name: effectName, playing: isPlaying, busy: isCompiling,
-      validation: legacyWorkspaceError || editError || '验证通过',
+      validation: legacyWorkspaceError || editError || capabilityManifest?.diagnostics.map(c => CAPABILITY_DIAGNOSTICS[c]).join(' ') || '验证通过',
       build: buildResult, plugin: pluginLoadStatus,
       lifecycle: getEffectLifecycleStatus(config?.blockly_effects?.[effectName]).label,
       diagnostics: (compilerLog || '').slice(0, 16384) });
-  }, [effectName, isPlaying, isCompiling, buildResult, pluginLoadStatus, compilerSuccess, compilerLog, editError, legacyWorkspaceError, config, onShellState]);
+  }, [effectName, isPlaying, isCompiling, buildResult, pluginLoadStatus, compilerSuccess, compilerLog, editError, legacyWorkspaceError, capabilityManifest, config, onShellState]);
 
   useEffect(() => {
     if (!embedded || !window.chrome?.webview) return;
     const webview = window.chrome.webview;
-    const receive = event => {
+    const receive = async event => {
       const m = event.data;
       if (m?.type === 'studio_ai_context' && /^[a-f0-9]{32}$/.test(m.request_id || '') && ['generate', 'modify', 'explain', 'error_analysis'].includes(m.intent)) {
-        if (isCompiling || !workspaceRef.current) return;
+        if (isCompiling || !workspaceRef.current || aiApplyingRef.current) return;
+        aiApplyingRef.current = true;
         try {
           const snapshot = { name: effectNameRef.current, publication: publicationRef.current, json: Blockly.serialization.workspaces.save(workspaceRef.current) };
           let intent = m.intent;
@@ -382,7 +449,10 @@ export default function EffectStudio({
         const current = () => ({ name: effectNameRef.current, publication: publicationRef.current, json: Blockly.serialization.workspaces.save(workspaceRef.current) });
         try {
           if (m.type === 'studio_ai_reject') { aiSessionRef.current.reject(); webview.postMessage({ type: 'studio_ai_applied', request_id: m.request_id, text: '建议已放弃。', undo: !!aiSessionRef.current.undoState }); return; }
+          if (recovery) throw new Error('请先恢复或放弃可恢复草稿。');
+          if (m.type === 'studio_ai_apply') await checkpointDraft('before_ai_apply');
           const next = m.type === 'studio_ai_apply' ? aiSessionRef.current.apply(current()) : aiSessionRef.current.undo(current());
+          setBenchOpen(false);
           // Pause streaming before replacing a draft; proposal preview itself is local-only.
           setIsPlaying(false);
           {
@@ -395,11 +465,12 @@ export default function EffectStudio({
           if (m.type === 'studio_ai_apply') aiSessionRef.current.markApplied(current());
           webview.postMessage({ type: 'studio_ai_applied', request_id: m.request_id, text: m.type === 'studio_ai_apply' ? '已应用至草稿；预览已暂停。可撤销或保存草稿。' : 'AI 修改已撤销。', undo: m.type === 'studio_ai_apply' });
         } catch (err) { webview.postMessage({ type: 'studio_ai_applied', request_id: m.request_id, text: err.message, undo: !!aiSessionRef.current.undoState }); }
+        finally { aiApplyingRef.current = false; }
       }
     };
     webview.addEventListener('message', receive);
     return () => webview.removeEventListener('message', receive);
-  }, [embedded, isCompiling, compilerSuccess, compilerLog, compilerFailureStage, editError, legacyWorkspaceError]);
+  }, [embedded, isCompiling, compilerSuccess, compilerLog, compilerFailureStage, editError, legacyWorkspaceError, recovery]);
 
   const handleCompileAndReload = () => saveWorkspace(true);
   const handleSaveToConfig = () => saveWorkspace(false);
@@ -409,7 +480,20 @@ export default function EffectStudio({
 
   return (
     <div className={`flex flex-col gap-3 p-1 h-full ${embedded ? 'min-h-[320px]' : 'min-h-[560px]'}`}>
+      {embedded && <div className="shrink-0 flex flex-wrap items-center gap-2 text-xs" data-studio-storage>
+        <span data-autosave-status role="status">{storageStatus || '草稿自动保存就绪'}</span>
+        {recovery && <div role="alert" data-recovery-offer className="flex flex-wrap gap-2"><strong>可恢复草稿 · {new Date(recovery.updated_utc).toLocaleString()}</strong>
+          <button data-recovery-restore onClick={() => restoreDraft('restore_recovery')}>恢复草稿</button><button data-recovery-discard onClick={discardRecovery}>放弃恢复</button></div>}
+        <select aria-label="草稿快照" data-studio-snapshots value={snapshotId} onChange={e => setSnapshotId(e.target.value)}><option value="">选择快照（{snapshots.length}）</option>
+          {snapshots.map(s => <option key={s.id} value={s.id}>{s.reason === 'before_ai_apply' ? 'AI 应用前' : '发布前'} · {new Date(s.created_utc).toLocaleString()}</option>)}</select>
+        <button data-snapshot-restore disabled={!snapshotId || !!recovery || isCompiling} onClick={() => restoreDraft('restore_snapshot', { snapshot_id: snapshotId })}>恢复快照至草稿</button>
+      </div>}
+      {capabilityManifest && <div data-effect-capabilities className="shrink-0 text-xs text-md-on-surface-variant">
+        工程输入：{capabilityManifest.inputs.map(c => CAPABILITY_LABELS[c]).join('、') || '无需外部输入'} · 输出：{capabilityManifest.outputs.map(c => CAPABILITY_LABELS[c]).join('、') || '无'}
+        {capabilityManifest.diagnostics.map(code => <p role="alert" key={code}>{CAPABILITY_DIAGNOSTICS[code]}</p>)}
+      </div>}
       <div className="flex shrink-0 flex-wrap items-center gap-2 rounded-md-lg border border-md-primary/40 bg-md-primary-container/30 px-3 py-2 text-xs text-md-on-surface" aria-label="当前光效生命周期">
+        {!embedded && <button onClick={openBench} disabled={isCompiling}>测试台</button>}
         <strong className="font-mono">{effectName}</strong>
         <span className={`rounded-md-full border px-2 py-0.5 font-semibold ${lifecycle.badgeClass}`}>{lifecycle.label}</span>
         <button type="button" aria-expanded={showLifecycleControls} onClick={() => setShowLifecycleControls(!showLifecycleControls)} className="rounded-md-full border border-md-primary bg-md-primary-container px-2 py-1 font-bold text-md-on-primary-container">
@@ -475,6 +559,7 @@ export default function EffectStudio({
           {EFFECT_PRESETS.map((p) => (
             <button
               key={p.id}
+              title={`${p.description} · 输入：${p.manifest.inputs.map(c => CAPABILITY_LABELS[c]).join('、') || '无'}`}
               onClick={() => handleLoadPreset(p)}
               className="h-8 px-3 text-xs font-medium bg-md-surface-container border border-md-outline-variant rounded-md-full hover:bg-md-surface-container-high active:scale-95 transition-all cursor-pointer text-md-on-surface"
             >
@@ -603,7 +688,8 @@ export default function EffectStudio({
       </div>}
       </div>
       {/* Google Blockly 主画布 */}
-      <div className="flex-1 min-h-[240px] w-full relative rounded-md-lg overflow-hidden border border-md-outline-variant shadow-md-level1 bg-md-surface-container-low">
+      {benchOpen && <TestBench getProject={currentDraft} onClose={() => setBenchOpen(false)}/>}
+      <div inert={recovery ? '' : undefined} className={`${benchOpen ? 'hidden' : 'flex-1'} min-h-[240px] w-full relative rounded-md-lg overflow-hidden border border-md-outline-variant shadow-md-level1 bg-md-surface-container-low`}>
         <div ref={blocklyDivRef} className="absolute inset-0 w-full h-full" />
       </div>
 

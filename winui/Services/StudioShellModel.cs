@@ -9,7 +9,6 @@ public sealed class StudioShellModel
     public string Validation { get; private set; } = "等待编辑器";
     public string Build { get; private set; } = "尚未构建";
     public string Plugin { get; private set; } = "未发布";
-    private readonly List<string> _recent = [];
     public string Lifecycle { get; private set; } = "草稿";
     public bool Playing { get; private set; }
     public bool Busy { get; private set; }
@@ -19,7 +18,7 @@ public sealed class StudioShellModel
         uri.Scheme == "http" && uri.Host == "127.0.0.1" && uri.Port == 19898;
     public static string Command(string command, string? name = null)
     {
-        if (command is not ("new" or "open" or "select" or "save" or "preview" or "validate" or "build" or "publish" or "details"))
+        if (command is not ("new" or "open" or "select" or "save" or "preview" or "validate" or "build" or "publish" or "details" or "bench"))
             throw new ArgumentOutOfRangeException(nameof(command));
         if (name?.Length > 128) throw new ArgumentOutOfRangeException(nameof(name));
         return name == null ? JsonSerializer.Serialize(new { type = "studio_command", command }) :
@@ -42,8 +41,7 @@ public sealed class StudioShellModel
             var playing = m.GetProperty("playing").GetBoolean(); var busy = m.GetProperty("busy").GetBoolean();
             Name = name; WorkType = kind; Validation = validation; Build = build; Lifecycle = lifecycle;
             Diagnostics = diagnostics; Plugin = plugin;
-            if (kind == "effect" && projects.Contains(name)) { _recent.Remove(name); _recent.Insert(0, name); if (_recent.Count > 8) _recent.RemoveAt(8); }
-            Projects = _recent.Where(projects.Contains).Concat(projects.Where(p => !_recent.Contains(p))).ToArray(); Playing = playing; Busy = busy;
+            Projects = projects; Playing = playing; Busy = busy;
             return true;
         }
         catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException or ArgumentException) { return false; }

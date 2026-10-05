@@ -1,5 +1,5 @@
 // Native UI is a command surface; the retained editor remains the document owner.
-export const STUDIO_COMMANDS = Object.freeze(['new', 'open', 'select', 'save', 'preview', 'validate', 'build', 'publish', 'details']);
+export const STUDIO_COMMANDS = Object.freeze(['new', 'open', 'select', 'save', 'preview', 'validate', 'build', 'publish', 'details', 'bench']);
 export function listenStudioCommands(webview, handlers) {
   if (!webview?.addEventListener) return () => {};
   const receive = event => {

@@ -14,6 +14,8 @@ from pathlib import Path
 import subprocess
 import tempfile
 import threading
+import shutil
+import hashlib
 import time
 import urllib.request
 
@@ -32,6 +34,13 @@ def main():
     generated = subprocess.check_output(['node', '--input-type=module', '-e',
         "import {EFFECT_PRESETS} from './src/blockly/presets.js';console.log(JSON.stringify(EFFECT_PRESETS[0].blocklyJson));"], cwd=repo / 'frontend')
     config['blockly_effects'] = {'fixture': {'name': 'fixture', 'version': 2, 'publication': {'mode': 'continuous', 'fade_out_ms': 0}, 'blockly_json': json.loads(generated)}}
+    health = subprocess.check_output(['node', '--input-type=module', '-e',
+        "import {EFFECT_PRESETS} from './src/blockly/presets.js';console.log(JSON.stringify(EFFECT_PRESETS.find(p=>p.manifest.gsi_fields.includes('player.state.health')).blocklyJson));"], cwd=repo / 'frontend')
+    config['blockly_effects']['fixture_health'] = {'name': 'fixture_health', 'version': 2, 'publication': {'mode': 'continuous', 'fade_out_ms': 0}, 'blockly_json': json.loads(health)}
+    def authority(value):
+        return {**{k: value.get(k) for k in ('profiles', 'default_profile', 'orchestration')},
+            'publication_records': {k: {f: v for f, v in effect.items() if f.startswith(('applied_', 'published_'))} for k, effect in value.get('blockly_effects', {}).items()}}
+    original_authority = authority(config)
     requests = []
     class Mock(BaseHTTPRequestHandler):
         def log_message(self, *args): pass
@@ -46,27 +55,27 @@ def main():
             context = json.loads(data['messages'][1]['content'])
             studio = context['studio']; prompt = context['prompt']
             requests.append({'intent': studio['intent'], 'diagnostic_kind': studio['diagnostic_kind'], 'diagnostic': studio['diagnostic'],
-                'context_keys': sorted(studio), 'node_count': len(studio['nodes']), 'structured_output': data.get('response_format', {}).get('type')})
+                'context_keys': sorted(studio), 'node_count': len(studio['nodes']), 'capabilities': studio['capabilities'], 'preset_ids': [p['id'] for p in studio['presets']], 'structured_output': data.get('response_format', {}).get('type')})
             proposal = {'action': 'explain', 'summary': 'mock：C2039 表示成员不存在；建议检查支持的积木 API。', 'preset': None, 'edits': []}
             if studio['intent'] == 'modify':
                 node = next(n for n in studio['nodes'] if n['input'] == 'PERIOD_SEC')
-                proposal = {'action': 'propose', 'summary': '将周期从 3 秒调整为 2 秒。', 'preset': None, 'edits': [{'node_id': node['node_id'], 'value': 2}]}
+                proposal = {'action': 'propose', 'summary': '将当前周期调整为 2 秒。', 'preset': None, 'edits': [{'node_id': node['node_id'], 'value': 2}]}
             if 'invalid-action' in prompt: proposal['action'] = 'publish'
             body = json.dumps({'choices': [{'finish_reason': 'stop', 'message': {'content': json.dumps(proposal, ensure_ascii=False)}}]}).encode()
             self.send_response(200); self.send_header('Content-Type', 'application/json'); self.send_header('Content-Length', str(len(body))); self.end_headers(); self.wfile.write(body)
     server = ThreadingHTTPServer(('127.0.0.1', 0), Mock)
     thread = threading.Thread(target=server.serve_forever, daemon=True); thread.start()
-    with tempfile.TemporaryDirectory(prefix='aura-studio-ai-') as directory:
-        root = Path(directory); (root / '.aura-studio-ai-fixture').write_text('local mock only')
+    with tempfile.TemporaryDirectory(prefix='aura-studio-tooling-') as directory:
+        root = Path(directory); (root / '.aura-studio-tooling-fixture').write_text('local mock only')
         path = root / 'config.json'; path.write_text(json.dumps(config), encoding='utf-8')
         env = os.environ.copy(); env.update(AURA_DATA_ROOT=str(root), AURA_DEV_ROOT=str(repo), AURA_DEV_BIN=str(binaries), AURA_MAGNETIC_VALIDATION_OFFLINE='1',
-            AURA_STUDIO_AI_VALIDATION_DIR=str(output), AURA_STUDIO_AI_MOCK_URL=f'http://127.0.0.1:{server.server_port}/v1/', AURA_STUDIO_AI_CAPTURE='1' if args.capture else '0')
+            AURA_STUDIO_TOOLING_DIR=str(output), AURA_STUDIO_AI_MOCK_URL=f'http://127.0.0.1:{server.server_port}/v1/', AURA_STUDIO_AI_CAPTURE='1' if args.capture else '0')
         # Use current built frontend; never overwrite tracked web/index.html.
-        web_root = repo / 'build/alpha8/frontend'
+        web_root = repo / 'build/alpha8_tooling/frontend'
         kernel = ctypes.WinDLL('kernel32', use_last_error=True)
         kernel.CreateEventW.argtypes = [wintypes.LPVOID, wintypes.BOOL, wintypes.BOOL, wintypes.LPCWSTR]; kernel.CreateEventW.restype = wintypes.HANDLE
         kernel.SetEvent.argtypes = [wintypes.HANDLE]; kernel.CloseHandle.argtypes = [wintypes.HANDLE]
-        event_name = 'Local\\AuraStudioAiSmoke-' + uuid.uuid4().hex
+        event_name = 'Local\\AuraStudioToolingSmoke-' + uuid.uuid4().hex
         shutdown_event = kernel.CreateEventW(None, True, False, event_name)
         if not shutdown_event: raise OSError(ctypes.get_last_error())
         core = subprocess.Popen([str(binaries / 'aura_daemon.exe'), '--dry-run', '--config', str(path), '--keymap', str(repo / 'calibrated_keymap.json'),
@@ -83,28 +92,36 @@ def main():
                 except (OSError, KeyError):
                     if core.poll() is not None or time.monotonic() >= deadline: raise RuntimeError('Dry-run fixture failed to start')
                     time.sleep(.1)
-            gui = subprocess.Popen([str(ui), '--validate-studio-ai'], cwd=root, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            if args.capture:
-                capture_deadline = time.monotonic() + 120
+            for stage in ('crash', 'recover', 'clean'):
+                env['AURA_STUDIO_TOOLING_STAGE'] = stage
                 ready = output / 'capture-ready.json'
-                while gui.poll() is None and not ready.exists():
-                    if time.monotonic() > capture_deadline: raise TimeoutError('Window capture readiness')
-                    time.sleep(.05)
-                if ready.exists() and gui.poll() is None:
-                    assert json.loads(ready.read_text())['process_id'] == gui.pid, 'Capture owner mismatch'
-                    for command, destination in [
-                        (['screenshot', '--focus', '--output', str(output / 'window-composite.png'), '--json'], 'window-capture.json'),
-                        (['inspect', '--json', '--depth', '6'], 'uia-tree.json'),
-                    ]:
-                        captured = subprocess.run(['winapp', 'ui', *command, '--on', 'local', '-a', str(gui.pid)], capture_output=True, text=True, encoding='utf-8', errors='replace')
-                        (output / destination).write_text(captured.stdout + captured.stderr, encoding='utf-8')
-                        if captured.returncode: raise RuntimeError('Window-scoped UIA capture failed; see ' + destination)
-            gui.wait(timeout=180)
-            result = json.loads((output / 'smoke-results.json').read_text(encoding='utf-8'))
-            if result['error']: raise RuntimeError(result['error'])
-            assert any(r['intent'] == 'error_analysis' and r['diagnostic_kind'] == 'build' and 'C2039' in r['diagnostic'] for r in requests), 'Error context was not carried'
-            assert all(r['context_keys'] == ['capabilities', 'diagnostic', 'diagnostic_kind', 'intent', 'name', 'nodes', 'presets', 'publication'] for r in requests)
-            print(json.dumps({'result': 'PASS', 'phases': len(result['results']), 'mock_requests': len(requests)}))
+                ready.unlink(missing_ok=True)
+                gui = subprocess.Popen([str(ui), '--validate-studio-tooling'], cwd=root, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                if args.capture and stage == 'recover':
+                    deadline = time.monotonic() + 150
+                    while gui.poll() is None and not ready.exists():
+                        if time.monotonic() > deadline: raise TimeoutError('Capture readiness')
+                        time.sleep(.05)
+                    if ready.exists() and gui.poll() is None:
+                        assert json.loads(ready.read_text())['process_id'] == gui.pid, 'Capture owner mismatch'
+                        for command, destination in [
+                            (['screenshot', '--focus', '--output', str(output / 'window-composite.png'), '--json'], 'window-capture.json'),
+                            (['inspect', '--json', '--depth', '6'], 'uia-tree.json'),
+                        ]:
+                            captured = subprocess.run(['winapp', 'ui', *command, '--on', 'local', '-a', str(gui.pid)], capture_output=True, text=True, encoding='utf-8', errors='replace')
+                            (output / destination).write_text(captured.stdout + captured.stderr, encoding='utf-8')
+                            if captured.returncode: raise RuntimeError('Owned UIA capture failed: ' + destination)
+                code = gui.wait(timeout=180)
+                result = json.loads((output / (stage + '-results.json')).read_text(encoding='utf-8'))
+                if result['error'] is not None: raise RuntimeError(result['error'] or 'Fixture failed without a message')
+                assert code == (23 if stage == 'crash' else 0), 'Unexpected fixture exit'
+                journal = root / 'Studio/drafts' / (hashlib.sha256(b'fixture').hexdigest() + '.json')
+                shutil.copyfile(journal, output / (stage + '-journal.json'))
+                assert 'fixture-only-key' not in journal.read_text(encoding='utf-8')
+                assert authority(json.loads(path.read_text(encoding='utf-8'))) == original_authority, 'Published/config authority changed automatically'
+                print(json.dumps({'stage': stage, 'result': 'PASS', 'phases': len(result['results'])}))
+            assert len(requests) == 1 and requests[0]['intent'] == 'modify', 'Unexpected external request scope'
+            assert requests[0]['capabilities']['gsi_fields'] == [] and requests[0]['capabilities']['inputs'] == ['time'], 'Unrelated GSI input entered AI context'
         finally:
             (output / 'mock-requests.json').write_text(json.dumps(requests, indent=2, ensure_ascii=False), encoding='utf-8')
             # Only test-owned processes; use the private named normal-shutdown event.

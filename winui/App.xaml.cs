@@ -63,10 +63,11 @@ public partial class App : Application
 
         // 2. 创建并激活主窗口
         var mainWindow = new MainWindow();
-        if (StudioAiValidation.Requested) Common.TrayIconManager.MinimizeToTrayEnabled = false;
+        if (StudioAiValidation.Requested || StudioToolingValidation.Requested) Common.TrayIconManager.MinimizeToTrayEnabled = false;
         _window = mainWindow;
         mainWindow.Activate();
-        if (StudioAiValidation.SettingsOnly) _ = StudioAiValidation.RunSettingsAsync(mainWindow);
+        if (StudioToolingValidation.Requested) _ = StudioToolingValidation.RunAsync(mainWindow);
+        else if (StudioAiValidation.SettingsOnly) _ = StudioAiValidation.RunSettingsAsync(mainWindow);
         else if (StudioAiValidation.FullSmoke) _ = StudioAiValidation.RunSmokeAsync(mainWindow);
         else if (Validation.LayoutValidation.Requested) _ = Validation.LayoutValidation.RunAsync(mainWindow);
         else if (Validation.StudioValidation.Requested) _ = Validation.StudioValidation.RunAsync(mainWindow);
@@ -106,6 +107,7 @@ public partial class App : Application
 
     private static async Task PerformShutdownAsync()
     {
+        await Pages.StudioPage.FlushDraftsAsync();
         try
         {
             // 1. 发送优雅停机请求并等待守护进程完成清理与退出

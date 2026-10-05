@@ -89,8 +89,8 @@ test('presets carry capabilities and each validates using both real transpilers'
     assert.ok(!ids.has(p.id)); ids.add(p.id); assert.ok(p.name && p.description && p.tags.length && p.capabilities.includes('local_simulation'));
     const value = { ...snapshot(), json: structuredClone(p.blocklyJson) };
     assert.equal(validateCandidate(value).valid, true, p.id);
-    if (JSON.stringify(p.blocklyJson).includes('gsi_')) assert.ok(p.requiredInputs.includes('gsi_player_state'));
-    if (JSON.stringify(p.blocklyJson).includes('key_decay')) assert.ok(p.requiredInputs.includes('key_press_simulation'));
+    if (JSON.stringify(p.blocklyJson).includes('gsi_')) assert.ok(p.requiredInputs.includes('cs2_gsi'));
+    if (JSON.stringify(p.blocklyJson).includes('key_decay')) assert.ok(p.requiredInputs.includes('keyboard'));
   }
   assert.ok(ids.has('template_static') && ids.has('template_reactive') && ids.has('template_gradient') && ids.has('kill_wave'));
 });
@@ -98,7 +98,7 @@ test('diagnostic entry points carry only selected error and its kind', () => {
   for (const kind of ['validation', 'build', 'plugin_load']) {
     const context = assistantContext(snapshot(), 'error_analysis', 'fixture error', kind);
     assert.equal(context.diagnostic_kind, kind); assert.equal(context.diagnostic, 'fixture error');
-    assert.deepEqual(Object.keys(context).sort(), ['diagnostic', 'diagnostic_kind', 'intent', 'name', 'nodes', 'presets', 'publication']);
+    assert.deepEqual(Object.keys(context).sort(), ['capabilities', 'diagnostic', 'diagnostic_kind', 'intent', 'name', 'nodes', 'presets', 'publication']);
   }
   assert.equal(assistantContext(snapshot(), 'modify', 'unrelated logs', 'plugin_load').diagnostic, '');
 });

@@ -19,8 +19,10 @@
             <AppBarButton x:Name="BuildCommand" Icon="Repair" Label="构建" Tag="build" Click="StudioCommand_Click" AutomationProperties.AutomationId="BuildCommand"/>
             <AppBarButton x:Name="PublishCommand" Icon="Upload" Label="发布" Tag="publish" Click="StudioCommand_Click" AutomationProperties.AutomationId="StudioPublish"/>
             <CommandBar.SecondaryCommands>
+                <AppBarButton Label="测试台" Tag="bench" Click="StudioCommand_Click" AutomationProperties.AutomationId="StudioTestBench"/>
                 <AppBarButton Label="验证" Tag="validate" Click="StudioCommand_Click" AutomationProperties.AutomationId="StudioValidate"/>
                 <AppBarButton Label="开发详情" Tag="details" Click="StudioCommand_Click" AutomationProperties.AutomationId="StudioDetails"/>
+                <AppBarButton x:Name="ClearRecentCommand" Label="清除最近记录" Click="ClearRecent_Click" AutomationProperties.AutomationId="StudioClearRecent"/>
                 <AppBarButton Label="诊断" Click="Diagnostics_Click" AutomationProperties.AutomationId="StudioDiagnostics"/>
                 <AppBarButton Label="AI 助手" Click="AssistantToggle_Click" AutomationProperties.AutomationId="StudioAssistant"/>
                 <AppBarButton Label="AI 服务设置" Click="LlmSettings_Click" AutomationProperties.AutomationId="StudioLlmSettings"/>

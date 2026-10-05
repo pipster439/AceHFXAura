@@ -25,19 +25,19 @@ internal static class StudioAiValidation
             foreach (var d in Descendants(child)) yield return d;
         }
     }
-    private static void Invoke(Button button) {
+    internal static void Invoke(Button button) {
         var peer = new Microsoft.UI.Xaml.Automation.Peers.ButtonAutomationPeer(button);
         ((Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider)peer.GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke)).Invoke();
     }
-    private static void InvokeControl(FrameworkElement control) {
+    internal static void InvokeControl(FrameworkElement control) {
         var peer = Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.CreatePeerForElement(control);
         ((Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider)peer.GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke)).Invoke();
     }
-    private static async Task Until(Func<Task<bool>> condition, string message) {
+    internal static async Task Until(Func<Task<bool>> condition, string message) {
         var deadline = DateTime.UtcNow.AddSeconds(20);
         while (!await condition()) { if (DateTime.UtcNow > deadline) throw new TimeoutException(message); await Task.Delay(50); }
     }
-    private static async Task<JsonElement> Eval(Microsoft.UI.Xaml.Controls.WebView2 view, string script) {
+    internal static async Task<JsonElement> Eval(Microsoft.UI.Xaml.Controls.WebView2 view, string script) {
         await view.EnsureCoreWebView2Async();
         using var doc = JsonDocument.Parse(await view.ExecuteScriptAsync(script)); return doc.RootElement.Clone();
     }

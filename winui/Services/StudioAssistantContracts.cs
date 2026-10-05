@@ -38,7 +38,18 @@ public static class StudioAssistantContracts
         if (json.Length > 40000 || prompt.Length is < 1 or > 4000) throw new StudioLlmException("context", "上下文或问题超过限制。");
         try {
             using var doc = JsonDocument.Parse(json, new JsonDocumentOptions { MaxDepth = 16 }); var c = doc.RootElement;
-            Fields(c, "intent", "name", "publication", "nodes", "presets", "diagnostic", "diagnostic_kind");
+            Fields(c, "intent", "name", "publication", "nodes", "presets", "diagnostic", "diagnostic_kind", "capabilities");
+            var manifest = c.GetProperty("capabilities");
+            Fields(manifest, "schema_version", "inputs", "outputs", "features", "gsi_fields", "diagnostics");
+            if (manifest.GetProperty("schema_version").GetInt32() != 1) throw new JsonException();
+            void Values(string name, params string[] allowed) {
+                var values = manifest.GetProperty(name); if (values.GetArrayLength() > allowed.Length || values.EnumerateArray().Any(v => !allowed.Contains(v.GetString()))) throw new JsonException();
+            }
+            Values("inputs", "keyboard", "cs2_gsi", "foreground_process", "time"); Values("outputs", "keyboard_rgb");
+            Values("features", "stateful", "event_driven", "simulation_supported");
+            Values("diagnostics", "unsupported_block", "foreground_automation_only", "legacy_event_pulse", "unsupported_gsi_field", "unsupported_declaration", "invalid_graph");
+            var fields = manifest.GetProperty("gsi_fields");
+            if (fields.GetArrayLength() > 128 || fields.EnumerateArray().Any(v => v.GetString() is not { Length: <= 80 } path || !Regex.IsMatch(path, "^[a-z_][a-z0-9_]*(\\.[a-z_][a-z0-9_]*)+$"))) throw new JsonException();
             var intent = c.GetProperty("intent").GetString();
             if (intent is not ("generate" or "modify" or "explain" or "error_analysis")) throw new JsonException();
             Identifier(c, "name", 48); Fields(c.GetProperty("publication"), "mode", "fade_out_ms");

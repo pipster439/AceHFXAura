@@ -2,6 +2,7 @@
  * Pre-configured Blockly Workspace Templates for Lighting Effects & Orchestration
  */
 
+import { deriveEffectCapabilities } from '../utils/effectCapabilities.js';
 export const EFFECT_PRESETS = [
   {
     id: 'template_smooth_breath',
@@ -374,8 +375,8 @@ EFFECT_PRESETS.push(
     } } } }] } }
 );
 for (const preset of EFFECT_PRESETS) {
-  const serialized = JSON.stringify(preset.blocklyJson);
-  preset.tags = serialized.includes('gsi_') ? ['CS2', '遥测'] : serialized.includes('key_decay') ? ['按键', '响应'] : ['光效', '本地预览'];
-  preset.requiredInputs = serialized.includes('gsi_') ? ['gsi_player_state'] : serialized.includes('key_decay') ? ['key_press_simulation'] : [];
+  preset.manifest = deriveEffectCapabilities(preset.blocklyJson);
+  preset.tags = preset.manifest.inputs.includes('cs2_gsi') ? ['CS2', '遥测'] : preset.manifest.inputs.includes('keyboard') ? ['按键', '响应'] : ['光效', '本地预览'];
+  preset.requiredInputs = preset.manifest.inputs.filter(x => x !== 'time');
   preset.capabilities = ['blockly', 'local_simulation', 'cpp_build'];
 }
