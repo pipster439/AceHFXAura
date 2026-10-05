@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
@@ -12,6 +13,8 @@ public sealed partial class StudioPage : Page
     private static bool _openAutomation;
     private bool _initialized, _initializing, _closed, _active, _checking;
     private string? _lastTheme;
+    private readonly StudioShellModel _shell = new();
+    private bool _settingProjects;
     private readonly DispatcherTimer _retry = new() { Interval = TimeSpan.FromSeconds(3) };
     public StudioPage()
     {
@@ -19,7 +22,7 @@ public sealed partial class StudioPage : Page
         NavigationCacheMode = NavigationCacheMode.Required; // One retained editor, preserving unsaved Blockly work.
         _host = this;
         Loaded += (_, _) => { _active = true; _retry.Start(); _ = InitializeStudioAsync(); SyncTheme(); };
-        Unloaded += (_, _) => { _active = false; _retry.Stop(); };
+        Unloaded += (_, _) => { _active = false; _retry.Stop(); _aiCancel?.Cancel(); };
         ActualThemeChanged += ThemeChanged;
         _retry.Tick += (_, _) => { if (!_initialized) _ = InitializeStudioAsync(); else _ = RefreshAvailabilityAsync(); };
     }
@@ -27,8 +30,9 @@ public sealed partial class StudioPage : Page
     {
         _openAutomation = true;
         if (_host?._initialized == true && _host.StudioWebView.CoreWebView2 != null &&
-            _host.StudioWebView.Visibility == Visibility.Visible)
+            _host.LoadingPanel.Visibility == Visibility.Collapsed)
         {
+            _host.AiPanel.Visibility = Visibility.Collapsed; _host.AdaptAssistant();
             _host.StudioWebView.CoreWebView2.PostWebMessageAsJson("{\"type\":\"open_automation\"}");
             _openAutomation = false;
         }
@@ -45,6 +49,7 @@ public sealed partial class StudioPage : Page
             StudioInfoBar.Title = DaemonSupervisor.Instance.WebSuppressed ? "工作室网页服务已被免打扰规则暂停" : "工作室网页服务暂不可用";
             StudioInfoBar.Message = "编辑器草稿保留；服务恢复后可继续保存。核心与 GSI 状态请查看原生页面。";
             StudioInfoBar.IsOpen = !ready;
+            RuntimeSummary.Text = $"核心：{(DaemonSupervisor.Instance.CoreReady ? "已连接" : "未连接")} · 工作室：{(ready ? "已连接" : "不可用")}";
         }
         catch (OperationCanceledException) { }
         finally { _checking = false; }
@@ -63,7 +68,7 @@ public sealed partial class StudioPage : Page
     }
     private async Task InitializeStudioAsync(bool force = false)
     {
-        if (_closed || !_active || _initializing || (_initialized && !force)) return;
+        if (Aura_WinUI.Validation.StudioAiValidation.SettingsOnly || _closed || !_active || _initializing || (_initialized && !force)) return;
         _initializing = true;
         try
         {
@@ -90,6 +95,8 @@ public sealed partial class StudioPage : Page
             StudioWebView.NavigationCompleted += NavigationCompleted;
             StudioWebView.CoreWebView2.NavigationStarting -= NavigationStarting;
             StudioWebView.CoreWebView2.NavigationStarting += NavigationStarting;
+            StudioWebView.CoreWebView2.WebMessageReceived -= StudioMessageReceived;
+            StudioWebView.CoreWebView2.WebMessageReceived += StudioMessageReceived;
             StudioWebView.Source = EmbeddedStudioNavigation.InitialUrl(_openAutomation ? "automation" : "studio", CurrentTheme);
             _openAutomation = false;
             _lastTheme = null;
@@ -98,6 +105,42 @@ public sealed partial class StudioPage : Page
         catch (Exception ex) { if (!_closed && _active) ShowError("工作室初始化失败：" + ex.Message + "。请确认 Microsoft WebView2 运行时已安装。"); }
         finally { _initializing = false; }
     }
+    private void PostAssistant(object message) {
+        if (!_closed && StudioWebView.CoreWebView2 != null) StudioWebView.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(message));
+    }
+    private void StudioMessageReceived(CoreWebView2 sender, CoreWebView2WebMessageReceivedEventArgs args)
+    {
+        if (_closed || !StudioShellModel.TrustedSource(args.Source)) return;
+        if (ReceiveAssistantMessage(args.WebMessageAsJson)) return;
+        if (!_shell.Receive(args.WebMessageAsJson)) return;
+        ProjectStatus.Text = $"{_shell.Name} · {_shell.Lifecycle}";
+        ValidationSummary.Text = $"{_shell.Validation} · 构建：{_shell.Build} · 插件：{_shell.Plugin}";
+        DiagnosticsText.Text = _shell.Diagnostics;
+        AskAiError.Visibility = _shell.Validation != "验证通过" || _shell.Build.Contains("失败") ? Visibility.Visible : Visibility.Collapsed;
+        PreviewCommand.Label = _shell.Playing ? "暂停预览" : "预览";
+        NewCommand.IsEnabled = OpenCommand.IsEnabled = RecentProjects.IsEnabled = !_shell.Busy;
+        var enabled = _shell.WorkType == "effect" && !_shell.Busy;
+        SaveCommand.IsEnabled = PreviewCommand.IsEnabled = BuildCommand.IsEnabled = PublishCommand.IsEnabled = enabled;
+        _settingProjects = true;
+        try {
+            if (RecentProjects.ItemsSource is not IReadOnlyList<string> current || !current.SequenceEqual(_shell.Projects)) RecentProjects.ItemsSource = _shell.Projects;
+            if (RecentProjects.SelectedItem as string != _shell.Name) RecentProjects.SelectedItem = _shell.Name;
+        }
+        finally { _settingProjects = false; }
+    }
+    private void StudioCommand_Click(object sender, RoutedEventArgs args)
+    {
+        if (sender is AppBarButton { Tag: string command } && !_closed && _initialized)
+            StudioWebView.CoreWebView2.PostWebMessageAsJson(StudioShellModel.Command(command));
+    }
+    private void ProjectSelection_Changed(object sender, SelectionChangedEventArgs args)
+    {
+        if (!_settingProjects && RecentProjects.SelectedItem is string name && _initialized && !_shell.Busy)
+            StudioWebView.CoreWebView2.PostWebMessageAsJson(StudioShellModel.Command("select", name));
+    }
+    private void Diagnostics_Click(object sender, RoutedEventArgs args) =>
+        DiagnosticsText.Visibility = DiagnosticsText.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
+
     private void NavigationStarting(CoreWebView2 sender, CoreWebView2NavigationStartingEventArgs args)
     {
         if (!Uri.TryCreate(args.Uri, UriKind.Absolute, out var uri) || uri.Scheme != "http" || uri.Host != "127.0.0.1" || uri.Port != 19898)
@@ -108,7 +151,7 @@ public sealed partial class StudioPage : Page
         if (_closed) return; // A retained page can finish navigation while another native page is visible.
         if (args.IsSuccess)
         {
-            LoadingPanel.Visibility = Visibility.Collapsed; StudioWebView.Visibility = Visibility.Visible; SyncTheme(true);
+            LoadingPanel.Visibility = Visibility.Collapsed; StudioWebView.Visibility = Visibility.Visible; AdaptAssistant(); SyncTheme(true);
             if (_openAutomation) OpenAutomation();
         }
         else { _initialized = false; ShowError("工作室加载失败：" + args.WebErrorStatus); }
@@ -120,10 +163,13 @@ public sealed partial class StudioPage : Page
     public static void CloseHost()
     {
         if (_host is not { } host || host._closed) return;
-        host._closed = true; host._retry.Stop();
+        host._closed = true; host._retry.Stop(); host._aiCancel?.Cancel(); host._llmHttp.Dispose();
         host.ActualThemeChanged -= host.ThemeChanged;
         host.StudioWebView.NavigationCompleted -= host.NavigationCompleted;
-        if (host.StudioWebView.CoreWebView2 != null) host.StudioWebView.CoreWebView2.NavigationStarting -= host.NavigationStarting;
+        if (host.StudioWebView.CoreWebView2 != null) {
+            host.StudioWebView.CoreWebView2.NavigationStarting -= host.NavigationStarting;
+            host.StudioWebView.CoreWebView2.WebMessageReceived -= host.StudioMessageReceived;
+        }
         host.StudioWebView.Close(); _host = null;
     }
 }

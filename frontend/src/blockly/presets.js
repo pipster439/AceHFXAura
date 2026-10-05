@@ -354,3 +354,28 @@ out_frame.Fill(r, g, 0);`,
     }
   }
 ];
+
+// Small compositions reuse the supported block API instead of duplicating projects.
+const number = value => ({ shadow: { type: 'math_number', fields: { NUM: value } } });
+const rgb = (r, g, b) => ({ type: 'color_rgb', inputs: { R: number(r), G: number(g), B: number(b) } });
+EFFECT_PRESETS.push(
+  { id: 'template_static', name: '静态柔光', description: '全键盘固定青色，可调整 RGB 数值。',
+    blocklyJson: { languageVersion: 0, blocks: [{ type: 'key_fill_all', inputs: { COLOR: { block: rgb(0, 100, 160) } } }] } },
+  { id: 'template_reactive', name: '按键响应', description: '逐键按下后亮起、松开后衰减；预览使用模拟按键。',
+    blocklyJson: { languageVersion: 0, blocks: [{ type: 'key_for_each', fields: { ZONE: 'all' }, inputs: { DO: { block: {
+      type: 'key_set_color', inputs: { LED_ID: { block: { type: 'geometry_coords', fields: { FIELD: 'led_id' } } },
+        COLOR: { block: { type: 'color_brightness', inputs: { COLOR: { block: rgb(0, 180, 255) }, SCALE: { block: { type: 'key_decay', inputs: { DECAY_RATE: number(3) } } } } } } }
+    } } } }] } },
+  { id: 'template_gradient', name: '简单双色渐变', description: '按横向位置在青色和紫色之间平滑过渡。',
+    blocklyJson: { languageVersion: 0, blocks: [{ type: 'key_for_each', fields: { ZONE: 'all' }, inputs: { DO: { block: {
+      type: 'key_set_color', inputs: { LED_ID: { block: { type: 'geometry_coords', fields: { FIELD: 'led_id' } } },
+        COLOR: { block: { type: 'color_lerp', inputs: { COLOR_A: { block: rgb(0, 180, 255) }, COLOR_B: { block: rgb(180, 0, 255) },
+          RATIO: { block: { type: 'math_arithmetic', fields: { OP: 'DIVIDE' }, inputs: { A: { block: { type: 'geometry_coords', fields: { FIELD: 'physical_x' } } }, B: number(16) } } } } } } }
+    } } } }] } }
+);
+for (const preset of EFFECT_PRESETS) {
+  const serialized = JSON.stringify(preset.blocklyJson);
+  preset.tags = serialized.includes('gsi_') ? ['CS2', '遥测'] : serialized.includes('key_decay') ? ['按键', '响应'] : ['光效', '本地预览'];
+  preset.requiredInputs = serialized.includes('gsi_') ? ['gsi_player_state'] : serialized.includes('key_decay') ? ['key_press_simulation'] : [];
+  preset.capabilities = ['blockly', 'local_simulation', 'cpp_build'];
+}

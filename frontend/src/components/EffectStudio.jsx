@@ -1,5 +1,7 @@
+import { assistantContext, parseProposal, StudioProposalSession, loadAiSnapshot } from '../utils/studioAssistant.js';
+import { listenStudioCommands, postStudioState } from '../utils/studioHost.js';
 import { normalizePublication } from '../blockly/publication.js';
-import { stageEffect, effectConfig, getEffectLifecycleStatus, fetchPublishReadiness } from '../utils/applyEffect.js';
+import { stageEffect, buildEffect, effectConfig, getEffectLifecycleStatus, fetchPublishReadiness } from '../utils/applyEffect.js';
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import Blockly, { loadSafeWorkspaceJson, assertNoLegacyEventPulse } from '../blockly/index.js';
 import { dismissForOverlay } from '../blockly/dismissForOverlay.js';
@@ -35,8 +37,11 @@ export default function EffectStudio({
   onEffectNameChange,
   embedded = false,
   compact = false,
-  overlayOpen = false
+  overlayOpen = false,
+  onShellState
 }) {
+  const aiRequestRef = useRef(null);
+  const aiSessionRef = useRef(new StudioProposalSession());
   const blocklyDivRef = useRef(null);
   const workspaceRef = useRef(null);
   useLayoutEffect(() => { if (overlayOpen) return dismissForOverlay(workspaceRef.current); }, [overlayOpen]);
@@ -53,6 +58,9 @@ export default function EffectStudio({
   const [showLifecycleControls, setShowLifecycleControls] = useState(false);
   const [isCompiling, setIsCompiling] = useState(false);
   const [compilerLog, setCompilerLog] = useState(null);
+  const [buildResult, setBuildResult] = useState('尚未构建');
+  const [pluginLoadStatus, setPluginLoadStatus] = useState('未发布');
+  const [compilerFailureStage, setCompilerFailureStage] = useState('build');
   const [compilerSuccess, setCompilerSuccess] = useState(null);
   const [isCopied, setIsCopied] = useState(false);
   const [editError, setEditError] = useState(null);
@@ -118,6 +126,9 @@ export default function EffectStudio({
         publicationRef.current = normalizePublication(localDraft.publication); setPublication(publicationRef.current);
         loadSafeWorkspaceJson(localDraft.json, ws); setEffectName(localDraft.name); effectNameRef.current = localDraft.name;
       } catch (err) { legacyWorkspaceBlockedRef.current = true; setLegacyWorkspaceError(err.message); }
+    } else if (config?.blockly_effects?.[activeEffectName]?.blockly_json) {
+      try { loadSafeWorkspaceJson(config.blockly_effects[activeEffectName].blockly_json, ws, true); }
+      catch (err) { legacyWorkspaceBlockedRef.current = true; setLegacyWorkspaceError(err.message); }
     } else if (defaultPreset?.blocklyJson) {
       loadSafeWorkspaceJson(defaultPreset.blocklyJson, ws);
     }
@@ -165,6 +176,7 @@ export default function EffectStudio({
         legacyWorkspaceBlockedRef.current = false;
         setLegacyWorkspaceError(null);
       }
+      setBuildResult('尚未构建'); setPluginLoadStatus(effectData?.applied_plugin_name ? '已有发布记录' : '未发布');
       setEffectName(activeEffectName);
       effectNameRef.current = activeEffectName;
     }
@@ -292,19 +304,103 @@ export default function EffectStudio({
       const json = Blockly.serialization.workspaces.save(workspaceRef.current);
       let build;
       if (apply) {
-        setCompilerLog('正在准备发布光效…');
+        setBuildResult('正在构建并发布…'); setPluginLoadStatus('等待发布确认'); setCompilerLog('正在准备发布光效…');
         build = await stageEffect(name, workspaceRef.current, CppTranspiler, setCompilerLog, publication);
       }
       const next = effectConfig(config, name, json, build, publication);
       const ok = await onSaveConfig(next, apply ? config : undefined);
       if (!ok) throw new Error('配置保存失败，请重试；原有运行版本保留');
       setCompilerSuccess(true);
+      if (apply) { setBuildResult('构建通过'); setPluginLoadStatus('daemon 已确认加载'); }
       if (apply) setIsPlaying(false);
       showToast?.(apply ? '光效已发布，配置已写入；daemon 将在下次热重载后应用' : '草稿已保存，正在运行的版本保持不变', 'success');
     } catch (err) {
-      setCompilerSuccess(false); setCompilerLog([err.message, err.detail].filter(Boolean).join('\n\n')); showToast?.(err.message, 'error');
+      if (apply) { setBuildResult('发布失败'); setPluginLoadStatus('原发布记录保留'); }
+      setCompilerSuccess(false); setCompilerFailureStage(err.stage === 'daemon_reload' ? 'plugin_load' : 'build'); setCompilerLog([err.message, err.detail].filter(Boolean).join('\n\n')); showToast?.(err.message, 'error');
     } finally { setIsCompiling(false); }
   };
+  const handleBuild = async () => {
+    if (isCompiling || !workspaceRef.current || legacyWorkspaceError || editError) return;
+    setIsCompiling(true); setBuildResult('正在构建…'); setCompilerLog('正在构建（仅编译）…'); setCompilerSuccess(null);
+    try {
+      const result = await buildEffect(effectName, workspaceRef.current, CppTranspiler, publication);
+      setCompilerLog(result.compiler_output || '构建成功；尚未发布'); setCompilerSuccess(true); setBuildResult('构建通过');
+    } catch (err) { setBuildResult('构建失败'); setCompilerSuccess(false); setCompilerFailureStage(err.stage === 'daemon_reload' ? 'plugin_load' : 'build'); setCompilerLog([err.message, err.detail].filter(Boolean).join('\n')); }
+    finally { setIsCompiling(false); }
+  };
+  useEffect(() => embedded ? listenStudioCommands(window.chrome?.webview, {
+    save: () => saveWorkspace(false), publish: () => { if (!editError) saveWorkspace(true); },
+    build: handleBuild, preview: () => { if (!isCompiling) setIsPlaying(v => !v); },
+    details: () => setIsCodeModalOpen(true),
+    validate: () => {
+      try { CppTranspiler.transpile(effectName, workspaceRef.current, publication); JsTranspiler.compile(workspaceRef.current, publication); setEditError(null); }
+      catch (err) { setEditError(err.message); }
+    }
+  }) : undefined, [embedded, effectName, publication, config, isCompiling, editError, legacyWorkspaceError]);
+  useEffect(() => {
+    onShellState?.({ name: effectName, playing: isPlaying, busy: isCompiling,
+      validation: legacyWorkspaceError || editError || '验证通过',
+      build: buildResult, plugin: pluginLoadStatus,
+      lifecycle: getEffectLifecycleStatus(config?.blockly_effects?.[effectName]).label,
+      diagnostics: (compilerLog || '').slice(0, 16384) });
+  }, [effectName, isPlaying, isCompiling, buildResult, pluginLoadStatus, compilerSuccess, compilerLog, editError, legacyWorkspaceError, config, onShellState]);
+
+  useEffect(() => {
+    if (!embedded || !window.chrome?.webview) return;
+    const webview = window.chrome.webview;
+    const receive = event => {
+      const m = event.data;
+      if (m?.type === 'studio_ai_context' && /^[a-f0-9]{32}$/.test(m.request_id || '') && ['generate', 'modify', 'explain', 'error_analysis'].includes(m.intent)) {
+        if (isCompiling || !workspaceRef.current) return;
+        try {
+          const snapshot = { name: effectNameRef.current, publication: publicationRef.current, json: Blockly.serialization.workspaces.save(workspaceRef.current) };
+          let intent = m.intent;
+          if (m.repair === true) {
+            if (!aiRequestRef.current || JSON.stringify(snapshot) !== JSON.stringify(aiSessionRef.current.base)) throw new Error('工程已变化，请重新生成');
+            aiSessionRef.current.reserveRepair(); intent = 'error_analysis';
+          } else aiSessionRef.current.begin(snapshot);
+          const previousError = aiRequestRef.current?.validationError || '';
+          aiRequestRef.current = { id: m.request_id, intent, snapshot, validationError: previousError };
+          // Selected compiler errors only; omit arbitrary logs and successful build output.
+          const diagnostic = legacyWorkspaceError || editError || (compilerSuccess === false ? (compilerLog || '').split('\n').filter(line => /error|错误|失败|确认|加载/i.test(line)).slice(0, 3).join('\n') : '');
+          webview.postMessage({ type: 'studio_ai_context', request_id: m.request_id, context: assistantContext(snapshot, intent, (m.repair === true ? previousError : '') || diagnostic, legacyWorkspaceError || editError ? 'validation' : compilerFailureStage) });
+        } catch { webview.postMessage({ type: 'studio_ai_context_error', request_id: m.request_id }); }
+      }
+      if (m?.type === 'studio_ai_reply' && m.request_id === aiRequestRef.current?.id) {
+        try {
+          const proposal = parseProposal(m.reply);
+          const prepared = aiSessionRef.current.stage(proposal, aiRequestRef.current.intent);
+          if (prepared) {
+            const validation = prepared.validation;
+            webview.postMessage({ type: 'studio_ai_preview', request_id: m.request_id, valid: true,
+              preview: validation.preview, text: proposal.summary + '\n\n' + prepared.changes.map(c => `${c.field}: ${c.before} → ${c.after}`).join('\n') + '\n验证通过 · 本地模拟通过 · 尚未应用' });
+          } else webview.postMessage({ type: 'studio_ai_preview', request_id: m.request_id, valid: false, text: proposal.summary });
+        } catch (err) { aiRequestRef.current.validationError = err.message; webview.postMessage({ type: 'studio_ai_preview', request_id: m.request_id, valid: false, text: '建议已拒绝：' + err.message }); }
+      }
+      if (['studio_ai_apply', 'studio_ai_reject', 'studio_ai_undo'].includes(m?.type) && m.request_id === aiRequestRef.current?.id) {
+        if (isCompiling || !workspaceRef.current) return;
+        const current = () => ({ name: effectNameRef.current, publication: publicationRef.current, json: Blockly.serialization.workspaces.save(workspaceRef.current) });
+        try {
+          if (m.type === 'studio_ai_reject') { aiSessionRef.current.reject(); webview.postMessage({ type: 'studio_ai_applied', request_id: m.request_id, text: '建议已放弃。', undo: !!aiSessionRef.current.undoState }); return; }
+          const next = m.type === 'studio_ai_apply' ? aiSessionRef.current.apply(current()) : aiSessionRef.current.undo(current());
+          // Pause streaming before replacing a draft; proposal preview itself is local-only.
+          setIsPlaying(false);
+          {
+            loadAiSnapshot(workspaceRef.current, next.json);
+            publicationRef.current = next.publication; setPublication(next.publication);
+            compiledJsRef.current = JsTranspiler.compile(workspaceRef.current, next.publication);
+            setCppCode(CppTranspiler.transpile(next.name, workspaceRef.current, next.publication));
+            setEditError(null); setCompilerSuccess(null); setCompilerLog(null); setBuildResult('尚未构建');
+          }
+          if (m.type === 'studio_ai_apply') aiSessionRef.current.markApplied(current());
+          webview.postMessage({ type: 'studio_ai_applied', request_id: m.request_id, text: m.type === 'studio_ai_apply' ? '已应用至草稿；预览已暂停。可撤销或保存草稿。' : 'AI 修改已撤销。', undo: m.type === 'studio_ai_apply' });
+        } catch (err) { webview.postMessage({ type: 'studio_ai_applied', request_id: m.request_id, text: err.message, undo: !!aiSessionRef.current.undoState }); }
+      }
+    };
+    webview.addEventListener('message', receive);
+    return () => webview.removeEventListener('message', receive);
+  }, [embedded, isCompiling, compilerSuccess, compilerLog, compilerFailureStage, editError, legacyWorkspaceError]);
+
   const handleCompileAndReload = () => saveWorkspace(true);
   const handleSaveToConfig = () => saveWorkspace(false);
 
@@ -327,11 +423,11 @@ export default function EffectStudio({
         </select></label>
         {publication.mode === 'one_shot' && <label>序列结束后淡出 <input type="number" min="0" max="60000" disabled={isCompiling} value={publication.fade_out_ms} onChange={e => setPublication(normalizePublication({ ...publication, fade_out_ms: Math.min(60000, Math.max(0, Math.trunc(Number(e.target.value) || 0))) }))} className="w-20" /> ms</label>}
       </div>}
-      {compact && <button type="button" aria-expanded={showCompactControls} onClick={() => setShowCompactControls(!showCompactControls)}
+      {!embedded && compact && <button type="button" aria-expanded={showCompactControls} onClick={() => setShowCompactControls(!showCompactControls)}
         className="shrink-0 rounded-md-sm bg-md-surface-container px-3 py-1.5 text-left text-xs font-semibold">
         {showCompactControls ? '收起作品操作' : '作品操作 · 保存与发布'}
       </button>}
-      <div className={compact ? (showCompactControls ? 'flex max-h-[45%] shrink-0 flex-col gap-3 overflow-y-auto' : 'hidden') : 'contents'}>
+      <div className={embedded ? 'hidden' : compact ? (showCompactControls ? 'flex max-h-[45%] shrink-0 flex-col gap-3 overflow-y-auto' : 'hidden') : 'contents'}>
       {/* 顶部控制栏 (MD3E Top App Bar) */}
       <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-md-surface-container-low border border-md-outline-variant rounded-md-lg shadow-md-level1">
         <div className="flex items-center gap-3">
@@ -502,7 +598,9 @@ export default function EffectStudio({
       </div>
 
       </details>
-      {(legacyWorkspaceError || editError) && <p role="alert" className="text-sm text-md-error">{legacyWorkspaceError || editError}</p>}
+      {(legacyWorkspaceError || editError) && <div role="alert" className="text-sm text-md-error">{legacyWorkspaceError || editError}
+        {embedded && <button onClick={() => window.chrome?.webview?.postMessage({ type: 'studio_ai_ask', kind: 'validation' })}>询问 AI</button>}
+      </div>}
       </div>
       {/* Google Blockly 主画布 */}
       <div className="flex-1 min-h-[240px] w-full relative rounded-md-lg overflow-hidden border border-md-outline-variant shadow-md-level1 bg-md-surface-container-low">
@@ -510,6 +608,7 @@ export default function EffectStudio({
       </div>
 
       {/* 编译器输出控制台抽屉 (如果有编译结果或正在编译) */}
+      {embedded && compilerSuccess === false && <button onClick={() => window.chrome?.webview?.postMessage({ type: 'studio_ai_ask', kind: compilerFailureStage })} className="text-left text-sm">询问 AI：分析此错误</button>}
       {compilerLog && (
         <div className="p-3 bg-md-surface-container-lowest border border-md-outline-variant rounded-md-md flex flex-col gap-2 max-h-40 overflow-y-auto">
           <div className="flex items-center justify-between">

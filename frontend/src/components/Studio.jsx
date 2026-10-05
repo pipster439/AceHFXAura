@@ -1,4 +1,5 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { listenStudioCommands, postStudioState, initialStudioProject } from '../utils/studioHost.js';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { 
   Sparkles, 
   GitBranch, 
@@ -110,6 +111,13 @@ export default function Studio({
   const effectKeys = useMemo(() => {
     return Object.keys(config?.blockly_effects || {});
   }, [config?.blockly_effects]);
+  const initialProjectChosenRef = useRef(false);
+  useEffect(() => {
+    if (initialProjectChosenRef.current || !config) return;
+    initialProjectChosenRef.current = true;
+    let draft; try { draft = JSON.parse(sessionStorage.getItem('aura-effect-draft')); } catch {}
+    setActiveEffectName(initialStudioProject(config.blockly_effects, draft));
+  }, [config]);
 
   // 处理新建光效
   const handleCreateNewEffect = async (e) => {
@@ -293,13 +301,29 @@ export default function Studio({
     }
   };
 
+  const [shellBusy, setShellBusy] = useState(false);
+  const shellStateRef = useRef({});
+  const onShellState = useCallback(state => { shellStateRef.current = state; setShellBusy(state.busy);
+    if (embedded) postStudioState({ ...state, workType: activeWorkType, projects: effectKeys.slice(0, 200) });
+  }, [embedded, activeWorkType, effectKeys]);
+  useEffect(() => {
+    if (embedded) postStudioState({ name: '自动化', validation: '由自动化检查器验证', build: '不适用',
+      lifecycle: '规则编排', plugin: '不适用', diagnostics: '', playing: false, busy: false, ...shellStateRef.current,
+      workType: activeWorkType, projects: effectKeys.slice(0, 200) });
+  }, [embedded, activeWorkType, effectKeys]);
+  useEffect(() => embedded ? listenStudioCommands(window.chrome?.webview, {
+    new: () => { setIsNewModalOpen(true); setOpenPanel(null); },
+    open: () => fileInputRef.current?.click(),
+    select: m => { if (effectKeys.includes(m.name)) { setActiveEffectName(m.name); setActiveWorkType('effect'); } }
+  }) : undefined, [embedded, effectKeys]);
+
   // 过滤后的列表项
   const filteredEffects = effectKeys.filter(k => 
     (!searchQuery || k.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   return (
-    <div ref={rootRef} data-studio-workspace={activeWorkType} className={`flex w-full min-w-0 overflow-hidden select-none ${embedded ? 'relative h-full gap-2 p-2 bg-md-surface' : 'h-[calc(100vh-100px)] gap-4'}`}>
+    <div ref={rootRef} inert={shellBusy ? '' : undefined} data-studio-workspace={activeWorkType} className={`flex w-full min-w-0 overflow-hidden select-none ${embedded ? 'relative h-full gap-2 p-2 bg-md-surface' : 'h-[calc(100vh-100px)] gap-4'}`}>
       {compact && <div className="absolute left-2 right-2 top-2 z-10 flex gap-2 rounded-md-md bg-md-surface-container p-1">
         <button type="button" onClick={() => setOpenPanel(openPanel === 'works' ? null : 'works')} aria-label="作品列表" className="rounded-md-sm px-2 py-1 text-xs">作品与类型</button>
         <span className="min-w-0 flex-1 truncate py-1 text-center text-xs">{activeWorkType === 'effect' ? activeEffectName : '自动化'}</span>
@@ -317,7 +341,7 @@ export default function Studio({
               </div>
               <span className="font-bold text-xs text-md-on-surface whitespace-nowrap">作品列表</span>
             </div>
-            <div className="flex items-center gap-1.5 min-w-0">
+            <div className={embedded ? 'hidden' : 'flex items-center gap-1.5 min-w-0'}>
               <input
                 type="file"
                 ref={fileInputRef}
@@ -551,6 +575,7 @@ export default function Studio({
         className={`flex-1 flex flex-col h-full min-w-0 overflow-y-auto overflow-x-hidden ${compact ? (embedded ? 'relative z-0 pt-10' : 'relative pt-10') : ''} ${overlayOpen ? 'pointer-events-none' : ''}`}>
         {activeWorkType === 'effect' ? (
           <EffectStudio
+            onShellState={onShellState}
             embedded={embedded}
             compact={compact}
             overlayOpen={overlayOpen}

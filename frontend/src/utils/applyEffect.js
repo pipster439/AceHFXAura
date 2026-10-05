@@ -108,6 +108,15 @@ export async function stageEffect(name, workspace, transpiler, onLog = () => {},
   return { pluginName, revision, publication };
 }
 
+// Compile-only validation never reloads a plugin or updates a profile/config.
+export async function buildEffect(name, workspace, transpiler, options = {}) {
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]{0,47}$/.test(name)) throw new Error('光效名称非法');
+  await ensurePublishReady();
+  const pluginName = `studio_${name.slice(0, 20)}_${crypto.randomUUID().replaceAll('-', '').slice(0, 20)}`;
+  const code = transpiler.transpile(pluginName, workspace, normalizePublication(options));
+  return requestJson('/api/compile_effect', { name: pluginName, code });
+}
+
 export function getEffectLifecycleStatus(effect) {
   if (!effect) {
     return { status: 'draft', label: '草稿', color: 'amber', badgeClass: 'bg-amber-500/15 text-amber-400 border-amber-500/30' };

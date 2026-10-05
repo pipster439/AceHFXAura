@@ -30,6 +30,7 @@ internal static class StudioValidation
 
     private static async Task<JsonElement> Eval(WebView2 view, string code)
     {
+        await view.EnsureCoreWebView2Async();
         var result = await view.ExecuteScriptAsync(code);
         using var json = JsonDocument.Parse(result);
         return json.RootElement.Clone();
