@@ -1,0 +1,237 @@
+{
+  "fixture": {
+    "languageVersion": 0,
+    "blocks": [
+      {
+        "type": "key_fill_all",
+        "x": 60,
+        "y": 60,
+        "inputs": {
+          "COLOR": {
+            "block": {
+              "type": "color_cycle",
+              "inputs": {
+                "COLOR_A": {
+                  "block": {
+                    "type": "color_rgb",
+                    "inputs": {
+                      "R": {
+                        "shadow": {
+                          "type": "math_number",
+                          "fields": {
+                            "NUM": 0
+                          }
+                        }
+                      },
+                      "G": {
+                        "shadow": {
+                          "type": "math_number",
+                          "fields": {
+                            "NUM": 180
+                          }
+                        }
+                      },
+                      "B": {
+                        "shadow": {
+                          "type": "math_number",
+                          "fields": {
+                            "NUM": 255
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "COLOR_B": {
+                  "block": {
+                    "type": "color_rgb",
+                    "inputs": {
+                      "R": {
+                        "shadow": {
+                          "type": "math_number",
+                          "fields": {
+                            "NUM": 220
+                          }
+                        }
+                      },
+                      "G": {
+                        "shadow": {
+                          "type": "math_number",
+                          "fields": {
+                            "NUM": 0
+                          }
+                        }
+                      },
+                      "B": {
+                        "shadow": {
+                          "type": "math_number",
+                          "fields": {
+                            "NUM": 160
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "PERIOD_SEC": {
+                  "shadow": {
+                    "type": "math_number",
+                    "fields": {
+                      "NUM": 3
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    ]
+  },
+  "fixture_health": {
+    "languageVersion": 0,
+    "blocks": [
+      {
+        "type": "controls_if",
+        "x": 60,
+        "y": 60,
+        "extraState": {
+          "hasElse": true
+        },
+        "inputs": {
+          "IF0": {
+            "block": {
+              "type": "gsi_player_health_condition",
+              "fields": {
+                "OP": "<",
+                "VALUE": 25
+              }
+            }
+          },
+          "DO0": {
+            "block": {
+              "type": "key_fill_all",
+              "inputs": {
+                "COLOR": {
+                  "block": {
+                    "type": "color_cycle",
+                    "inputs": {
+                      "COLOR_A": {
+                        "block": {
+                          "type": "color_rgb",
+                          "inputs": {
+                            "R": {
+                              "shadow": {
+                                "type": "math_number",
+                                "fields": {
+                                  "NUM": 255
+                                }
+                              }
+                            },
+                            "G": {
+                              "shadow": {
+                                "type": "math_number",
+                                "fields": {
+                                  "NUM": 0
+                                }
+                              }
+                            },
+                            "B": {
+                              "shadow": {
+                                "type": "math_number",
+                                "fields": {
+                                  "NUM": 0
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "COLOR_B": {
+                        "block": {
+                          "type": "color_rgb",
+                          "inputs": {
+                            "R": {
+                              "shadow": {
+                                "type": "math_number",
+                                "fields": {
+                                  "NUM": 0
+                                }
+                              }
+                            },
+                            "G": {
+                              "shadow": {
+                                "type": "math_number",
+                                "fields": {
+                                  "NUM": 0
+                                }
+                              }
+                            },
+                            "B": {
+                              "shadow": {
+                                "type": "math_number",
+                                "fields": {
+                                  "NUM": 0
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "PERIOD_SEC": {
+                        "shadow": {
+                          "type": "math_number",
+                          "fields": {
+                            "NUM": 0.8
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "ELSE": {
+            "block": {
+              "type": "key_fill_all",
+              "inputs": {
+                "COLOR": {
+                  "block": {
+                    "type": "color_rgb",
+                    "inputs": {
+                      "R": {
+                        "shadow": {
+                          "type": "math_number",
+                          "fields": {
+                            "NUM": 0
+                          }
+                        }
+                      },
+                      "G": {
+                        "shadow": {
+                          "type": "math_number",
+                          "fields": {
+                            "NUM": 120
+                          }
+                        }
+                      },
+                      "B": {
+                        "shadow": {
+                          "type": "math_number",
+                          "fields": {
+                            "NUM": 255
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    ]
+  }
+}

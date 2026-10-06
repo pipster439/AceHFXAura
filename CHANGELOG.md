@@ -1,3 +1,15 @@
+## [0.1.0-alpha.8] — Release candidate (not released)
+
+- Studio 的 WinUI 原生命令与状态界面继续保留 WebView2 / Blockly 编辑器，改善窄窗口、主题、长名称与错误展示。
+- 对话式 AI Assistant 支持自然多轮聊天、快捷提示、取消与显式重试；OpenAI-compatible provider 设置提供 Auto / JSON Object / JSON Schema 响应模式，API 密钥保存在 Windows 受保护凭据存储。
+- AI 修改以 typed proposal 提供，经过工程及模拟验证；Diff 显示变更前后，必须由用户明确 Apply。AI 不能自动 Apply 或 Publish，提供一步 AI Undo 与修改前快照。
+- 本地 Test Bench 提供确定性按键、CS2 GSI 与前台进程场景，复用现有效果模拟；测试台不输出真实 HID。
+- 草稿增加防抖自动保存、意外退出恢复、有限快照和最近工程；恢复始终只是草稿，不自动发布。
+- 工程图推导 capability manifest，为 presets、AI context 和测试场景推荐提供信息；`.auraeffect` 支持受限源工程导入导出，摘要确认后创建独立草稿，不自动编译或发布。
+- Ctrl+Shift+P 打开命令面板，复用现有 Studio 命令和验证。
+- AI 对话仅保留在当前会话，退出后不保留。Provider 质量与兼容性各异，API 请求可能产生 provider 费用。SSE 与跨重启聊天记录仍延后。
+- 已知限制：手工构造的不支持/跨工作室 malformed graph 可能导致编辑器空白或上下文超时，尚未优雅显示不支持工程错误；正常支持工程路径已验证。Native 125% DPI 尚未人工验收。当前候选仍为 unsigned alpha。
+
 ## [0.1.0-alpha.7] — Final release freeze (not released)
 
 - HardwareSlot activation selects existing firmware banks with BasicInfo verification, selector deduplication, firmware lighting ownership and no automatic reclaim after external drift. HostManaged profile behavior remains separately supported.

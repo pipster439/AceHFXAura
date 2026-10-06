@@ -19,8 +19,9 @@ Current code is the implementation authority. Guides below have distinct roles; 
 | [Cleanup audit](development/REPOSITORY_CLEANUP.md) | Complete pre-cleanup tracked-file inventory and decisions |
 | [Repository hygiene](development/REPOSITORY_HYGIENE.md) | Tracking boundaries, audit artifact policy and Git rules |
 | [History](archive/README.md) | Superseded decisions, reports and patch snapshots |
-| [alpha.7 current closure](release/HARDWARE_SLOT_RELEASE_CLOSURE.md) / [package candidate](release/PACKAGE_CANDIDATE_AUDIT.md) | Current acceptance state; historical checkpoints are explicitly superseded |
+| [alpha.7 release closure (historical)](release/HARDWARE_SLOT_RELEASE_CLOSURE.md) / [package candidate](release/PACKAGE_CANDIDATE_AUDIT.md) | Current acceptance state; historical checkpoints are explicitly superseded |
 | [Plugin reload closure](release/PLUGIN_RELOAD_ROOT_CAUSE.md) / [ASUS command9 closure](release/ASUS_COMMAND9_RELEASE_CLOSURE.md) | Fixture isolation and additive protocol v1 compatibility evidence |
+| [alpha.8 Studio acceptance](ALPHA8_FEATURE_ACCEPTANCE.md) | Accepted conversational Studio behavior, provider provenance and known limits |
 | [Changelog](../CHANGELOG.md) | Version history |
 
 Runtime configuration is local and ignored. The checked-in [example](../config.example.json) is the small canonical first-run template, not a second user configuration. [VERSION](../VERSION) is the release version source.

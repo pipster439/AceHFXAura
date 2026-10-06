@@ -2,6 +2,22 @@
 
 Studio 由本地 Web 服务提供，也通过 WinUI WebView2 使用。硬件默认 auto（Native HID 优先，保留 gated legacy_hal 回退）。
 
+## alpha.8 Studio 助手与工具
+
+WinUI 原生 Studio 命令、状态、最近工程与 Assistant 围绕现有 WebView2 / Blockly 编辑器工作。Ctrl+Shift+P 打开命令面板；它复用现有命令与验证，disabled 命令会说明原因。
+
+在 AI 服务设置填 OpenAI-compatible Base URL 和模型，手动输入 API key。密钥保存在 Windows 受保护凭据存储，不保存到工程、config 或工程包。默认 Auto 接受普通回复；JSON Object 适合支持 JSON mode 的 endpoint；仅服务明确支持严格 schema 时选择 JSON Schema。模式不兼容时手动切换并显式重试，不自动重复付费请求。Provider 输出质量、兼容性与费用由各 provider 决定，请先测试连接。
+
+直接聊天解释效果、提出调整或分析相关诊断，不用选择 Explain/Modify 模式。普通文字没有修改权限；typed proposal 在独立候选上验证工程和模拟，并在卡片显示 Diff、before/after、基准与 stale 状态。用户明确 Preview / Apply 后才修改草稿；外部编辑使旧建议失效。AI 不能自动 Apply、Publish、编译、操作文件/shell 或硬件。一步 AI Undo 和 pre-AI snapshot 可恢复草稿，恢复不发布。对话仅 session-memory，退出后丢失；SSE 与跨重启历史延后。
+
+Test Bench 默认 LOCAL SIMULATION ONLY，复用效果 JS 模拟与确定性时间，支持 Play/Pause/Step/Reset/Loop，以及按键轻按/长按/连按、CS2 health 等场景。JSON 场景导入严格校验；不会发送真实 HID。能力信息由实际工程图推导，帮助筛选相关 AI context 和推荐场景，不相信模型自称能力。
+
+自动保存使用 data-root（尊重 AURA_DATA_ROOT）和原子写入；恢复提示让用户选择 Restore / Discard，不自动覆盖。AI Apply 和 Publish 前保存 bounded snapshots（每工程最多 10 个）。最近列表也有限保存，缺失工程可正常处理。
+
+`.auraeffect` 仅包含 manifest、Blockly/source 工程及元数据，不含插件 DLL、密钥、日志、恢复 journal、快照或最近列表。导入显示摘要并要求明确确认，再创建独立草稿，不覆盖现有工程、不编译、不 Publish。导出 created_with_version 由实际 WinUI 产品版本写入，源头是 VERSION。
+
+Known limitation：不支持/跨工作室 malformed graph 在手工构造的错误路径上可能产生空白编辑器或 context timeout，而非优雅的不支持工程诊断。正常支持工程和生产 bundle 导入路径已验证；此 robustness backlog 本轮不修。Native 125% DPI 尚未人工验收，可选且不阻塞本次候选。
+
 ## 制作与发布光效
 
 保存草稿只保存编辑内容，不改变运行版本。发布显式选择 continuous 或 one-shot：stageEffect → 原生编译 → daemon 确认加载与生命周期 → revision 检查及原子配置写入。失败保留旧发布引用。旧有效连续工作区继续运行；Plugin ABI v1、generation pinning 和无生命周期插件的 LegacyEnvelope 均保留。

@@ -106,7 +106,8 @@ def build(version, generator, vcvars, build_dir=None, skip_build=False, skip_zip
     build_dir = Path(build_dir or ROOT / "build/winui-release").resolve()
     # Always regenerate the frontend, even when the native build has just been tested separately.
     command(["npm.cmd", "ci"], ROOT / "frontend")
-    command(["npm.cmd", "run", "build"], ROOT / "frontend")
+    frontend_output = build_dir / "frontend"
+    command(["npm.cmd", "run", "build", "--", "--outDir", frontend_output], ROOT / "frontend")
     if not skip_build:
         command(["cmake", "-S", ROOT, "-B", build_dir, "-G", generator, "-A", "x64"])
         command(["cmake", "--build", build_dir, "--config", "Release", "--target", "aura_daemon", "aura_web_ui", "--parallel", "2"])
@@ -122,7 +123,7 @@ def build(version, generator, vcvars, build_dir=None, skip_build=False, skip_zip
         payload.mkdir()
         files = []
         for role, relative in ASSETS.items():
-            source = (build_dir / "Release" / relative) if role in ("daemon", "web") else ROOT / relative
+            source = (build_dir / "Release" / relative) if role in ("daemon", "web") else (frontend_output / "index.html" if role == "studio" else ROOT / relative)
             target = payload / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, target)
@@ -150,6 +151,17 @@ Studio native publishing also needs MSVC x64 C++ Build Tools and the Windows SDK
 Native HID is preferred. ASUS proprietary DLLs are not included. Independent Light Bar control is not implemented.
 This is an unsigned alpha candidate. SHA-256 verifies download integrity; it does not replace code signing or establish SmartScreen reputation.
 Physical keyboard and live CS2 acceptance must be recorded separately before release.
+
+## Studio assistant and tooling
+The conversational assistant uses an OpenAI-compatible provider configured in Settings.
+Response modes: Auto, JSON Object, JSON Schema. API keys use Windows protected credential storage.
+Provider quality/compatibility varies and API requests may incur provider charges.
+Typed proposals require validation and an explicit user Apply; AI cannot automatically Apply or Publish.
+Chat history is session-only. AI Undo, bounded snapshots, autosave/recovery and recent projects retain draft authority.
+Test Bench is local simulation only. Source-only .auraeffect import/export and Ctrl+Shift+P reuse Studio commands.
+SSE and cross-restart chat history are deferred. Native 125% DPI has not been manually accepted.
+Unsupported/malformed cross-workspace graphs may show a blank editor/context timeout instead of a graceful error;
+the supported project and bundle paths have been accepted.
 
 ## Third-party runtime components
 Windows App SDK/.NET dependencies retain their upstream licenses. Microsoft VC runtime DLLs are redistributed from the installed Visual Studio Redist directory under the applicable Microsoft redistribution terms.

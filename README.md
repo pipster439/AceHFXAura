@@ -4,7 +4,7 @@ Aura 是面向 **ROG Falchion Ace HFX** 的高性能独立 Windows 灯光控制�
 
 当前 alpha 版本号以仓库根目录的 [`VERSION`](VERSION) 为单一事实源；核心能力与已知限制见 [`CHANGELOG.md`](CHANGELOG.md)。
 
-当前 `0.1.0-alpha.7` 已完成 package candidate 验收，正在最终源码冻结；尚未正式发布。WinUI 为发行入口，沿用 Native HID、Automation v2、GSI 与 Studio publication 语义。HardwareSlot 使用已存在的板载槽位，不提供隐藏 bank authoring。自动化测试、hosted CI 与真机验收分别记录；最新状态和已知限制见 [release closure](docs/release/HARDWARE_SLOT_RELEASE_CLOSURE.md)、[package candidate](docs/release/PACKAGE_CANDIDATE_AUDIT.md) 与 [文档索引](docs/README.md)。
+当前 `0.1.0-alpha.8` 进入源码冻结与最终发行候选验证，尚未正式发布。WinUI 为发行入口；本版集中改进 Studio、对话式 AI 与本地测试/恢复工具，沿用 Native HID、Automation v2、GSI 与 publication 语义。硬件、hosted CI 与软件包验收分别记录；使用方式见 [Studio 指南](docs/studio/STUDIO_WORKFLOW.md)，版本变化见 [CHANGELOG](CHANGELOG.md)。
 
 ## 硬件后端架构 (Hardware Backends)
 
@@ -34,6 +34,8 @@ Aura 是面向 **ROG Falchion Ace HFX** 的高性能独立 Windows 灯光控制�
 - **原生 Lighting 控制**：选择内置效果，编辑 schema 提供的颜色、开关、枚举和数值参数，应用基础灯效并处理配置版本冲突。
 - **在 Studio 制作光效**：用 Blockly 组合全键填色、单键控制、波纹、颜色运算、时间、变量、循环、按键状态和 GSI 数据。
 - **直接预览到键盘**：浏览器中的 JS 运行时与原生插件共享同一套顺序控制语义；停止预览后，键盘恢复显示当前已应用方案。
+- **对话式 AI 助手**：在 Settings 配置 OpenAI-compatible provider，API 密钥使用 Windows 受保护存储；自然多轮聊天生成 typed/validated 建议，查看 Diff 后显式 Apply，支持 Undo 和快照。AI 不自动 Apply 或 Publish，对话仅在当前会话保留，provider API 可能收费。
+- **本地 Test Bench 与安全草稿**：确定性场景模拟、自动保存/恢复、有限快照、`.auraeffect` 导入导出与 Ctrl+Shift+P 命令面板。
 - **编排自动化**：按前台进程和 GSI 条件选择基础方案，也可以在击杀等事件发生时播放一次叠加，或在低血量等条件成立期间持续叠加。
 - **自动部署 CS2 GSI**：检测 Steam 库中的 CS2 `cfg` 目录，经界面确认后写入 `gamestate_integration_aura.cfg`，并在诊断页显示连接状态、字段与事件。
 - **动态发布插件**：Studio 将积木转译为 C++17、调用本机 MSVC 生成独立 DLL，再让 daemon 热加载，不需要重启灯光服务。

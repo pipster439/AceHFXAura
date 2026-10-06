@@ -14,7 +14,7 @@ python tools/package_release.py --build-dir build --skip-build
 python tools/package_winui.py --verify dist/Aura-v<VERSION>-windows-x64-<build-id>
 ```
 
-The default rebuilds frontend assets, builds the native sidecars, publishes WinUI, verifies required files/roles/hashes/x64 PE architecture, then emits a versioned directory, ZIP and `.sha256`. `--skip-build` skips only native compilation. `--skip-zip` retains the verified directory. There is no release publishing, local deployment, config migration or user-runtime deletion. Do not pass `--clean` to the new pipeline. A stale native build is detected by the packaged runtime version test, so use `--skip-build` only after rebuilding.
+The default rebuilds frontend assets into the selected build directory (leaving tracked web/index.html unchanged), builds the native sidecars, publishes WinUI, verifies required files/roles/hashes/x64 PE architecture, then emits a versioned directory, ZIP and `.sha256`. `--skip-build` skips only native compilation. `--skip-zip` retains the verified directory. There is no release publishing, local deployment, config migration or user-runtime deletion. Do not pass `--clean` to the new pipeline. A stale native build is detected by the packaged runtime version test, so use `--skip-build` only after rebuilding.
 
 Build prerequisites: VS 2022/2026 C++ desktop workload + Windows SDK, CMake, Python, Node/npm, .NET 10 SDK. The installed Visual Studio supplies app-local x64 VC CRT redistributables. No ASUS proprietary binaries may enter the package.
 
@@ -70,3 +70,10 @@ WinUI starts daemon suspended, assigns its private kill-on-close Job Object, the
 .NET and Windows App SDK are bundled; no source checkout is needed. Studio requires WebView2 Evergreen Runtime. Native Studio publishing additionally requires local x64 MSVC Build Tools and Windows SDK; drafts do not. The four SDK headers travel in the verified payload. No Plugin ABI change or native crash isolation is provided.
 
 Current candidates are unsigned. SHA-256 establishes file consistency, not publisher identity or SmartScreen reputation. Do not claim signing, automatic updates, installer integration, or enterprise deployment. A Release can only be approved after [the release checklist](RELEASE_CHECKLIST.md), including manual Windows/keyboard/CS2 validation.
+
+
+## alpha.8 exact-commit candidate verification
+
+Freeze VERSION and source, pass canonical CI, commit, and create a fresh detached worktree at the accepted final SHA. Invoke tools/package_release.py there with fresh build/dist output; do not package a development tree or use --legacy. Verify both generated staging and a fresh ZIP extraction with tools/ci/verify_release_package.py. The verifier checks runtime roles/ProductVersion, checksums inventory, ZIP CRC/original paths/case duplicates/links/size bounds, forbidden files and private-path/credential patterns. ZIP SHA-256 is external.
+
+Desktop smoke scripts accept --package with the extracted directory; GUI, sidecars, web, keymap, template and SDK must come from that package. They unset AURA_DEV_ROOT/AURA_DEV_BIN, use isolated AURA_DATA_ROOT and dry-run, local mock provider only. Committed fixture graphs are test data, never runtime source fallback. Protected synthetic credentials are removed normally; published/config authority remains guarded. Rebuild final outputs afresh after exact-commit hosted CI PASS, then repeat static verification and packaged smoke. No tag/Release publication is implied by these gates.

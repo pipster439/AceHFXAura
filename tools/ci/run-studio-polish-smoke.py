@@ -4,6 +4,7 @@ No deployment or package generation. Requires current built UI and daemon paths.
 Credentials use a random loopback target and are removed by the native harness.
 """
 from studio_conversation_mock import reply_for
+from studio_smoke_runtime import configure_package, package_projects, configure_environment, assert_clean_persistence
 import argparse
 import ctypes
 from ctypes import wintypes
@@ -27,16 +28,18 @@ def main():
     parser.add_argument('--output', required=True, type=Path)
     parser.add_argument('--capture', action='store_true')
     parser.add_argument('--web-root', type=Path)
+    parser.add_argument('--package', type=Path, help='Actual extracted package; rejects checkout runtime fallback')
     args = parser.parse_args()
     repo = Path(__file__).resolve().parents[2]
     output = args.output.resolve(); output.mkdir(parents=True, exist_ok=True)
     binaries = args.bin.resolve(); ui = args.ui.resolve()
+    package = configure_package(args, repo, output)
     subprocess.run(['python', '-B', str(repo / 'tools/ci/check-idle-test-ports.py')], check=True)
-    config = json.loads((repo / 'config.example.json').read_text(encoding='utf-8'))
-    generated = subprocess.check_output(['node', '--input-type=module', '-e',
+    config = json.loads(((package / 'runtime-payload' if package else repo) / 'config.example.json').read_text(encoding='utf-8'))
+    generated = json.dumps(package_projects()['fixture']).encode() if package else subprocess.check_output(['node', '--input-type=module', '-e',
         "import {EFFECT_PRESETS} from './src/blockly/presets.js';console.log(JSON.stringify(EFFECT_PRESETS[0].blocklyJson));"], cwd=repo / 'frontend')
     config['blockly_effects'] = {'fixture': {'name': 'fixture', 'version': 2, 'publication': {'mode': 'continuous', 'fade_out_ms': 0}, 'blockly_json': json.loads(generated)}}
-    health = subprocess.check_output(['node', '--input-type=module', '-e',
+    health = json.dumps(package_projects()['fixture_health']).encode() if package else subprocess.check_output(['node', '--input-type=module', '-e',
         "import {EFFECT_PRESETS} from './src/blockly/presets.js';console.log(JSON.stringify(EFFECT_PRESETS.find(p=>p.manifest.gsi_fields.includes('player.state.health')).blocklyJson));"], cwd=repo / 'frontend')
     config['blockly_effects']['fixture_health'] = {'name': 'fixture_health', 'version': 2, 'publication': {'mode': 'continuous', 'fade_out_ms': 0}, 'blockly_json': json.loads(health)}
     def authority(value):
@@ -60,11 +63,12 @@ def main():
             self.send_response(200); self.send_header('Content-Type', 'application/json'); self.send_header('Content-Length', str(len(body))); self.end_headers(); self.wfile.write(body)
     server = ThreadingHTTPServer(('127.0.0.1', 0), Mock)
     thread = threading.Thread(target=server.serve_forever, daemon=True); thread.start()
-    with tempfile.TemporaryDirectory(prefix='aura-studio-tooling-') as directory:
+    with tempfile.TemporaryDirectory(prefix='aura-studio-tooling-', dir=output if package else None) as directory:
         root = Path(directory); (root / '.aura-studio-tooling-fixture').write_text('local mock only')
         path = root / 'config.json'; path.write_text(json.dumps(config), encoding='utf-8')
         env = os.environ.copy(); env.update(AURA_STUDIO_POLISH='1', AURA_DATA_ROOT=str(root), AURA_DEV_ROOT=str(repo), AURA_DEV_BIN=str(binaries), AURA_MAGNETIC_VALIDATION_OFFLINE='1',
             AURA_STUDIO_TOOLING_DIR=str(output), AURA_STUDIO_AI_MOCK_URL=f'http://127.0.0.1:{server.server_port}/v1/', AURA_STUDIO_AI_CAPTURE='1' if args.capture else '0')
+        configure_environment(env, package, root)
         # Use current built frontend; never overwrite tracked web/index.html.
         web_root = args.web_root.resolve() if args.web_root else repo / 'build/alpha8_polish/frontend'
         kernel = ctypes.WinDLL('kernel32', use_last_error=True)
@@ -73,8 +77,8 @@ def main():
         event_name = 'Local\\AuraStudioToolingSmoke-' + uuid.uuid4().hex
         shutdown_event = kernel.CreateEventW(None, True, False, event_name)
         if not shutdown_event: raise OSError(ctypes.get_last_error())
-        core = subprocess.Popen([str(binaries / 'aura_daemon.exe'), '--dry-run', '--config', str(path), '--keymap', str(repo / 'calibrated_keymap.json'),
-            '--shutdown-event', event_name, '--web-root', str(web_root), '--sdk-include', str(repo / 'include')], cwd=binaries, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        core = subprocess.Popen([str(binaries / 'aura_daemon.exe'), '--dry-run', '--config', str(path), '--keymap', str((package / 'runtime-payload' if package else repo) / 'calibrated_keymap.json'),
+            '--shutdown-event', event_name, '--web-root', str(web_root), '--sdk-include', str((package / 'runtime-payload' if package else repo) / 'include')], cwd=binaries, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         gui = None
         try:
             deadline = time.monotonic() + 30
@@ -138,5 +142,6 @@ def main():
                 finally:
                     kernel.CloseHandle(shutdown_event)
                     server.shutdown(); server.server_close()
+                    assert_clean_persistence(root, output, package)
 
 if __name__ == '__main__': main()

@@ -79,6 +79,9 @@ internal static class StudioAiValidation
                 return Task.FromResult(settingsDialog != null);
             }, "Provider settings did not open");
             var controls = Descendants(settingsDialog!).OfType<FrameworkElement>().ToArray();
+            var responseModes = controls.OfType<ComboBox>().Single(c => c.Name == "LlmResponseMode").Items.Cast<string>().ToArray();
+            if (responseModes.Length != 3 || !responseModes[0].StartsWith("Auto") || !responseModes[1].StartsWith("JSON Object") || !responseModes[2].StartsWith("JSON Schema")) throw new InvalidOperationException("Provider response modes missing");
+            results.Add(new { phase = "native Settings exposes Auto, JSON Object, JSON Schema" });
             var connectionTest = controls.OfType<Button>().First(b => b.Name == "LlmTest");
             var connectionStatus = controls.OfType<TextBlock>().First(b => b.Name == "LlmSettingsStatus");
             Invoke(connectionTest);

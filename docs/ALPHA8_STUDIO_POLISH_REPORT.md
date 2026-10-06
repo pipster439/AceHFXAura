@@ -115,4 +115,17 @@ Deliverables (repository-relative):
 - `winui/Validation/StudioToolingValidation.cs`
 - `docs/ALPHA8_STUDIO_POLISH_REPORT.md`
 
-24 implementation/test files plus this report. New changes remain uncommitted. The only commit created in this task is the authorized Tooling checkpoint. STOP: wait for Owner real-LLM smoke; no push/tag/release/package.
+24 Phase 3 implementation/test files plus this report were verified and checkpointed locally in the subsequent Conversational Assistant task. The Phase 3 evidence above remains its historical accepted result.
+
+## Conversational Assistant follow-up
+
+ALPHA8_POLISH_COMMIT: `53cdbb68df0673d2fca977dfcf6aa97bcc2aae16`. All previous 25 source/report hashes and 468 accepted build inputs matched; C# Studio 64/64, frontend Studio/Polish 62 PASS / 1 existing skip. No hook input drift.
+
+ALPHA8_CONVERSATIONAL_AI_COMMIT: `310b164b09a0019cbb661924f3fa0aeddb09ebc9`. Conversational Assistant automated gate PASS; current fixed-source canonical 18/18 PASS, 0 unexpected NOT RUN; desktop conversation 14 phases/12 loopback requests PASS and existing bundle/UI/crash-recovery regression 12+5+3 phases PASS. No hook build-input drift. See `ALPHA8_CONVERSATIONAL_ASSISTANT_REPORT.md` for architecture and evidence, and `ALPHA8_FEATURE_ACCEPTANCE.md` for Owner gates.
+
+Real conversational LLM acceptance is in progress: Owner connection, natural explanation, typed speed proposal, unapplied follow-up, explicit approval/Apply, manual Test Bench playback, actual draft comparison and Undo passed. Colors and durable config remained unchanged. Real error conversation and secret hygiene remain pending; native-focus Ctrl+Shift+P and production Save/Open picker still require Owner acceptance. Native Windows 125% DPI remains optional NOT RUN. Feature acceptance/freeze readiness is pending mandatory gates; no VERSION bump, product package, push/tag/release, real HID or new hardware protocol.
+
+
+## Accepted feature closure
+
+本段更新既有 in-progress 状态：CONVERSATIONAL_PROVIDER_COMPAT_PASS / ALPHA8_FEATURE_ACCEPTANCE_PASS / READY_FOR_VERSION_FREEZE 已闭合。真实 error chat、Owner exact-key 自检（187 payloads / 0 命中）、native Ctrl+Shift+P 与生产 Save/Open picker 均 PASS；Native 125% DPI optional NOT RUN。不支持的手工跨工作室错误 fixture 空白现象保留为 robustness backlog，不声称正常支持工程失败。详见 ALPHA8_FEATURE_ACCEPTANCE.md。后续 version freeze / package / source push 按 Owner 新授权单独验证，既有 checkpoint 结果保留。

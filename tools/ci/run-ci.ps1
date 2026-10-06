@@ -138,7 +138,8 @@ try {
                 'test_runtime_entrypoints.TestWebUiEntrypoint', 'test_runtime_entrypoints.TestDaemonEntrypoint',
                 'test_automation_v2_daemon', 'test_automation_authoring_daemon', 'test_automation_effect_daemon',
                 'test_automation_reload_daemon', 'test_automation_retrigger_daemon', 'test_global_lighting_daemon',
-                'test_winui_productization.TestGsiConfigurationContract', 'test_gsi_dictionary_blocks')
+                'test_winui_productization.TestGsiConfigurationContract', 'test_gsi_dictionary_blocks',
+                'test_release_archive_guards', 'test_packaged_studio_paths')
         } finally { Pop-Location }
     }
     Invoke-CiStage $summary $output 'dotnet-test' 'dotnet-test.log' {
