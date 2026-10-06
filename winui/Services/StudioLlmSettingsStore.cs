@@ -73,6 +73,8 @@ public sealed class StudioLlmSettingsStore(string path, IStudioCredentialStore c
         catch (JsonException) { throw new StudioLlmException("settings", "服务设置格式无效，请重新保存。"); }
     }
     public void Save(StudioLlmSettings settings, string? newKey = null) {
+        settings.Endpoint();
+        settings = settings with { ResponseMode = settings.EffectiveResponseMode, StructuredOutput = false };
         var target = Target(settings);
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
         if (newKey != null) credentials.Set(target, newKey);

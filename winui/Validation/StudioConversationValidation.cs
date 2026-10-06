@@ -34,10 +34,10 @@ internal static class StudioConversationValidation
             string Messages() => string.Join("\n", Descendants(Find<StackPanel>("AiMessages")).OfType<TextBlock>().Select(t => t.Text));
             string Config() => File.ReadAllText(Path.Combine(RuntimeLayoutResolver.DataRoot, "config.json"));
             var originalConfig = Config();
-            async Task Chat(string text) {
+            async Task Chat(string text, bool rejectedAction = false) {
                 ShowAi(); Find<TextBox>("AiPrompt").Text = text; Invoke(Find<Button>("AiSend"));
                 await Until(() => Task.FromResult(Find<Button>("AiSend").IsEnabled), "Chat did not finish: " + Find<TextBlock>("AiStatus").Text);
-                if (!Find<TextBlock>("AiStatus").Text.Contains("本轮完成")) throw new InvalidOperationException("Chat failed: " + Find<TextBlock>("AiStatus").Text);
+                if (!Find<TextBlock>("AiStatus").Text.Contains(rejectedAction ? "动作已拒绝" : "本轮完成")) throw new InvalidOperationException("Chat failed: " + Find<TextBlock>("AiStatus").Text);
             }
             async Task Capture(string name) {
                 var start = new System.Diagnostics.ProcessStartInfo("winapp") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true, WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden };
@@ -54,6 +54,15 @@ internal static class StudioConversationValidation
             await Chat("这个效果为什么消失得这么快？");
             if (!Messages().Contains("周期")) throw new InvalidOperationException("Explanation missing");
             Record("ordinary natural explanation as assistant message");
+            await Chat("为什么验证失败？");
+            if (!Messages().Contains("普通文字说明不会修改工程") || Find<Button>("AiApply").IsEnabled || !Find<TextBlock>("AiStatus").Text.Contains("仅文字回复")) throw new InvalidOperationException("Plain-text explanation failed or enabled action");
+            Record("plain-text error explanation displayed; no proposal or protocol error");
+            await Chat("你能修吗？");
+            if (!Messages().Contains("已准备可验证的周期建议") || !Find<Button>("AiApply").IsEnabled || Config() != originalConfig) throw new InvalidOperationException("Mixed text/typed proposal missing or auto-applied");
+            Record("explanation and valid typed proposal visible; no Apply");
+            await Chat("malformed-with-text", rejectedAction: true);
+            if (!Messages().Contains("这条动作无效") || Find<Button>("AiApply").IsEnabled || !Find<TextBlock>("AiStatus").Text.Contains("动作已拒绝") || Config() != originalConfig) throw new InvalidOperationException("Malformed action executed or safe text lost");
+            Record("safe text survives malformed action; candidate discarded and project unchanged");
             await Chat("帮我柔和一点，但颜色别变。");
             if (!Find<Button>("AiApply").IsEnabled || !Find<TextBlock>("AiProposal").Text.Contains("3 → 2")) throw new InvalidOperationException("Initial typed card/diff missing");
             if (Config() != originalConfig) throw new InvalidOperationException("Proposal changed durable project");
@@ -90,11 +99,11 @@ internal static class StudioConversationValidation
             await Capture("conversation-error");
             Find<TextBox>("AiPrompt").Text = "invalid-action"; Invoke(Find<Button>("AiSend"));
             await Until(() => Task.FromResult(Find<Button>("AiSend").IsEnabled), "Invalid tool turn did not stop");
-            if (Find<Button>("AiApply").IsEnabled || !Find<TextBlock>("AiStatus").Text.Contains("安全结构")) throw new InvalidOperationException("Unknown/Publish tool accepted");
+            if (Find<Button>("AiApply").IsEnabled || !Find<TextBlock>("AiStatus").Text.Contains("动作已拒绝")) throw new InvalidOperationException("Unknown/Publish tool accepted");
             Record("model Publish tool rejected; explicit retry available, no automatic retry");
             if (!Find<Button>("AiRetry").IsEnabled) throw new InvalidOperationException("Explicit retry unavailable");
             Invoke(Find<Button>("AiRetry")); await Until(() => Task.FromResult(Find<Button>("AiSend").IsEnabled), "Retry did not complete");
-            if (Find<Button>("AiApply").IsEnabled || !Find<TextBlock>("AiStatus").Text.Contains("安全结构")) throw new InvalidOperationException("Retry bypassed tool validation");
+            if (Find<Button>("AiApply").IsEnabled || !Find<TextBlock>("AiStatus").Text.Contains("动作已拒绝")) throw new InvalidOperationException("Retry bypassed tool validation");
             Record("one explicit Retry sends a new turn through same tool validator");
             Find<TextBox>("AiPrompt").Text = "cancel-wait"; Invoke(Find<Button>("AiSend"));
             await Until(() => Task.FromResult(Find<Button>("AiCancel").IsEnabled && File.Exists(Path.Combine(directory, "mock-inflight-ready.json"))), "Provider did not receive cancellable in-flight request");

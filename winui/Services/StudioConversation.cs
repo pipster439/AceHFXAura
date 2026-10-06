@@ -7,7 +7,12 @@ namespace Aura_WinUI.Services;
 
 public sealed record AssistantMessage([property: JsonPropertyName("role")] string Role, [property: JsonPropertyName("text")] string Text);
 public sealed record TypedToolCall(string Name, JsonElement Arguments);
-public sealed record StudioAssistantTurnResult(string Message, IReadOnlyList<TypedToolCall> Tools);
+public sealed record AssistantText(string Value);
+public sealed record StudioAssistantTurnResult(AssistantText Text, IReadOnlyList<TypedToolCall> Tools, bool ActionsRejected = false)
+{
+    public string Message => Text.Value;
+    public StudioAssistantTurnResult(string message, IReadOnlyList<TypedToolCall> tools, bool actionsRejected = false) : this(new AssistantText(message), tools, actionsRejected) { }
+}
 
 // Session-only data. There is intentionally no serializer/store/export path for chat.
 public sealed class StudioConversationSession
@@ -36,7 +41,8 @@ public static class StudioConversationContracts
     public static readonly string[] ReadTools = ["get_current_effect_summary", "get_capabilities", "get_validation_errors", "get_build_errors", "get_active_proposal", "validate_candidate", "simulate_candidate"];
     public static readonly string[] Tools = [.. ReadTools, "get_preset", "propose_effect_change"];
     public const string SystemPrompt = "You are Aura Studio's conversational assistant. Converse naturally in Chinese and understand follow-up messages as the same conversation. " +
-        "Return JSON only: {message:string,tool_calls:[{name:string,arguments:object}]}. Final answer has empty tool_calls. " +
+        "For ordinary answers you may return natural text; text grants no actions. For any tool/action, return the complete JSON envelope {message:string,tool_calls:[{name:string,arguments:object}]}. " +
+        "In JSON response modes use this envelope, with empty tool_calls for a text-only answer. Never put actions in markdown or prose; those are only displayed, never executed. " +
         "Allowed read tools with empty arguments: get_current_effect_summary,get_capabilities,get_validation_errors,get_build_errors,get_active_proposal,validate_candidate,simulate_candidate. " +
         "For a new effect get_preset with {preset_id:string}, using only a known bounded preset ID: template_smooth_breath,template_reactive,cs2_health_bar,rainbow_radial_wave,template_static,template_gradient,wasd_radar_highlight,template_low_health_warning,kill_wave. If unavailable explain the limitation. " +
         "propose_effect_change arguments are {action:'propose',summary:string,preset:null or previously retrieved preset ID,edits:[{node_id:string,value:number}]}. " +
@@ -79,6 +85,38 @@ public static class StudioConversationContracts
             throw new StudioLlmException("conversation", "助手响应或工具参数不符合安全结构；未执行修改。");
         }
     }
+    // Decode text independently from executable structure. Never mine prose/code fences for actions.
+    public static StudioAssistantTurnResult Decode(string response) {
+        try { _ = new UTF8Encoding(false, true).GetByteCount(response); }
+        catch (EncoderFallbackException) { throw new StudioLlmException("conversation", "助手文字编码损坏；未执行修改。"); }
+        if (string.IsNullOrWhiteSpace(response) || Encoding.UTF8.GetByteCount(response) > 16384 ||
+            response.Any(c => char.IsControl(c) && c is not ('\r' or '\n' or '\t')))
+            throw new StudioLlmException("conversation", "助手响应为空、格式损坏或超过大小限制；未执行修改。");
+        var trimmed = response.TrimStart();
+        if (trimmed.StartsWith('{') || trimmed.StartsWith('[')) {
+            JsonDocument doc;
+            try { doc = JsonDocument.Parse(response, new JsonDocumentOptions { MaxDepth = 12 }); }
+            catch (JsonException) { throw new StudioLlmException("conversation", "助手结构化响应损坏；未执行修改。"); }
+            using (doc) {
+                try { return Parse(response); }
+                catch (StudioLlmException) {
+                    // All-or-nothing action validation. Only a unique, bounded message survives rejection.
+                    var node = doc.RootElement;
+                    if (node.ValueKind != JsonValueKind.Object) throw new StudioLlmException("conversation", "助手结构化响应无效；未执行修改。");
+                    var messages = node.EnumerateObject().Where(p => p.Name == "message").ToArray();
+                    var text = messages.Length == 1 && messages[0].Value.ValueKind == JsonValueKind.String ? messages[0].Value.GetString()! : "响应包含无法执行的结构化内容。";
+                    if (string.IsNullOrWhiteSpace(text)) text = "响应包含无法执行的结构化内容。";
+                    return new(SafeText(text), [], true);
+                }
+            }
+        }
+        return new(SafeText(response), []);
+    }
+    private static string SafeText(string text) {
+        if (text.Length > 4000 || text.Any(c => char.IsControl(c) && c is not ('\r' or '\n' or '\t')))
+            throw new StudioLlmException("conversation", "助手文字格式损坏或超过大小限制；未执行修改。");
+        return StudioLlmRedaction.Filter(text);
+    }
     public static void Exact(JsonElement node, params string[] fields) {
         if (node.ValueKind != JsonValueKind.Object || node.EnumerateObject().Count() != fields.Length || fields.Any(f => !node.TryGetProperty(f, out _)) || node.EnumerateObject().Any(p => !fields.Contains(p.Name))) throw new JsonException();
     }
@@ -108,8 +146,9 @@ public sealed class StudioConversationOrchestrator(StudioLlmProvider provider)
         for (var round = 0; round <= MaxToolRounds; round++) {
             cancellation.ThrowIfCancellationRequested();
             var payload = JsonSerializer.Serialize(new { conversation = session.Context(), current_project = current, tool_rounds = rounds });
-            var reply = await provider.CompleteAsync(settings, key, StudioConversationContracts.SystemPrompt, payload, cancellation, StudioConversationContracts.Schema);
-            var turn = StudioConversationContracts.Parse(reply);
+            var system = StudioConversationContracts.SystemPrompt + (settings.EffectiveResponseMode == StudioResponseMode.Auto ? "" : " Response mode requires JSON: use the complete message/tool_calls envelope even for ordinary answers.");
+            var reply = await provider.CompleteAsync(settings, key, system, payload, cancellation, StudioConversationContracts.Schema);
+            var turn = StudioConversationContracts.Decode(reply);
             if (turn.Tools.Count == 0) return turn;
             if (round == MaxToolRounds) throw new StudioLlmException("tool_limit", "本轮已达到 4 次工具循环上限；请缩小问题范围。未自动重试。");
             foreach (var tool in turn.Tools) {

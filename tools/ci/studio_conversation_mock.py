@@ -14,6 +14,13 @@ def reply_for(context, requests):
     node = next((n for n in studio['nodes'] if n['input'] == 'PERIOD_SEC'), None)
     def tool(name, arguments=None): return {'message': '我先检查当前工程。', 'tool_calls': [{'name': name, 'arguments': arguments or {}}]}
     def text(message): return {'message': message, 'tool_calls': []}
+    if prompt == '为什么验证失败？': return '实际诊断需查看工程验证结果；目前草稿验证通过。普通文字说明不会修改工程。'
+    if prompt == '你能修吗？':
+        if rounds: return '已准备可验证的周期建议；请查看 Diff，自行决定是否应用。'
+        return tool('propose_effect_change', {'action': 'propose', 'summary': '提供可验证的周期建议，不声称修复不存在的错误。', 'preset': None, 'edits': [{'node_id': node['node_id'], 'value': 2}]})
+    if prompt == 'malformed-with-text':
+        if not rounds: return tool('propose_effect_change', {'action': 'propose', 'summary': '先验证候选，最终回复仍需通过动作校验。', 'preset': None, 'edits': [{'node_id': node['node_id'], 'value': 2.2}]})
+        return {'message': '我建议改这里；这条动作无效。', 'tool_calls': [{'name': 'propose_effect_change', 'arguments': {'action': 'apply', 'path': 'C:/fixture/private'}}]}
     if prompt == 'invalid-action': return tool('publish')
     if prompt == 'repeat-tools': return tool('get_capabilities')
     if rounds:

@@ -122,9 +122,14 @@ public sealed partial class StudioPage
                 }, status => AiStatus.Text = status, token);
             token.ThrowIfCancellationRequested();
             if (request != _aiRequest || session != _conversation || session.Fingerprint != fingerprint) throw new StudioLlmException("stale", "项目在请求期间发生变化；建议已作废，请基于最新草稿继续。");
-            AddChat("assistant", result.Message); session.RetryPrompt = null;
-            if (_chatCandidate.HasValue) ShowConversationProposal(_chatCandidate.Value);
-            AiStatus.Text = "本轮完成；所有修改仍需你确认。";
+            AddChat("assistant", result.Message); if (!result.ActionsRejected) session.RetryPrompt = null;
+            if (result.ActionsRejected) {
+                _chatCandidate = null; PostAssistant(new { type = "studio_chat_cancel", request_id = request });
+                AiStatus.Text = "未生成可执行修改建议；回复中的动作已拒绝，草稿未改变。";
+            } else {
+                if (_chatCandidate.HasValue) ShowConversationProposal(_chatCandidate.Value);
+                AiStatus.Text = _chatCandidate.HasValue ? "本轮完成；所有修改仍需你确认。" : "本轮完成 · 仅文字回复，未生成修改建议。";
+            }
         } catch (OperationCanceledException) { AiStatus.Text = "本轮已取消；未应用任何修改。"; }
         catch (TimeoutException) { AiStatus.Text = "编辑器响应超时；未自动重试。"; }
         catch (StudioLlmException ex) { AiStatus.Text = ex.Message; }

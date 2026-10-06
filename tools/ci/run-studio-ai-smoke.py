@@ -50,7 +50,7 @@ def main():
             if any(m.get('role') == 'user' and m.get('text') == 'cancel-wait' for m in context['conversation'][-1:]):
                 (output / 'mock-inflight-ready.json').write_text('{"inflight":true}', encoding='utf-8')
             proposal = reply_for(context, requests)
-            body = json.dumps({'choices': [{'finish_reason': 'stop', 'message': {'content': json.dumps(proposal, ensure_ascii=False)}}]}).encode()
+            body = json.dumps({'choices': [{'finish_reason': 'stop', 'message': {'content': proposal if isinstance(proposal, str) else json.dumps(proposal, ensure_ascii=False)}}]}).encode()
             self.send_response(200); self.send_header('Content-Type', 'application/json'); self.send_header('Content-Length', str(len(body))); self.end_headers(); self.wfile.write(body)
     server = ThreadingHTTPServer(('127.0.0.1', 0), Mock)
     thread = threading.Thread(target=server.serve_forever, daemon=True); thread.start()

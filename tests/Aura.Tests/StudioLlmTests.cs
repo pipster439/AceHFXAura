@@ -129,7 +129,7 @@ public class StudioLlmTests
             Assert.DoesNotContain(Secret, File.ReadAllText(path)); Assert.IsTrue(store.HasKey);
             store.Save(Settings with { BaseUrl = "https://different.test/v1" }); Assert.IsFalse(store.HasKey);
             store.Save(Settings); store.RemoveKey(); Assert.IsFalse(store.HasKey);
-            var loaded = new StudioLlmSettingsStore(path, vault); loaded.Load(); Assert.AreEqual(Settings, loaded.Settings);
+            var loaded = new StudioLlmSettingsStore(path, vault); loaded.Load(); Assert.AreEqual(Settings with { ResponseMode = StudioResponseMode.Auto }, loaded.Settings);
         } finally { if (Directory.Exists(folder)) Directory.Delete(folder, true); }
     }
     [TestMethod]
