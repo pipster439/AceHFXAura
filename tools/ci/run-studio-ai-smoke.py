@@ -4,13 +4,14 @@ No deployment or package generation. Requires current built UI and daemon paths.
 Credentials use a random loopback target and are removed by the native harness.
 """
 from studio_conversation_mock import reply_for
-from studio_smoke_runtime import configure_package, package_projects, configure_environment, assert_clean_persistence
+from studio_smoke_runtime import configure_package, package_projects, configure_environment, assert_clean_persistence, owned_runtime_ready
 import argparse
 import ctypes
 from ctypes import wintypes
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
+import hashlib
 import os
 from pathlib import Path
 import subprocess
@@ -26,6 +27,7 @@ def main():
     parser.add_argument('--output', required=True, type=Path)
     parser.add_argument('--capture', action='store_true')
     parser.add_argument('--conversation', action='store_true')
+    parser.add_argument('--rejection-case', choices=('publish', 'unknown', 'malformed'), default='publish')
     parser.add_argument('--web-root', type=Path)
     parser.add_argument('--package', type=Path, help='Actual extracted package; rejects checkout runtime fallback')
     args = parser.parse_args()
@@ -39,9 +41,17 @@ def main():
         "import {EFFECT_PRESETS} from './src/blockly/presets.js';console.log(JSON.stringify(EFFECT_PRESETS[0].blocklyJson));"], cwd=repo / 'frontend')
     config['blockly_effects'] = {'fixture': {'name': 'fixture', 'version': 2, 'publication': {'mode': 'continuous', 'fade_out_ms': 0}, 'blockly_json': json.loads(generated)}}
     requests = []
+    authority_before_rejection = None
+    def authority_snapshot():
+        with urllib.request.urlopen('http://127.0.0.1:19898/api/config', timeout=2) as response:
+            config = json.load(response)
+        with urllib.request.urlopen('http://127.0.0.1:19897/api/runtime/status', timeout=2) as response:
+            runtime = json.load(response)['config']
+        return hashlib.sha256(json.dumps([config, runtime], sort_keys=True).encode()).hexdigest()
     class Mock(BaseHTTPRequestHandler):
         def log_message(self, *args): pass
         def do_POST(self):
+            nonlocal authority_before_rejection
             length = int(self.headers.get('Content-Length', '0'))
             if length > 65536 or self.path != '/v1/chat/completions': self.send_error(400); return
             data = json.loads(self.rfile.read(length))
@@ -50,9 +60,13 @@ def main():
                 self.send_response(200); self.send_header('Content-Type', 'application/json'); self.send_header('Content-Length', str(len(body))); self.end_headers(); self.wfile.write(body)
                 return
             context = json.loads(data['messages'][1]['content'])
+            if context['conversation'][-1]['text'] == 'invalid-action':
+                current_authority = authority_snapshot()
+                if authority_before_rejection is None: authority_before_rejection = current_authority
+                assert current_authority == authority_before_rejection, 'Invalid action changed published/runtime authority'
             if any(m.get('role') == 'user' and m.get('text') == 'cancel-wait' for m in context['conversation'][-1:]):
                 (output / 'mock-inflight-ready.json').write_text('{"inflight":true}', encoding='utf-8')
-            proposal = reply_for(context, requests)
+            proposal = reply_for(context, requests, args.rejection_case)
             body = json.dumps({'choices': [{'finish_reason': 'stop', 'message': {'content': proposal if isinstance(proposal, str) else json.dumps(proposal, ensure_ascii=False)}}]}).encode()
             self.send_response(200); self.send_header('Content-Type', 'application/json'); self.send_header('Content-Length', str(len(body))); self.end_headers(); self.wfile.write(body)
     server = ThreadingHTTPServer(('127.0.0.1', 0), Mock)
@@ -74,14 +88,14 @@ def main():
         shutdown_event = kernel.CreateEventW(None, True, False, event_name)
         if not shutdown_event: raise OSError(ctypes.get_last_error())
         core = subprocess.Popen([str(binaries / 'aura_daemon.exe'), '--dry-run', '--config', str(path), '--keymap', str((package / 'runtime-payload' if package else repo) / 'calibrated_keymap.json'),
-            '--shutdown-event', event_name, '--web-root', str(web_root), '--sdk-include', str((package / 'runtime-payload' if package else repo) / 'include')], cwd=root if package else binaries, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            '--shutdown-event', event_name, '--web-root', str(web_root), '--sdk-include', str((package / 'runtime-payload' if package else repo) / 'include')], cwd=root, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         gui = None
         try:
             deadline = time.monotonic() + 30
             while True:
                 try:
                     with urllib.request.urlopen('http://127.0.0.1:19897/api/runtime/status', timeout=1) as response: status = json.load(response)
-                    if status['identity']['process_id'] != core.pid: raise RuntimeError('Unexpected runtime owner')
+                    if not owned_runtime_ready(status, core.pid): raise KeyError('Owner snapshot not ready')
                     with urllib.request.urlopen('http://127.0.0.1:19898/api/status', timeout=1): pass
                     break
                 except (OSError, KeyError):
@@ -108,6 +122,14 @@ def main():
             if result['error']: raise RuntimeError(result['error'])
             assert any('get_build_errors' in r['tools'] and any('C2039' in d for d in r['diagnostics']) for r in requests), 'Actual error tool/diagnostic was not carried'
             assert all(r['preset_ids'] == [] for r in requests), 'Unrelated preset metadata was sent'
+            rejections = [r for r in requests if r['prompt'] == 'invalid-action']
+            assert rejections and all(r['round'] == 0 and r['tools'] == [] for r in rejections), 'Rejected action executed a tool round'
+            assert len({r['fingerprint'] for r in rejections}) == 1, 'Rejected action changed the draft'
+            assert authority_before_rejection is not None and authority_snapshot() == authority_before_rejection, 'Rejected action changed published/runtime authority'
+            (output / 'rejection-case.json').write_text(json.dumps({'case': args.rejection_case, 'result': 'PASS',
+                'invalid_action_tool_rounds': 0, 'draft_fingerprint': rejections[0]['fingerprint'],
+                'native_apply_authority_assertions': 'PASS', 'published_runtime_authority_unchanged': True,
+                'original_packaged_runtime': package is not None}), encoding='utf-8')
             print(json.dumps({'result': 'PASS', 'phases': len(result['results']), 'mock_requests': len(requests)}))
         finally:
             (output / 'mock-requests.json').write_text(json.dumps(requests, indent=2, ensure_ascii=False), encoding='utf-8')

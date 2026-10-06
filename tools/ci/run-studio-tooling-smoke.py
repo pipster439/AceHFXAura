@@ -4,7 +4,7 @@ No deployment or package generation. Requires current built UI and daemon paths.
 Credentials use a random loopback target and are removed by the native harness.
 """
 from studio_conversation_mock import reply_for
-from studio_smoke_runtime import configure_package, package_projects, configure_environment, assert_clean_persistence
+from studio_smoke_runtime import configure_package, package_projects, configure_environment, assert_clean_persistence, owned_runtime_ready
 import argparse
 import ctypes
 from ctypes import wintypes
@@ -85,7 +85,7 @@ def main():
             while True:
                 try:
                     with urllib.request.urlopen('http://127.0.0.1:19897/api/runtime/status', timeout=1) as response: status = json.load(response)
-                    if status['identity']['process_id'] != core.pid: raise RuntimeError('Unexpected runtime owner')
+                    if not owned_runtime_ready(status, core.pid): raise KeyError('Owner snapshot not ready')
                     with urllib.request.urlopen('http://127.0.0.1:19898/api/status', timeout=1): pass
                     break
                 except (OSError, KeyError):

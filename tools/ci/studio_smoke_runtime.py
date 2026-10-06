@@ -3,6 +3,14 @@ import json
 from pathlib import Path
 import zipfile
 
+def owned_runtime_ready(status, process_id):
+    reported = status.get('identity', {}).get('process_id', 0)
+    if not reported:
+        return False  # Listener can precede the first owner-thread snapshot.
+    if reported != process_id:
+        raise RuntimeError('Unexpected runtime owner')
+    return True
+
 
 def configure_package(args, repo, output):
     if args.package is None:

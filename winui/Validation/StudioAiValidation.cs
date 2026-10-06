@@ -63,6 +63,7 @@ internal static class StudioAiValidation
             await DaemonSupervisor.Instance.RefreshAsync();
             var mockUrl = Environment.GetEnvironmentVariable("AURA_STUDIO_AI_MOCK_URL") ?? "";
             if (!Uri.TryCreate(mockUrl, UriKind.Absolute, out var url) || !url.IsLoopback || url.Scheme != "http") throw new InvalidOperationException("Mock provider must be loopback HTTP");
+            await Until(() => Task.FromResult(window.Content?.XamlRoot != null), "Fixture XAML root not ready");
             var initialScale = window.Content.XamlRoot.RasterizationScale;
             window.AppWindow.Resize(new((int)(1520 * initialScale), (int)(800 * initialScale)));
             window.NavigateTo(typeof(StudioPage)); var page = (StudioPage)MainWindow.CurrentNavFrame!.Content;
@@ -90,7 +91,11 @@ internal static class StudioAiValidation
             settingsDialog!.Hide(); await settingsShowing; results.Add(new { phase = "native mock test connection, no key echo" });
             // Instrument requests only in this explicitly isolated test WebView.
             await Eval(view, """
-                (()=>{window.__aiSmokeCalls=[];const original=window.fetch;
+                (()=>{window.__aiSmokeCalls=[];window.__aiSmokeContexts={};window.__aiSmokeControls=[];
+                  const post=window.chrome.webview.postMessage.bind(window.chrome.webview);
+                  window.chrome.webview.postMessage=m=>{if(m.type==='studio_chat_result'&&m.call_id==='begin')window.__aiSmokeContexts[m.request_id]=m.result;return post(m);};
+                  window.chrome.webview.addEventListener('message',e=>{if(e.data?.type==='studio_chat_cancel')window.__aiSmokeControls.push(e.data.request_id);});
+                  const original=window.fetch;
                   window.fetch=async(...args)=>{const url=String(args[0]);const method=args[1]?.method||'GET';
                     window.__aiSmokeCalls.push({url,method});
                     if(url==='/api/compile_effect')return new Response(JSON.stringify({success:false,stage:'compile_failed',message:'mock error C2039: fixture member'}),{status:400,headers:{'Content-Type':'application/json'}});
@@ -137,11 +142,40 @@ internal static class StudioAiValidation
             if (!Find<TextBox>("AiPrompt").Text.Contains("失败")) throw new InvalidOperationException("Ask AI did not fill ordinary chat prompt");
             Invoke(send); await Until(() => Task.FromResult((proposal.Text.Contains("C2039") || Descendants(Find<StackPanel>("AiMessages")).OfType<TextBlock>().Any(t => t.Text.Contains("C2039"))) && send.IsEnabled), "Mock error analysis failed: " + aiStatus.Text);
             results.Add(new { phase = "build error Ask AI minimal context" });
-            // Rejected model output never produces an applyable proposal.
+            // Exercise rejection with an existing executable proposal, not an empty card.
+            prompt.Text = "把当前效果速度提高一点"; Invoke(send);
+            await Until(() => Task.FromResult(send.IsEnabled && apply.IsEnabled), "Pre-rejection candidate missing");
+            var configBeforeRejection = ConfigText();
+            using var authorityClient = new System.Net.Http.HttpClient();
+            async Task<string> Authority() {
+                using var runtime = JsonDocument.Parse(await authorityClient.GetStringAsync("http://127.0.0.1:19897/api/runtime/status"));
+                return (await authorityClient.GetStringAsync("http://127.0.0.1:19898/api/config")) + runtime.RootElement.GetProperty("config").GetRawText();
+            }
+            var authorityBefore = await Authority();
+            var fingerprintBefore = (await Eval(view, "Object.values(window.__aiSmokeContexts).at(-1).fingerprint")).GetString();
+            var callCountBefore = (await Eval(view, "window.__aiSmokeCalls.length")).GetInt32();
+            var controlCountBefore = (await Eval(view, "window.__aiSmokeControls.length")).GetInt32();
             prompt.Text = "invalid-action"; Invoke(send);
-            await Until(() => Task.FromResult(send.IsEnabled && aiStatus.Text.Contains("不符合")), "Invalid action not rejected");
-            if (apply.IsEnabled) throw new InvalidOperationException("Invalid action enabled Apply");
-            results.Add(new { phase = "invalid action rejection" });
+            await Until(() => Task.FromResult(send.IsEnabled), "Rejected action did not complete");
+            await Until(async () => (await Eval(view, $"window.__aiSmokeControls.length>{controlCountBefore}")).GetBoolean(), "Candidate cancellation missing");
+            var fields = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+            if (apply.IsEnabled || Find<Button>("AiReject").IsEnabled || Find<Border>("AiProposalCard").Visibility != Visibility.Collapsed ||
+                typeof(StudioPage).GetField("_chatCandidate", fields)!.GetValue(page) != null ||
+                (bool)typeof(StudioPage).GetField("_aiProposalReady", fields)!.GetValue(page)!)
+                throw new InvalidOperationException("Rejected action retained an executable candidate");
+            if (!aiStatus.Text.Contains("动作已拒绝")) throw new InvalidOperationException("Missing explicit rejection status: " + aiStatus.Text);
+            // Read the actual editor graph fingerprint through its existing local context bridge.
+            var probe = Guid.NewGuid().ToString("N");
+            view.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new { type = "studio_chat_begin", request_id = probe }));
+            await Until(async () => (await Eval(view, $"Object.hasOwn(window.__aiSmokeContexts,'{probe}')")).GetBoolean(), "Post-rejection graph probe missing");
+            if ((await Eval(view, $"window.__aiSmokeContexts['{probe}'].fingerprint")).GetString() != fingerprintBefore ||
+                ConfigText() != configBeforeRejection || await Authority() != authorityBefore)
+                throw new InvalidOperationException("Rejected action changed draft or published/runtime authority");
+            if ((await Eval(view, $"window.__aiSmokeCalls.slice({callCountBefore}).some(c=>c.method!=='GET')")).GetBoolean())
+                throw new InvalidOperationException("Rejected action made a mutating HTTP request");
+            results.Add(new { phase = "invalid action rejection", candidate_cleared = true, apply_disabled = true,
+                draft_unchanged = true, published_runtime_authority_unchanged = true, automatic_apply = false, automatic_publish = false,
+                fingerprint = fingerprintBefore, rejection_status = aiStatus.Text });
             foreach (var theme in new[] { ElementTheme.Dark, ElementTheme.Light }) {
                 ((FrameworkElement)window.Content).RequestedTheme = theme;
                 foreach (var size in new[] { (1280, 800), (600, 500) }) {

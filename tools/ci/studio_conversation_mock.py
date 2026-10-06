@@ -2,7 +2,7 @@
 import json
 import time
 
-def reply_for(context, requests):
+def reply_for(context, requests, rejection_case='publish'):
     studio = context['current_project']['studio']
     prompt = next(m['text'] for m in reversed(context['conversation']) if m['role'] == 'user')
     rounds = context['tool_rounds']
@@ -21,7 +21,9 @@ def reply_for(context, requests):
     if prompt == 'malformed-with-text':
         if not rounds: return tool('propose_effect_change', {'action': 'propose', 'summary': '先验证候选，最终回复仍需通过动作校验。', 'preset': None, 'edits': [{'node_id': node['node_id'], 'value': 2.2}]})
         return {'message': '我建议改这里；这条动作无效。', 'tool_calls': [{'name': 'propose_effect_change', 'arguments': {'action': 'apply', 'path': 'C:/fixture/private'}}]}
-    if prompt == 'invalid-action': return tool('publish')
+    if prompt == 'invalid-action':
+        if rejection_case == 'malformed': return tool('propose_effect_change', {'action': 'apply'})
+        return tool('unknown_tool' if rejection_case == 'unknown' else 'publish')
     if prompt == 'repeat-tools': return tool('get_capabilities')
     if rounds:
         last = rounds[-1]

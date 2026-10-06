@@ -29,6 +29,7 @@ internal static class StudioToolingValidation
             await DaemonSupervisor.Instance.RefreshAsync();
             var address = Environment.GetEnvironmentVariable("AURA_STUDIO_AI_MOCK_URL")!;
             if (!Uri.TryCreate(address, UriKind.Absolute, out var uri) || !uri.IsLoopback || uri.Scheme != "http") throw new InvalidOperationException("Local mock required");
+            await Until(() => Task.FromResult(window.Content?.XamlRoot != null), "Fixture XAML root not ready");
             var scale = window.Content.XamlRoot.RasterizationScale;
             window.AppWindow.Resize(new((int)(1520 * scale), (int)(800 * scale)));
             window.NavigateTo(typeof(StudioPage)); var page = (StudioPage)MainWindow.CurrentNavFrame!.Content;
