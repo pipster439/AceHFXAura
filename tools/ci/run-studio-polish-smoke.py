@@ -3,6 +3,7 @@
 No deployment or package generation. Requires current built UI and daemon paths.
 Credentials use a random loopback target and are removed by the native harness.
 """
+from studio_conversation_mock import reply_for
 import argparse
 import ctypes
 from ctypes import wintypes
@@ -25,6 +26,7 @@ def main():
     parser.add_argument('--ui', required=True, type=Path)
     parser.add_argument('--output', required=True, type=Path)
     parser.add_argument('--capture', action='store_true')
+    parser.add_argument('--web-root', type=Path)
     args = parser.parse_args()
     repo = Path(__file__).resolve().parents[2]
     output = args.output.resolve(); output.mkdir(parents=True, exist_ok=True)
@@ -53,14 +55,7 @@ def main():
                 self.send_response(200); self.send_header('Content-Type', 'application/json'); self.send_header('Content-Length', str(len(body))); self.end_headers(); self.wfile.write(body)
                 return
             context = json.loads(data['messages'][1]['content'])
-            studio = context['studio']; prompt = context['prompt']
-            requests.append({'intent': studio['intent'], 'diagnostic_kind': studio['diagnostic_kind'], 'diagnostic': studio['diagnostic'],
-                'context_keys': sorted(studio), 'node_count': len(studio['nodes']), 'capabilities': studio['capabilities'], 'preset_ids': [p['id'] for p in studio['presets']], 'structured_output': data.get('response_format', {}).get('type')})
-            proposal = {'action': 'explain', 'summary': 'mock：C2039 表示成员不存在；建议检查支持的积木 API。', 'preset': None, 'edits': []}
-            if studio['intent'] == 'modify':
-                node = next(n for n in studio['nodes'] if n['input'] == 'PERIOD_SEC')
-                proposal = {'action': 'propose', 'summary': '将当前周期调整为 2 秒。', 'preset': None, 'edits': [{'node_id': node['node_id'], 'value': 2}]}
-            if 'invalid-action' in prompt: proposal['action'] = 'publish'
+            proposal = reply_for(context, requests)
             body = json.dumps({'choices': [{'finish_reason': 'stop', 'message': {'content': json.dumps(proposal, ensure_ascii=False)}}]}).encode()
             self.send_response(200); self.send_header('Content-Type', 'application/json'); self.send_header('Content-Length', str(len(body))); self.end_headers(); self.wfile.write(body)
     server = ThreadingHTTPServer(('127.0.0.1', 0), Mock)
@@ -71,7 +66,7 @@ def main():
         env = os.environ.copy(); env.update(AURA_STUDIO_POLISH='1', AURA_DATA_ROOT=str(root), AURA_DEV_ROOT=str(repo), AURA_DEV_BIN=str(binaries), AURA_MAGNETIC_VALIDATION_OFFLINE='1',
             AURA_STUDIO_TOOLING_DIR=str(output), AURA_STUDIO_AI_MOCK_URL=f'http://127.0.0.1:{server.server_port}/v1/', AURA_STUDIO_AI_CAPTURE='1' if args.capture else '0')
         # Use current built frontend; never overwrite tracked web/index.html.
-        web_root = repo / 'build/alpha8_polish/frontend'
+        web_root = args.web_root.resolve() if args.web_root else repo / 'build/alpha8_polish/frontend'
         kernel = ctypes.WinDLL('kernel32', use_last_error=True)
         kernel.CreateEventW.argtypes = [wintypes.LPVOID, wintypes.BOOL, wintypes.BOOL, wintypes.LPCWSTR]; kernel.CreateEventW.restype = wintypes.HANDLE
         kernel.SetEvent.argtypes = [wintypes.HANDLE]; kernel.CloseHandle.argtypes = [wintypes.HANDLE]
@@ -126,7 +121,7 @@ def main():
             with zipfile.ZipFile(output / 'fixture.auraeffect') as bundle:
                 assert bundle.namelist() == ['manifest.json', 'project.json']
                 assert all('fixture-only-key' not in bundle.read(n).decode('utf-8') for n in bundle.namelist())
-            assert len(requests) == 1 and requests[0]['intent'] == 'modify', 'Unexpected external request scope'
+            assert len(requests) == 2 and requests[1]['tools'] == ['propose_effect_change'], 'Unexpected conversation/tool scope'
             assert requests[0]['preset_ids'] == [], 'Unselected preset metadata entered AI context'
             assert requests[0]['capabilities']['gsi_fields'] == [] and requests[0]['capabilities']['inputs'] == ['time'], 'Unrelated GSI input entered AI context'
         finally:

@@ -96,7 +96,7 @@ internal static class StudioAiValidation
             results.Add(new { phase = "shell and retained editor load", dry_run = status.IsDryRun });
             var commands = Find<CommandBar>("StudioCommands");
             InvokeControl(commands.SecondaryCommands.OfType<AppBarButton>().First(b => b.Label == "AI 助手"));
-            Find<TextBox>("AiPrompt").Text = "把当前效果速度提高一点"; Find<ComboBox>("AiIntent").SelectedIndex = 1;
+            Find<TextBox>("AiPrompt").Text = "把当前效果速度提高一点";
             var prompt = Find<TextBox>("AiPrompt"); var proposal = Find<TextBlock>("AiProposal"); var aiStatus = Find<TextBlock>("AiStatus");
             var apply = Find<Button>("AiApply"); var undo = Find<Button>("AiUndo"); var send = Find<Button>("AiSend");
             string ConfigText() => File.ReadAllText(Path.Combine(RuntimeLayoutResolver.DataRoot, "config.json"));
@@ -131,11 +131,11 @@ internal static class StudioAiValidation
             InvokeControl(Find<AppBarButton>("BuildCommand"));
             await Until(() => Task.FromResult(Find<TextBlock>("ValidationSummary").Text.Contains("失败")), "Mock build error did not appear");
             Invoke(Find<Button>("AskAiError"));
-            if (Find<ComboBox>("AiIntent").SelectedIndex != 3) throw new InvalidOperationException("Ask AI did not select error action");
-            Invoke(send); await Until(() => Task.FromResult(proposal.Text.Contains("C2039") && send.IsEnabled), "Mock error analysis failed: " + aiStatus.Text);
+            if (!Find<TextBox>("AiPrompt").Text.Contains("失败")) throw new InvalidOperationException("Ask AI did not fill ordinary chat prompt");
+            Invoke(send); await Until(() => Task.FromResult((proposal.Text.Contains("C2039") || Descendants(Find<StackPanel>("AiMessages")).OfType<TextBlock>().Any(t => t.Text.Contains("C2039"))) && send.IsEnabled), "Mock error analysis failed: " + aiStatus.Text);
             results.Add(new { phase = "build error Ask AI minimal context" });
             // Rejected model output never produces an applyable proposal.
-            prompt.Text = "invalid-action"; Find<ComboBox>("AiIntent").SelectedIndex = 1; Invoke(send);
+            prompt.Text = "invalid-action"; Invoke(send);
             await Until(() => Task.FromResult(send.IsEnabled && aiStatus.Text.Contains("不符合")), "Invalid action not rejected");
             if (apply.IsEnabled) throw new InvalidOperationException("Invalid action enabled Apply");
             results.Add(new { phase = "invalid action rejection" });
@@ -159,7 +159,7 @@ internal static class StudioAiValidation
             if (Environment.GetEnvironmentVariable("AURA_STUDIO_AI_CAPTURE") == "1") {
                 var scale = window.Content.XamlRoot.RasterizationScale;
                 window.AppWindow.Resize(new((int)(1520 * scale), (int)(800 * scale)));
-                prompt.Text = "把当前效果速度提高一点"; Find<ComboBox>("AiIntent").SelectedIndex = 1; Invoke(send);
+                prompt.Text = "把当前效果速度提高一点"; Invoke(send);
                 await Until(() => Task.FromResult(apply.IsEnabled), "Capture proposal did not validate");
                 apply.StartBringIntoView(new BringIntoViewOptions { AnimationDesired = false }); await Task.Delay(100);
             }

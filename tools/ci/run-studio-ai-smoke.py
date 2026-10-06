@@ -3,6 +3,7 @@
 No deployment or package generation. Requires current built UI and daemon paths.
 Credentials use a random loopback target and are removed by the native harness.
 """
+from studio_conversation_mock import reply_for
 import argparse
 import ctypes
 from ctypes import wintypes
@@ -23,6 +24,8 @@ def main():
     parser.add_argument('--ui', required=True, type=Path)
     parser.add_argument('--output', required=True, type=Path)
     parser.add_argument('--capture', action='store_true')
+    parser.add_argument('--conversation', action='store_true')
+    parser.add_argument('--web-root', type=Path)
     args = parser.parse_args()
     repo = Path(__file__).resolve().parents[2]
     output = args.output.resolve(); output.mkdir(parents=True, exist_ok=True)
@@ -44,14 +47,9 @@ def main():
                 self.send_response(200); self.send_header('Content-Type', 'application/json'); self.send_header('Content-Length', str(len(body))); self.end_headers(); self.wfile.write(body)
                 return
             context = json.loads(data['messages'][1]['content'])
-            studio = context['studio']; prompt = context['prompt']
-            requests.append({'intent': studio['intent'], 'diagnostic_kind': studio['diagnostic_kind'], 'diagnostic': studio['diagnostic'],
-                'context_keys': sorted(studio), 'node_count': len(studio['nodes']), 'structured_output': data.get('response_format', {}).get('type')})
-            proposal = {'action': 'explain', 'summary': 'mock：C2039 表示成员不存在；建议检查支持的积木 API。', 'preset': None, 'edits': []}
-            if studio['intent'] == 'modify':
-                node = next(n for n in studio['nodes'] if n['input'] == 'PERIOD_SEC')
-                proposal = {'action': 'propose', 'summary': '将周期从 3 秒调整为 2 秒。', 'preset': None, 'edits': [{'node_id': node['node_id'], 'value': 2}]}
-            if 'invalid-action' in prompt: proposal['action'] = 'publish'
+            if any(m.get('role') == 'user' and m.get('text') == 'cancel-wait' for m in context['conversation'][-1:]):
+                (output / 'mock-inflight-ready.json').write_text('{"inflight":true}', encoding='utf-8')
+            proposal = reply_for(context, requests)
             body = json.dumps({'choices': [{'finish_reason': 'stop', 'message': {'content': json.dumps(proposal, ensure_ascii=False)}}]}).encode()
             self.send_response(200); self.send_header('Content-Type', 'application/json'); self.send_header('Content-Length', str(len(body))); self.end_headers(); self.wfile.write(body)
     server = ThreadingHTTPServer(('127.0.0.1', 0), Mock)
@@ -59,10 +57,12 @@ def main():
     with tempfile.TemporaryDirectory(prefix='aura-studio-ai-') as directory:
         root = Path(directory); (root / '.aura-studio-ai-fixture').write_text('local mock only')
         path = root / 'config.json'; path.write_text(json.dumps(config), encoding='utf-8')
-        env = os.environ.copy(); env.update(AURA_DATA_ROOT=str(root), AURA_DEV_ROOT=str(repo), AURA_DEV_BIN=str(binaries), AURA_MAGNETIC_VALIDATION_OFFLINE='1',
+        env = os.environ.copy();
+        if args.conversation: env['AURA_STUDIO_CONVERSATION'] = '1'
+        env.update(AURA_DATA_ROOT=str(root), AURA_DEV_ROOT=str(repo), AURA_DEV_BIN=str(binaries), AURA_MAGNETIC_VALIDATION_OFFLINE='1',
             AURA_STUDIO_AI_VALIDATION_DIR=str(output), AURA_STUDIO_AI_MOCK_URL=f'http://127.0.0.1:{server.server_port}/v1/', AURA_STUDIO_AI_CAPTURE='1' if args.capture else '0')
         # Use current built frontend; never overwrite tracked web/index.html.
-        web_root = repo / 'build/alpha8/frontend'
+        web_root = args.web_root.resolve() if args.web_root else repo / 'build/alpha8/frontend'
         kernel = ctypes.WinDLL('kernel32', use_last_error=True)
         kernel.CreateEventW.argtypes = [wintypes.LPVOID, wintypes.BOOL, wintypes.BOOL, wintypes.LPCWSTR]; kernel.CreateEventW.restype = wintypes.HANDLE
         kernel.SetEvent.argtypes = [wintypes.HANDLE]; kernel.CloseHandle.argtypes = [wintypes.HANDLE]
@@ -102,8 +102,8 @@ def main():
             gui.wait(timeout=180)
             result = json.loads((output / 'smoke-results.json').read_text(encoding='utf-8'))
             if result['error']: raise RuntimeError(result['error'])
-            assert any(r['intent'] == 'error_analysis' and r['diagnostic_kind'] == 'build' and 'C2039' in r['diagnostic'] for r in requests), 'Error context was not carried'
-            assert all(r['context_keys'] == ['capabilities', 'diagnostic', 'diagnostic_kind', 'intent', 'name', 'nodes', 'presets', 'publication'] for r in requests)
+            assert any('get_build_errors' in r['tools'] and any('C2039' in d for d in r['diagnostics']) for r in requests), 'Actual error tool/diagnostic was not carried'
+            assert all(r['preset_ids'] == [] for r in requests), 'Unrelated preset metadata was sent'
             print(json.dumps({'result': 'PASS', 'phases': len(result['results']), 'mock_requests': len(requests)}))
         finally:
             (output / 'mock-requests.json').write_text(json.dumps(requests, indent=2, ensure_ascii=False), encoding='utf-8')

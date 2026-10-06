@@ -57,7 +57,7 @@ internal static class StudioToolingValidation
             void Bench() => InvokeControl(commands.SecondaryCommands.OfType<AppBarButton>().First(b => b.Tag as string == "bench"));
             async Task Click(string selector) => await Eval(view, $"(()=>{{const e=document.querySelector({JsonSerializer.Serialize(selector)});if(!e||e.disabled)throw Error('Unavailable control');e.click();return true;}})()");
             async Task ProposeApply() {
-                ShowAi(); Find<ComboBox>("AiIntent").SelectedIndex = 1; Find<TextBox>("AiPrompt").Text = "把当前效果速度提高一点";
+                ShowAi(); Find<TextBox>("AiPrompt").Text = "把当前效果速度提高一点";
                 Invoke(Find<Button>("AiSend")); await Until(() => Task.FromResult(Find<Button>("AiApply").IsEnabled), "AI proposal not validated: " + Find<TextBlock>("AiStatus").Text);
                 NoPublishedChange(); Invoke(Find<Button>("AiApply"));
                 await Until(() => Task.FromResult(Find<Button>("AiUndo").IsEnabled), "AI apply failed: " + Find<TextBlock>("AiStatus").Text);

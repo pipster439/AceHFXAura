@@ -7,6 +7,11 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     Background="Transparent"
     mc:Ignorable="d">
+    <Page.Resources>
+        <Style x:Key="ChatUserBubble" TargetType="Border"><Setter Property="Background" Value="{ThemeResource AccentFillColorDefaultBrush}"/></Style>
+        <Style x:Key="ChatAssistantBubble" TargetType="Border"><Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}"/></Style>
+        <Style x:Key="ChatUserText" TargetType="TextBlock"><Setter Property="Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}"/></Style>
+    </Page.Resources>
     <Page.KeyboardAccelerators>
         <KeyboardAccelerator Key="P" Modifiers="Control,Shift" Invoked="PaletteShortcut_Invoked"/>
     </Page.KeyboardAccelerators>
@@ -82,47 +87,50 @@
         </InfoBar>
         </Grid>
         <Border x:Name="AiPanel" Grid.Row="2" Grid.Column="1" Margin="8" Padding="12" CornerRadius="8" Background="{ThemeResource SolidBackgroundFillColorBaseBrush}" Visibility="Collapsed">
-            <ScrollViewer HorizontalScrollBarVisibility="Disabled">
-                <StackPanel Spacing="10">
-                    <TextBlock Text="AI 助手" Style="{ThemeResource SubtitleTextBlockStyle}"/>
-                    <TextBlock Text="建议经验证与预览后，由你决定应用。" TextWrapping="Wrap"/>
-                    <ComboBox x:Name="AiIntent" Header="工作室动作" SelectedIndex="1" HorizontalAlignment="Stretch" AutomationProperties.AutomationId="AiIntent">
-                        <ComboBoxItem Content="生成光效"/><ComboBoxItem Content="修改当前光效"/><ComboBoxItem Content="解释当前光效"/><ComboBoxItem Content="分析验证或构建错误"/>
-                    </ComboBox>
-                    <ComboBox x:Name="AiPreset" Header="生成时采用的模板" HorizontalAlignment="Stretch" AutomationProperties.AutomationId="AiPreset"/>
-                    <CheckBox x:Name="AiManualMode" Content="真实 provider 人工验收模式" Checked="ManualMode_Click" Unchecked="ManualMode_Click" AutomationProperties.AutomationId="AiManualMode"/>
-                    <StackPanel x:Name="AiManualChecklist" Visibility="Collapsed" Spacing="6">
-                        <TextBlock Text="Owner 手动验收；采用本地测试台。每次请求需确认，可能产生费用。429 / 超时不会自动重试。不要把 API key 填入工程或提示词。" TextWrapping="Wrap"/>
-                        <CheckBox AutomationProperties.AutomationId="ManualCheck0"><TextBlock Text="A · 在服务设置中手动测试连接" TextWrapping="Wrap"/></CheckBox>
-                        <CheckBox AutomationProperties.AutomationId="ManualCheck1"><TextBlock Text="B · 解释当前效果" TextWrapping="Wrap"/></CheckBox>
-                        <CheckBox AutomationProperties.AutomationId="ManualCheck2"><TextBlock Text="C–E · 提速且不改颜色；检查 typed proposal 与 Diff" TextWrapping="Wrap"/></CheckBox>
-                        <CheckBox AutomationProperties.AutomationId="ManualCheck3"><TextBlock Text="F–G · 手动 Apply 后运行测试台" TextWrapping="Wrap"/></CheckBox>
-                        <CheckBox AutomationProperties.AutomationId="ManualCheck4"><TextBlock Text="H · Undo 或恢复 pre-AI 快照" TextWrapping="Wrap"/></CheckBox>
-                        <CheckBox AutomationProperties.AutomationId="ManualCheck5"><TextBlock Text="I · 密钥未出现在日志、诊断、工程、工程包或恢复记录" TextWrapping="Wrap"/></CheckBox>
+            <Grid RowSpacing="8">
+                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                <Grid ColumnSpacing="8"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <StackPanel><TextBlock Text="AI 助手" Style="{ThemeResource SubtitleTextBlockStyle}"/><TextBlock Text="一起调整当前草稿；应用由你决定。" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}"/></StackPanel>
+                    <Button x:Name="AiClear" Grid.Column="1" Content="清空" Click="AssistantClear_Click" AutomationProperties.AutomationId="AiClear" AutomationProperties.Name="清空当前工程会话"/>
+                </Grid>
+                <ScrollViewer x:Name="AiHistoryScroll" Grid.Row="1" HorizontalScrollBarVisibility="Disabled" ViewChanged="AssistantScroll_Changed">
+                    <StackPanel Spacing="10">
+                        <StackPanel x:Name="AiEmptyPrompts" Spacing="6">
+                            <TextBlock Text="从一个问题开始" TextWrapping="Wrap"/>
+                            <Button Content="做一个按键扩散波纹" Tag="做一个按键按下后向外扩散的波纹" Click="AssistantExample_Click" AutomationProperties.AutomationId="AiExampleReactive"/>
+                            <Button Content="解释当前效果" Tag="解释一下当前效果" Click="AssistantExample_Click" AutomationProperties.AutomationId="AiExampleExplain"/>
+                            <Button Content="让它柔和一点" Tag="让这个效果柔和一点，颜色别变" Click="AssistantExample_Click" AutomationProperties.AutomationId="AiExampleSoften"/>
+                            <Button Content="为什么验证失败？" Tag="为什么当前工程验证失败？" Click="AssistantExample_Click" AutomationProperties.AutomationId="AiExampleError"/>
+                            <Button Content="推荐测试场景" Tag="给我推荐一个适合这个效果的 Test Bench 场景" Click="AssistantExample_Click" AutomationProperties.AutomationId="AiExampleBench"/>
+                        </StackPanel>
+                        <StackPanel x:Name="AiMessages" Spacing="10" AutomationProperties.AutomationId="AiMessages"/>
+                        <Border x:Name="AiProposalCard" Padding="10" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" CornerRadius="6" Visibility="Collapsed">
+                            <StackPanel Spacing="8">
+                                <TextBlock x:Name="AiProposalTitle" Text="建议修改 · 尚未应用" FontWeight="SemiBold"/>
+                                <TextBlock x:Name="AiProposal" TextWrapping="Wrap" IsTextSelectionEnabled="True" AutomationProperties.AutomationId="AiProposal"/>
+                                <StackPanel x:Name="AiPreviewSwatches" Orientation="Horizontal" Spacing="4" Visibility="Collapsed"/>
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <Button x:Name="AiPreview" Content="预览" Click="AssistantPreview_Click" AutomationProperties.AutomationId="AiPreview"/>
+                                    <Button x:Name="AiApply" Content="应用至草稿" Click="AssistantApply_Click" IsEnabled="False" AutomationProperties.AutomationId="AiApply"/>
+                                    <Button x:Name="AiReject" Content="放弃" Click="AssistantReject_Click" IsEnabled="False" AutomationProperties.AutomationId="AiReject"/>
+                                </StackPanel>
+                                <Button x:Name="AiBench" Content="在测试台查看当前草稿" Click="AssistantBench_Click" AutomationProperties.AutomationId="AiBench"/>
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
-                    <TextBlock Text="可试试：" Style="{ThemeResource CaptionTextBlockStyle}"/>
-                    <Button Content="做一个按键按下后亮起的光效" Tag="做一个按键按下后亮起并衰减的光效" Click="AssistantExample_Click" AutomationProperties.AutomationId="AiExampleReactive"/>
-                    <Button Content="把当前效果衰减速度提高" Tag="把当前效果的衰减速度提高" Click="AssistantExample_Click" AutomationProperties.AutomationId="AiExampleDecay"/>
-                    <Button Content="基于当前效果做一个更柔和的版本" Tag="基于当前效果做一个更柔和的版本" Click="AssistantExample_Click" AutomationProperties.AutomationId="AiExampleSoften"/>
-                    <TextBox x:Name="AiPrompt" Header="描述目标" PlaceholderText="把当前效果速度提高一点" AcceptsReturn="True" TextWrapping="Wrap" MaxLength="4000" MinHeight="70" AutomationProperties.AutomationId="AiPrompt"/>
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Button x:Name="AiSend" Content="生成建议" Click="AssistantSend_Click" AutomationProperties.AutomationId="AiSend"/>
-                        <Button x:Name="AiCancel" Content="取消请求" Click="AssistantCancel_Click" IsEnabled="False" AutomationProperties.AutomationId="AiCancel"/>
-                    </StackPanel>
-                    <Button Content="AI 服务设置" Click="LlmSettings_Click" AutomationProperties.AutomationId="AiProviderSettings"/>
-                    <TextBlock x:Name="AiStatus" TextWrapping="Wrap"/>
-                    <TextBlock Text="建议变更 / 本地模拟预览" FontWeight="SemiBold"/>
-                    <StackPanel x:Name="AiPreviewSwatches" Orientation="Horizontal" Spacing="4"/>
-                    <TextBlock x:Name="AiProposal" TextWrapping="Wrap" IsTextSelectionEnabled="True" AutomationProperties.AutomationId="AiProposal"/>
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Button x:Name="AiApply" Content="应用至草稿" Click="AssistantApply_Click" IsEnabled="False" AutomationProperties.AutomationId="AiApply"/>
-                        <Button x:Name="AiReject" Content="放弃建议" Click="AssistantReject_Click" IsEnabled="False" AutomationProperties.AutomationId="AiReject"/>
+                </ScrollViewer>
+                <StackPanel Grid.Row="2" Spacing="6">
+                    <TextBlock x:Name="AiStatus" TextWrapping="Wrap" MaxHeight="64" AutomationProperties.LiveSetting="Polite"/>
+                    <TextBox x:Name="AiPrompt" Header="消息" PlaceholderText="继续聊聊这个效果…" AcceptsReturn="True" TextWrapping="Wrap" MaxLength="4000" MinHeight="68" MaxHeight="140" PreviewKeyDown="AssistantPrompt_KeyDown" AutomationProperties.AutomationId="AiPrompt"/>
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Button x:Name="AiSend" Content="发送" Click="AssistantSend_Click" AutomationProperties.AutomationId="AiSend"/>
+                        <Button x:Name="AiCancel" Content="取消" Click="AssistantCancel_Click" IsEnabled="False" AutomationProperties.AutomationId="AiCancel"/>
+                        <Button x:Name="AiRetry" Content="重试" Click="AssistantRetry_Click" IsEnabled="False" AutomationProperties.AutomationId="AiRetry"/>
                     </StackPanel>
                     <Button x:Name="AiUndo" Content="撤销 AI 修改" Click="AssistantUndo_Click" IsEnabled="False" AutomationProperties.AutomationId="AiUndo"/>
-                    <Button x:Name="AiRepair" Content="请求修正建议（最多两次）" Click="AssistantRepair_Click" IsEnabled="False" AutomationProperties.AutomationId="AiRepair"/>
-                    <TextBlock Text="普通积木撤销记录保留；AI 撤销独立保留一次，后续编辑后失效。" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                    <TextBlock Text="Enter 发送 · Shift+Enter 换行 · 会话仅保留到退出" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}"/>
                 </StackPanel>
-            </ScrollViewer>
+            </Grid>
         </Border>
         <StackPanel Grid.Row="4" Grid.ColumnSpan="2" Margin="12,4" Spacing="4">
             <TextBlock x:Name="RuntimeSummary" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}"/>

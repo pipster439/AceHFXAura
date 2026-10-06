@@ -68,6 +68,8 @@ public partial class App : Application
         mainWindow.Activate();
         if (StudioToolingValidation.Requested) _ = StudioToolingValidation.RunAsync(mainWindow);
         else if (StudioAiValidation.SettingsOnly) _ = StudioAiValidation.RunSettingsAsync(mainWindow);
+        else if (StudioOwnerAcceptance.Requested) _ = StudioOwnerAcceptance.OpenAsync(mainWindow);
+        else if (StudioConversationValidation.Requested) _ = StudioConversationValidation.RunAsync(mainWindow);
         else if (StudioAiValidation.FullSmoke) _ = StudioAiValidation.RunSmokeAsync(mainWindow);
         else if (Validation.LayoutValidation.Requested) _ = Validation.LayoutValidation.RunAsync(mainWindow);
         else if (Validation.StudioValidation.Requested) _ = Validation.StudioValidation.RunAsync(mainWindow);

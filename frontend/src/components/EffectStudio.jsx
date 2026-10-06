@@ -1,3 +1,4 @@
+import { StudioConversationTools, projectFingerprint } from '../utils/studioConversation.js';
 import { assistantContext, parseProposal, StudioProposalSession, loadAiSnapshot, validateCandidate } from '../utils/studioAssistant.js';
 import { listenStudioCommands, postStudioState } from '../utils/studioHost.js';
 import { normalizePublication } from '../blockly/publication.js';
@@ -48,6 +49,15 @@ export default function EffectStudio({
 }) {
   const aiRequestRef = useRef(null);
   const aiSessionRef = useRef(new StudioProposalSession());
+  const chatToolsRef = useRef(new StudioConversationTools(aiSessionRef.current));
+  const chatTurnRef = useRef(null);
+  const revisionSequence = useRef(0);
+  const postRevision = async () => {
+    if (!embedded || !workspaceRef.current) return;
+    const seq = ++revisionSequence.current, snapshot = currentDraft();
+    const fingerprint = await projectFingerprint(snapshot);
+    if (seq === revisionSequence.current) window.chrome?.webview?.postMessage({ type: "studio_chat_revision", name: snapshot.name, fingerprint });
+  };
   const [benchOpen, setBenchOpen] = useState(false);
   const [runToken, setRunToken] = useState(0);
   const bundleBridge = useRef(null);
@@ -96,7 +106,7 @@ export default function EffectStudio({
       setIsPlaying(false); setBenchOpen(false); loadAiSnapshot(workspaceRef.current, draft.json);
       publicationRef.current = normalizePublication(draft.publication); setPublication(publicationRef.current);
       compiledJsRef.current = JsTranspiler.compile(workspaceRef.current, publicationRef.current);
-      setRecovery(null); aiSessionRef.current = new StudioProposalSession(); queueDraft(); setStorageStatus('已恢复至草稿；尚未保存或发布。');
+      setRecovery(null); aiSessionRef.current = new StudioProposalSession(); chatToolsRef.current = new StudioConversationTools(aiSessionRef.current); postRevision(); queueDraft(); setStorageStatus('已恢复至草稿；尚未保存或发布。');
       if (aiRequestRef.current) window.chrome?.webview?.postMessage({ type: 'studio_ai_applied', request_id: aiRequestRef.current.id, text: '快照已恢复为草稿；发布状态保持不变。', undo: false });
     } catch (e) { setStorageStatus(e.message); }
     finally { setIsCompiling(false); }
@@ -112,6 +122,7 @@ export default function EffectStudio({
   const effectNameRef = useRef(effectName);
   effectNameRef.current = effectName;
   const [publication, setPublication] = useState(() => normalizePublication(config?.blockly_effects?.[activeEffectName]?.publication));
+  useEffect(() => { postRevision(); }, [effectName, publication]);
   const publicationRef = useRef(publication);
   publicationRef.current = publication;
   const [isPlaying, setIsPlaying] = useState(true);
@@ -200,6 +211,7 @@ export default function EffectStudio({
     const onWorkspaceChange = (event) => {
       if (event?.isUiEvent) return;
       setCapabilityManifest(deriveEffectCapabilities(currentDraft()));
+      postRevision();
       try {
         compiledJsRef.current = JsTranspiler.compile(ws, publicationRef.current);
         previewClockRef.current = { elapsed: 0, last: null };
@@ -252,6 +264,7 @@ export default function EffectStudio({
       setEffectName(activeEffectName);
       effectNameRef.current = activeEffectName;
       setCapabilityManifest(deriveEffectCapabilities(currentDraft()));
+      postRevision();
       observeDraft();
     }
   }, [activeEffectName, config]);
@@ -474,6 +487,31 @@ export default function EffectStudio({
     webview.postMessage({ type: "studio_ai_catalog", presets: EFFECT_PRESETS.map(p => ({ id: p.id, name: p.name })) });
     const receive = async event => {
       const m = event.data;
+      if (m?.type === 'studio_chat_clear') { chatToolsRef.current.clear(); chatTurnRef.current = null; return; }
+      if (m?.type === 'studio_chat_cancel' && m.request_id === chatTurnRef.current) { chatToolsRef.current.cancel(); chatTurnRef.current = null; aiSessionRef.current.reject(); return; }
+      if (m?.type === 'studio_chat_begin' && /^[a-f0-9]{32}$/.test(m.request_id || '')) {
+        try {
+          if (isCompiling || recovery || !workspaceRef.current) throw new Error('工程暂不可请求');
+          const snapshot = currentDraft();
+          chatTurnRef.current = m.request_id;
+          const context = await chatToolsRef.current.begin(snapshot);
+          aiRequestRef.current = { id: m.request_id, intent: 'modify', snapshot };
+          webview.postMessage({ type: 'studio_chat_result', request_id: m.request_id, call_id: 'begin', result: context });
+        } catch { webview.postMessage({ type: 'studio_chat_result', request_id: m.request_id, call_id: 'begin', error: '请先解决工程状态或恢复草稿' }); }
+        return;
+      }
+      if (m?.type === 'studio_chat_tool' && m.request_id === chatTurnRef.current) {
+        try {
+          if (isCompiling || recovery || !workspaceRef.current) throw new Error('工程暂不可请求');
+          const result = await chatToolsRef.current.execute(m.name, m.arguments, currentDraft(), {
+            validation: legacyWorkspaceError || editError || deriveEffectCapabilities(currentDraft()).diagnostics.map(c => CAPABILITY_DIAGNOSTICS[c]).join(' '),
+            build: compilerSuccess === false ? (compilerLog || '').split('\n').filter(line => /error|错误|失败|确认|加载/i.test(line)).slice(0, 3).join('\n') : ''
+          });
+          if (m.request_id !== chatTurnRef.current) return;
+          webview.postMessage({ type: 'studio_chat_result', request_id: m.request_id, call_id: m.call_id, result });
+        } catch (error) { webview.postMessage({ type: 'studio_chat_result', request_id: m.request_id, call_id: m.call_id, error: error.message }); }
+        return;
+      }
       if (m?.type === 'studio_ai_context' && /^[a-f0-9]{32}$/.test(m.request_id || '') && ['generate', 'modify', 'explain', 'error_analysis'].includes(m.intent)) {
         if (isCompiling || !workspaceRef.current || aiApplyingRef.current) return;
         aiApplyingRef.current = true;
@@ -507,7 +545,7 @@ export default function EffectStudio({
         if (isCompiling || !workspaceRef.current) return;
         const current = () => ({ name: effectNameRef.current, publication: publicationRef.current, json: Blockly.serialization.workspaces.save(workspaceRef.current) });
         try {
-          if (m.type === 'studio_ai_reject') { aiSessionRef.current.reject(); webview.postMessage({ type: 'studio_ai_applied', request_id: m.request_id, text: '建议已放弃。', undo: !!aiSessionRef.current.undoState }); return; }
+          if (m.type === 'studio_ai_reject') { chatToolsRef.current.mark('dismissed'); aiSessionRef.current.reject(); webview.postMessage({ type: 'studio_ai_applied', request_id: m.request_id, text: '建议已放弃。', undo: !!aiSessionRef.current.undoState }); return; }
           if (recovery) throw new Error('请先恢复或放弃可恢复草稿。');
           if (m.type === 'studio_ai_apply') await checkpointDraft('before_ai_apply');
           const next = m.type === 'studio_ai_apply' ? aiSessionRef.current.apply(current()) : aiSessionRef.current.undo(current());
@@ -522,6 +560,8 @@ export default function EffectStudio({
             setEditError(null); setCompilerSuccess(null); setCompilerLog(null); setBuildResult('尚未构建');
           }
           if (m.type === 'studio_ai_apply') aiSessionRef.current.markApplied(current());
+          chatToolsRef.current.mark(m.type === 'studio_ai_apply' ? 'applied' : 'undone');
+          postRevision();
           webview.postMessage({ type: 'studio_ai_applied', request_id: m.request_id, text: m.type === 'studio_ai_apply' ? '已应用至草稿；预览已暂停。可撤销或保存草稿。' : 'AI 修改已撤销。', undo: m.type === 'studio_ai_apply' });
         } catch (err) { webview.postMessage({ type: 'studio_ai_applied', request_id: m.request_id, text: err.message, undo: !!aiSessionRef.current.undoState }); }
         finally { aiApplyingRef.current = false; }

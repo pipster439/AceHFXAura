@@ -91,10 +91,8 @@ internal static class StudioPolishValidation
         } finally { root.RequestedTheme=originalTheme; StudioPage.HostThemeChanged(); await view.CoreWebView2.CallDevToolsProtocolMethodAsync("Emulation.clearDeviceMetricsOverride", "{}"); window.AppWindow.Resize(new((int)(1520*scale),(int)(800*scale))); await SettleWindow(1520); }
         // Exercise the manual checklist without issuing any provider request.
         InvokeControl(commands.SecondaryCommands.OfType<AppBarButton>().First(b=>b.Label=="AI 助手"));
-        var manual=Find<CheckBox>("AiManualMode"); manual.IsChecked=true;
-        if(Find<StackPanel>("AiManualChecklist").Visibility!=Visibility.Visible || Find<Button>("AiRepair").IsEnabled) throw new InvalidOperationException("Manual acceptance harness unavailable");
-        await CaptureNative("manual-mode-native");
-        manual.IsChecked=false;
+        if(page.FindName("AiIntent") != null || page.FindName("AiPreset") != null || Find<StackPanel>("AiEmptyPrompts").Visibility != Visibility.Visible) throw new InvalidOperationException("Conversation UI unavailable");
+        await CaptureNative("conversation-empty-native");
         var status=Find<TextBlock>("AiStatus"); var proposal=Find<TextBlock>("AiProposal");
         status.Text=string.Concat(Enumerable.Repeat("本地验证错误：请检查支持的积木与播放方式。",60));
         proposal.Text=string.Concat(Enumerable.Repeat("typed proposal 未应用；长错误仍可滚动阅读。",60));
@@ -108,8 +106,8 @@ internal static class StudioPolishValidation
         if(Descendants(settingsDialog!).OfType<PasswordBox>().First().Password.Length!=0) throw new InvalidOperationException("Stored credential echoed");
         await CaptureNative("long-model-settings-native");
         settingsDialog!.Hide(); await settingsTask;
-        manual.IsChecked=false; InvokeControl(commands.SecondaryCommands.OfType<AppBarButton>().First(b=>b.Label=="AI 助手"));
-        record("manual provider checklist, long model/error layout, hidden credential, retry disabled; zero provider requests", null);
+        InvokeControl(commands.SecondaryCommands.OfType<AppBarButton>().First(b=>b.Label=="AI 助手"));
+        record("conversation empty state, long model/error layout, hidden credential; zero provider requests", null);
         Find<ComboBox>("RecentProjects").SelectedItem="fixture";
         await Until(()=>Task.FromResult(Find<TextBlock>("ProjectStatus").Text.StartsWith("fixture ")),"Original fixture not reselected");
     }
