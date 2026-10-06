@@ -61,7 +61,7 @@ public sealed class StudioLlmProvider(HttpClient http)
             if (!response.IsSuccessStatusCode)
                 throw response.StatusCode switch {
                     HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden => new StudioLlmException("auth", "认证失败，请检查密钥和权限。"),
-                    HttpStatusCode.TooManyRequests => new StudioLlmException("rate_limit", "请求过于频繁，请稍后重试。"),
+                    HttpStatusCode.TooManyRequests => new StudioLlmException("rate_limit", "请求过于频繁（HTTP 429）；未自动重试，请稍后手动重试。"),
                     _ => new StudioLlmException("http", "服务请求失败（HTTP " + (int)response.StatusCode + "）。") };
             if (response.Content.Headers.ContentLength > MaxResponseBytes) throw TooLarge();
             await using var stream = await response.Content.ReadAsStreamAsync(timeout.Token);
@@ -82,7 +82,7 @@ public sealed class StudioLlmProvider(HttpClient http)
             return StudioLlmRedaction.Filter(content, key);
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { throw; }
-        catch (OperationCanceledException) { throw new StudioLlmException("timeout", "服务请求超时。"); }
+        catch (OperationCanceledException) { throw new StudioLlmException("timeout", "服务请求超时；未自动重试。"); }
         catch (HttpRequestException) { throw new StudioLlmException("network", "无法连接服务。"); }
         catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException or IOException) {
             throw new StudioLlmException("response", "响应格式无效或连接中断。");

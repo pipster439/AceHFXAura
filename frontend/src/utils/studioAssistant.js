@@ -22,19 +22,19 @@ export function numericNodes(json) {
       if (input === 'DECAY_RATE') { min = 0; max = 100; }
       nodes.push({ node_id: `n${nodes.length}`, type: 'math_number', parent, input, value: block.fields.NUM, min, max, block });
     }
-    for (const [key, value] of Object.entries(block.inputs || {})) { visit(value.shadow, block.type, key); visit(value.block, block.type, key); }
+    for (const [key, value] of Object.entries(block.inputs || {})) visit(value.block || value.shadow, block.type, key);
     visit(block.next?.block, block.type, 'next');
   };
   for (const block of (Array.isArray(json.blocks) ? json.blocks : json.blocks?.blocks) || []) visit(block);
   return nodes;
 }
-export function assistantContext(snapshot, intent, diagnostic = '', diagnosticKind = 'validation') {
+export function assistantContext(snapshot, intent, diagnostic = '', diagnosticKind = 'validation', selectedPresetId = null) {
   if (!ASSISTANT_INTENTS.includes(intent)) throw new Error('未知工作室动作');
   const nodes = numericNodes(snapshot.json).map(({ block, ...n }) => n);
   const capabilities = deriveEffectCapabilities(snapshot);
   return { intent, name: /^[a-zA-Z_][a-zA-Z0-9_]{0,47}$/.test(snapshot.name) ? snapshot.name : 'current_effect',
     publication: normalizePublication(snapshot.publication), nodes, capabilities,
-    presets: EFFECT_PRESETS.filter(p => intent === 'generate' || p.requiredInputs.every(i => capabilities.inputs.includes(i))).map(p => ({ id: p.id, name: p.name, description: p.description, tags: p.tags, required_inputs: p.requiredInputs, capabilities: p.capabilities })),
+    presets: EFFECT_PRESETS.filter(p => intent === 'generate' && p.id === selectedPresetId).map(p => ({ id: p.id, name: p.name, description: p.description, tags: p.tags, required_inputs: p.requiredInputs, capabilities: p.capabilities })),
     diagnostic: intent === 'error_analysis' ? diagnostic.slice(0, 2048) : '',
     diagnostic_kind: intent === 'error_analysis' && ['validation', 'build', 'plugin_load'].includes(diagnosticKind) ? diagnosticKind : 'none' };
 }

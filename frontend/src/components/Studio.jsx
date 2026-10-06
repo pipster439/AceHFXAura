@@ -1,4 +1,5 @@
 import { listenStudioCommands, postStudioState, initialStudioProject } from '../utils/studioHost.js';
+import StudioCommandPalette from './StudioCommandPalette';
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { 
   Sparkles, 
@@ -302,8 +303,10 @@ export default function Studio({
   };
 
   const [shellBusy, setShellBusy] = useState(false);
+  const [paletteState, setPaletteState] = useState({});
   const shellStateRef = useRef({});
   const onShellState = useCallback(state => { shellStateRef.current = state; setShellBusy(state.busy);
+    setPaletteState(old => JSON.stringify(old) === JSON.stringify(state) ? old : state);
     if (embedded) postStudioState({ ...state, workType: activeWorkType, projects: effectKeys.slice(0, 200) });
   }, [embedded, activeWorkType, effectKeys]);
   useEffect(() => {
@@ -311,11 +314,13 @@ export default function Studio({
       lifecycle: '规则编排', plugin: '不适用', diagnostics: '', playing: false, busy: false, ...shellStateRef.current,
       workType: activeWorkType, projects: effectKeys.slice(0, 200) });
   }, [embedded, activeWorkType, effectKeys]);
-  useEffect(() => embedded ? listenStudioCommands(window.chrome?.webview, {
+  useEffect(() => listenStudioCommands(window.chrome?.webview, {
     new: () => { setIsNewModalOpen(true); setOpenPanel(null); },
     open: () => fileInputRef.current?.click(),
-    select: m => { if (effectKeys.includes(m.name)) { setActiveEffectName(m.name); setActiveWorkType('effect'); } }
-  }) : undefined, [embedded, effectKeys]);
+    select: m => { if (effectKeys.includes(m.name)) { setActiveEffectName(m.name); setActiveWorkType('effect'); } },
+    ask_ai: () => window.chrome?.webview?.postMessage({ type: 'studio_host_action', action: 'ask_ai' }),
+    diagnostics: () => window.chrome?.webview?.postMessage({ type: 'studio_host_action', action: 'diagnostics' })
+  }, () => ({ ...shellStateRef.current, workType: activeWorkType, embedded })), [embedded, effectKeys, activeWorkType]);
 
   // 过滤后的列表项
   const filteredEffects = effectKeys.filter(k => 
@@ -323,6 +328,7 @@ export default function Studio({
   );
 
   return (
+    <><StudioCommandPalette state={{ ...paletteState, workType: activeWorkType, embedded }}/>
     <div ref={rootRef} inert={shellBusy ? '' : undefined} data-studio-workspace={activeWorkType} className={`flex w-full min-w-0 overflow-hidden select-none ${embedded ? 'relative h-full gap-2 p-2 bg-md-surface' : 'h-[calc(100vh-100px)] gap-4'}`}>
       {compact && <div className="absolute left-2 right-2 top-2 z-10 flex gap-2 rounded-md-md bg-md-surface-container p-1">
         <button type="button" onClick={() => setOpenPanel(openPanel === 'works' ? null : 'works')} aria-label="作品列表" className="rounded-md-sm px-2 py-1 text-xs">作品与类型</button>
@@ -575,6 +581,12 @@ export default function Studio({
         className={`flex-1 flex flex-col h-full min-w-0 overflow-y-auto overflow-x-hidden ${compact ? (embedded ? 'relative z-0 pt-10' : 'relative pt-10') : ''} ${overlayOpen ? 'pointer-events-none' : ''}`}>
         {activeWorkType === 'effect' ? (
           <EffectStudio
+            onImportDraft={async draft => {
+              if (Object.hasOwn(config?.blockly_effects || {}, draft.name)) throw new Error('工程名称已占用');
+              const next = effectConfig(config, draft.name, draft.json, undefined, draft.publication);
+              if (!await onSaveConfig(next)) throw new Error('导入草稿保存失败');
+              setActiveEffectName(draft.name); setActiveWorkType('effect');
+            }}
             onShellState={onShellState}
             embedded={embedded}
             compact={compact}
@@ -743,6 +755,6 @@ export default function Studio({
           </div>
         </div>
       )}
-    </div>
+    </div></>
   );
 }

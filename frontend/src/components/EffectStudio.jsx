@@ -3,6 +3,7 @@ import { listenStudioCommands, postStudioState } from '../utils/studioHost.js';
 import { normalizePublication } from '../blockly/publication.js';
 import { stageEffect, buildEffect, effectConfig, getEffectLifecycleStatus, fetchPublishReadiness } from '../utils/applyEffect.js';
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import Blockly, { loadSafeWorkspaceJson, assertNoLegacyEventPulse } from '../blockly/index.js';
 import { dismissForOverlay } from '../blockly/dismissForOverlay.js';
 import { registerCustomBlocks } from '../blockly/customBlocks';
@@ -11,6 +12,7 @@ import { EFFECT_STUDIO_TOOLBOX } from '../blockly/toolboxes';
 import { CppTranspiler } from '../blockly/cppTranspiler';
 import { JsTranspiler, PREVIEW_68_KEYS } from '../blockly/jsTranspiler';
 import TestBench from './StudioTestBench';
+import { createBundleBridge, createBundlePayload, validateBundlePayload, importedDraft, nextImportedName } from '../utils/studioBundle.js';
 import { createStudioStorage, durableStudioDraft } from '../utils/studioStorage.js';
 import { CAPABILITY_LABELS, CAPABILITY_DIAGNOSTICS, deriveEffectCapabilities } from '../utils/effectCapabilities.js';
 import { EFFECT_PRESETS } from '../blockly/presets';
@@ -41,11 +43,21 @@ export default function EffectStudio({
   embedded = false,
   compact = false,
   overlayOpen = false,
-  onShellState
+  onShellState,
+  onImportDraft
 }) {
   const aiRequestRef = useRef(null);
   const aiSessionRef = useRef(new StudioProposalSession());
   const [benchOpen, setBenchOpen] = useState(false);
+  const [runToken, setRunToken] = useState(0);
+  const bundleBridge = useRef(null);
+  const [bundleDialog, setBundleDialog] = useState(null);
+  const [bundleName, setBundleName] = useState('');
+  const [bundleDescription, setBundleDescription] = useState('');
+  const [bundleAuthor, setBundleAuthor] = useState('');
+  const [bundleTags, setBundleTags] = useState('');
+  const [bundleError, setBundleError] = useState('');
+  useEffect(() => { bundleBridge.current = createBundleBridge(window.chrome?.webview); return () => bundleBridge.current?.dispose(); }, []);
   const storageRef = useRef(null); const observedRef = useRef(null); const observeSequence = useRef(0);
   const configLoadedRef = useRef(!!config); const aiApplyingRef = useRef(false);
   const [storageStatus, setStorageStatus] = useState(''); const [recovery, setRecovery] = useState(null);
@@ -95,7 +107,7 @@ export default function EffectStudio({
   };
   const blocklyDivRef = useRef(null);
   const workspaceRef = useRef(null);
-  useLayoutEffect(() => { if (overlayOpen) return dismissForOverlay(workspaceRef.current); }, [overlayOpen]);
+  useLayoutEffect(() => { if (overlayOpen || bundleDialog) return dismissForOverlay(workspaceRef.current); }, [overlayOpen, bundleDialog]);
   const [effectName, setEffectName] = useState(activeEffectName || 'custom_rainbow');
   const effectNameRef = useRef(effectName);
   effectNameRef.current = effectName;
@@ -368,6 +380,8 @@ export default function EffectStudio({
       const json = Blockly.serialization.workspaces.save(workspaceRef.current);
       let build;
       if (apply) {
+        if (deriveEffectCapabilities(currentDraft()).diagnostics.length) throw new Error('请先解决工程能力验证错误');
+        validateCandidate(currentDraft());
         if (embedded) await checkpointDraft('before_publish');
         setBuildResult('正在构建并发布…'); setPluginLoadStatus('等待发布确认'); setCompilerLog('正在准备发布光效…');
         build = await stageEffect(name, workspaceRef.current, CppTranspiler, setCompilerLog, publication);
@@ -389,31 +403,75 @@ export default function EffectStudio({
     if (isCompiling || !workspaceRef.current || legacyWorkspaceError || editError) return;
     setIsCompiling(true); setBuildResult('正在构建…'); setCompilerLog('正在构建（仅编译）…'); setCompilerSuccess(null);
     try {
+      if (deriveEffectCapabilities(currentDraft()).diagnostics.length) throw new Error('请先解决工程能力验证错误');
+      validateCandidate(currentDraft());
       const result = await buildEffect(effectName, workspaceRef.current, CppTranspiler, publication);
       setCompilerLog(result.compiler_output || '构建成功；尚未发布'); setCompilerSuccess(true); setBuildResult('构建通过');
     } catch (err) { setBuildResult('构建失败'); setCompilerSuccess(false); setCompilerFailureStage(err.stage === 'daemon_reload' ? 'plugin_load' : 'build'); setCompilerLog([err.message, err.detail].filter(Boolean).join('\n')); }
     finally { setIsCompiling(false); }
   };
-  useEffect(() => embedded ? listenStudioCommands(window.chrome?.webview, {
+  const bundleAction = async operation => {
+    if (isCompiling || recovery || bundleDialog) return;
+    setIsPlaying(false); setBundleError('');
+    try {
+      if (operation === 'export') {
+        const payload = createBundlePayload(currentDraft());
+        setBundleDescription(''); setBundleAuthor(''); setBundleTags(''); setBundleDialog({ operation, payload });
+      } else {
+        setIsCompiling(true);
+        const result = await bundleBridge.current.request('import');
+        if (result?.cancelled) return;
+        const payload = validateBundlePayload(result.payload);
+        const catalog = config?.blockly_effects || {};
+        setBundleName(Object.hasOwn(catalog, payload.project.name) ? nextImportedName(payload.project.name, catalog) : payload.project.name);
+        setBundleDialog({ operation, payload });
+      }
+    } catch (e) { setBundleError(e.message); showToast?.(e.message, 'error'); }
+    finally { setIsCompiling(false); }
+  };
+  const confirmBundle = async () => {
+    if (isCompiling || !bundleDialog) return;
+    setIsCompiling(true); setBundleError('');
+    try {
+      if (bundleDialog.operation === 'import') {
+        const draft = importedDraft(bundleDialog.payload, config?.blockly_effects, bundleName);
+        await onImportDraft(draft); setStorageStatus('工程包已导入为新草稿；尚未发布。');
+      } else {
+        const payload = createBundlePayload(bundleDialog.payload.project, { description: bundleDescription, author: bundleAuthor, tags: bundleTags.split(',').map(t => t.trim()).filter(Boolean) });
+        const result = await bundleBridge.current.request('export', payload);
+        if (result?.cancelled) return;
+        setStorageStatus('工程包已导出；仅包含源工程与元数据。');
+      }
+      setBundleDialog(null);
+    } catch (e) { setBundleError(e.message); }
+    finally { setIsCompiling(false); }
+  };
+  const commandState = () => ({ busy: isCompiling || !!bundleDialog, recovery: !!recovery, hasSnapshots: snapshots.length > 0, embedded,
+    workType: 'effect', validation: legacyWorkspaceError || editError || capabilityManifest?.diagnostics.map(c => CAPABILITY_DIAGNOSTICS[c]).join(' ') || '验证通过' });
+  useEffect(() => listenStudioCommands(window.chrome?.webview, {
     save: () => saveWorkspace(false), publish: () => { if (!editError) saveWorkspace(true); },
     build: handleBuild, bench: openBench, preview: () => { if (!isCompiling && !benchOpen) setIsPlaying(v => !v); },
     details: () => setIsCodeModalOpen(true),
+    run_scenario: () => { openBench(); setRunToken(v => v + 1); },
+    restore_snapshot: () => { if (snapshotId) restoreDraft('restore_snapshot', { snapshot_id: snapshotId }); else document.querySelector('[aria-label="草稿快照"]')?.focus(); },
+    export_bundle: () => bundleAction('export'), import_bundle: () => bundleAction('import'),
     validate: () => {
       try { CppTranspiler.transpile(effectName, workspaceRef.current, publication); JsTranspiler.compile(workspaceRef.current, publication); setEditError(null); }
       catch (err) { setEditError(err.message); }
     }
-  }) : undefined, [embedded, effectName, publication, config, isCompiling, editError, legacyWorkspaceError, benchOpen, recovery]);
+  }, commandState), [embedded, effectName, publication, config, isCompiling, editError, legacyWorkspaceError, benchOpen, recovery, snapshots, snapshotId, bundleDialog, capabilityManifest]);
   useEffect(() => {
-    onShellState?.({ name: effectName, playing: isPlaying, busy: isCompiling,
+    onShellState?.({ name: effectName, playing: isPlaying, busy: isCompiling || !!bundleDialog, recovery: !!recovery, hasSnapshots: snapshots.length > 0, embedded,
       validation: legacyWorkspaceError || editError || capabilityManifest?.diagnostics.map(c => CAPABILITY_DIAGNOSTICS[c]).join(' ') || '验证通过',
       build: buildResult, plugin: pluginLoadStatus,
       lifecycle: getEffectLifecycleStatus(config?.blockly_effects?.[effectName]).label,
       diagnostics: (compilerLog || '').slice(0, 16384) });
-  }, [effectName, isPlaying, isCompiling, buildResult, pluginLoadStatus, compilerSuccess, compilerLog, editError, legacyWorkspaceError, capabilityManifest, config, onShellState]);
+  }, [effectName, isPlaying, isCompiling, buildResult, pluginLoadStatus, compilerSuccess, compilerLog, editError, legacyWorkspaceError, capabilityManifest, config, onShellState, recovery, snapshots, embedded, bundleDialog]);
 
   useEffect(() => {
     if (!embedded || !window.chrome?.webview) return;
     const webview = window.chrome.webview;
+    webview.postMessage({ type: "studio_ai_catalog", presets: EFFECT_PRESETS.map(p => ({ id: p.id, name: p.name })) });
     const receive = async event => {
       const m = event.data;
       if (m?.type === 'studio_ai_context' && /^[a-f0-9]{32}$/.test(m.request_id || '') && ['generate', 'modify', 'explain', 'error_analysis'].includes(m.intent)) {
@@ -427,15 +485,16 @@ export default function EffectStudio({
             aiSessionRef.current.reserveRepair(); intent = 'error_analysis';
           } else aiSessionRef.current.begin(snapshot);
           const previousError = aiRequestRef.current?.validationError || '';
-          aiRequestRef.current = { id: m.request_id, intent, snapshot, validationError: previousError };
+          aiRequestRef.current = { id: m.request_id, intent, snapshot, presetId: m.preset_id, validationError: previousError };
           // Selected compiler errors only; omit arbitrary logs and successful build output.
           const diagnostic = legacyWorkspaceError || editError || (compilerSuccess === false ? (compilerLog || '').split('\n').filter(line => /error|错误|失败|确认|加载/i.test(line)).slice(0, 3).join('\n') : '');
-          webview.postMessage({ type: 'studio_ai_context', request_id: m.request_id, context: assistantContext(snapshot, intent, (m.repair === true ? previousError : '') || diagnostic, legacyWorkspaceError || editError ? 'validation' : compilerFailureStage) });
+          webview.postMessage({ type: 'studio_ai_context', request_id: m.request_id, context: assistantContext(snapshot, intent, (m.repair === true ? previousError : '') || diagnostic, legacyWorkspaceError || editError ? 'validation' : compilerFailureStage, m.preset_id) });
         } catch { webview.postMessage({ type: 'studio_ai_context_error', request_id: m.request_id }); }
       }
       if (m?.type === 'studio_ai_reply' && m.request_id === aiRequestRef.current?.id) {
         try {
           const proposal = parseProposal(m.reply);
+          if (proposal.preset !== null && proposal.preset !== aiRequestRef.current.presetId) throw new Error('建议采用了未选择的模板');
           const prepared = aiSessionRef.current.stage(proposal, aiRequestRef.current.intent);
           if (prepared) {
             const validation = prepared.validation;
@@ -479,12 +538,12 @@ export default function EffectStudio({
   const lifecycle = getEffectLifecycleStatus(currentEffectData);
 
   return (
-    <div className={`flex flex-col gap-3 p-1 h-full ${embedded ? 'min-h-[320px]' : 'min-h-[560px]'}`}>
+    <div className={`flex min-w-0 flex-col gap-3 p-1 h-full ${embedded ? 'min-h-[320px]' : 'min-h-[560px]'}`}>
       {embedded && <div className="shrink-0 flex flex-wrap items-center gap-2 text-xs" data-studio-storage>
         <span data-autosave-status role="status">{storageStatus || '草稿自动保存就绪'}</span>
         {recovery && <div role="alert" data-recovery-offer className="flex flex-wrap gap-2"><strong>可恢复草稿 · {new Date(recovery.updated_utc).toLocaleString()}</strong>
           <button data-recovery-restore onClick={() => restoreDraft('restore_recovery')}>恢复草稿</button><button data-recovery-discard onClick={discardRecovery}>放弃恢复</button></div>}
-        <select aria-label="草稿快照" data-studio-snapshots value={snapshotId} onChange={e => setSnapshotId(e.target.value)}><option value="">选择快照（{snapshots.length}）</option>
+        <select className="min-w-0 max-w-full rounded bg-md-surface-container" aria-label="草稿快照" data-studio-snapshots value={snapshotId} onChange={e => setSnapshotId(e.target.value)}><option value="">选择快照（{snapshots.length}）</option>
           {snapshots.map(s => <option key={s.id} value={s.id}>{s.reason === 'before_ai_apply' ? 'AI 应用前' : '发布前'} · {new Date(s.created_utc).toLocaleString()}</option>)}</select>
         <button data-snapshot-restore disabled={!snapshotId || !!recovery || isCompiling} onClick={() => restoreDraft('restore_snapshot', { snapshot_id: snapshotId })}>恢复快照至草稿</button>
       </div>}
@@ -494,7 +553,7 @@ export default function EffectStudio({
       </div>}
       <div className="flex shrink-0 flex-wrap items-center gap-2 rounded-md-lg border border-md-primary/40 bg-md-primary-container/30 px-3 py-2 text-xs text-md-on-surface" aria-label="当前光效生命周期">
         {!embedded && <button onClick={openBench} disabled={isCompiling}>测试台</button>}
-        <strong className="font-mono">{effectName}</strong>
+        <strong className="font-mono min-w-0 max-w-full break-all" title={effectName}>{effectName}</strong>
         <span className={`rounded-md-full border px-2 py-0.5 font-semibold ${lifecycle.badgeClass}`}>{lifecycle.label}</span>
         <button type="button" aria-expanded={showLifecycleControls} onClick={() => setShowLifecycleControls(!showLifecycleControls)} className="rounded-md-full border border-md-primary bg-md-primary-container px-2 py-1 font-bold text-md-on-primary-container">
           {publication.mode === 'one_shot' ? `单次光效 · 淡出 ${publication.fade_out_ms} ms` : '持续光效'} · 编辑
@@ -688,7 +747,25 @@ export default function EffectStudio({
       </div>}
       </div>
       {/* Google Blockly 主画布 */}
-      {benchOpen && <TestBench getProject={currentDraft} onClose={() => setBenchOpen(false)}/>}
+      {bundleDialog && createPortal(<div data-bundle-dialog role="dialog" aria-modal="true" aria-label="工程包确认" className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-3" onKeyDown={e => { if (e.key === 'Escape' && !isCompiling) setBundleDialog(null); }}>
+        <div className="w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-md-xl border border-md-outline-variant bg-md-surface-container p-4 space-y-3">
+          <h2 className="font-bold">{bundleDialog.operation === 'import' ? '导入工程包 · 创建新草稿' : '导出工程包'}</h2>
+          <p className="break-words text-sm">{bundleDialog.payload.manifest.name} · {bundleDialog.payload.manifest.capabilities.inputs.map(i => CAPABILITY_LABELS[i] || i).join('、') || '无外部输入'}</p>
+          {bundleDialog.operation === 'import' ? <>
+            <p className="whitespace-pre-wrap break-words text-sm">{bundleDialog.payload.manifest.description || '无描述'}<br/>作者：{bundleDialog.payload.manifest.author || '未提供'}<br/>标签：{bundleDialog.payload.manifest.tags.join('、') || '无'}<br/>创建版本：{bundleDialog.payload.manifest.created_with_version}</p>
+            <label className="block">新草稿名称<input autoFocus data-bundle-name value={bundleName} maxLength={48} onChange={e => setBundleName(e.target.value)} className="block w-full bg-md-surface p-2 rounded"/></label>
+            <p className="text-sm">确认后保存为独立草稿。不会覆盖现有工程，也不会构建或发布。</p>
+          </> : <>
+            <label className="block">描述<textarea autoFocus value={bundleDescription} maxLength={1024} onChange={e => setBundleDescription(e.target.value)} className="block w-full bg-md-surface p-2 rounded"/></label>
+            <label className="block">作者（可选）<input value={bundleAuthor} maxLength={80} onChange={e => setBundleAuthor(e.target.value)} className="block w-full bg-md-surface p-2 rounded"/></label>
+            <label className="block">标签（逗号分隔，最多 12 个）<input value={bundleTags} maxLength={492} onChange={e => setBundleTags(e.target.value)} className="block w-full bg-md-surface p-2 rounded"/></label>
+            <p className="text-sm">仅包含当前源工程、播放方式与以上元数据。</p>
+          </>}
+          {bundleError && <p role="alert" className="break-words text-md-error">{bundleError}</p>}
+          <div className="flex flex-wrap gap-3"><button data-bundle-confirm disabled={isCompiling} onClick={confirmBundle} className="rounded bg-md-primary text-md-on-primary px-3 py-2">{bundleDialog.operation === 'import' ? '确认创建草稿' : '选择导出位置'}</button><button disabled={isCompiling} onClick={() => setBundleDialog(null)}>取消</button></div>
+        </div>
+      </div>, document.body)}
+      {benchOpen && <TestBench getProject={currentDraft} runToken={runToken} onClose={() => setBenchOpen(false)}/>}
       <div inert={recovery ? '' : undefined} className={`${benchOpen ? 'hidden' : 'flex-1'} min-h-[240px] w-full relative rounded-md-lg overflow-hidden border border-md-outline-variant shadow-md-level1 bg-md-surface-container-low`}>
         <div ref={blocklyDivRef} className="absolute inset-0 w-full h-full" />
       </div>

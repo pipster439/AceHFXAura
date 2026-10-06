@@ -7,6 +7,9 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     Background="Transparent"
     mc:Ignorable="d">
+    <Page.KeyboardAccelerators>
+        <KeyboardAccelerator Key="P" Modifiers="Control,Shift" Invoked="PaletteShortcut_Invoked"/>
+    </Page.KeyboardAccelerators>
 
     <Grid x:Name="ShellRoot" RowSpacing="4" SizeChanged="Shell_SizeChanged">
         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition x:Name="AssistantColumn" Width="0"/></Grid.ColumnDefinitions>
@@ -19,6 +22,9 @@
             <AppBarButton x:Name="BuildCommand" Icon="Repair" Label="构建" Tag="build" Click="StudioCommand_Click" AutomationProperties.AutomationId="BuildCommand"/>
             <AppBarButton x:Name="PublishCommand" Icon="Upload" Label="发布" Tag="publish" Click="StudioCommand_Click" AutomationProperties.AutomationId="StudioPublish"/>
             <CommandBar.SecondaryCommands>
+                <AppBarButton Label="命令面板（Ctrl+Shift+P）" Tag="palette" Click="StudioCommand_Click" AutomationProperties.AutomationId="StudioPalette"/>
+                <AppBarButton Label="导出工程包" Tag="export_bundle" Click="StudioCommand_Click" AutomationProperties.AutomationId="StudioExportBundle"/>
+                <AppBarButton Label="导入工程包" Tag="import_bundle" Click="StudioCommand_Click" AutomationProperties.AutomationId="StudioImportBundle"/>
                 <AppBarButton Label="测试台" Tag="bench" Click="StudioCommand_Click" AutomationProperties.AutomationId="StudioTestBench"/>
                 <AppBarButton Label="验证" Tag="validate" Click="StudioCommand_Click" AutomationProperties.AutomationId="StudioValidate"/>
                 <AppBarButton Label="开发详情" Tag="details" Click="StudioCommand_Click" AutomationProperties.AutomationId="StudioDetails"/>
@@ -83,6 +89,17 @@
                     <ComboBox x:Name="AiIntent" Header="工作室动作" SelectedIndex="1" HorizontalAlignment="Stretch" AutomationProperties.AutomationId="AiIntent">
                         <ComboBoxItem Content="生成光效"/><ComboBoxItem Content="修改当前光效"/><ComboBoxItem Content="解释当前光效"/><ComboBoxItem Content="分析验证或构建错误"/>
                     </ComboBox>
+                    <ComboBox x:Name="AiPreset" Header="生成时采用的模板" HorizontalAlignment="Stretch" AutomationProperties.AutomationId="AiPreset"/>
+                    <CheckBox x:Name="AiManualMode" Content="真实 provider 人工验收模式" Checked="ManualMode_Click" Unchecked="ManualMode_Click" AutomationProperties.AutomationId="AiManualMode"/>
+                    <StackPanel x:Name="AiManualChecklist" Visibility="Collapsed" Spacing="6">
+                        <TextBlock Text="Owner 手动验收；采用本地测试台。每次请求需确认，可能产生费用。429 / 超时不会自动重试。不要把 API key 填入工程或提示词。" TextWrapping="Wrap"/>
+                        <CheckBox AutomationProperties.AutomationId="ManualCheck0"><TextBlock Text="A · 在服务设置中手动测试连接" TextWrapping="Wrap"/></CheckBox>
+                        <CheckBox AutomationProperties.AutomationId="ManualCheck1"><TextBlock Text="B · 解释当前效果" TextWrapping="Wrap"/></CheckBox>
+                        <CheckBox AutomationProperties.AutomationId="ManualCheck2"><TextBlock Text="C–E · 提速且不改颜色；检查 typed proposal 与 Diff" TextWrapping="Wrap"/></CheckBox>
+                        <CheckBox AutomationProperties.AutomationId="ManualCheck3"><TextBlock Text="F–G · 手动 Apply 后运行测试台" TextWrapping="Wrap"/></CheckBox>
+                        <CheckBox AutomationProperties.AutomationId="ManualCheck4"><TextBlock Text="H · Undo 或恢复 pre-AI 快照" TextWrapping="Wrap"/></CheckBox>
+                        <CheckBox AutomationProperties.AutomationId="ManualCheck5"><TextBlock Text="I · 密钥未出现在日志、诊断、工程、工程包或恢复记录" TextWrapping="Wrap"/></CheckBox>
+                    </StackPanel>
                     <TextBlock Text="可试试：" Style="{ThemeResource CaptionTextBlockStyle}"/>
                     <Button Content="做一个按键按下后亮起的光效" Tag="做一个按键按下后亮起并衰减的光效" Click="AssistantExample_Click" AutomationProperties.AutomationId="AiExampleReactive"/>
                     <Button Content="把当前效果衰减速度提高" Tag="把当前效果的衰减速度提高" Click="AssistantExample_Click" AutomationProperties.AutomationId="AiExampleDecay"/>
@@ -109,7 +126,7 @@
         </Border>
         <StackPanel Grid.Row="4" Grid.ColumnSpan="2" Margin="12,4" Spacing="4">
             <TextBlock x:Name="RuntimeSummary" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}"/>
-            <TextBlock x:Name="ValidationSummary" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}"/>
+            <ScrollViewer MaxHeight="72" HorizontalScrollBarVisibility="Disabled"><TextBlock x:Name="ValidationSummary" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}"/></ScrollViewer>
             <Button x:Name="AskAiError" Content="询问 AI：分析验证、构建或插件错误" Click="AssistantError_Click" Visibility="Collapsed" AutomationProperties.AutomationId="AskAiError"/>
             <TextBox x:Name="DiagnosticsText" Header="构建与诊断" IsReadOnly="True" TextWrapping="Wrap" MaxHeight="150" Visibility="Collapsed" AutomationProperties.AutomationId="DiagnosticsText"/>
         </StackPanel>

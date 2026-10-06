@@ -57,7 +57,7 @@ public static class StudioAssistantContracts
             var fade = c.GetProperty("publication").GetProperty("fade_out_ms").GetInt32();
             if (mode is not ("continuous" or "one_shot") || fade is < 0 or > 60000) throw new JsonException();
             var nodes = c.GetProperty("nodes"); var presets = c.GetProperty("presets");
-            if (nodes.GetArrayLength() > 256 || presets.GetArrayLength() > 20) throw new JsonException();
+            if (nodes.GetArrayLength() > 256 || presets.GetArrayLength() > 1 || intent != "generate" && presets.GetArrayLength() != 0) throw new JsonException();
             foreach (var n in nodes.EnumerateArray()) {
                 Fields(n, "node_id", "type", "parent", "input", "value", "min", "max");
                 if (!Regex.IsMatch(n.GetProperty("node_id").GetString() ?? "", "^n[0-9]{1,3}$") || Identifier(n, "type") != "math_number") throw new JsonException();

@@ -19,7 +19,7 @@ internal static class StudioAiValidation
         !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("AURA_STUDIO_AI_VALIDATION_DIR")) &&
         !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("AURA_DATA_ROOT")) &&
         Environment.GetEnvironmentVariable("AURA_MAGNETIC_VALIDATION_OFFLINE") == "1";
-    private static IEnumerable<DependencyObject> Descendants(DependencyObject parent) {
+    internal static IEnumerable<DependencyObject> Descendants(DependencyObject parent) {
         for (var i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++) {
             var child = VisualTreeHelper.GetChild(parent, i); yield return child;
             foreach (var d in Descendants(child)) yield return d;

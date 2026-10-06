@@ -46,7 +46,7 @@ export default function KeyboardVisualizer({
       for (const entry of entries) {
         const width = entry.contentRect.width;
         const newScale = Math.min(1.08, (width - 24) / baseWidth);
-        setScale(Math.max(0.48, newScale));
+        setScale(Math.max(0.12, newScale));
       }
     });
     observer.observe(containerRef.current);

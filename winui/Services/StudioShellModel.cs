@@ -18,7 +18,7 @@ public sealed class StudioShellModel
         uri.Scheme == "http" && uri.Host == "127.0.0.1" && uri.Port == 19898;
     public static string Command(string command, string? name = null)
     {
-        if (command is not ("new" or "open" or "select" or "save" or "preview" or "validate" or "build" or "publish" or "details" or "bench"))
+        if (command is not ("new" or "open" or "select" or "save" or "preview" or "validate" or "build" or "publish" or "details" or "bench" or "palette" or "run_scenario" or "restore_snapshot" or "export_bundle" or "import_bundle" or "ask_ai" or "diagnostics"))
             throw new ArgumentOutOfRangeException(nameof(command));
         if (name?.Length > 128) throw new ArgumentOutOfRangeException(nameof(name));
         return name == null ? JsonSerializer.Serialize(new { type = "studio_command", command }) :

@@ -112,6 +112,8 @@ public sealed partial class StudioPage : Page
     private async void StudioMessageReceived(CoreWebView2 sender, CoreWebView2WebMessageReceivedEventArgs args)
     {
         if (_closed || !StudioShellModel.TrustedSource(args.Source)) return;
+        if (ReceiveStudioHostAction(args.WebMessageAsJson)) return;
+        if (await ReceiveBundleAsync(args.WebMessageAsJson)) return;
         if (await ReceivePersistenceAsync(args.WebMessageAsJson)) return;
         if (ReceiveAssistantMessage(args.WebMessageAsJson)) return;
         if (!_shell.Receive(args.WebMessageAsJson)) return;
@@ -123,6 +125,7 @@ public sealed partial class StudioPage : Page
         NewCommand.IsEnabled = OpenCommand.IsEnabled = RecentProjects.IsEnabled = !_shell.Busy;
         var enabled = _shell.WorkType == "effect" && !_shell.Busy;
         SaveCommand.IsEnabled = PreviewCommand.IsEnabled = BuildCommand.IsEnabled = PublishCommand.IsEnabled = enabled;
+        BuildCommand.IsEnabled = PublishCommand.IsEnabled = enabled && _shell.Validation == "验证通过";
         _settingProjects = true;
         try {
             var projects = PersistentProjects();
@@ -161,7 +164,7 @@ public sealed partial class StudioPage : Page
     {
         if (sender is AppBarButton { Tag: string command } && !_closed && _initialized)
         {
-            if (command == "bench") { AiPanel.Visibility = Visibility.Collapsed; AdaptAssistant(); }
+            if (command is "bench" or "palette" or "export_bundle" or "import_bundle") { AiPanel.Visibility = Visibility.Collapsed; AdaptAssistant(); }
             StudioWebView.CoreWebView2.PostWebMessageAsJson(StudioShellModel.Command(command));
         }
     }
@@ -172,6 +175,25 @@ public sealed partial class StudioPage : Page
     }
     private void Diagnostics_Click(object sender, RoutedEventArgs args) =>
         DiagnosticsText.Visibility = DiagnosticsText.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
+    private void PaletteShortcut_Invoked(Microsoft.UI.Xaml.Input.KeyboardAccelerator sender, Microsoft.UI.Xaml.Input.KeyboardAcceleratorInvokedEventArgs args) {
+        if (!_initialized || _closed) return;
+        AiPanel.Visibility = Visibility.Collapsed; AdaptAssistant();
+        StudioWebView.CoreWebView2.PostWebMessageAsJson(StudioShellModel.Command("palette")); args.Handled = true;
+    }
+    private bool ReceiveStudioHostAction(string json) {
+        if (json.Length > 256) return false;
+        try {
+            using var doc = JsonDocument.Parse(json); var m = doc.RootElement;
+            if (m.GetProperty("type").GetString() != "studio_host_action") return false;
+            StudioDraft.Exact(m, "type", "action");
+            if (_shell.Busy) return true;
+            switch (m.GetProperty("action").GetString()) {
+                case "ask_ai": AiPanel.Visibility = Visibility.Visible; AdaptAssistant(); break;
+                case "diagnostics": DiagnosticsText.Visibility = Visibility.Visible; break;
+            }
+            return true;
+        } catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException or StudioPersistenceException) { return false; }
+    }
 
     private void NavigationStarting(CoreWebView2 sender, CoreWebView2NavigationStartingEventArgs args)
     {

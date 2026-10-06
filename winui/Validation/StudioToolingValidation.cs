@@ -64,6 +64,7 @@ internal static class StudioToolingValidation
             }
             Record("open isolated Studio and configured preset", new { runtime.IsDryRun, stage });
             if (stage == "crash") {
+                if (StudioPolishValidation.Requested) await StudioPolishValidation.RunAsync(window, page, view, directory, (phase, evidence) => Record(phase, evidence));
                 await Until(async () => (await Eval(view, "document.querySelector('[data-autosave-status]')?.textContent.includes('自动')||false")).GetBoolean(), "Storage not ready");
                 Bench(); await Until(async () => (await Eval(view, "!!document.querySelector('[data-studio-bench]')")).GetBoolean(), "Bench not opened");
                 await Click("[data-bench-play]"); await Until(async () => (await Eval(view, "document.querySelector('[data-studio-bench]').dataset.completed==='true'")).GetBoolean(), "Key tap not completed");
@@ -149,7 +150,7 @@ internal static class StudioToolingValidation
                 }
                 InvokeControl(Find<AppBarButton>("ClearRecentCommand"));
                 using (var doc = JsonDocument.Parse(File.ReadAllText(recent))) if (doc.RootElement.GetProperty("projects").GetArrayLength() != 0) throw new InvalidOperationException("Clear recent failed");
-                if (Find<ComboBox>("RecentProjects").Items.Count != 2) throw new InvalidOperationException("Clear recent removed project catalog");
+                if (Find<ComboBox>("RecentProjects").Items.Count != (StudioPolishValidation.Requested ? 3 : 2)) throw new InvalidOperationException("Clear recent removed project catalog");
                 Record("recent logical IDs persist through restart; Clear recent preserves projects");
             }
         } catch (Exception ex) { error = ex.GetType().Name + ": " + StudioLlmRedaction.Filter(ex.Message); }

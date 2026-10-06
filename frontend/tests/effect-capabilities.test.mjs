@@ -48,7 +48,7 @@ test('AI modify/explain context filters GSI fields and unrelated GSI presets', (
     const c = assistantContext(p, intent); assert.deepEqual(c.capabilities.gsi_fields, []);
     assert.ok(c.presets.every(x => !x.required_inputs.includes('cs2_gsi'))); assert.ok(!JSON.stringify(c).includes('player.state'));
   }
-  assert.equal(assistantContext(p, 'generate').presets.length, EFFECT_PRESETS.length);
+  assert.equal(assistantContext(p, 'generate', '', 'validation', EFFECT_PRESETS[0].id).presets.length, 1);
 });
 test('Test Bench recommends input-relevant built-ins and retains custom field compatibility', () => {
   assert.deepEqual(recommendStudioScenarios(derive(project({ type: 'key_decay' }))), ['单键轻按', '按住后释放', '快速重复按键']);
