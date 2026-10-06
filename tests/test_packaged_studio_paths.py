@@ -23,11 +23,33 @@ class PackagedStudioPaths(unittest.TestCase):
         self.args = SimpleNamespace(package=self.package, ui=self.package / 'Aura.exe', bin=self.package / 'runtime-payload', web_root=None)
 
     def test_exact_packaged_assets_without_development_environment(self):
-        self.assertEqual(paths.configure_package(self.args, ROOT, self.output), self.package)
-        self.assertEqual(self.args.web_root, self.package / 'runtime-payload/web')
+        package = paths.configure_package(self.args, ROOT, self.output)
+        self.assertEqual(package, self.package.resolve())
+        self.assertTrue(package.samefile(self.package))
+        self.assertEqual(self.args.web_root, (self.package / 'runtime-payload/web').resolve())
         env = {'AURA_DEV_ROOT': 'checkout', 'AURA_DEV_BIN': 'build'}
         paths.configure_environment(env, self.package, self.output)
         self.assertNotIn('AURA_DEV_ROOT', env); self.assertNotIn('AURA_DEV_BIN', env)
+
+    def test_package_path_alias_resolves_to_same_assets(self):
+        import os
+        alias = self.package / '..' / 'package'
+        if os.name == 'nt':
+            import ctypes
+            from ctypes import wintypes
+            get_short_path = ctypes.WinDLL('kernel32', use_last_error=True).GetShortPathNameW
+            get_short_path.argtypes = [wintypes.LPCWSTR, wintypes.LPWSTR, wintypes.DWORD]
+            get_short_path.restype = wintypes.DWORD
+            buffer = ctypes.create_unicode_buffer(32768)
+            length = get_short_path(str(self.package.resolve()), buffer, len(buffer))
+            self.assertGreater(length, 0)
+            self.assertLess(length, len(buffer))
+            alias = Path(buffer.value)  # Windows may return a long name when 8.3 names are disabled.
+        args = SimpleNamespace(package=alias, ui=alias / 'Aura.exe', bin=alias / 'runtime-payload', web_root=None)
+        canonical = paths.configure_package(args, ROOT, self.output)
+        self.assertEqual(canonical, self.package.resolve())
+        self.assertTrue(canonical.samefile(alias))
+        self.assertEqual(args.web_root, (self.package / 'runtime-payload/web').resolve())
 
     def test_checkout_gui_sidecar_and_web_rejected(self):
         for field, value in [('ui', ROOT / 'Aura.exe'), ('bin', ROOT / 'build/Release'), ('web_root', ROOT / 'web')]:
