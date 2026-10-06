@@ -44,6 +44,8 @@ def configure_environment(env, package, root):
 def assert_clean_persistence(root, output, package):
     if package is None:
         return
+    if (package / 'runtime-payload/aura_daemon.log').exists():
+        raise RuntimeError('Packaged fixture wrote logs into immutable payload')
     checked = 0
     for file in root.rglob('*'):
         if file.is_file() and file.suffix.lower() in ('.json', '.log', '.txt'):

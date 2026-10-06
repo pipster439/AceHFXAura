@@ -16,6 +16,17 @@ MAX_EXPANDED = 1024 * 1024 * 1024
 FORBIDDEN_PARTS = {'audit_artifacts', 'audit_repros', 'node_modules', '.git', 'obj', 'snapshots', 'journals', 'owner-data', 'diagnostics'}
 FORBIDDEN_NAMES = {'config.json', 'studio-llm-settings.json', 'client-settings.json', 'recent.json', 'portable.marker', 'aackbhal_x64.dll'}
 FORBIDDEN_EXTENSIONS = {'.pdb', '.ilk', '.obj', '.lib', '.exp', '.ipdb', '.iobj', '.dmp', '.pcap', '.pcapng', '.auraeffect', '.trx', '.log', '.patch', '.zip', '.cs', '.cpp'}
+TOKEN_PATTERN = re.compile(r'(?i)(?<![a-z0-9_-])(?:sk-[a-z0-9_-]{20,}|Bearer[ ]+[a-z0-9_-]{20,})')
+
+
+def contains_credential_payload(data):
+    # A token starts at a lexical boundary. Font names such as Grotesk-Text-Pro
+    # contain "sk-" inside a word and are not API credentials. Check native and
+    # managed string encodings without printing any matching content.
+    texts = (data.decode('ascii', errors='replace'),
+             data.decode('utf-16-le', errors='replace'),
+             data[1:].decode('utf-16-le', errors='replace'))
+    return any(TOKEN_PATTERN.search(text) for text in texts)
 
 
 def safe_name(name):
@@ -74,7 +85,7 @@ def verify_directory(directory, expected_version, private_paths=()):
         data = file.read_bytes(); lower = data.lower()
         if any(needle and needle in lower for needle in needles):
             raise RuntimeError('Local developer path leaked: ' + relative)
-        if re.search(rb'(?i)sk-[a-z0-9_-]{20,}|Bearer[ ]+[a-z0-9_-]{20,}', data):
+        if contains_credential_payload(data):
             raise RuntimeError('Credential-looking payload rejected: ' + relative)
         if relative != 'checksums.json':
             key = relative.casefold()

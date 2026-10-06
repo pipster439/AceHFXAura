@@ -74,7 +74,7 @@ def main():
         shutdown_event = kernel.CreateEventW(None, True, False, event_name)
         if not shutdown_event: raise OSError(ctypes.get_last_error())
         core = subprocess.Popen([str(binaries / 'aura_daemon.exe'), '--dry-run', '--config', str(path), '--keymap', str((package / 'runtime-payload' if package else repo) / 'calibrated_keymap.json'),
-            '--shutdown-event', event_name, '--web-root', str(web_root), '--sdk-include', str((package / 'runtime-payload' if package else repo) / 'include')], cwd=binaries, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            '--shutdown-event', event_name, '--web-root', str(web_root), '--sdk-include', str((package / 'runtime-payload' if package else repo) / 'include')], cwd=root if package else binaries, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         gui = None
         try:
             deadline = time.monotonic() + 30

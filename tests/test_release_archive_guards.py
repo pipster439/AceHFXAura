@@ -53,3 +53,10 @@ class ReleaseArchiveGuards(unittest.TestCase):
             self.check(['a.txt', 'b.txt'])
         with patch.object(guards, 'MAX_EXPANDED', 4), self.assertRaisesRegex(RuntimeError, 'size'):
             self.check(['a.txt'])
+
+    def test_credential_boundaries_and_native_managed_encodings(self):
+        self.assertFalse(guards.contains_credential_payload(b'Neue-Haas-Grotesk-Text-Pro-UltraThin'))
+        synthetic = 'sk-syntheticfixture000000000000'
+        for encoding in ('ascii', 'utf-16-le'):
+            self.assertTrue(guards.contains_credential_payload(('"' + synthetic + '"').encode(encoding)))
+            self.assertTrue(guards.contains_credential_payload(('Bearer ' + synthetic).encode(encoding)))

@@ -45,11 +45,12 @@ class TestAutomationEffectDaemon(unittest.TestCase):
                 while True:
                     self.assertIsNone(proc.poll(), "daemon exited before packet")
                     try:
-                        request = urllib.request.Request("http://127.0.0.1:19897/gsi",
-                            data=json.dumps({"player": {"state": {"health": 10}}}).encode(),
+                        request = urllib.request.Request("http://127.0.0.1:19897/api/gsi/simulation",
+                            data=json.dumps({"enabled": True, "health": 10}).encode(),
                             headers={"Content-Type": "application/json"})
                         with urllib.request.urlopen(request, timeout=0.3) as response:
-                            self.assertEqual(response.status, 200)
+                            self.assertEqual(response.status, 202)
+                            queued = json.load(response)
                         break
                     except OSError:
                         if time.monotonic() >= deadline:
@@ -57,6 +58,12 @@ class TestAutomationEffectDaemon(unittest.TestCase):
                         time.sleep(0.05)
                 deadline = time.monotonic() + 2
                 while time.monotonic() < deadline:
+                    with urllib.request.urlopen("http://127.0.0.1:19897/api/gsi/simulation", timeout=0.3) as response:
+                        simulation = json.load(response)
+                    if simulation["applied_sequence"] < queued["sequence"]:
+                        time.sleep(0.02)
+                        continue
+                    self.assertEqual(simulation["payload"]["player"]["state"]["health"], 10)
                     text = trace.read_text() if trace.exists() else ""
                     if "finished\n" in text:
                         self.assertIn("render\n", text)
