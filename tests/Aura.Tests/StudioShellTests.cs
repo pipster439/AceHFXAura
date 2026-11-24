@@ -10,6 +10,7 @@ public class StudioShellTests
     public void CommandsAreTypedAndOriginBounded()
     {
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => StudioShellModel.Command("shell"));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => StudioShellModel.Command("ask_ai"));
         Assert.IsTrue(StudioShellModel.TrustedSource("http://127.0.0.1:19898/?host=winui"));
         Assert.IsFalse(StudioShellModel.TrustedSource("https://127.0.0.1:19898/"));
         Assert.IsFalse(StudioShellModel.TrustedSource("http://example.org:19898/"));

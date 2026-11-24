@@ -15,11 +15,13 @@
 #include <array>
 #include <mutex>
 #include "aura/aura_types.h"
+#include "aura/hardware/m605_protocol.h"
 
 namespace aura {
 
 class M605Runtime;
 class M605NativeTransport;
+namespace m605::hall { struct HallCtrlWriter; }
 
 constexpr uint16_t ASUS_VID = 0x0B05;
 constexpr uint16_t FALCHION_ACE_HFX_PID = 0x1B7E;
@@ -86,12 +88,14 @@ public:
 private:
     friend class M605Runtime;
     friend class M605NativeTransport;
+    friend struct m605::hall::HallCtrlWriter;
     // Shared across MI_01 handles so a staged magnetic setting and its apply
     // cannot be interleaved with another runtime operation or a lighting frame.
     static std::mutex& DeviceWriteMutex();
     bool SendReport(const std::array<uint8_t, HID_REPORT_SIZE>& report);
     // DeviceWriteMutex held. Only the fixed12 00 query, never arbitrary reads/commands.
     bool QueryBasicInfo(std::array<uint8_t, HID_REPORT_SIZE>& response);
+    m605::FirmwareCompatibility ReadFirmwareCompatibility(); // DeviceWriteMutex held
     bool ProbeCurrentM605Transport() const; // read-only; DeviceWriteMutex held
     bool OpenDevice();
     static DWORD CALLBACK OnInterfaceNotification(HCMNOTIFICATION, PVOID context,
@@ -106,6 +110,8 @@ private:
     std::atomic<bool> interface_changed_{true};
     std::mutex notification_mutex_;
     std::wstring observed_path_; // callback-only identity, protected independently
+    uint64_t session_epoch_ = 0; // one opened handle, invalidated before close
+    m605::FirmwareCompatibility firmware_; // never populated by config/API input
 };
 
 } // namespace aura

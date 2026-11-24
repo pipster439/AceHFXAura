@@ -7,6 +7,7 @@
 #include <atomic>
 #include <thread>
 #include <sstream>
+#include "engine/plugin_publication_queue.h"
 using namespace aura;
 using json = nlohmann::json;
 namespace fs = std::filesystem;
@@ -79,6 +80,57 @@ void HostLifecycle() {
     runtime.Consume(old,factory,0,revision); Check(runtime.ActiveCount()==0,"rebuild rejects in-flight old admission");
     Consume(runtime,{Decision()},factory,0,2); Consume(runtime,{},factory,0,3);
     Check(runtime.ActiveCount()==0,"config generation rebuild conservatively cancels");
+}
+void ProgramLifecycle(const fs::path& directory) {
+    const auto number=[](double value){return json{{"op","number"},{"value",value}};};
+    const auto program=[&](unsigned red,bool once=false){return EffectProgram::Compile({{"schema_version",1},{"entry",0},{"variables",0},{"slots",0},
+        {"publication",{{"mode",once?"one_shot":"continuous"},{"fade_out_ms",once?10:0}}},
+        {"nodes",json::array({{{"kind","action"},{"op","setKey"},{"led",number(0)},
+            {"color",{{"op","rgb"},{"args",json::array({number(red),number(0),number(0)})}}},{"next",1}},{{"kind","end"}}})}});};
+    PluginManager manager;
+    auto prepared=manager.PrepareProgram("ir_fixture",program(0),directory/"first.aurair");
+    Check(bool(prepared)&&!manager.HasPlugin("ir_fixture"),"IR preparation does not publish");
+    Check(manager.PublishReload(prepared),"IR generation published transactionally");
+    auto old=manager.CreateEffectInstance("ir_fixture");Check(old.HasLifecycle()&&!old.GetGeneration()->handle,"IR uses host lifecycle without DLL");
+    AutomationEffectRuntime runtime;auto shot=Decision();shot.action["lifetime"]="while_true";shot.eligibility=ConditionTruth::True;
+    Consume(runtime,{shot},[&](const json&){return manager.CreateEffectInstance("ir_fixture");});
+    auto black=Frame(runtime,0,true,100);Check(black.buffer[0]==0,"IR explicit black overlays lower frame");
+    FrameBuffer lower;lower.Fill(100,100,100);Keymap empty;runtime.Apply(true,0,lower,empty);
+    Check(lower.buffer[0]==0&&lower.buffer[3]==100,"IR untouched LEDs preserve lower layer");
+    auto replacement=manager.PrepareProgram("ir_fixture",program(200,true),directory/"second.aurair");
+    Check(manager.PublishReload(replacement)&&!manager.PublishReload(prepared),"IR new immutable path replaces alias; stale candidate rejected");
+    Check(!manager.RollbackProgram(prepared),"stale persistence failure cannot roll back a newer catalog generation");
+    Check(manager.RollbackProgram(replacement)&&manager.GetGeneration("ir_fixture")==prepared.candidate,"exact published receipt restores previous enabled generation");
+    Check(manager.PublishReload(replacement),"explicitly republish prepared candidate after rollback test");
+    auto current=manager.CreateEffectInstance("ir_fixture");FrameBuffer frame;current.GetEffect()->Render(0,frame,empty);
+    Check(frame.buffer[0]==200&&current.Finished(0)==0,"IR one-shot terminal frame rendered");
+    current.GetEffect()->Render(5,frame,empty);Check(std::abs(current.Opacity(5)-.5)<.001,"host IR opacity dispatch");
+    old.GetEffect()->Render(5,frame,empty);Check(frame.buffer[0]==0,"old IR instance remains generation pinned");
+    Check(!manager.UnregisterProgram("ir_fixture",old.GetGeneration()->generation_id),"disable refuses stale generation");
+    Check(manager.UnregisterProgram("ir_fixture",current.GetGeneration()->generation_id),"disable removes only current program aliases");
+    Check(!manager.CreateEffectInstance("ir_fixture")&&!manager.PrepareEffectGeneration("ir_fixture"),"disabled alias cannot create fallback instance");
+    current.GetEffect()->Render(6,frame,empty);Check(frame.buffer[0]==200,"disabled generation remains alive for admitted work");
+    auto reenable=manager.PrepareProgram("ir_fixture",program(20),directory/"third.aurair");
+    Check(manager.PublishReload(reenable),"explicit re-enable clears alias tombstone");
+    Check(manager.RollbackProgram(reenable)&&!manager.CreateEffectInstance("ir_fixture"),"failed enable persistence restores disabled state");
+    Check(manager.PublishReload(reenable),"retry exact enable after successful compensation");
+    auto queued=manager.PrepareProgram("ir_fixture",program(30),directory/"fourth.aurair");PluginPublicationQueue publication;
+    auto caller=std::async(std::launch::async,[&]{return publication.Submit(queued,std::chrono::milliseconds(1000));});
+    bool changed=false;const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(2);
+    while(caller.wait_for(std::chrono::milliseconds(0))!=std::future_status::ready&&std::chrono::steady_clock::now()<deadline){
+        changed|=publication.ApplyAtFrameBoundary(manager);std::this_thread::yield();}
+    Check(changed&&caller.get()&&manager.GetGeneration("ir_fixture")==queued.candidate,"IR uses existing owner-frame publication queue");
+    const auto data_file=directory/"developer.aurair";
+    const json data={{"schema_version",1},{"entry",0},{"variables",0},{"slots",0},
+        {"publication",{{"mode","continuous"},{"fade_out_ms",0}}},{"nodes",json::array({{{"kind","end"}}})}};
+    {std::ofstream out(data_file);out<<data.dump();}
+    auto developer=manager.LoadPluginInstance(data_file.string());Check(developer&&developer.GetGeneration()->program,"aurair is parsed as restricted data, never DLL");
+    {std::ofstream out(data_file);out<<"{invalid";}
+    Check(!manager.ReloadPlugin("developer")&&manager.GetGeneration("developer")==developer.GetGeneration(),"invalid aurair reload retains previous data generation");
+    Check(!manager.PrepareProgram("../unsafe",program(20),data_file)&&!manager.PrepareProgram("safe",program(20),directory/"unsafe.dll"),"catalog preparation requires logical alias and data extension");
+    auto profile=std::make_shared<Profile>();profile->base_effect=std::make_shared<ProgramEffect>(program(200,true));profile->brightness=128;
+    EffectEngine engine;engine.SetActiveProfile(profile);engine.TickAt(0,frame,empty);Check(frame.buffer[0]==100,"IR base keeps profile brightness");
+    engine.TickAt(5,frame,empty);Check(frame.buffer[0]==50,"IR base applies lifecycle opacity exactly once");
 }
 struct Dll {
     PluginManager manager; TriggeredEffectInstance sample;
@@ -291,7 +343,7 @@ int main(int argc,char** argv) {
     const auto dir=fs::temp_directory_path()/("aura-stage3-"+std::to_string(GetCurrentProcessId()));
     try {
         Check(argc==2,"fixture directory argument"); fs::create_directories(dir);
-        HostLifecycle(); DllLifecycle(argv[1]); Capabilities(argv[1]); Generation(argv[1],dir); Composition(); ResolutionAndEvaluation(dir);
+        HostLifecycle(); ProgramLifecycle(dir); DllLifecycle(argv[1]); Capabilities(argv[1]); Generation(argv[1],dir); Composition(); ResolutionAndEvaluation(dir);
         fs::remove_all(dir); std::cout<<"PASS: "<<checks<<" Stage 3 runtime assertions\n"; return 0;
     } catch(const std::exception& error) { std::cerr<<"FAIL after "<<checks<<": "<<error.what()<<"\n"; return 1; }
 }

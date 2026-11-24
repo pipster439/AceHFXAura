@@ -1,7 +1,7 @@
 import { normalizePublication } from '../blockly/publication.js';
-export async function fetchPublishReadiness() {
+export async function fetchPublishReadiness({ signal, fetchImpl = globalThis.fetch } = {}) {
   try {
-    const res = await fetch('/api/status', { cache: 'no-store' });
+    const res = await fetchImpl('/api/status', { cache: 'no-store', signal });
     if (!res.ok) return { ok: false, ready: true, sdkFound: true, msvcFound: true };
     const data = await res.json();
     return {
@@ -17,8 +17,8 @@ export async function fetchPublishReadiness() {
   }
 }
 
-export async function ensurePublishReady() {
-  const readiness = await fetchPublishReadiness();
+export async function ensurePublishReady(transport) {
+  const readiness = await fetchPublishReadiness(transport);
   if (readiness.sdkFound === false) {
     const err = new Error('Studio 原生发布 SDK 缺失或损坏 (缺少 include/engine/effect.h 等)。如果是单文件发行版，请确认运行时资产完整。');
     err.stage = 'sdk_missing';
@@ -55,12 +55,13 @@ export async function ensureStudioRuntime() {
       ? 'daemon 不在线：请启动最新的 aura_daemon.exe 后重试。'
       : `未检测到兼容的 Studio Runtime：当前 v${daemon.studio_runtime ?? '未知'}，要求 v2。请关闭旧 daemon，启动最新构建。`);
   }
+  return daemon;
 }
 
-export async function requestJson(url, body) {
+export async function requestJson(url, body, { signal, fetchImpl = globalThis.fetch } = {}) {
   let res;
   try {
-    res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    res = await fetchImpl(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal });
   } catch (err) {
     throw new Error(`无法连接 Web UI：${err.message}`);
   }
@@ -82,7 +83,11 @@ export async function stageEffect(name, workspace, transpiler, onLog = () => {},
   let progress = '';
   const report = line => { progress += `${line}\n`; onLog(progress); };
   report('1/5 检查运行环境…');
-  await ensureStudioRuntime();
+  const runtime = await ensureStudioRuntime();
+  const requiresKeyboard = (workspace?.getAllBlocks?.(false) || []).some(block =>
+    block.isEnabled?.() !== false && ['key_is_pressed', 'key_decay'].includes(block.type));
+  if (requiresKeyboard && runtime.logical_keyboard_version !== 1)
+    throw new Error('当前 daemon 不支持 Studio 逻辑按键输入；请更新软件后发布。当前运行版本未改变。');
   await ensurePublishReady();
   // The editor is locked during publishing; both transpilations happen before
   // the compile request so the revision and generated plugin share one source.
@@ -109,12 +114,12 @@ export async function stageEffect(name, workspace, transpiler, onLog = () => {},
 }
 
 // Compile-only validation never reloads a plugin or updates a profile/config.
-export async function buildEffect(name, workspace, transpiler, options = {}) {
+export async function buildEffect(name, workspace, transpiler, options = {}, transport = {}) {
   if (!/^[a-zA-Z_][a-zA-Z0-9_]{0,47}$/.test(name)) throw new Error('光效名称非法');
-  await ensurePublishReady();
+  await ensurePublishReady(transport);
   const pluginName = `studio_${name.slice(0, 20)}_${crypto.randomUUID().replaceAll('-', '').slice(0, 20)}`;
   const code = transpiler.transpile(pluginName, workspace, normalizePublication(options));
-  return requestJson('/api/compile_effect', { name: pluginName, code });
+  return requestJson('/api/compile_effect', { name: pluginName, code }, transport);
 }
 
 export function getEffectLifecycleStatus(effect) {

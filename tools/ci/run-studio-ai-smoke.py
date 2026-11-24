@@ -29,10 +29,15 @@ def main():
     parser.add_argument('--conversation', action='store_true')
     parser.add_argument('--rejection-case', choices=('publish', 'unknown', 'malformed'), default='publish')
     parser.add_argument('--web-root', type=Path)
+    parser.add_argument('--scratch-root', type=Path, help='Task-local scratch directory beneath audit_artifacts or audit_repros')
     parser.add_argument('--package', type=Path, help='Actual extracted package; rejects checkout runtime fallback')
     args = parser.parse_args()
     repo = Path(__file__).resolve().parents[2]
     output = args.output.resolve(); output.mkdir(parents=True, exist_ok=True)
+    scratch = (args.scratch_root or output / 'scratch').resolve()
+    if not any(scratch.is_relative_to(repo / name) for name in ('audit_artifacts', 'audit_repros')):
+        raise RuntimeError('Scratch root must remain beneath task audit_artifacts or audit_repros')
+    scratch.mkdir(parents=True, exist_ok=True)
     binaries = args.bin.resolve(); ui = args.ui.resolve()
     package = configure_package(args, repo, output)
     subprocess.run(['python', '-B', str(repo / 'tools/ci/check-idle-test-ports.py')], check=True)
@@ -53,7 +58,7 @@ def main():
         def do_POST(self):
             nonlocal authority_before_rejection
             length = int(self.headers.get('Content-Length', '0'))
-            if length > 65536 or self.path != '/v1/chat/completions': self.send_error(400); return
+            if length > 262144 or self.path != '/v1/chat/completions': self.send_error(400); return
             data = json.loads(self.rfile.read(length))
             if data['messages'][1]['content'] == 'Connection test only.':
                 body = json.dumps({'choices': [{'finish_reason': 'stop', 'message': {'content': 'ok'}}]}).encode()
@@ -67,11 +72,26 @@ def main():
             if any(m.get('role') == 'user' and m.get('text') == 'cancel-wait' for m in context['conversation'][-1:]):
                 (output / 'mock-inflight-ready.json').write_text('{"inflight":true}', encoding='utf-8')
             proposal = reply_for(context, requests, args.rejection_case)
+            if data.get('stream'):
+                content = proposal if isinstance(proposal, str) else json.dumps(proposal, ensure_ascii=False)
+                self.send_response(200); self.send_header('Content-Type', 'text/event-stream'); self.send_header('Cache-Control', 'no-cache'); self.end_headers()
+                try:
+                    for offset in range(0, len(content), 30):
+                        chunk = {'choices': [{'index': 0, 'delta': {'content': content[offset:offset + 30]}, 'finish_reason': None}]}
+                        self.wfile.write(('data: ' + json.dumps(chunk, ensure_ascii=False) + '\n\n').encode()); self.wfile.flush()
+                        if context['conversation'][-1]['text'] in ('stream-progress', 'stream-close'):
+                            time.sleep(.25)
+                    self.wfile.write(b'data: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n'); self.wfile.flush()
+                except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                    (output / 'mock-stream-cancelled.json').write_text('{"cancelled":true}', encoding='utf-8')
+                return
             body = json.dumps({'choices': [{'finish_reason': 'stop', 'message': {'content': proposal if isinstance(proposal, str) else json.dumps(proposal, ensure_ascii=False)}}]}).encode()
             self.send_response(200); self.send_header('Content-Type', 'application/json'); self.send_header('Content-Length', str(len(body))); self.end_headers(); self.wfile.write(body)
     server = ThreadingHTTPServer(('127.0.0.1', 0), Mock)
     thread = threading.Thread(target=server.serve_forever, daemon=True); thread.start()
-    with tempfile.TemporaryDirectory(prefix='aura-studio-ai-', dir=output if package else None) as directory:
+    # WebView child shutdown can lag behind the GUI. A retained task-local cache
+    # must not mask the original test outcome or provoke unrelated process kills.
+    with tempfile.TemporaryDirectory(prefix='aura-studio-ai-', dir=scratch, ignore_cleanup_errors=True) as directory:
         root = Path(directory); (root / '.aura-studio-ai-fixture').write_text('local mock only')
         path = root / 'config.json'; path.write_text(json.dumps(config), encoding='utf-8')
         env = os.environ.copy();
@@ -87,8 +107,9 @@ def main():
         event_name = 'Local\\AuraStudioAiSmoke-' + uuid.uuid4().hex
         shutdown_event = kernel.CreateEventW(None, True, False, event_name)
         if not shutdown_event: raise OSError(ctypes.get_last_error())
+        core_log = (output / 'core-process.log').open('wb'); gui_log = (output / 'gui-process.log').open('wb')
         core = subprocess.Popen([str(binaries / 'aura_daemon.exe'), '--dry-run', '--config', str(path), '--keymap', str((package / 'runtime-payload' if package else repo) / 'calibrated_keymap.json'),
-            '--shutdown-event', event_name, '--web-root', str(web_root), '--sdk-include', str((package / 'runtime-payload' if package else repo) / 'include')], cwd=root, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            '--shutdown-event', event_name, '--web-root', str(web_root), '--sdk-include', str((package / 'runtime-payload' if package else repo) / 'include')], cwd=root, env=env, stdout=core_log, stderr=subprocess.STDOUT)
         gui = None
         try:
             deadline = time.monotonic() + 30
@@ -96,12 +117,13 @@ def main():
                 try:
                     with urllib.request.urlopen('http://127.0.0.1:19897/api/runtime/status', timeout=1) as response: status = json.load(response)
                     if not owned_runtime_ready(status, core.pid): raise KeyError('Owner snapshot not ready')
+                    (output / 'owned-runtime.json').write_text(json.dumps({'process_id': core.pid, 'status': status, 'scratch_beneath_task': True}, indent=2), encoding='utf-8')
                     with urllib.request.urlopen('http://127.0.0.1:19898/api/status', timeout=1): pass
                     break
                 except (OSError, KeyError):
                     if core.poll() is not None or time.monotonic() >= deadline: raise RuntimeError('Dry-run fixture failed to start')
                     time.sleep(.1)
-            gui = subprocess.Popen([str(ui), '--validate-studio-ai'], cwd=root, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            gui = subprocess.Popen([str(ui), '--validate-studio-ai'], cwd=root, env=env, stdout=gui_log, stderr=subprocess.STDOUT)
             if args.capture:
                 capture_deadline = time.monotonic() + 120
                 ready = output / 'capture-ready.json'
@@ -145,6 +167,7 @@ def main():
                 finally:
                     kernel.CloseHandle(shutdown_event)
                     server.shutdown(); server.server_close()
+                    core_log.close(); gui_log.close()
                     assert_clean_persistence(root, output, package)
 
 if __name__ == '__main__': main()

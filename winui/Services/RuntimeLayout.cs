@@ -42,7 +42,7 @@ public static class RuntimeLayoutResolver
     {
         var manifest = JsonSerializer.Deserialize<RuntimeManifest>(File.ReadAllText(Path.Combine(root, "runtime-manifest.json")), JsonOptions)
             ?? throw new InvalidDataException("Missing runtime manifest");
-        if (manifest.SchemaVersion != 1 || !Regex.IsMatch(manifest.Version ?? "", @"^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.]+)?$")
+        if (manifest.SchemaVersion != 1 || !Regex.IsMatch(manifest.Version ?? "", @"^\d+\.\d+\.\d+(?:-[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*)?$")
             || !Regex.IsMatch(manifest.BuildId ?? "", "^[a-f0-9]{16,64}$") || manifest.Files is null)
             throw new InvalidDataException("Unsupported runtime manifest");
         var required = new Dictionary<string, string> {

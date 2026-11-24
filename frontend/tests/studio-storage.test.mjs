@@ -30,7 +30,9 @@ test('durable draft projection excludes applied authority credentials and config
 });
 test('actual editor checkpoints before AI mutation and publication; save ack follows durable save', () => {
   const source = readFileSync(new URL('../src/components/EffectStudio.jsx', import.meta.url), 'utf8');
-  assert.ok(source.indexOf("await checkpointDraft('before_ai_apply')") < source.indexOf("aiSessionRef.current.apply(current())"));
+  const checkpoint = source.indexOf("await checkpointDraft('before_ai_apply', base");
+  const commit = source.indexOf('session.commitApply(afterCheckpoint, reservation, load)');
+  assert.ok(checkpoint >= 0 && commit > checkpoint);
   assert.ok(source.indexOf("await checkpointDraft('before_publish')") < source.indexOf('await stageEffect('));
   assert.ok(source.indexOf("request('saved', currentDraft())") > source.indexOf('await onSaveConfig(next'));
 });

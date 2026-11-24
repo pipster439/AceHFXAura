@@ -5,6 +5,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using System.Globalization;
 using System.Runtime.InteropServices;
 
 namespace Aura_WinUI.Pages;
@@ -17,6 +18,16 @@ public sealed partial class MagneticSwitchPage : Page
     private readonly Dictionary<ushort, Button> _keyButtons = [];
     private readonly Dictionary<ushort, (TextBlock Legend, TextBlock Actuation, TextBlock RtPress,
         TextBlock RtRelease)> _keycapParts = [];
+    private readonly Dictionary<ushort, Border> _keyDepthBars = [];
+    private readonly MagneticHallClient _hallClient = new();
+    private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer? _hallTimer;
+    private bool _hallPolling;
+    private bool _hallActive;
+    private bool _verifyRunning;
+    private double _lastKeyboardKeyHeight = 38.0;
+    private double _liveSelectedDepthMm;
+    private ushort _liveSelectedRaw;
+    private bool _liveSelectedDigitalDown;
     private readonly List<Canvas> _keyboardCanvases = [];
     private readonly List<(ComboBox Target, ComboBox DownStart, ComboBox DownEnd,
         ComboBox UpStart, ComboBox UpEnd)> _dksControls = [];
@@ -66,41 +77,60 @@ public sealed partial class MagneticSwitchPage : Page
         }
         PageLayout.Attach(this, PageScroll, PageContent, width =>
         {
-            bool wide = width >= 1120;
-            double detailsWidth = wide ? Math.Clamp(360 + (width - 1120) * 0.25, 360, 440) : 0;
-            ContentColumns.ColumnDefinitions[0].Width = new GridLength(1, GridUnitType.Star);
-            ContentColumns.ColumnDefinitions[1].Width = new GridLength(detailsWidth);
-            Grid.SetColumn(DetailsPanel, wide ? 1 : 0);
-            Grid.SetRow(DetailsPanel, wide ? 0 : 1);
-            Grid.SetRow(CommonLowerGrid, wide ? 1 : 2);
-            Grid.SetRow(GlobalFeaturesPanel, wide ? 2 : 3);
-            bool twoCommonColumns = width >= 800;
-            CommonLowerGrid.ColumnDefinitions[1].Width = twoCommonColumns ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
-            Grid.SetColumn(DeadzoneHost, twoCommonColumns ? 1 : 0);
-            Grid.SetRow(DeadzoneHost, twoCommonColumns ? 0 : 1);
-            PageLayout.Columns(DksSlotsHost, width >= 800 ? 2 : 1);
+            double unit = Math.Max(34, ((int)Math.Clamp((width - 120) / 16.75, 34.0, 52.0)) & ~1);
+            double keyH = width >= 900 ? 46.0 : 40.0;
+            _lastKeyboardKeyHeight = keyH;
 
-            double keyboardWidth = width - detailsWidth - (wide ? 20 : 0);
-            double unit = wide ? Math.Clamp((keyboardWidth - 32 - 56 - 24) / 16.75, 34.0, 44.0) : 38.0;
+            bool sideBySideViz = width >= 760;
+            BasicWorkbenchGrid.ColumnDefinitions[0].Width = sideBySideViz ? new GridLength(244) : new GridLength(1, GridUnitType.Star);
+            BasicWorkbenchGrid.ColumnDefinitions[1].Width = sideBySideViz ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
+            Grid.SetColumn(CommonLowerGrid, sideBySideViz ? 1 : 0);
+            Grid.SetRow(CommonLowerGrid, sideBySideViz ? 0 : 1);
+
+            double rightWidth = sideBySideViz ? Math.Max(0, width - 260) : width;
+            bool twoCommonColumns = rightWidth >= 680;
+            CommonLowerGrid.ColumnDefinitions[1].Width = twoCommonColumns ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
+            Grid.SetColumn(RapidTriggerCard, twoCommonColumns ? 1 : 0);
+            Grid.SetRow(RapidTriggerCard, twoCommonColumns ? 0 : 1);
+            Grid.SetRow(DeadzoneCard, twoCommonColumns ? 1 : 2);
+            Grid.SetColumnSpan(DeadzoneCard, twoCommonColumns ? 2 : 1);
+
+            bool twoDzColumns = rightWidth >= 500;
+            DeadzoneSlidersGrid.ColumnDefinitions[1].Width = twoDzColumns ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
+            Grid.SetColumn(BottomDzCol, twoDzColumns ? 1 : 0);
+            Grid.SetRow(BottomDzCol, twoDzColumns ? 0 : 1);
+
+            bool twoHallColumns = width >= 900;
+            HallSectionGrid.ColumnDefinitions[1].Width = twoHallColumns ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
+            Grid.SetColumn(WootingBridgeCard, twoHallColumns ? 1 : 0);
+            Grid.SetRow(WootingBridgeCard, twoHallColumns ? 0 : 1);
+
+            PageLayout.Columns(DksSlotsHost, width >= 760 ? 2 : 1);
+
             foreach (var key in MagneticKeyLayout.Keys)
             {
                 var button = _keyButtons[key.LogicalId];
                 button.Width = unit * key.Units;
-                button.Height = wide ? 44 : 38;
+                button.Height = keyH;
                 Canvas.SetLeft(button, MagneticKeyLayout.LeftOf(key, unit));
             }
             foreach (var canvas in _keyboardCanvases)
             {
                 canvas.Width = MagneticKeyLayout.RightmostColumn(unit) + 1.3 * unit;
-                canvas.Height = wide ? 44 : 38;
+                canvas.Height = keyH;
             }
-        }, maxWidth: 1380);
+        }, maxWidth: 1280);
         PageScroll.SizeChanged += (_, _) => PageHost.MinHeight = PageScroll.ViewportHeight;
         Loaded += async (_, _) =>
         {
             await _model.RefreshAsync();
             Render();
+            if (_hallActive || _verifyRunning) _hallTimer?.Start();
         };
+        Unloaded += (_, _) => _hallTimer?.Stop();
+        _hallTimer = DispatcherQueue.CreateTimer();
+        _hallTimer.Interval = TimeSpan.FromMilliseconds(40);
+        _hallTimer.Tick += HallTimer_Tick;
         ActualThemeChanged += (_, _) => Render();
         Render();
     }
@@ -215,10 +245,10 @@ public sealed partial class MagneticSwitchPage : Page
                 TextBlock Corner(string name, HorizontalAlignment horizontal, VerticalAlignment vertical)
                 {
                     return new TextBlock {
-                        Name = name, Text = "—", FontSize = 7.5, Opacity = 0.82,
+                        Name = name, Text = "—", FontSize = 7.5, Opacity = 0.22,
                         TextTrimming = TextTrimming.CharacterEllipsis, MaxLines = 1,
                         HorizontalAlignment = horizontal, VerticalAlignment = vertical,
-                        Margin = new Thickness(2, 1, 2, 1)
+                        Margin = new Thickness(3, 2, 3, 2)
                     };
                 }
                 var legend = new TextBlock {
@@ -234,6 +264,18 @@ public sealed partial class MagneticSwitchPage : Page
                     HorizontalAlignment.Right, VerticalAlignment.Top);
                 var rtRelease = Corner($"MagneticKeyRtRelease{key.LogicalId:X4}",
                     HorizontalAlignment.Right, VerticalAlignment.Bottom);
+                var depthBar = new Border
+                {
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                    VerticalAlignment = VerticalAlignment.Bottom,
+                    Height = 0,
+                    CornerRadius = new CornerRadius(4),
+                    Background = (Brush)Application.Current.Resources["AccentFillColorSecondaryBrush"],
+                    Opacity = 0.45,
+                    IsHitTestVisible = false
+                };
+                keycap.Children.Add(depthBar);
+                _keyDepthBars.Add(key.LogicalId, depthBar);
                 keycap.Children.Add(actuation);
                 keycap.Children.Add(rtPress);
                 keycap.Children.Add(rtRelease);
@@ -304,8 +346,6 @@ public sealed partial class MagneticSwitchPage : Page
                 SelectedKeyHeroDesc.Text = "全局磁轴设置";
                 SelectedKeyTagText.Text = "全局基础值";
                 SelectedKeyDebugInfo.Text = "";
-
-                foreach (var (_, button) in _keyButtons) button.Style = null;
             }
             else if (selected != null)
             {
@@ -316,10 +356,6 @@ public sealed partial class MagneticSwitchPage : Page
                 SelectedKeyHeroDesc.Text = $"Row {selected.Row + 1} · 实体按键";
                 SelectedKeyTagText.Text = "选中按键";
                 SelectedKeyDebugInfo.Text = $"0x{selected.LogicalId:X4}";
-
-                foreach (var (id, button) in _keyButtons)
-                    button.Style = id == _model.SelectedLogicalId ?
-                        (Style)Application.Current.Resources["AccentButtonStyle"] : null;
             }
             else if (_model.IsMultiMode)
             {
@@ -340,7 +376,6 @@ public sealed partial class MagneticSwitchPage : Page
                 SelectedKeyHeroDesc.Text = "请在左侧键盘中点击任意实体按键开始配置";
                 SelectedKeyTagText.Text = "未选择";
                 SelectedKeyDebugInfo.Text = "";
-                foreach (var (_, button) in _keyButtons) button.Style = null;
             }
 
             foreach (var (id, button) in _keyButtons)
@@ -360,10 +395,11 @@ public sealed partial class MagneticSwitchPage : Page
                 parts.Actuation.Foreground = button.Foreground;
                 parts.RtPress.Foreground = button.Foreground;
                 parts.RtRelease.Foreground = button.Foreground;
-                parts.Actuation.Opacity = overlay.ActuationSource is
-                    MagneticOverlaySource.SessionGlobalBaseline or MagneticOverlaySource.HostGlobalBaseline ? 0.55 : 0.82;
-                parts.RtPress.Opacity = overlay.RtPressKnown ? 0.82 : 0.55;
-                parts.RtRelease.Opacity = overlay.RtReleaseKnown ? 0.82 : 0.55;
+                parts.Actuation.Opacity = overlay.ActuationText == "—" ? 0.20 :
+                    overlay.ActuationSource is
+                        MagneticOverlaySource.SessionGlobalBaseline or MagneticOverlaySource.HostGlobalBaseline ? 0.55 : 0.85;
+                parts.RtPress.Opacity = overlay.RtPressText == "—" ? 0.18 : (overlay.RtPressKnown ? 0.85 : 0.50);
+                parts.RtRelease.Opacity = overlay.RtReleaseText == "—" ? 0.18 : (overlay.RtReleaseKnown ? 0.85 : 0.50);
                 button.BorderThickness = new Thickness(isSelected ? 2 : 1);
                 button.IsEnabled = !_model.Busy;
                 AutomationProperties.SetName(button, $"{visual.FullName}，{(isSelected ? "已选择" : "未选择")}，{overlay.AccessibilityText}");
@@ -396,12 +432,12 @@ public sealed partial class MagneticSwitchPage : Page
             if (_model.IsGlobalMode)
             {
                 // Card headers & descriptions
-                ActuationCard.Header = "全局触发点";
-                ActuationCard.Description = "手动全局设置的基础触发深度 (0.1–4.0 mm)；配置文件覆盖时仍显示基础值";
-                RapidTriggerCard.Header = "旧版快速触发参数（只读）";
-                RapidTriggerCard.Description = "请在键盘中选择单键或多键后设置快速触发；本页不再编辑旧版整体参数";
-                DeadzoneCard.Header = "全局死区设置";
-                DeadzoneCard.Description = "手动全局设置的基础死区 (0.0–0.5 mm)；不清除已有逐键覆盖";
+                ActuationCardTitle.Text = "全局触发点";
+                ActuationCardDesc.Text = "手动全局设置的基础触发深度 (0.1–4.0 mm)；配置文件覆盖时仍显示基础值";
+                RapidTriggerCardTitle.Text = "旧版快速触发参数（只读）";
+                RapidTriggerCardDesc.Text = "请在键盘中选择单键或多键后设置快速触发；本页不再编辑旧版整体参数";
+                DeadzoneCardTitle.Text = "全局死区设置";
+                DeadzoneCardDesc.Text = "手动全局设置的基础死区 (0.0–0.5 mm)；不清除已有逐键覆盖";
                 DksSection.Visibility = Visibility.Collapsed;
 
                 RapidTriggerToggle.Visibility = Visibility.Collapsed;
@@ -482,15 +518,15 @@ public sealed partial class MagneticSwitchPage : Page
             else
             {
                 // Reset card headers for per-key mode
-                ActuationCard.Header = "触发点";
-                ActuationCard.Description = "按键按下触发深度 (0.1–4.0 mm)；移动滑杆仅修改草稿";
-                RapidTriggerCard.Header = "快速触发";
-                RapidTriggerCard.Description = "根据移动方向即时重置与重新触发";
-                DeadzoneCard.Header = "死区设置";
-                DeadzoneCard.Description = "消除微触误触与触底杂音 (0.0–0.5 mm)";
+                ActuationCardTitle.Text = "触发点";
+                ActuationCardDesc.Text = "按键按下触发深度 (0.1–4.0 mm)；移动滑杆仅修改草稿";
+                RapidTriggerCardTitle.Text = "快速触发";
+                RapidTriggerCardDesc.Text = "根据移动方向即时重置与重新触发";
+                DeadzoneCardTitle.Text = "死区设置";
+                DeadzoneCardDesc.Text = "消除微触误触与触底杂音 (0.0–0.5 mm)";
                 DksSection.Visibility = _model.IsMultiMode ? Visibility.Collapsed : Visibility.Visible;
-                DksExpander.Visibility = _model.DksEditorOpen ? Visibility.Visible : Visibility.Collapsed;
-                if (!_model.DksEditorOpen) DksExpander.IsExpanded = false;
+                DksEditorBody.Visibility = _model.DksEditorOpen ? Visibility.Visible : Visibility.Collapsed;
+                DksConfigureButton.Content = _model.DksEditorOpen ? "收起编辑器" : "展开编辑器";
 
                 RapidTriggerToggle.Visibility = Visibility.Visible;
                 SeparateModeToggle.Visibility = Visibility.Collapsed;
@@ -696,6 +732,13 @@ public sealed partial class MagneticSwitchPage : Page
             AnalogApplyButton.IsEnabled = _model.CanApplyStaticAnalog && _model.CanWrite && _model.StaticAnalogDraft != null;
             AnalogApplyButton.Style = AnalogApplyButton.IsEnabled ? (Style)Application.Current.Resources["AccentButtonStyle"] : null;
 
+            SelectedKeyLiveDepthPanel.Visibility = (_hallActive && !_model.IsGlobalMode && !_model.IsMultiMode && selected != null)
+                ? Visibility.Visible : Visibility.Collapsed;
+            HallVerifyTargetText.Text = selected != null ? $"当前选中：{selected.FullName}" : "当前选中：未选择";
+            HallVerifyStartButton.IsEnabled = !_verifyRunning && selected != null && _model.CanWriteSelected;
+            HallVerifyStopButton.IsEnabled = _verifyRunning;
+            UpdateVerticalHallVisualizer();
+
             // 7. Compact Health Strip & Escalation InfoBar
             RefreshButton.IsEnabled = !_model.Busy && !_model.Refreshing;
             BusyRing.IsActive = _model.Busy;
@@ -742,7 +785,7 @@ public sealed partial class MagneticSwitchPage : Page
             else if (status is { Succeeded: true, Available: true, Health: "Clean" })
             {
                 HealthStatusText.Text = "设备已连接 · 状态正常";
-                HealthStatusDot.Fill = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 16, 124, 65));
+                HealthStatusDot.Fill = (Brush)Application.Current.Resources["SystemFillColorSuccessBrush"];
                 HealthBar.IsOpen = false;
                 _quarantineRecoveryButton.Visibility = Visibility.Collapsed;
             }
@@ -788,8 +831,17 @@ public sealed partial class MagneticSwitchPage : Page
         if (_model.ConfigureDksEditor())
         {
             Render();
-            DksExpander.IsExpanded = true;
         }
+    }
+
+    private void MagneticSectionBar_SelectionChanged(SelectorBar sender, SelectorBarSelectionChangedEventArgs args)
+    {
+        if (SectionBasicPanel == null) return;
+        string tag = (sender.SelectedItem as SelectorBarItem)?.Tag as string ?? "basic";
+        SectionBasicPanel.Visibility = tag == "basic" ? Visibility.Visible : Visibility.Collapsed;
+        SectionHallPanel.Visibility = tag == "hall" ? Visibility.Visible : Visibility.Collapsed;
+        SectionAdvancedPanel.Visibility = tag == "advanced" ? Visibility.Visible : Visibility.Collapsed;
+        SectionUtilityPanel.Visibility = tag == "utility" ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void ActuationSlider_ValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
@@ -1066,5 +1118,360 @@ public sealed partial class MagneticSwitchPage : Page
             DefaultButton = ContentDialogButton.Close
         };
         return await dialog.ShowAsync() == ContentDialogResult.Primary;
+    }
+
+    private async void HallTelemetryToggle_Click(object sender, RoutedEventArgs e)
+    {
+        await ToggleHallTelemetryAsync(HallTelemetryToggle.IsChecked == true);
+    }
+
+    private async void HallVizToggleButton_Click(object sender, RoutedEventArgs e)
+    {
+        await ToggleHallTelemetryAsync(!_hallActive);
+    }
+
+    private async Task ToggleHallTelemetryAsync(bool wantActive)
+    {
+        HallTelemetryToggle.IsEnabled = false;
+        HallVizToggleButton.IsEnabled = false;
+        try
+        {
+            var snap = wantActive
+                ? await _hallClient.StartAsync(HallUnlockFaCheckBox.IsChecked == true)
+                : await _hallClient.StopAsync();
+            _hallActive = snap.Active;
+            HallTelemetryToggle.IsChecked = _hallActive;
+            if (_hallActive)
+            {
+                HallTelemetryStatsBorder.Visibility = Visibility.Visible;
+                HallTelemetryStatsText.Text = snap.SharedMemoryOk ? "已启动 · Wooting 共享内存就绪" : "已启动";
+                _hallTimer?.Start();
+            }
+            else
+            {
+                if (!_verifyRunning) _hallTimer?.Stop();
+                ClearKeyDepthBars();
+                HallTelemetryStatsBorder.Visibility = string.IsNullOrWhiteSpace(snap.LastError) ? Visibility.Collapsed : Visibility.Visible;
+                HallTelemetryStatsText.Text = snap.LastError;
+            }
+            Render();
+        }
+        finally
+        {
+            HallTelemetryToggle.IsEnabled = true;
+            HallVizToggleButton.IsEnabled = true;
+        }
+    }
+
+    private void ClearKeyDepthBars()
+    {
+        foreach (var bar in _keyDepthBars.Values) bar.Height = 0;
+        _liveSelectedDepthMm = 0.0;
+        _liveSelectedRaw = 0;
+        _liveSelectedDigitalDown = false;
+        SelectedKeyDepthBar.Value = 0;
+        SelectedKeyDepthText.Text = "0.00 mm";
+        UpdateVerticalHallVisualizer();
+    }
+
+    private void UpdateVerticalHallVisualizer()
+    {
+        if (HallVizTrackCanvas == null) return;
+        const double trackH = 238.0;
+        const double pxPerMm = trackH / 4.0;
+
+        var selected = _model.SelectedKey;
+        HallVizKeyBadgeText.Text = selected != null ? selected.Label :
+            _model.IsGlobalMode ? "全局" : _model.IsMultiMode ? $"{_model.SelectedCount} 键" : "—";
+        HallVizToggleButton.Content = _hallActive ? "停止实时行程" : "开启实时行程";
+
+        double actMm = Math.Clamp(ActuationSlider.Value, 0.1, 4.0);
+        double actY = Math.Clamp(actMm * pxPerMm - 1.0, 0.0, trackH - 2.0);
+        Canvas.SetTop(HallVizActuationLine, actY);
+        Canvas.SetTop(HallVizActuationTag, Math.Clamp(actMm * pxPerMm - 11.0, 0.0, trackH - 22.0));
+        HallVizActuationTagText.Text = $"{actMm:F1} mm";
+
+        double topMm = Math.Clamp(TopSlider.Value, 0.0, 0.5);
+        double topH = Math.Clamp(topMm * pxPerMm, 0.0, trackH);
+        HallVizTopDzBand.Height = topH;
+        HallVizTopDzBand.Visibility = topMm > 0.01 ? Visibility.Visible : Visibility.Collapsed;
+
+        double botMm = Math.Clamp(BottomSlider.Value, 0.0, 0.5);
+        double botH = Math.Clamp(botMm * pxPerMm, 0.0, trackH);
+        Canvas.SetTop(HallVizBottomDzBand, trackH - botH);
+        HallVizBottomDzBand.Height = botH;
+        HallVizBottomDzBand.Visibility = botMm > 0.01 ? Visibility.Visible : Visibility.Collapsed;
+
+        bool showRt = !_model.IsGlobalMode && !_model.IsMultiMode && RapidTriggerToggle.IsOn;
+        if (showRt)
+        {
+            double pressMm = Math.Clamp(PressSlider.Value, 0.1, 2.5);
+            double releaseMm = Math.Clamp(ReleaseSlider.Value, 0.1, 2.5);
+            double anchor = (_hallActive && _liveSelectedDepthMm > 0.05) ? _liveSelectedDepthMm : actMm;
+            double rtTopMm = Math.Max(0.0, anchor - releaseMm);
+            double rtBotMm = Math.Min(4.0, anchor + pressMm);
+            Canvas.SetTop(HallVizRtBand, rtTopMm * pxPerMm);
+            HallVizRtBand.Height = Math.Max(2.0, (rtBotMm - rtTopMm) * pxPerMm);
+            HallVizRtBand.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            HallVizRtBand.Visibility = Visibility.Collapsed;
+        }
+
+        if (_hallActive && !_model.IsGlobalMode && !_model.IsMultiMode && selected != null)
+        {
+            double d = Math.Clamp(_liveSelectedDepthMm, 0.0, 4.0);
+            bool triggered = _liveSelectedDigitalDown || d >= actMm;
+            HallVizDepthFill.Height = d * pxPerMm;
+            HallVizDepthFill.Background = (Brush)Application.Current.Resources[
+                triggered ? "SystemFillColorSuccessBrush" : "AccentFillColorSecondaryBrush"];
+            HallVizDepthTip.Visibility = d > 0.02 ? Visibility.Visible : Visibility.Collapsed;
+            Canvas.SetTop(HallVizDepthTip, Math.Clamp(d * pxPerMm - 1.5, 0.0, trackH - 3.0));
+            HallVizLiveTag.Visibility = d > 0.05 ? Visibility.Visible : Visibility.Collapsed;
+            Canvas.SetTop(HallVizLiveTag, Math.Clamp(d * pxPerMm - 10.0, 0.0, trackH - 20.0));
+            HallVizLiveTagText.Text = $"{d:F2}";
+            HallVizDepthReadout.Text = $"{d:F2} mm";
+            HallVizRawReadout.Text = _liveSelectedRaw > 0 ? $"Raw {_liveSelectedRaw} · 触发点 {actMm:F1} mm" : "正在等待霍尔帧…";
+            HallVizStateText.Text = triggered ? "已触发" : "未触发";
+            HallVizStateText.Foreground = (Brush)Application.Current.Resources[
+                triggered ? "SystemFillColorSuccessBrush" : "TextFillColorSecondaryBrush"];
+        }
+        else
+        {
+            HallVizDepthFill.Height = 0;
+            HallVizDepthTip.Visibility = Visibility.Collapsed;
+            HallVizLiveTag.Visibility = Visibility.Collapsed;
+            HallVizDepthReadout.Text = _hallActive ? "请选择单键" : "0.00 mm";
+            HallVizStateText.Text = _hallActive ? "全键监听" : "未开启";
+            HallVizStateText.Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
+            HallVizRawReadout.Text = _hallActive
+                ? "点击任意按键可查看实时按压深度"
+                : "拖动滑杆可实时预览触发线、死区与 RT 区间";
+        }
+    }
+
+    private void HallVerifyModeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (HallVerifyParamsBox == null) return;
+        string mode = (HallVerifyModeCombo.SelectedItem as ComboBoxItem)?.Tag as string ?? "actuation";
+        switch (mode)
+        {
+            case "rt":
+                HallVerifyParamsBox.Header = "RT 灵敏度列表 (mm，逗号分隔)";
+                HallVerifyParamsBox.Text = "0.3";
+                break;
+            case "deadzone":
+                HallVerifyParamsBox.Header = "顶部与底部死区 (top, bottom mm)";
+                HallVerifyParamsBox.Text = "0.4, 0.4";
+                break;
+            default:
+                HallVerifyParamsBox.Header = "目标触发点列表 (mm，逗号分隔)";
+                HallVerifyParamsBox.Text = "0.8, 2.0, 3.2";
+                break;
+        }
+    }
+
+    private async void HallVerifyStartButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_model.SelectedKey is not { } selectedKey)
+        {
+            HallVerifyGuideBar.Severity = InfoBarSeverity.Warning;
+            HallVerifyGuideBar.Title = "未选择按键";
+            HallVerifyGuideBar.Message = "请先在左侧键盘中单击选中一个实体按键，再开始闭环校验。";
+            HallVerifyGuideBar.IsOpen = true;
+            return;
+        }
+
+        string mode = (HallVerifyModeCombo.SelectedItem as ComboBoxItem)?.Tag as string ?? "actuation";
+        var values = HallVerifyParamsBox.Text
+            .Split([',', '，', ' '], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(s => double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var v) ? (double?)v : null)
+            .Where(v => v.HasValue)
+            .Select(v => Math.Round(v!.Value, 1))
+            .ToList();
+
+        var request = new MagneticHallVerifyStartRequest
+        {
+            LogicalId = selectedKey.LogicalId,
+            Mode = mode,
+            RestoreActuationMm = 2.0,
+            UnlockFa = HallUnlockFaCheckBox.IsChecked == true
+        };
+
+        if (mode == "actuation")
+        {
+            if (values.Count == 0 || values.Any(v => v < 0.1 || v > 4.0))
+            {
+                ShowVerifyInputError("触发点参数需在 0.1–4.0 mm 之间（如 0.8, 2.0, 3.2）。");
+                return;
+            }
+            request.ActuationPoints = values;
+        }
+        else if (mode == "rt")
+        {
+            if (values.Count == 0 || values.Any(v => v < 0.1 || v > 2.5))
+            {
+                ShowVerifyInputError("RT 灵敏度参数需在 0.1–2.5 mm 之间（如 0.3）。");
+                return;
+            }
+            request.RtPoints = values;
+        }
+        else
+        {
+            double top = values.Count >= 1 ? values[0] : 0.4;
+            double bot = values.Count >= 2 ? values[1] : top;
+            if (top < 0.0 || top > 0.5 || bot < 0.0 || bot > 0.5)
+            {
+                ShowVerifyInputError("死区参数需在 0.0–0.5 mm 之间（如 0.4, 0.4）。");
+                return;
+            }
+            request.DzTopMm = top;
+            request.DzBottomMm = bot;
+            request.DzRtMm = 0.2;
+        }
+
+        HallVerifyResultsPanel.Children.Clear();
+        HallVerifyLivePanel.Visibility = Visibility.Visible;
+        _verifyRunning = true;
+        _hallActive = true;
+        HallTelemetryToggle.IsChecked = true;
+        Render();
+
+        var st = await _hallClient.StartVerifyAsync(request);
+        UpdateHallVerifyVisuals(st);
+        if (st.State is "Failed")
+        {
+            _verifyRunning = false;
+            Render();
+            return;
+        }
+        _hallTimer?.Start();
+    }
+
+    private void ShowVerifyInputError(string message)
+    {
+        HallVerifyGuideBar.Severity = InfoBarSeverity.Error;
+        HallVerifyGuideBar.Title = "参数格式无效";
+        HallVerifyGuideBar.Message = message;
+        HallVerifyGuideBar.IsOpen = true;
+    }
+
+    private async void HallVerifyStopButton_Click(object sender, RoutedEventArgs e)
+    {
+        HallVerifyStopButton.IsEnabled = false;
+        var st = await _hallClient.StopVerifyAsync();
+        _verifyRunning = false;
+        UpdateHallVerifyVisuals(st);
+        Render();
+    }
+
+    private async void HallTimer_Tick(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args)
+    {
+        if (_hallPolling) return;
+        _hallPolling = true;
+        try
+        {
+            if (_hallActive)
+            {
+                var snap = await _hallClient.GetSnapshotAsync();
+                UpdateHallDepthVisuals(snap);
+            }
+            if (_verifyRunning)
+            {
+                var st = await _hallClient.GetVerifyStatusAsync();
+                UpdateHallVerifyVisuals(st);
+                if (st.State is "Completed" or "Failed" or "Cancelled")
+                {
+                    _verifyRunning = false;
+                    if (HallTelemetryToggle.IsChecked != true) _hallTimer?.Stop();
+                    Render();
+                }
+            }
+        }
+        finally
+        {
+            _hallPolling = false;
+        }
+    }
+
+    private void UpdateHallDepthVisuals(MagneticHallSnapshot snap)
+    {
+        if (!snap.Active)
+        {
+            _hallActive = false;
+            HallTelemetryToggle.IsChecked = false;
+            HallTelemetryStatsBorder.Visibility = Visibility.Collapsed;
+            ClearKeyDepthBars();
+            if (!_verifyRunning) _hallTimer?.Stop();
+            return;
+        }
+
+        HallTelemetryStatsBorder.Visibility = Visibility.Visible;
+        HallTelemetryStatsText.Text =
+            $"{snap.PacketRateHz:F0} Hz · Wooting {(snap.SharedMemoryOk ? "共享内存就绪" : "未就绪")}";
+
+        double maxBarH = Math.Max(20.0, _lastKeyboardKeyHeight - 2.0);
+        foreach (var k in snap.Keys)
+        {
+            if (_keyDepthBars.TryGetValue(k.LogicalId, out var bar))
+            {
+                bar.Height = maxBarH * Math.Clamp(k.Normalized, 0.0, 1.0);
+            }
+            if (_model.SelectedLogicalId == k.LogicalId)
+            {
+                _liveSelectedDepthMm = k.DepthMm;
+                _liveSelectedRaw = k.Raw;
+                _liveSelectedDigitalDown = k.DigitalDown;
+                if (SelectedKeyLiveDepthPanel.Visibility == Visibility.Visible)
+                {
+                    SelectedKeyDepthBar.Value = Math.Clamp(k.DepthMm, 0.0, 4.0);
+                    SelectedKeyDepthText.Text = $"{k.DepthMm:F2} mm · Raw {k.Raw}";
+                }
+            }
+        }
+        UpdateVerticalHallVisualizer();
+    }
+
+    private void UpdateHallVerifyVisuals(MagneticHallVerifyStatus st)
+    {
+        HallVerifyLivePanel.Visibility = Visibility.Visible;
+        HallVerifyGuideBar.IsOpen = true;
+        HallVerifyGuideBar.Title = string.IsNullOrEmpty(st.KeyName)
+            ? "闭环校验"
+            : $"{st.KeyName} · {(st.StepTotal > 0 ? $"步骤 {st.StepIndex}/{st.StepTotal}" : st.State)}";
+        HallVerifyGuideBar.Message = !string.IsNullOrEmpty(st.Error) ? st.Error : st.Instruction;
+        HallVerifyGuideBar.Severity = st.State switch
+        {
+            "Completed" => InfoBarSeverity.Success,
+            "Failed" => InfoBarSeverity.Error,
+            "Cancelled" => InfoBarSeverity.Warning,
+            _ => InfoBarSeverity.Informational
+        };
+
+        HallVerifyDepthBar.Value = Math.Clamp(st.LiveDepthMm, 0.0, 4.0);
+        string bitInfo = string.IsNullOrEmpty(st.BoundBit) ? "" : $" · 触发位 {st.BoundBit}";
+        HallVerifyLiveText.Text = $"当前深度 {st.LiveDepthMm:F2} mm · Raw {st.LiveRaw} · 数字触发：{(st.DigitalDown ? "已触发" : "未触发")}{bitInfo}";
+
+        if (HallVerifyResultsPanel.Children.Count != st.Results.Count)
+        {
+            HallVerifyResultsPanel.Children.Clear();
+            foreach (var item in st.Results)
+            {
+                var badge = item.Passed ? "PASS" : "CHECK";
+                HallVerifyResultsPanel.Children.Add(new TextBlock
+                {
+                    Text = $"[{badge}] {item.Label}：{item.Detail}",
+                    Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"],
+                    Foreground = (Brush)Application.Current.Resources[item.Passed ? "SystemFillColorSuccessBrush" : "SystemFillColorCautionBrush"],
+                    TextWrapping = TextWrapping.Wrap
+                });
+            }
+        }
+    }
+
+    private void OpenPluginsPageButton_Click(object sender, RoutedEventArgs e)
+    {
+        MainWindow.CurrentInstance?.NavigateTo(typeof(PluginsPage));
     }
 }

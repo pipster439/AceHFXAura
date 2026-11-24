@@ -1,0 +1,603 @@
+{
+  "schema_version": 1,
+  "research_date_local": "2026-10-08",
+  "timezone": "Asia/Shanghai",
+  "vid": "0x0B05",
+  "pid": "0x1B7E",
+  "current_firmware_version": "UNKNOWN; not queried",
+  "cached_metadata_sha256": "6ddd3e26ef73608e06b59b0ad88f235459c36543bb9cf60ae3f393c9d00740f2",
+  "raw_input_metadata_sha256": "0efb8dad518bf051435ac308a293fdbdef5c3d12792e692b9d1e121aa43cdb6f",
+  "collector_sources": [
+    {
+      "path": "tools/research/physical_key_state_metadata.py",
+      "sha256": "1ea8f416b93ca9c4dcb250cb3242f8cab8c7becb56e60f84b5697212b0ff1791"
+    },
+    {
+      "path": "tools/research/physical_key_state_hid_inventory.py",
+      "sha256": "5f0a1b10068be423f9cc25b84cf71383485710ff367171f60402008a5342850a"
+    }
+  ],
+  "collection_count": 8,
+  "collections": [
+    {
+      "interface": "MI_00",
+      "collection": null,
+      "caps_status": "0x00110000",
+      "usage": 6,
+      "usage_page": 1,
+      "input_bytes": 9,
+      "output_bytes": 2,
+      "feature_bytes": 0,
+      "links": 1,
+      "report_ids_by_direction": {
+        "input": [
+          0
+        ],
+        "output": [
+          0
+        ],
+        "feature": []
+      },
+      "input_capabilities": [
+        {
+          "kind": "button",
+          "usage_page": 7,
+          "report_id": 0,
+          "main_item_flags": 2,
+          "link_collection": 0,
+          "is_range": true,
+          "is_absolute": true,
+          "usage_min": 224,
+          "usage_max": 231,
+          "direction": "input"
+        },
+        {
+          "kind": "button",
+          "usage_page": 7,
+          "report_id": 0,
+          "main_item_flags": 0,
+          "link_collection": 0,
+          "is_range": true,
+          "is_absolute": true,
+          "usage_min": 0,
+          "usage_max": 152,
+          "direction": "input"
+        }
+      ]
+    },
+    {
+      "interface": "MI_01",
+      "collection": null,
+      "caps_status": "0x00110000",
+      "usage": 1,
+      "usage_page": 65280,
+      "input_bytes": 65,
+      "output_bytes": 65,
+      "feature_bytes": 0,
+      "links": 1,
+      "report_ids_by_direction": {
+        "input": [
+          0
+        ],
+        "output": [
+          0
+        ],
+        "feature": []
+      },
+      "input_capabilities": [
+        {
+          "kind": "value",
+          "usage_page": 65280,
+          "report_id": 0,
+          "main_item_flags": 2,
+          "link_collection": 0,
+          "is_range": false,
+          "is_absolute": true,
+          "usage_min": 2,
+          "usage_max": 2,
+          "bit_size": 8,
+          "report_count": 64,
+          "direction": "input"
+        }
+      ]
+    },
+    {
+      "interface": "MI_02",
+      "collection": "Col01",
+      "caps_status": "0x00110000",
+      "usage": 1,
+      "usage_page": 12,
+      "input_bytes": 4,
+      "output_bytes": 0,
+      "feature_bytes": 0,
+      "links": 1,
+      "report_ids_by_direction": {
+        "input": [
+          1
+        ],
+        "output": [],
+        "feature": []
+      },
+      "input_capabilities": [
+        {
+          "kind": "button",
+          "usage_page": 12,
+          "report_id": 1,
+          "main_item_flags": 2,
+          "link_collection": 0,
+          "is_range": false,
+          "is_absolute": true,
+          "usage_min": 554,
+          "usage_max": 554,
+          "direction": "input"
+        },
+        {
+          "kind": "button",
+          "usage_page": 12,
+          "report_id": 1,
+          "main_item_flags": 2,
+          "link_collection": 0,
+          "is_range": false,
+          "is_absolute": true,
+          "usage_min": 551,
+          "usage_max": 551,
+          "direction": "input"
+        },
+        {
+          "kind": "button",
+          "usage_page": 12,
+          "report_id": 1,
+          "main_item_flags": 2,
+          "link_collection": 0,
+          "is_range": false,
+          "is_absolute": true,
+          "usage_min": 550,
+          "usage_max": 550,
+          "direction": "input"
+        },
+        {
+          "kind": "button",
+          "usage_page": 12,
+          "report_id": 1,
+          "main_item_flags": 2,
+          "link_collection": 0,
+          "is_range": false,
+          "is_absolute": true,
+          "usage_min": 549,
+          "usage_max": 549,
+          "direction": "input"
+        },
+        {
+          "kind": "button",
+          "usage_page": 12,
+          "report_id": 1,
+          "main_item_flags": 2,
+          "link_collection": 0,
+          "is_range": false,
+          "is_absolute": true,
+          "usage_min": 548,
+          "usage_max": 548,
+          "direction": "input"
+        },
+        {
+          "kind": "button",
+          "usage_page": 12,
+          "report_id": 1,
+          "main_item_flags": 2,
+          "link_collection": 0,
+          "is_range": false,
+          "is_absolute": true,
+          "usage_min": 547,
+          "usage_max": 547,
+          "direction": "input"
+        },
+        {
+          "kind": "button",
+          "usage_page": 12,
+          "report_id": 1,
+          "main_item_flags": 2,
+          "link_collection": 0,
+          "is_range": false,
+          "is_absolute": true,
+          "usage_min": 545,
+          "usage_max": 545,
+          "direction": "input"
+        },
+        {
+          "kind": "button",
+          "usage_page": 12,
+          "report_id": 1,
+          "main_item_flags": 2,
+          "link_collection": 0,
+          "is_range": false,
+          "is_absolute": true,
+          "usage_min": 233,
+          "usage_max": 233,
+          "direction": "input"
+        },
+        {
+          "kind": "button",
+          "usage_page": 12,
+          "report_id": 1,
+          "main_item_flags": 2,
+          "link_collection": 0,
+          "is_range": false,
+          "is_absolute": true,
+          "usage_min": 234,
+          "usage_max": 234,
+          "direction": "input"
+        },
+        {
+          "kind": "button",
+          "usage_page": 12,
+          "report_id": 1,
+          "main_item_flags": 2,
+          "link_collection": 0,
+          "is_range": false,
+          "is_absolute": true,
+          "usage_min": 226,
+          "usage_max": 226,
+          "direction": "input"
+        },
+        {
+          "kind": "button",
+          "usage_page": 12,
+          "report_id": 1,
+          "main_item_flags": 2,
+          "link_collection": 0,
+          "is_range": false,
+          "is_absolute": true,
+          "usage_min": 181,
+          "usage_max": 181,
+          "direction": "input"
+        },
+        {
+          "kind": "button",
+          "usage_page": 12,
+          "report_id": 1,
+          "main_item_flags": 2,
+          "link_collection": 0,
+          "is_range": false,
+          "is_absolute": true,
+          "usage_min": 182,
+          "usage_max": 182,
+          "direction": "input"
+        },
+        {
+          "kind": "button",
+          "usage_page": 12,
+          "report_id": 1,
+          "main_item_flags": 2,
+          "link_collection": 0,
+          "is_range": false,
+          "is_absolute": true,
+          "usage_min": 183,
+          "usage_max": 183,
+          "direction": "input"
+        },
+        {
+          "kind": "button",
+          "usage_page": 12,
+          "report_id": 1,
+          "main_item_flags": 2,
+          "link_collection": 0,
+          "is_range": false,
+          "is_absolute": true,
+          "usage_min": 205,
+          "usage_max": 205,
+          "direction": "input"
+        },
+        {
+          "kind": "button",
+          "usage_page": 12,
+          "report_id": 1,
+          "main_item_flags": 2,
+          "link_collection": 0,
+          "is_range": false,
+          "is_absolute": true,
+          "usage_min": 404,
+          "usage_max": 404,
+          "direction": "input"
+        },
+        {
+          "kind": "button",
+          "usage_page": 12,
+          "report_id": 1,
+          "main_item_flags": 2,
+          "link_collection": 0,
+          "is_range": false,
+          "is_absolute": true,
+          "usage_min": 402,
+          "usage_max": 402,
+          "direction": "input"
+        },
+        {
+          "kind": "button",
+          "usage_page": 12,
+          "report_id": 1,
+          "main_item_flags": 2,
+          "link_collection": 0,
+          "is_range": false,
+          "is_absolute": true,
+          "usage_min": 394,
+          "usage_max": 394,
+          "direction": "input"
+        },
+        {
+          "kind": "button",
+          "usage_page": 12,
+          "report_id": 1,
+          "main_item_flags": 2,
+          "link_collection": 0,
+          "is_range": false,
+          "is_absolute": true,
+          "usage_min": 387,
+          "usage_max": 387,
+          "direction": "input"
+        }
+      ]
+    },
+    {
+      "interface": "MI_02",
+      "collection": "Col02",
+      "caps_status": "0x00110000",
+      "usage": 128,
+      "usage_page": 1,
+      "input_bytes": 2,
+      "output_bytes": 0,
+      "feature_bytes": 0,
+      "links": 1,
+      "report_ids_by_direction": {
+        "input": [
+          2
+        ],
+        "output": [],
+        "feature": []
+      },
+      "input_capabilities": [
+        {
+          "kind": "button",
+          "usage_page": 1,
+          "report_id": 2,
+          "main_item_flags": 2,
+          "link_collection": 0,
+          "is_range": false,
+          "is_absolute": true,
+          "usage_min": 131,
+          "usage_max": 131,
+          "direction": "input"
+        },
+        {
+          "kind": "button",
+          "usage_page": 1,
+          "report_id": 2,
+          "main_item_flags": 2,
+          "link_collection": 0,
+          "is_range": false,
+          "is_absolute": true,
+          "usage_min": 130,
+          "usage_max": 130,
+          "direction": "input"
+        },
+        {
+          "kind": "button",
+          "usage_page": 1,
+          "report_id": 2,
+          "main_item_flags": 2,
+          "link_collection": 0,
+          "is_range": false,
+          "is_absolute": true,
+          "usage_min": 129,
+          "usage_max": 129,
+          "direction": "input"
+        }
+      ]
+    },
+    {
+      "interface": "MI_02",
+      "collection": "Col03",
+      "caps_status": "0x00110000",
+      "usage": 1,
+      "usage_page": 65472,
+      "input_bytes": 21,
+      "output_bytes": 0,
+      "feature_bytes": 0,
+      "links": 1,
+      "report_ids_by_direction": {
+        "input": [
+          3
+        ],
+        "output": [],
+        "feature": []
+      },
+      "input_capabilities": [
+        {
+          "kind": "button",
+          "usage_page": 65472,
+          "report_id": 3,
+          "main_item_flags": 0,
+          "link_collection": 0,
+          "is_range": false,
+          "is_absolute": true,
+          "usage_min": 2,
+          "usage_max": 2,
+          "direction": "input"
+        }
+      ]
+    },
+    {
+      "interface": "MI_02",
+      "collection": "Col04",
+      "error": "metadata_handle_unavailable",
+      "report_ids_by_direction": {
+        "input": null,
+        "output": null,
+        "feature": null
+      },
+      "input_capabilities": null
+    },
+    {
+      "interface": "MI_03",
+      "collection": null,
+      "caps_status": "0x00110000",
+      "usage": 6,
+      "usage_page": 1,
+      "input_bytes": 20,
+      "output_bytes": 0,
+      "feature_bytes": 0,
+      "links": 1,
+      "report_ids_by_direction": {
+        "input": [
+          0
+        ],
+        "output": [],
+        "feature": []
+      },
+      "input_capabilities": [
+        {
+          "kind": "button",
+          "usage_page": 7,
+          "report_id": 0,
+          "main_item_flags": 2,
+          "link_collection": 0,
+          "is_range": true,
+          "is_absolute": true,
+          "usage_min": 0,
+          "usage_max": 151,
+          "direction": "input"
+        }
+      ]
+    },
+    {
+      "interface": "MI_04",
+      "collection": null,
+      "caps_status": "0x00110000",
+      "usage": 1,
+      "usage_page": 89,
+      "input_bytes": 0,
+      "output_bytes": 0,
+      "feature_bytes": 51,
+      "links": 7,
+      "report_ids_by_direction": {
+        "input": [],
+        "output": [],
+        "feature": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ]
+      },
+      "input_capabilities": []
+    }
+  ],
+  "historical_usb_configuration": {
+    "source": "audit_artifacts/alpha7_reset_type1_usb/target_descriptor_frames.json",
+    "frame": 22,
+    "provenance": "Historical USBPcap injected configuration metadata, not a live transaction",
+    "device_bcdUSB": "0x0200",
+    "historical_device_bcdDevice": "0x0159",
+    "speed_and_current_polling_rate": "UNKNOWN; not derived from bcdUSB or bInterval alone",
+    "configuration_bytes": 141,
+    "interfaces": [
+      {
+        "interface": "MI_00",
+        "alternate": 0,
+        "class": 3,
+        "subclass": 1,
+        "protocol": 1,
+        "declared_endpoints": 1,
+        "endpoints": [
+          {
+            "address": "0x81",
+            "attributes": 3,
+            "max_packet_bytes": 8,
+            "bInterval_raw": 1
+          }
+        ],
+        "declared_report_descriptor_bytes": 68
+      },
+      {
+        "interface": "MI_01",
+        "alternate": 0,
+        "class": 3,
+        "subclass": 0,
+        "protocol": 0,
+        "declared_endpoints": 2,
+        "endpoints": [
+          {
+            "address": "0x85",
+            "attributes": 3,
+            "max_packet_bytes": 64,
+            "bInterval_raw": 1
+          },
+          {
+            "address": "0x0D",
+            "attributes": 3,
+            "max_packet_bytes": 64,
+            "bInterval_raw": 4
+          }
+        ],
+        "declared_report_descriptor_bytes": 34
+      },
+      {
+        "interface": "MI_02",
+        "alternate": 0,
+        "class": 3,
+        "subclass": 0,
+        "protocol": 0,
+        "declared_endpoints": 1,
+        "endpoints": [
+          {
+            "address": "0x8C",
+            "attributes": 3,
+            "max_packet_bytes": 21,
+            "bInterval_raw": 1
+          }
+        ],
+        "declared_report_descriptor_bytes": 182
+      },
+      {
+        "interface": "MI_03",
+        "alternate": 0,
+        "class": 3,
+        "subclass": 0,
+        "protocol": 0,
+        "declared_endpoints": 1,
+        "endpoints": [
+          {
+            "address": "0x8E",
+            "attributes": 3,
+            "max_packet_bytes": 19,
+            "bInterval_raw": 4
+          }
+        ],
+        "declared_report_descriptor_bytes": 23
+      },
+      {
+        "interface": "MI_04",
+        "alternate": 0,
+        "class": 3,
+        "subclass": 0,
+        "protocol": 0,
+        "declared_endpoints": 1,
+        "endpoints": [
+          {
+            "address": "0x0F",
+            "attributes": 3,
+            "max_packet_bytes": 64,
+            "bInterval_raw": 4
+          }
+        ],
+        "declared_report_descriptor_bytes": 327
+      }
+    ],
+    "report_descriptor_bodies_present": false
+  },
+  "firmware_static_input_sha256": "8fe68a13d7a0cd3bf8b4fd0dbe0575c0b7e67c1d4373e8d63970cf248684e668",
+  "hal_static_input_sha256": "52d575bf942b7551b3f120c446bf0d853e36f9225c6b9a17407a80e0b1829f04",
+  "observed_input_events": 0,
+  "physical_acceptance": "NOT_RUN"
+}

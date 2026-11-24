@@ -2,6 +2,7 @@
 
 #include "engine/effect.h"
 #include "engine/automation_effect_runtime.h"
+#include "engine/layer_compositor.h"
 #include "aura/aura_types.h"
 #include "aura/keymap.h"
 #include <memory>
@@ -24,6 +25,21 @@ public:
     void Tick(FrameBuffer& out_frame, const Keymap& keymap, const IGsiReader* gsi = nullptr);
     // Explicit clock entry point for deterministic frame tests; same production path.
     void TickAt(uint64_t elapsed_ms, FrameBuffer& out_frame, const Keymap& keymap, const IGsiReader* gsi = nullptr);
+    void TickAt(uint64_t elapsed_ms, FrameBuffer& out_frame, const Keymap& keymap, const EffectContext& context);
+    void SetInputSources(const AudioFeatureSource* audio, const ScreenColorSource* screen);
+    const AudioFeatureSource* GetAudioSource() const { return audio_source_; }
+    const ScreenColorSource* GetScreenSource() const { return screen_source_; }
+    const LayerCompositor& GetCompositor() const { return compositor_; }
+    const FrameBuffer& GetLastFrame() const { return last_frame_; }
+    struct RenderDiagnostics {
+        bool active_program{false}, program_faulted{false};
+        bool audio_used{false}, audio_available{false};
+        bool screen_used{false}, screen_available{false};
+        uint64_t rendered_frames{0}, program_generation{0}, last_render_us{0};
+        std::string program_error;
+        uint64_t compositor_calls{0}, composited_layers{0};
+    };
+    RenderDiagnostics GetRenderDiagnostics() const;
     AutomationEffectRuntime& GetAutomationEffects() { return automation_effects_; }
 
     uint64_t GetElapsedMs() const;
@@ -45,6 +61,12 @@ private:
     std::chrono::steady_clock::time_point start_time_;
 
     AutomationEffectRuntime automation_effects_;
+    LayerCompositor compositor_;
+    const AudioFeatureSource* audio_source_{nullptr};
+    const ScreenColorSource* screen_source_{nullptr};
+    FrameBuffer last_frame_{};
+    mutable std::mutex render_diagnostics_mutex_;
+    RenderDiagnostics render_diagnostics_{};
 
     mutable std::mutex preview_mutex_;
     FrameBuffer preview_frame_;

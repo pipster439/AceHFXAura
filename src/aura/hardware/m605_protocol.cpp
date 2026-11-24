@@ -1,6 +1,7 @@
 #include "aura/hardware/m605_protocol.h"
 #include "aura/hardware/m605_key_mapping.h"
 #include <cmath>
+#include <cstdio>
 
 namespace aura::m605 {
 
@@ -18,6 +19,63 @@ std::optional<uint8_t> ParseBasicInfoActiveSlot(const uint8_t* r, size_t n) {
         r[3] != 0 || r[4] != 0 || r[9] != 6 || r[11] < 1 || r[11] > 6)
         return std::nullopt;
     return r[11]; // No interpretation of firmware configuration/unknown fields.
+}
+
+const char* FirmwareStateName(FirmwareState state) {
+    switch (state) {
+    case FirmwareState::Supported: return "Supported";
+    case FirmwareState::Unsupported: return "Unsupported";
+    case FirmwareState::ReadFailed: return "ReadFailed";
+    default: return "Unknown";
+    }
+}
+
+FirmwareCompatibility ParseBasicInfoFirmware(const uint8_t* r, size_t n) {
+    FirmwareCompatibility result;
+    if (!r || n != Report{}.size()) result.reason = "FirmwareUnknown: BasicInfo must be a complete 65-byte Windows HID report";
+    else if (r[0] != 0) result.reason = "FirmwareUnknown: unexpected HID Report ID";
+    else if (r[1] != 0x12 || r[2] != 0) result.reason = "FirmwareUnknown: not a BasicInfo 12 00 response";
+    else if (r[3] != 0 || r[4] != 0) result.reason = "FirmwareUnknown: unverified BasicInfo reserved/status prefix";
+    else if (r[9] != 6 || r[11] < 1 || r[11] > 6) result.reason = "FirmwareUnknown: invalid M605 bank envelope or request echo";
+    else {
+        // STATIC_PROTOCOL: official USB decoder uses hexadecimal components,
+        // not decimal scaling and not HIDD_ATTRIBUTES.VersionNumber.
+        const uint16_t major = static_cast<uint16_t>(r[7] | (r[8] << 8));
+        if (major == 0 || major == 0xffff || r[5] == 0xff || r[6] == 0xff) {
+            result.reason = "FirmwareUnknown: empty or unverified firmware version encoding";
+            return result;
+        }
+        char version[32]{};
+        std::snprintf(version, sizeof(version), "%x.%02x.%02x", major, r[6], r[5]);
+        result.version = version;
+        result.state = major == 1 && r[6] == 0 && r[5] == 0x59 ?
+            FirmwareState::Supported : FirmwareState::Unsupported;
+        result.reason = result.Supported() ? "FirmwareSupported: captured M605 USB firmware 1.00.59" :
+            "FirmwareUnsupported: " + result.version + "; only M605 USB 1.00.59 is verified";
+    }
+    return result;
+}
+
+bool IsConfigurationMutation(const Report& r) {
+    // Structural whitelist is still authoritative. Only these two existing
+    // operation families are exempt from firmware configuration admission.
+    return !((r[1] == 0xc0 && r[2] == 0x81) || (r[1] == 0x12 && r[2] == 0));
+}
+
+BasicInfoReplyWindow::Result BasicInfoReplyWindow::Consider(const uint8_t* r,
+    size_t length, uint64_t epoch, uint64_t now_ms, bool current_session) {
+    if (!current_session || epoch != epoch_) {
+        error_ = "BasicInfo session changed during acquisition"; return Result::StaleSession;
+    }
+    if (now_ms < started_ms_ || now_ms - started_ms_ >= 100 || ++received_ > 64) {
+        error_ = "BasicInfo acquisition deadline/report budget exceeded"; return Result::Expired;
+    }
+    if (!ParseBasicInfoActiveSlot(r, length)) {
+        error_ = ParseBasicInfoFirmware(r, length).reason;
+        return Result::Ignore; // unrelated traffic/echo cannot finish acquisition
+    }
+    error_.clear();
+    return Result::Accept;
 }
 
 namespace {

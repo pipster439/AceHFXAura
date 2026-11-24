@@ -103,7 +103,9 @@ private:
     DeviceProfileBindingEngine binding_engine_; // read-only decision subsystem, no actuator
     DeviceProfileBindingEngine::Clock observation_clock_;
     std::optional<int64_t> last_slot_observation_ms_;
-    bool firmware_lighting_owned_ = false; // persists across drift/disconnect
+    enum class LightingOwner { AuraDirectRgb, FirmwareBank };
+    static LightingOwner ResolveLightingOwner(const Json& profile);
+    LightingOwner lighting_owner_ = LightingOwner::AuraDirectRgb; // persists across drift/disconnect
     uint64_t hardware_slot_selector_count_ = 0; // actual submitted selectors, not attempts
     std::function<Json()> coordinator_snapshot_; // installed before worker/startup
     const DaemonProcessIdentity process_identity_;

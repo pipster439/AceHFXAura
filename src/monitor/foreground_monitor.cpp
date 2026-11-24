@@ -212,7 +212,7 @@ void ForegroundMonitor::MonitorThreadProc() {
     // Initial check for currently active foreground window
     ReconcileForeground();
 
-    // 注册全局低开销键盘钩子，捕捉真实物理敲击以驱动按键响应与涟漪光效
+    // Existing OS logical-key hook; it does not establish physical depth/provenance.
     HHOOK kb_hook = SetWindowsHookExW(
         WH_KEYBOARD_LL,
         LowLevelKeyboardProc,
@@ -222,8 +222,9 @@ void ForegroundMonitor::MonitorThreadProc() {
     if (!kb_hook) {
         kb_hook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboardProc, NULL, 0);
     }
+    KeyInputHub::Instance().SetSourceAvailable(kb_hook != nullptr);
     if (kb_hook) {
-        LOG_INFO("全局物理按键监听钩子 (WH_KEYBOARD_LL) 注册成功");
+        LOG_INFO("全局逻辑按键监听钩子 (WH_KEYBOARD_LL) 注册成功");
     } else {
         LOG_WARN("WH_KEYBOARD_LL 注册失败: 0x" + std::to_string(GetLastError()));
     }
@@ -261,7 +262,7 @@ void ForegroundMonitor::MonitorThreadProc() {
     if (kb_hook) {
         UnhookWindowsHookEx(kb_hook);
     }
-    KeyInputHub::Instance().Reset();
+    KeyInputHub::Instance().SetSourceAvailable(false);
 
     if (hook_handle_) {
         UnhookWinEvent(hook_handle_);

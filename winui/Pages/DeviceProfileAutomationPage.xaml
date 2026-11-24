@@ -42,17 +42,23 @@
                     <controls:SettingsCard Header="自动应用到键盘" IsClickEnabled="False"><TextBlock x:Name="ActivationStatusText" MaxWidth="520" TextWrapping="Wrap" /></controls:SettingsCard>
                 </controls:SettingsExpander.Items>
             </controls:SettingsExpander>
+            <InfoBar x:Name="LightingCompatibilityBar" Severity="Warning" IsClosable="False" />
             <ContentControl x:Name="EditorSurface" IsEnabled="False" HorizontalContentAlignment="Stretch">
             <StackPanel Spacing="12">
                 <controls:SettingsCard Header="自动切换配置文件" Description="前台程序稳定匹配后，后台自动应用对应的设备配置文件。" IsClickEnabled="False">
                     <ToggleSwitch x:Name="EnabledToggle" OnContent="开启" OffContent="关闭" Toggled="Enabled_Toggled"
                                   AutomationProperties.Name="自动切换配置文件" AutomationProperties.AutomationId="DeviceAutomationEnabled" />
                 </controls:SettingsCard>
-                <controls:SettingsCard Header="无匹配规则时" Description="选择后备配置文件，或不执行任何操作。" IsClickEnabled="False">
+                <controls:SettingsCard Header="无匹配规则时" Description="选择后备配置文件，或不执行任何操作。也可在本页选择或创建板载配置。" IsClickEnabled="False">
                     <ComboBox x:Name="FallbackPicker" DisplayMemberPath="Label" MinWidth="160" MaxWidth="340"
                               SelectionChanged="Fallback_Changed" AutomationProperties.Name="无匹配规则时"
                               AutomationProperties.AutomationId="DeviceAutomationFallback" />
                 </controls:SettingsCard>
+                <Button Content="选择板载槽位 / 创建后备配置" Click="FallbackTarget_Click"
+                        AutomationProperties.Name="选择板载槽位或创建后备配置"
+                        AutomationProperties.AutomationId="DeviceAutomationFallbackHardware" />
+                <TextBlock Text="板载磁轴配置与灯光控制独立：可使用板载槽位，同时由 Aura 播放动态灯光。选择不会重写板载磁轴参数。"
+                           TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 <Grid ColumnSpacing="12">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                     <TextBlock Text="程序规则" Style="{ThemeResource SubtitleTextBlockStyle}" VerticalAlignment="Center" />

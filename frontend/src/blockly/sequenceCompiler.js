@@ -1,7 +1,7 @@
 import { KEYBOARD_LAYOUT } from '../constants/keyboardLayout.js';
 // Both preview and native code use the same resumable control-flow graph.
 // A wait yields a frame; reaching the end starts the script again next frame.
-export function compileSequence(workspace, target) {
+export function compileSequencePlan(workspace) {
   const nodes = [];
   let slots = 0;
   const emit = (node) => (nodes.push(node), nodes.length - 1);
@@ -42,6 +42,11 @@ export function compileSequence(workspace, target) {
   let entry = end;
   const tops = workspace?.getTopBlocks(true) || [];
   for (const block of [...tops].reverse()) entry = chain(block, entry);
+  return { nodes, entry, slots: Math.max(1, slots) };
+}
+
+export function compileSequence(workspace, target) {
+  const { nodes, entry, slots } = compileSequencePlan(workspace);
   const cpp = target.language === 'cpp';
   const expr = (n, input, fallback) => target.value(n.block, input, fallback);
   const go = (id) => `_pc = ${id}; break;`;
@@ -73,6 +78,7 @@ export function compileSequence(workspace, target) {
           const zone = n.block.getFieldValue('ZONE') || 'all';
           let filter = 'true';
           if (names[zone]) filter = names[zone].map(name => `name == ${JSON.stringify(name)}`).join(' || ');
+          if (zone === 'alpha') filter = cpp ? '(name.size() == 1 && name[0] >= \'A\' && name[0] <= \'Z\')' : '/^[A-Z]$/.test(name)';
           if (zone === 'numeric') filter = cpp ? 'info.physical_row == 1 && info.physical_col >= 2 && info.physical_col <= 13' : 'info.row === 1 && info.col >= 2 && info.col <= 13';
           if (zone === 'navigation') filter = `${cpp ? 'info.physical_col' : 'info.col'} >= 14 || name == "UP" || name == "DOWN" || name == "LEFT" || name == "RIGHT"`;
           const context = cpp

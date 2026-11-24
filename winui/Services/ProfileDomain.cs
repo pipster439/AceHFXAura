@@ -14,6 +14,8 @@ public sealed class DeviceProfile
     public int? HardwareSlot { get; set; }
     public ProfileMagnetic Magnetic { get; set; } = new();
     public ProfileLighting Lighting { get; set; } = new();
+    [JsonIgnore] public string EffectiveLightingOwner => Lighting.ControlOwner ??
+        (ActivationBackend == "hardware_slot" ? "FirmwareBank" : "AuraDirectRgb");
     public ProfileAutomationBinding? Automation { get; set; }
     [JsonExtensionData] public Dictionary<string, JsonElement>? Extensions { get; set; }
 
@@ -60,7 +62,9 @@ public sealed class ProfileDksSlot
 }
 public sealed class ProfileLighting
 {
-    // The existing daemon/Automation owns lighting until the ownership phase.
+    // Legacy effect reference semantics stay independent of the RGB admission policy.
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ControlOwner { get; set; }
     public string? LegacyEffectReference { get; set; }
     public string Ownership { get; set; } = "LegacyUnmanaged";
     [JsonExtensionData] public Dictionary<string, JsonElement>? Extensions { get; set; }
@@ -146,6 +150,8 @@ public static class ProfileValidator
             throw new InvalidDataException("Duplicate profile ID or missing selected profile.");
         ValidateMagnetic(document.GlobalDefaults);
         foreach (var profile in document.Profiles) {
+            if (profile.Lighting.ControlOwner is not (null or "AuraDirectRgb" or "FirmwareBank"))
+                throw new InvalidDataException("Unsupported lighting control owner.");
             if (profile.ActivationBackend is not ("host_managed" or "hardware_slot") ||
                 profile.ActivationBackend == "hardware_slot" && profile.HardwareSlot is not (>= 1 and <= 5))
                 throw new InvalidDataException("Invalid activation backend or hardware slot (expected 1–5).");

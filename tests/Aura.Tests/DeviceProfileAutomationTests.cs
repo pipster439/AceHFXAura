@@ -126,7 +126,7 @@ public sealed class DeviceProfileAutomationTests
         Assert.AreEqual("不选择配置文件", model.WouldSelect); // draft never evaluates locally
         server.Decision = new() { Enabled = true, ForegroundProcess = "cs2.exe", ResolvedProfileId = Daemon.B,
             DecisionKind = "Match", DecisionReason = "MatchedRule", MatchedRuleId = model.Draft.Bindings[0].RuleId };
-        await model.SaveAsync(); Assert.AreEqual("CS2", model.WouldSelect);
+        await model.SaveAsync(); Assert.AreEqual("Aura 管理 · CS2 · Aura 动态灯光", model.WouldSelect);
         Assert.AreEqual("cs2.exe", model.MatchedRule);
         Assert.DoesNotContain("已应用", model.PreviewStatus);
         Assert.IsFalse(model.Decision!.HardwareActivationAllowed);

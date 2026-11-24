@@ -174,7 +174,7 @@ AutomationControlService::AuthoringResult AutomationControlService::Author(const
                 const auto plugin=recipe.value("type",std::string{})=="plugin" ?
                     recipe.value("plugin_name",recipe.value("plugin",recipe.value("effect",recipe.value("effect_name",recipe.value("plugin_path",std::string{}))))) : std::string{};
                 const auto generation=plugin.empty() ? nullptr : PluginManager::Instance().GetGeneration(plugin);
-                const bool capable=generation && generation->lifecycle.version==1 && generation->lifecycle.is_finished;
+                const bool capable=generation && generation->HasLifecycle();
                 const bool available=recipe.value("type",std::string{})!="plugin" || static_cast<bool>(generation);
                 Json lifecycle={{"kind",capable?"lifecycle_capable":"legacy_envelope"}};
                 if (capable && root.contains("blockly_effects") && root["blockly_effects"].is_object() && root["blockly_effects"].contains(item.key())) {
@@ -188,7 +188,7 @@ AutomationControlService::AuthoringResult AutomationControlService::Author(const
             }
             for(const auto& name:PluginManager::Instance().GetLoadedPluginNames()) {
                 const auto generation=PluginManager::Instance().GetGeneration(name);
-                const bool capable=generation && generation->lifecycle.version==1 && generation->lifecycle.is_finished;
+                const bool capable=generation && generation->HasLifecycle();
                 Json lifecycle={{"kind",capable?"lifecycle_capable":"legacy_envelope"}};
                 if (capable && root.contains("blockly_effects") && root["blockly_effects"].is_object())
                     for (const auto& studio:root["blockly_effects"].items())

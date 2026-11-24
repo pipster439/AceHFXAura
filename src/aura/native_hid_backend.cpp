@@ -184,6 +184,8 @@ std::mutex& NativeHidBackend::DeviceWriteMutex() {
 }
 
 void NativeHidBackend::Disconnect() {
+    ++session_epoch_;
+    firmware_ = {};
     validated_target_ = false;
     if (interface_notification_) {
         // Unregister outside the callback and its mutex: Windows waits for
@@ -448,11 +450,13 @@ bool NativeHidBackend::OpenDevice() {
 
 bool NativeHidBackend::QueryBasicInfo(std::array<uint8_t, HID_REPORT_SIZE>& response) {
     response = {};
+    last_error_.clear();
+    firmware_ = {}; // every failed acquisition invalidates prior authorization
     if (!validated_target_ || !IsConnected() || !ProbeCurrentM605Transport()) {
         last_error_ = "BasicInfo requires a current validated M605 handle"; return false;
     }
-    // Discard previous echoes/status on this handle so an old12 00 cannot
-    // validate a new selector. This never changes keyboard configuration.
+    // Flush queued traffic, not a wire freshness proof: 12 00 has no nonce.
+    // Reads and writes below use the SAME opened handle under DeviceWriteMutex.
     if (!HidD_FlushQueue(hDevice_)) {
         last_error_ = "BasicInfo input queue flush failed"; return false;
     }
@@ -461,6 +465,8 @@ bool NativeHidBackend::QueryBasicInfo(std::array<uint8_t, HID_REPORT_SIZE>& resp
     HANDLE event = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!event) { last_error_ = "BasicInfo read event unavailable"; return false; }
     const auto deadline = GetTickCount64() + 100;
+    const uint64_t epoch = session_epoch_;
+    m605::BasicInfoReplyWindow window(epoch, deadline - 100);
     bool result = false;
     do {
         OVERLAPPED overlapped{}; overlapped.hEvent = event;
@@ -470,12 +476,16 @@ bool NativeHidBackend::QueryBasicInfo(std::array<uint8_t, HID_REPORT_SIZE>& resp
         if (!ready && ::GetLastError() == ERROR_IO_PENDING) {
             const auto now = GetTickCount64();
             const DWORD remaining = now >= deadline ? 0 : static_cast<DWORD>(deadline - now);
-            if (WaitForSingleObject(event, remaining) != WAIT_OBJECT_0) {
+            const DWORD waited = WaitForSingleObject(event, remaining);
+            if (waited != WAIT_OBJECT_0) {
+                const DWORD wait_error = waited == WAIT_FAILED ? ::GetLastError() : 0;
                 CancelIoEx(hDevice_, &overlapped);
                 // Always reclaim this exact overlapped request before its stack
                 // buffer/event is released, as on the existing write path.
                 GetOverlappedResult(hDevice_, &overlapped, &received, TRUE);
-                last_error_ = "BasicInfo query timeout";
+                last_error_ = waited == WAIT_TIMEOUT ? "BasicInfo query timeout (100ms response window)" :
+                    "BasicInfo wait failed, Win32 error: " + std::to_string(wait_error);
+                if (!window.Error().empty()) last_error_ += "; last rejected report: " + window.Error();
                 break;
             }
             ready = GetOverlappedResult(hDevice_, &overlapped, &received, FALSE);
@@ -483,13 +493,28 @@ bool NativeHidBackend::QueryBasicInfo(std::array<uint8_t, HID_REPORT_SIZE>& resp
         if (!ready || received != HID_REPORT_SIZE) {
             last_error_ = "BasicInfo read failed or wrong report length"; break;
         }
-        if (response[0] == 0 && response[1] == 0x12 && response[2] == 0) {
-            result = true; break; // Typed parser still validates active slot.
+        const auto disposition = window.Consider(response.data(), received,
+            session_epoch_, GetTickCount64(), ProbeCurrentM605Transport());
+        if (disposition == m605::BasicInfoReplyWindow::Result::Accept) {
+            firmware_ = m605::ParseBasicInfoFirmware(response.data(), response.size());
+            firmware_.session_generation = epoch;
+            result = true; break;
         }
+        last_error_ = window.Error();
+        if (disposition != m605::BasicInfoReplyWindow::Result::Ignore) break;
     } while (GetTickCount64() < deadline);
     CloseHandle(event);
     if (!result && last_error_.empty()) last_error_ = "BasicInfo response unavailable";
     return result;
+}
+
+m605::FirmwareCompatibility NativeHidBackend::ReadFirmwareCompatibility() {
+    m605::Report response{};
+    if (!QueryBasicInfo(response)) {
+        firmware_ = {m605::FirmwareState::ReadFailed, {},
+            "FirmwareReadFailed: " + last_error_, session_epoch_};
+    }
+    return firmware_;
 }
 
 bool NativeHidBackend::IsSupportedOutputReport(const uint8_t* report, size_t length) {
@@ -506,6 +531,12 @@ bool NativeHidBackend::SendReport(const std::array<uint8_t, HID_REPORT_SIZE>& re
     }
     if (hDevice_ == INVALID_HANDLE_VALUE || !hEvent_ || !validated_target_) {
         last_error_ = "设备未打开或事件句柄无效";
+        return false;
+    }
+    if (m605::IsConfigurationMutation(report) &&
+        (!firmware_.Supported() || firmware_.session_generation != session_epoch_ ||
+         !ProbeCurrentM605Transport())) {
+        last_error_ = "FirmwareAdmissionDenied: current opened M605 handle requires verified 1.00.59; " + firmware_.reason;
         return false;
     }
 

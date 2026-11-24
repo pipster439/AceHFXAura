@@ -9,7 +9,9 @@ The current development line contains native Lighting controls and accepted Auto
 
 The [alpha.7 Profile Engine core](PROFILE_ENGINE.md) documents device profile desired state, apply ordering, migration, and hardware evidence limits. Its profiles are distinct from the existing lighting recipes.
 
-[Phase 4A / 4A.5 Device Profile Automation](DEVICE_PROFILE_AUTOMATION.md) adds daemon-owned, debounced GUID decisions, a native draft editor, accepted Manual Apply hold integration and pure-read process diagnostics. Hardware activation remains disabled; [decision/state table](DEVICE_PROFILE_AUTOMATION_STATES.md).
+[Device Profile Automation](DEVICE_PROFILE_AUTOMATION.md) documents the earlier Phase 4A decision-only boundary and the current Phase 4B production coordinator. The daemon attaches the coordinator for debounced foreground decisions and gated hardware activation through the shared Profile runtime, with ManualHold and session/quarantine checks; [decision/state table](DEVICE_PROFILE_AUTOMATION_STATES.md). Automatic reconnect reapply and automatic reclaim after external bank drift remain separate unsupported behaviors.
+
+[Studio workspace safety](STUDIO_WORKSPACE_SAFETY.md) is the current candidate-loading contract. The [alpha.8 design audit](STUDIO_ALPHA8_DESIGN.md) preserves the historical implementation proposal.
 
 ```text
 WinUI Home / Lighting ── HTTP 19897 ── aura_daemon
@@ -48,3 +50,5 @@ uses a separate serialized coordinator and the existing Profile apply authority.
 
 [Reusable software CI and local Profile automation smoke](../development/CI.md) keep
 mock/dry-run regression separate from explicitly authorized hardware acceptance.
+
+[M605 firmware admission](M605_FIRMWARE_ADMISSION.md) defines current configuration write gating and its physical evidence limits.

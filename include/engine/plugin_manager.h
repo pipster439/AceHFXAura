@@ -19,6 +19,8 @@
 
 #include "engine/effect.h"
 #include "engine/plugin_interface.h"
+#include "engine/effect_program.h"
+#include <unordered_set>
 
 namespace aura {
 
@@ -35,6 +37,11 @@ struct EffectLifecycleExports {
     // Finished-only is usable with host opacity=1; no timing is executed here.
     PfnAuraIsEffectFinished is_finished{nullptr};
     PfnAuraGetEffectOpacity get_opacity{nullptr};
+};
+
+struct LogicalKeyboardExports {
+    std::optional<uint32_t> version;
+    PfnAuraBindLogicalKeyboard bind{nullptr};
 };
 
 /**
@@ -76,6 +83,21 @@ private:
 /**
  * @brief Metadata and function pointers for a loaded plugin.
  */
+struct HallAnalogExports {
+    std::optional<uint32_t> version;
+    PfnAuraBindHallAnalog bind{nullptr};
+};
+
+struct PluginSummary {
+    std::string effect_name;
+    std::string kind; // "native_dll" or "program"
+    uint64_t generation_id{0};
+    std::filesystem::path original_path;
+    bool has_lifecycle{false};
+    bool has_logical_keyboard{false};
+    bool has_hall_analog{false};
+};
+
 struct PluginEntry {
     uint64_t generation_id{0};
     std::string effect_name;
@@ -84,6 +106,10 @@ struct PluginEntry {
     bool version_export_present{false};
     PluginAbiVersion normalized_version{PluginAbiVersion::Unsupported};
     EffectLifecycleExports lifecycle;
+    LogicalKeyboardExports logical_keyboard;
+    HallAnalogExports hall_analog;
+    std::shared_ptr<const EffectProgram> program; // restricted data tier; no DLL callbacks.
+    bool HasLifecycle() const { return bool(program) || (lifecycle.version == 1 && lifecycle.is_finished); }
     std::shared_ptr<PluginHandle> handle;
     PfnAuraCreateEffect create_fn{nullptr};
     PfnAuraDestroyEffect destroy_fn{nullptr};
@@ -102,6 +128,11 @@ public:
     explicit operator bool() const { return effect_ != nullptr; }
     const std::shared_ptr<Effect>& GetEffect() const { return effect_; }
     const std::shared_ptr<const PluginEntry>& GetGeneration() const { return generation_; }
+    bool HasLifecycle() const;
+    uint32_t Finished(uint64_t elapsed_ms) const;
+    double Opacity(uint64_t elapsed_ms) const;
+    const std::bitset<TOTAL_LEDS>* Coverage() const;
+    bool Faulted() const;
     // Builtins have no DLL callbacks; only host-owned effects may use this path.
     static TriggeredEffectInstance FromHostEffect(std::shared_ptr<Effect> effect) {
         return TriggeredEffectInstance({}, std::move(effect));
@@ -124,7 +155,13 @@ public:
     struct PreparedReload {
         std::shared_ptr<const PluginEntry> candidate, previous;
         std::string alias;
+        bool previous_disabled{false};
         explicit operator bool() const { return candidate != nullptr; }
+    };
+    struct ProgramRemoval {
+        std::shared_ptr<const PluginEntry> generation;
+        std::vector<std::string> aliases;
+        explicit operator bool() const { return generation && generation->program && !aliases.empty(); }
     };
     static PluginManager& Instance();
 
@@ -137,6 +174,14 @@ public:
     // Forces a reload of a plugin from disk
     bool ReloadPlugin(const std::string& effect_name);
     PreparedReload PrepareReload(const std::string& name, bool require_lifecycle = false);
+    PreparedReload PrepareProgram(const std::string& name, std::shared_ptr<const EffectProgram> program,
+                                  const std::filesystem::path& immutable_source);
+    bool UnregisterProgram(const std::string& name, uint64_t expected_generation);
+    ProgramRemoval PrepareProgramRemoval(const std::string& name, uint64_t expected_generation) const;
+    bool UnregisterProgram(const ProgramRemoval& removal);
+    bool RestoreProgram(const ProgramRemoval& removal);
+    // Compensate only this exact publication receipt; refuse a newer generation.
+    bool RollbackProgram(const PreparedReload& published);
     bool PublishReload(const PreparedReload& prepared);
     std::shared_ptr<const PluginEntry> GetGeneration(const std::string& name) const;
 
@@ -160,6 +205,7 @@ public:
 
     // Returns a list of loaded effect names
     std::vector<std::string> GetLoadedPluginNames() const;
+    std::vector<PluginSummary> GetPluginSummaries() const;
 
     // Discovers and loads all plugins from plugins directory
     void LoadAllFromDirectory(const std::filesystem::path& dir = "plugins");
@@ -177,10 +223,13 @@ private:
     std::shared_ptr<const PluginEntry> FindByPath(const std::filesystem::path& path) const;
     bool PublishGeneration(const std::shared_ptr<const PluginEntry>& candidate,
                            const std::string& requested_alias,
-                           const std::shared_ptr<const PluginEntry>& expected_previous, bool quiet = false);
+                           const std::shared_ptr<const PluginEntry>& expected_previous, bool quiet = false,
+                           std::optional<bool> expected_disabled = std::nullopt);
 
     mutable std::mutex mutex_;
     std::unordered_map<std::string, std::shared_ptr<const PluginEntry>> plugins_;
+    std::unordered_set<std::string> disabled_program_aliases_;
+    std::unordered_map<std::string,uint64_t> disabled_program_generations_;
     std::filesystem::path plugins_dir_{"plugins"};
     std::filesystem::path cache_dir_{"plugins/.cache"};
 };

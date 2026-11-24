@@ -18,6 +18,14 @@ Test Bench 默认 LOCAL SIMULATION ONLY，复用效果 JS 模拟与确定性时�
 
 Known limitation：不支持/跨工作室 malformed graph 在手工构造的错误路径上可能产生空白编辑器或 context timeout，而非优雅的不支持工程诊断。正常支持工程和生产 bundle 导入路径已验证；此 robustness backlog 本轮不修。Native 125% DPI 尚未人工验收，可选且不阻塞本次候选。
 
+## 后续候选：灯效扩展入口与独立 AI 窗口
+
+现有 Studio 已支持将 .auraeffect 源工程包导入为新草稿，并由用户显式发布成独立 DLL 热加载。新增「导入灯效扩展」快捷入口与 Studio 的「灯效扩展」列表，用于查看已保存工程和已发布状态；导入本身不执行 DLL、不修改板载磁轴配置，也不会直接替换运行中的光效。首次发布仍依赖本机 MSVC 和 Plugin SDK，本功能不是任意二进制 DLL 的安装商店。
+
+AI 助手候选改为独立 WinUI 窗口，不再遮盖狭窄布局中的 Studio WebView。会话仍按工程区分，仅保存在应用本次运行期间。每次手动应用的建议绑定请求 ID，并在对话状态中显示逐请求撤销；必须先逆序撤销较新的 AI 修改，草稿被其他操作编辑后不能强制恢复旧快照。继续保留独立候选验证、应用前快照和不自动发布的约束。
+
+AI 服务支持填写兼容 Chat Completions 的 Base URL 或完整 /chat/completions 地址，不会重复拼接。真实服务连通、WinUI 窗口交互及插件安装硬件表现需要单独验收，不能把离线测试当作通过。
+
 ## 制作与发布光效
 
 保存草稿只保存编辑内容，不改变运行版本。发布显式选择 continuous 或 one-shot：stageEffect → 原生编译 → daemon 确认加载与生命周期 → revision 检查及原子配置写入。失败保留旧发布引用。旧有效连续工作区继续运行；Plugin ABI v1、generation pinning 和无生命周期插件的 LegacyEnvelope 均保留。

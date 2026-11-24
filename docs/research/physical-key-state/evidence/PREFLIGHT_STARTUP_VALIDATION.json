@@ -1,0 +1,360 @@
+{
+  "date": "2026-10-09",
+  "head": "c52398bef2738f71b927594424736a42da5184ab",
+  "baseline_version": "0.1.0-alpha.8",
+  "conclusion": "CONFIRMED BUG / FIX VALIDATED (startup metadata only)",
+  "root_cause": {
+    "api": "GetRegisteredRawInputDevices",
+    "returned": 0,
+    "capacity_out": 1,
+    "win32_error": 0,
+    "old_predicate": "returned == 0 && capacity_out == 0",
+    "old_preflight_skipped_registration_check": true,
+    "before_preflight_exit": 0,
+    "before_registration_audit_exit": 2
+  },
+  "modified_existing_files": [
+    "tools/research/physical-key-stage-b/README.md",
+    "tools/research/physical-key-stage-b/observer_win32.cpp",
+    "tools/research/physical-key-stage-b/offline_tests.cpp"
+  ],
+  "unchanged_baseline_files": 648,
+  "baseline_files": 651,
+  "safety_segments": {
+    "target_binding": "UNCHANGED",
+    "native_subscription": "UNCHANGED",
+    "app_guards_and_capture": "UNCHANGED",
+    "window_message_routing": "UNCHANGED"
+  },
+  "source_and_import_forbidden_api_scan": "PASS (direct calls/imports only)",
+  "build": "Release x64 MSVC /W4 /WX PASS",
+  "offline_tests": {
+    "passed": 58,
+    "failed": 0,
+    "added": 9,
+    "test_names": [
+      "empty_registration_success_keeps_capacity_one",
+      "empty_registration_success_zero_capacity",
+      "actual_process_registration_still_blocks",
+      "insufficient_registration_buffer_still_blocks",
+      "registration_api_failure_preserves_error",
+      "shared_startup_gate_ready_with_unchanged_capacity",
+      "locked_remote_or_unknown_session_gate_not_bypassed",
+      "desktop_api_failure_precedes_other_startup_gates",
+      "missing_and_ambiguous_target_diagnostics",
+      "registration_snapshot_accepts_observed_devnotify_omission",
+      "registration_snapshot_rejects_background_and_other_flags",
+      "registration_snapshot_rejects_wrong_collection_or_window",
+      "registration_snapshot_rejects_api_errors_and_ambiguous_counts",
+      "synthetic_markers_are_not_press_release",
+      "payload_73_is_not_header_marker",
+      "parameter_histogram_remains_a_layout_hypothesis",
+      "wrong_device_never_dereferences_payload",
+      "old_generation_is_rejected",
+      "duplicate_report_counts_without_history",
+      "74_before73_has_no_up_semantics",
+      "batch_processes_every_report",
+      "malformed_second_report_rejects_whole_batch",
+      "truncated_oversized_zero_and_overflow_batches",
+      "clock_reversal_cancels_and_clears",
+      "deadline_checked_before_payload",
+      "disconnect_reset_rearm_discards_old_payload",
+      "control65_and_notification21_do_not_mix",
+      "all_stop_causes_clear_short_raw_memory",
+      "finite_report_budget_stops_before_overrun",
+      "unsafe_start_does_not_register",
+      "register_failure_has_no_owned_subscription",
+      "double_start_and_double_cleanup_are_idempotent",
+      "exception_unwinds_subscription",
+      "unregister_failure_is_not_reported_as_success",
+      "known_RT76_contract_through_mock_acquisition",
+      "pure_RT_parser_null_truncated_and_unrelated_contract",
+      "RT76_duplicate_and_three_round_trips",
+      "RT76_invalid_parameter_reserved_and_tail_unknown",
+      "RT76_missing_transition_is_not_invented",
+      "RT76_unrelated_report_does_not_change_known_state",
+      "SYNTHETIC_73_74_through_mock_acquisition",
+      "non_target_and_non_HID_headers_never_fetch_payload",
+      "stale_generation_never_fetches_target_payload",
+      "acquisition_deadline_precedes_header_read",
+      "header_read_failure_and_short_header",
+      "size_probe_error_and_size_bounds",
+      "copy_error_short_copy_and_changed_size",
+      "mock_read_exception_closes_owned_subscription_and_resets_state",
+      "changed_packet_header_rejected_before_report_parse",
+      "truncated_HID_and_multiplication_overflow_rejected",
+      "trailing_RAWINPUT_padding_is_not_HID_data",
+      "unknown_report_id_and_wrong_length_have_separate_diagnostics",
+      "zero_reports_stop_without_fabricated_state",
+      "timer_clock_reversal_without_prior_report_stops",
+      "all_handler_entries_count_before_guard_or_active_filter",
+      "message_loop_result_and_subscription_exit_cleanup",
+      "disconnect_generation_reconnect_reset_stale_and_old_session",
+      "SYNTHETIC_missing_or_reordered_73_74_never_become_key_state"
+    ]
+  },
+  "native_metadata_validation": {
+    "classification": "NATIVE METADATA ONLY",
+    "physical_test": "NOT RUN",
+    "runs": [
+      {
+        "name": "after-preflight-notifications",
+        "arguments": [
+          "--preflight",
+          "--collection",
+          "notifications"
+        ],
+        "exit_code": 0,
+        "output": [
+          {
+            "classification": "READ_ONLY_PREFLIGHT",
+            "mode": "preflight",
+            "local_unlocked_console": true,
+            "collection": "MI_02_Col03",
+            "matching_collections": 1,
+            "blocked_stage": "none",
+            "reason": "ready",
+            "api": "none",
+            "win32_error": 0,
+            "registration_returned": 0,
+            "registration_capacity_out": 1,
+            "registration_win32_error": 0,
+            "window_created": false,
+            "foreground_check": "deferred_until_explicit_start",
+            "capture_started": false,
+            "raw_registration": false,
+            "physical_test": "NOT RUN",
+            "stop": "preflight_ready"
+          }
+        ]
+      },
+      {
+        "name": "after-audit-notifications",
+        "arguments": [
+          "--registration-audit",
+          "--collection",
+          "notifications"
+        ],
+        "exit_code": 0,
+        "output": [
+          {
+            "classification": "STARTUP_PREFLIGHT",
+            "mode": "registration_audit",
+            "local_unlocked_console": true,
+            "collection": "MI_02_Col03",
+            "matching_collections": 1,
+            "blocked_stage": "none",
+            "reason": "ready",
+            "api": "none",
+            "win32_error": 0,
+            "registration_returned": 0,
+            "registration_capacity_out": 1,
+            "registration_win32_error": 0,
+            "window_created": false,
+            "foreground_check": "not_applicable_metadata_only",
+            "capture_started": false,
+            "raw_registration": false,
+            "physical_test": "NOT RUN",
+            "stop": "preflight_ready"
+          },
+          {
+            "classification": "REGISTRATION_METADATA",
+            "returned": 1,
+            "count": 1,
+            "error": 0,
+            "page": 65472,
+            "usage": 1,
+            "flags": 0,
+            "expected_flags": 8192,
+            "window_matches": true
+          },
+          {
+            "classification": "READ_ONLY_REGISTRATION_AUDIT",
+            "added": true,
+            "exact_snapshot": true,
+            "removed": true,
+            "blocked_stage": "none",
+            "reason": "ready",
+            "api": "none",
+            "win32_error": 0,
+            "after_remove_returned": 0,
+            "after_remove_capacity_out": 1,
+            "after_remove_win32_error": 0,
+            "registration_error": 0,
+            "removal_error": 0,
+            "capture_started": false,
+            "payloads_read": 0,
+            "physical_test": "NOT RUN"
+          }
+        ]
+      },
+      {
+        "name": "after-preflight-control",
+        "arguments": [
+          "--preflight",
+          "--collection",
+          "control"
+        ],
+        "exit_code": 0,
+        "output": [
+          {
+            "classification": "READ_ONLY_PREFLIGHT",
+            "mode": "preflight",
+            "local_unlocked_console": true,
+            "collection": "MI_01",
+            "matching_collections": 1,
+            "blocked_stage": "none",
+            "reason": "ready",
+            "api": "none",
+            "win32_error": 0,
+            "registration_returned": 0,
+            "registration_capacity_out": 1,
+            "registration_win32_error": 0,
+            "window_created": false,
+            "foreground_check": "deferred_until_explicit_start",
+            "capture_started": false,
+            "raw_registration": false,
+            "physical_test": "NOT RUN",
+            "stop": "preflight_ready"
+          }
+        ]
+      },
+      {
+        "name": "after-audit-control",
+        "arguments": [
+          "--registration-audit",
+          "--collection",
+          "control"
+        ],
+        "exit_code": 0,
+        "output": [
+          {
+            "classification": "STARTUP_PREFLIGHT",
+            "mode": "registration_audit",
+            "local_unlocked_console": true,
+            "collection": "MI_01",
+            "matching_collections": 1,
+            "blocked_stage": "none",
+            "reason": "ready",
+            "api": "none",
+            "win32_error": 0,
+            "registration_returned": 0,
+            "registration_capacity_out": 1,
+            "registration_win32_error": 0,
+            "window_created": false,
+            "foreground_check": "not_applicable_metadata_only",
+            "capture_started": false,
+            "raw_registration": false,
+            "physical_test": "NOT RUN",
+            "stop": "preflight_ready"
+          },
+          {
+            "classification": "REGISTRATION_METADATA",
+            "returned": 1,
+            "count": 1,
+            "error": 0,
+            "page": 65280,
+            "usage": 1,
+            "flags": 0,
+            "expected_flags": 8192,
+            "window_matches": true
+          },
+          {
+            "classification": "READ_ONLY_REGISTRATION_AUDIT",
+            "added": true,
+            "exact_snapshot": true,
+            "removed": true,
+            "blocked_stage": "none",
+            "reason": "ready",
+            "api": "none",
+            "win32_error": 0,
+            "after_remove_returned": 0,
+            "after_remove_capacity_out": 1,
+            "after_remove_win32_error": 0,
+            "registration_error": 0,
+            "removal_error": 0,
+            "capture_started": false,
+            "payloads_read": 0,
+            "physical_test": "NOT RUN"
+          }
+        ]
+      },
+      {
+        "name": "invalid-modes",
+        "arguments": [
+          "--preflight",
+          "--registration-audit"
+        ],
+        "exit_code": 2,
+        "output": [
+          {
+            "classification": "INITIALIZATION_METADATA",
+            "stage": "cli",
+            "blocked_stage": "cli",
+            "reason": "invalid_arguments_or_incompatible_mode",
+            "win32_error": 87,
+            "error": 87,
+            "capture_started": false,
+            "physical_test": "NOT RUN"
+          }
+        ]
+      },
+      {
+        "name": "invalid-rt-collection",
+        "arguments": [
+          "--preflight",
+          "--collection",
+          "control",
+          "--case",
+          "RTGATE"
+        ],
+        "exit_code": 2,
+        "output": [
+          {
+            "classification": "INITIALIZATION_METADATA",
+            "stage": "cli",
+            "blocked_stage": "cli",
+            "reason": "invalid_arguments_or_incompatible_mode",
+            "win32_error": 87,
+            "error": 87,
+            "capture_started": false,
+            "physical_test": "NOT RUN"
+          }
+        ]
+      },
+      {
+        "name": "invalid-timeout",
+        "arguments": [
+          "--preflight",
+          "--timeout",
+          "4"
+        ],
+        "exit_code": 2,
+        "output": [
+          {
+            "classification": "INITIALIZATION_METADATA",
+            "stage": "cli",
+            "blocked_stage": "cli",
+            "reason": "invalid_arguments_or_incompatible_mode",
+            "win32_error": 87,
+            "error": 87,
+            "capture_started": false,
+            "physical_test": "NOT RUN"
+          }
+        ]
+      }
+    ]
+  },
+  "physical_test": "NOT RUN",
+  "interactive_capture_mode_executed": false,
+  "HID_query_or_write": false,
+  "production_changes": false,
+  "observer_sha256": "6f51f49e974a7510f7d76186f2705459b2269c65dba481777c296ee8da827ae1",
+  "prior_observer_sha256": "46f353600244ea414dc62a3b29c1d63648aa643abd083ecc5c1ec4782a0ed4a4",
+  "limitations": [
+    "No real WM_INPUT or RT test performed",
+    "No native lock/focus-loss/unplug acceptance",
+    "73/74 semantics and physical identity remain UNKNOWN",
+    "Earlier A-key zero-input result not explained by this later startup regression"
+  ]
+}

@@ -49,6 +49,10 @@ If an audit or investigation produces findings, security remediation baselines, 
    - Development & release processes: `docs/development/`
 4. Formal milestone patches (if intentionally preserved) belong in `docs/archive/patches/`, not in the repository root.
 
+### 2.4 Reviewable task delivery
+
+When repository contents change, deliver a task-only patch that excludes changes already present at task start and concurrent unrelated work. Multi-file fixes, debugging, audits and experiments also deliver a report covering conclusions, major changes, actual PASS/FAIL/SKIP/NOT RUN results, risks, unresolved items and evidence paths. Keep reports, logs, manifests, hashes and necessary screenshots/evidence in one structured ignored task directory. Do not copy whole source trees, dependencies, binaries or unrelated historical artifacts. ZIP packaging is not required. Check final contents and paths before handoff. Existing evidence may be referenced at its original location.
+
 ---
 
 ## 3. Pre-Commit Hygiene Checklist

@@ -2,6 +2,34 @@
 
 ## Ownership and compatibility
 
+Alpha.9 adds optional `lighting.control_owner`: `AuraDirectRgb` or `FirmwareBank`.
+When omitted, `hardware_slot` defaults to FirmwareBank and `host_managed` to
+AuraDirectRgb. This does not change `lighting.ownership = LegacyUnmanaged` or
+the legacy effect reference. Saves preserve an omitted new field from an older
+client. Schema and API versions remain 1; the daemon advertises
+`lighting_control_owner_supported` so newer UI disables this editor on old daemons.
+
+Magnetic activation and frame admission are independent. A confirmed HardwareSlot
+activation applies its chosen owner without magnetic Stage/Apply or bank edits.
+Failed/deferred slot selection suppresses frames conservatively until explicit
+activation succeeds; reconnect can confirm a matching magnetic slot only with
+supported firmware and never applies a saved lighting edit. Startup reads the saved
+lighting policy without claiming magnetic activation. Drift invalidates magnetic
+state without reclaiming the slot or changing the lighting policy. Saving a draft
+alone does not apply its lighting policy. HostManaged publishes the new owner
+only after successful activation. All frame writes, including shutdown black,
+remain inside the mutation gate before DeviceWriteMutex, as do slot selection
+and owner publication. Direct RGB retains its separate C0 81 safety contract.
+The parent installs frame admission and its lifetime guard before adapter
+initialization and crash-recovery ForceReset. The isolated crash probe rejects
+all lighting frames, including its own shutdown blackout; it never owns lighting.
+
+FirmwareBank means Aura frame suppression. It never confirms firmware rendering:
+`FirmwareLightingRestoreUnverified` and null `firmware_lighting_restored` report
+that boundary. No release/stop/restore command has been added. HostManaged plus
+FirmwareBank supports the data model and suppression only; physical restoration
+is unverified. See the [alpha.9 acceptance matrix](../testing/ALPHA9_ACCEPTANCE_MATRIX.md).
+
 The daemon is the **only live owner** of `device-profiles.json`, selected desired Profile, active submitted Profile, dirty state, apply planning, and magnetic mutation invalidation. `MagneticControlService` constructs one `DeviceProfileRuntime` beside its one `M605Runtime`; all Profile and manual magnetic routes share its `write_mutex_`. WinUI exposes `ProfileControlClient`, a stateless HTTP transport. It has no production file writer or apply planner. If the daemon is unavailable, the client reports that error and does not write locally. The daemon keeps Profile CRUD available when the keyboard is absent.
 
 The device Profile document is separate from `config.json/profiles`, which remain lighting recipes. Existing Automation v2 `activate_profile`, Reactive/Ripple, GSI simulation and lighting selection retain their prior meanings. Device-profile process bindings use distinct stable GUIDs and invoke the daemon activation coordinator; they do not reuse lighting Automation actions. See [Device Profile Automation](DEVICE_PROFILE_AUTOMATION.md).
@@ -25,7 +53,7 @@ All routes are loopback-only. Mutations require JSON and the existing loopback O
 | POST | `/api/device-profiles/defaults` | `global_defaults`, `expected_revision`. |
 | POST | `/api/device-profiles/activate` | `profile_id`, `reason`, `expected_revision`, optional `temporary_override`. |
 
-Reasons are `Manual`, `Automation`, `Startup`, `Reconnect`, `Restore`. Activation returns `outcome: succeeded | deferred | failed`, operation outcomes, selected/active/dirty, document/runtime/mutation revisions and M605 session generation. A deferred activation (HTTP 202) persists the selected desired GUID. A failed apply is HTTP 409 with an explicit error and retains the desired selection. The native WinUI Profile page uses this API; automatic activation is not wired.
+Reasons are `Manual`, `Automation`, `Startup`, `Reconnect`, `Restore`. Activation returns `outcome: succeeded | deferred | failed`, operation outcomes, selected/active/dirty, document/runtime/mutation revisions and M605 session generation. A deferred activation (HTTP 202) persists the selected desired GUID. A failed apply is HTTP 409 with an explicit error and retains the desired selection. The native WinUI Profile page uses this API. The production daemon also attaches the [Device Profile automation coordinator](DEVICE_PROFILE_AUTOMATION.md), which evaluates foreground decisions and dispatches authorized activation through the same runtime and mutation gate. The isolated binding-engine projection's `hardware_activation_allowed=false` describes that projection only; it does not disable the attached production coordinator.
 
 ## State and apply transaction
 
@@ -229,16 +257,18 @@ A matching reconnect confirms active without a selector; mismatch remains dirty.
 Observed bank changes expire magnetic host shadow/prior knowledge. External writers
 remain possible; last observation cannot guarantee an indefinitely unchanged bank.
 
-HardwareSlot activation reserves firmware lighting ownership before selection.
-The frame admission gate shares the Profile mutation mutex: it suppresses all
-Aura Direct RGB frames, including the shutdown blackout, across bank activation,
-external drift and disconnect. Startup with a saved hardware-slot Profile also
-suppresses the first frame. No firmware lighting setter or unverified release
-packet is sent. Physical restoration of a firmware effect remains an acceptance
-gate; stopping frames alone is not a claim that firmware lighting has resumed.
-Saving a backend edit does not release this reservation. A successful HostManaged
-activation restores Aura frame admission. Rapid transitions are serialized with
-frame submission, so no late frame can follow a completed bank selection.
+HardwareSlot activation suppresses frames before selection and publishes the
+independent resolved lighting owner only after slot confirmation. Failed/deferred
+selection remains suppressed. Saved HardwareSlot profiles without an explicit
+owner retain FirmwareBank suppression, including the startup and shutdown frames.
+An explicit AuraDirectRgb policy permits the startup frame without asserting
+magnetic activation. Drift/disconnect preserve lighting policy while invalidating
+magnetic state. No firmware lighting setter or unverified release packet is sent.
+Physical firmware restoration remains unverified; stopping frames is not proof.
+Saving a backend/lighting edit does not apply its policy. Successful HostManaged
+activation publishes the resolved owner as well. Frame admission holds the Profile
+mutation mutex throughout the writer, before DeviceWriteMutex. Policy publication
+and selector execution hold that same gate, preventing a late old-policy frame.
 
 Diagnostics expose lighting_owner, actual selector_count (not activation attempts),
 and external_drift_observation interval/last attempt. A mismatching observation

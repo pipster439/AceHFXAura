@@ -20,7 +20,8 @@ struct Phase4BFixture {
     int64_t now = 0; std::atomic<bool> available{true};
     int attempts = 0;
     std::function<void()> before_admission;
-    Phase4BFixture(bool rt = false, const char* process = "cs2.exe", bool hardware = false) {
+    Phase4BFixture(bool rt = false, const char* process = "cs2.exe", bool hardware = false, bool hardware_target_only = false,
+        const char* lighting_owner = nullptr, bool split_lighting = false) {
         static std::atomic<int> serial{0};
         folder = std::filesystem::temp_directory_path() / ("aura-phase4b-" + std::to_string(GetCurrentProcessId()) + "-" + std::to_string(++serial));
         std::filesystem::create_directories(folder); path = folder / "device-profiles.json";
@@ -32,11 +33,13 @@ struct Phase4BFixture {
         config["bindings"] = Json::array({{{"rule_id", C}, {"process_name", process}, {"profile_id", B}, {"enabled", true}, {"priority", 100}}});
         doc["device_profile_automation"] = config;
         if (hardware) {
-            doc["profiles"][0]["activation_backend"] = "hardware_slot"; doc["profiles"][0]["hardware_slot"] = 1;
+            if (!hardware_target_only) { doc["profiles"][0]["activation_backend"] = "hardware_slot"; doc["profiles"][0]["hardware_slot"] = 1; }
             doc["profiles"][1]["activation_backend"] = "hardware_slot"; doc["profiles"][1]["hardware_slot"] = 5;
         }
         if (rt) doc["profiles"][1]["magnetic"]["keys"] = Json::array({{{"logical_id", 0x0701},
             {"rapid_trigger", {{"enabled", true}, {"press_mm", 0.5}, {"release_mm", 1.5}, {"separate_mode", true}}}}});
+        if (lighting_owner) for (auto& p : doc["profiles"]) p["lighting"]["control_owner"] = lighting_owner;
+        if (split_lighting) doc["profiles"][0]["lighting"]["control_owner"] = "FirmwareBank";
         Write(path, doc);
         auto transport = std::make_unique<Io>(); io = transport.get();
         io->basic_supported = hardware;

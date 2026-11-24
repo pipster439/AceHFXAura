@@ -13,6 +13,8 @@ import { EFFECT_STUDIO_TOOLBOX } from '../blockly/toolboxes';
 import { CppTranspiler } from '../blockly/cppTranspiler';
 import { JsTranspiler, PREVIEW_68_KEYS } from '../blockly/jsTranspiler';
 import TestBench from './StudioTestBench';
+import ProgramCatalog from './ProgramCatalog';
+import InputSourcesControl from './InputSourcesControl';
 import { createBundleBridge, createBundlePayload, validateBundlePayload, importedDraft, nextImportedName } from '../utils/studioBundle.js';
 import { createStudioStorage, durableStudioDraft } from '../utils/studioStorage.js';
 import { CAPABILITY_LABELS, CAPABILITY_DIAGNOSTICS, deriveEffectCapabilities } from '../utils/effectCapabilities.js';
@@ -34,6 +36,12 @@ import {
   CheckCircle2
 } from 'lucide-react';
 
+export const WORKSPACE_STATUS = Object.freeze({
+  UNREADY: 'unready',
+  READY: 'ready',
+  DESTROYED: 'destroyed'
+});
+
 export default function EffectStudio({
   config,
   onSaveConfig,
@@ -51,12 +59,20 @@ export default function EffectStudio({
   const aiSessionRef = useRef(new StudioProposalSession());
   const chatToolsRef = useRef(new StudioConversationTools(aiSessionRef.current));
   const chatTurnRef = useRef(null);
+  const aiOperationRef = useRef(null);
+  const editorIdRef = useRef(globalThis.crypto.randomUUID().replaceAll('-', ''));
   const revisionSequence = useRef(0);
   const postRevision = async () => {
-    if (!embedded || !workspaceRef.current) return;
+    if (!embedded || !workspaceRef.current || workspaceStatusRef.current !== WORKSPACE_STATUS.READY) return;
     const seq = ++revisionSequence.current, snapshot = currentDraft();
+    if (!snapshot) return;
+    aiSessionRef.current.activateProject(snapshot.name);
     const fingerprint = await projectFingerprint(snapshot);
-    if (seq === revisionSequence.current) window.chrome?.webview?.postMessage({ type: "studio_chat_revision", name: snapshot.name, fingerprint });
+    if (seq === revisionSequence.current) window.chrome?.webview?.postMessage({
+      type: 'studio_ai_state', editor_id: editorIdRef.current, sequence: seq, name: snapshot.name, fingerprint,
+      undo_requests: aiSessionRef.current.getUndoableRequestIds(snapshot.name), can_undo: aiSessionRef.current.canUndo(snapshot),
+      operation_id: aiOperationRef.current?.id || null
+    });
   };
   const [benchOpen, setBenchOpen] = useState(false);
   const [runToken, setRunToken] = useState(0);
@@ -69,15 +85,36 @@ export default function EffectStudio({
   const [bundleError, setBundleError] = useState('');
   useEffect(() => { bundleBridge.current = createBundleBridge(window.chrome?.webview); return () => bundleBridge.current?.dispose(); }, []);
   const storageRef = useRef(null); const observedRef = useRef(null); const observeSequence = useRef(0);
-  const configLoadedRef = useRef(!!config); const aiApplyingRef = useRef(false);
+  const configLoadedRef = useRef(!!config);
   const [storageStatus, setStorageStatus] = useState(''); const [recovery, setRecovery] = useState(null);
   const [snapshots, setSnapshots] = useState([]); const [snapshotId, setSnapshotId] = useState('');
   const [capabilityManifest, setCapabilityManifest] = useState(null);
-  const currentDraft = () => ({ name: effectNameRef.current, publication: publicationRef.current, json: Blockly.serialization.workspaces.save(workspaceRef.current) });
+  const [workspaceStatus, setWorkspaceStatus] = useState(WORKSPACE_STATUS.UNREADY);
+  const workspaceStatusRef = useRef(WORKSPACE_STATUS.UNREADY);
+  const [programSnapshot, setProgramSnapshot] = useState(null);
+  const currentDraft = () => {
+    if (!workspaceRef.current || workspaceStatusRef.current !== WORKSPACE_STATUS.READY) return null;
+    return {
+      name: effectNameRef.current,
+      publication: publicationRef.current,
+      json: Blockly.serialization.workspaces.save(workspaceRef.current)
+    };
+  };
+  const linkProgramToLighting = async entry => {
+    const profileName = `ir_${entry.name}`.replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 48);
+    if (!/^[a-zA-Z_][a-zA-Z0-9_]{0,47}$/.test(profileName)) { showToast?.('程序名称无法创建 Lighting 方案', 'error'); return; }
+    if (config?.profiles?.[profileName] || config?.blockly_effects?.[profileName]) { showToast?.(`Lighting 方案「${profileName}」已存在，未覆盖。`, 'error'); return; }
+    if (globalThis.confirm?.(`创建 Lighting 方案「${profileName}」并指向 ${entry.plugin_name}？\n这只写入配置，不会自动激活。`) === false) return;
+    const next = { ...config, profiles: { ...(config?.profiles || {}), [profileName]: { type: 'plugin', plugin_name: entry.plugin_name, title: profileName } } };
+    if (await onSaveConfig?.(next)) showToast?.(`已创建 Lighting 方案「${profileName}」；尚未自动激活。`, 'success');
+  };
   const openBench = () => { if (!isCompiling && workspaceRef.current) { setIsPlaying(false); setBenchOpen(true); } };
   const queueDraft = () => {
-    if (embedded && observedRef.current === effectNameRef.current && workspaceRef.current)
-      storageRef.current?.request('autosave', currentDraft()).then(r => setStorageStatus(r.text)).catch(e => setStorageStatus(e.message));
+    if (legacyWorkspaceBlockedRef.current) return;
+    if (embedded && observedRef.current === effectNameRef.current && workspaceRef.current && workspaceStatusRef.current === WORKSPACE_STATUS.READY) {
+      const draft = currentDraft();
+      if (draft) storageRef.current?.request('autosave', draft).then(r => setStorageStatus(r.text)).catch(e => setStorageStatus(e.message));
+    }
   };
   const observeDraft = () => {
     if (!embedded || !storageRef.current || !config) return;
@@ -91,23 +128,30 @@ export default function EffectStudio({
       }).catch(e => setStorageStatus(e.message));
     } catch (e) { setStorageStatus(e.message); }
   };
-  const checkpointDraft = async reason => {
+  const checkpointDraft = async (reason, draft = currentDraft(), requestId = null) => {
+    if (legacyWorkspaceBlockedRef.current) throw new Error('当前工程无法加载，请先打开有效工程。');
     if (!embedded) throw new Error('发布前快照需要 Aura 桌面宿主。');
-    const result = await storageRef.current.request('snapshot', currentDraft(), { reason }); setSnapshots(result.snapshots || []);
+    const result = await storageRef.current.request('snapshot', draft, { reason, ...(requestId ? { ai_request_id: requestId } : {}) });
+    if (draft.name === effectNameRef.current) setSnapshots(result.snapshots || []);
+    return result;
   };
   const restoreDraft = async (operation, extra = {}) => {
-    if (isCompiling) return;
+    if (isCompiling || aiOperationRef.current) return;
     setIsCompiling(true);
     try {
       const result = await storageRef.current.request(operation, currentDraft(), extra);
       const draft = result.draft; if (draft.name !== effectNameRef.current) throw new Error('恢复工程与当前工程不一致');
+      if (aiOperationRef.current) throw new Error('AI 工程操作正在进行；请完成后再恢复草稿。');
       // Validate before replacing the current draft; no config/publish call.
       validateCandidate(draft);
       setIsPlaying(false); setBenchOpen(false); loadAiSnapshot(workspaceRef.current, draft.json);
+      retainedWorkspaceValidRef.current = true;
+      legacyWorkspaceBlockedRef.current = false; setLegacyWorkspaceError(null);
       publicationRef.current = normalizePublication(draft.publication); setPublication(publicationRef.current);
       compiledJsRef.current = JsTranspiler.compile(workspaceRef.current, publicationRef.current);
-      setRecovery(null); aiSessionRef.current = new StudioProposalSession(); chatToolsRef.current = new StudioConversationTools(aiSessionRef.current); postRevision(); queueDraft(); setStorageStatus('已恢复至草稿；尚未保存或发布。');
-      if (aiRequestRef.current) window.chrome?.webview?.postMessage({ type: 'studio_ai_applied', request_id: aiRequestRef.current.id, text: '快照已恢复为草稿；发布状态保持不变。', undo: false });
+      setRecovery(null); aiSessionRef.current.invalidateProject(draft.name);
+      chatToolsRef.current = new StudioConversationTools(aiSessionRef.current); chatTurnRef.current = null; aiRequestRef.current = null;
+      postRevision(); queueDraft(); setStorageStatus('已恢复至草稿；发布状态保持不变，旧 AI 撤销记录已失效。');
     } catch (e) { setStorageStatus(e.message); }
     finally { setIsCompiling(false); }
   };
@@ -117,6 +161,7 @@ export default function EffectStudio({
   };
   const blocklyDivRef = useRef(null);
   const workspaceRef = useRef(null);
+  const retainedWorkspaceValidRef = useRef(false);
   useLayoutEffect(() => { if (overlayOpen || bundleDialog) return dismissForOverlay(workspaceRef.current); }, [overlayOpen, bundleDialog]);
   const [effectName, setEffectName] = useState(activeEffectName || 'custom_rainbow');
   const effectNameRef = useRef(effectName);
@@ -192,14 +237,15 @@ export default function EffectStudio({
     workspaceRef.current = ws;
 
     let localDraft;
-    try { localDraft = JSON.parse(sessionStorage.getItem('aura-effect-draft')); } catch {}
+    try { localDraft = JSON.parse(sessionStorage.getItem('aura-effect-draft')); }
+    catch { legacyWorkspaceBlockedRef.current = true; setLegacyWorkspaceError('恢复草稿 JSON 已损坏；原记录已保留，请打开有效工程。'); }
     // 默认加载第一个样例模板
     const defaultPreset = EFFECT_PRESETS[0];
     if (localDraft?.json) {
       try {
         assertNoLegacyEventPulse(localDraft.json);
-        publicationRef.current = normalizePublication(localDraft.publication); setPublication(publicationRef.current);
         loadSafeWorkspaceJson(localDraft.json, ws); setEffectName(localDraft.name); effectNameRef.current = localDraft.name;
+        publicationRef.current = normalizePublication(localDraft.publication); setPublication(publicationRef.current);
       } catch (err) { legacyWorkspaceBlockedRef.current = true; setLegacyWorkspaceError(err.message); }
     } else if (config?.blockly_effects?.[activeEffectName]?.blockly_json) {
       try { loadSafeWorkspaceJson(config.blockly_effects[activeEffectName].blockly_json, ws, true); }
@@ -207,10 +253,16 @@ export default function EffectStudio({
     } else if (defaultPreset?.blocklyJson) {
       loadSafeWorkspaceJson(defaultPreset.blocklyJson, ws);
     }
+    retainedWorkspaceValidRef.current = !legacyWorkspaceBlockedRef.current;
 
     const onWorkspaceChange = (event) => {
       if (event?.isUiEvent) return;
-      setCapabilityManifest(deriveEffectCapabilities(currentDraft()));
+      if (!workspaceRef.current || workspaceStatusRef.current === WORKSPACE_STATUS.DESTROYED) return;
+      const draft = currentDraft();
+      if (draft) {
+        setProgramSnapshot(draft);
+        setCapabilityManifest(deriveEffectCapabilities(draft));
+      }
       postRevision();
       try {
         compiledJsRef.current = JsTranspiler.compile(ws, publicationRef.current);
@@ -225,6 +277,8 @@ export default function EffectStudio({
     };
 
     ws.addChangeListener(onWorkspaceChange);
+    workspaceStatusRef.current = WORKSPACE_STATUS.READY;
+    setWorkspaceStatus(WORKSPACE_STATUS.READY);
     onWorkspaceChange();
     observeDraft();
 
@@ -236,34 +290,48 @@ export default function EffectStudio({
     return () => {
       window.removeEventListener('resize', handleResize);
       observer.disconnect();
-      try { if (!legacyWorkspaceBlockedRef.current) sessionStorage.setItem('aura-effect-draft', JSON.stringify({ name: effectNameRef.current, publication: publicationRef.current, json: Blockly.serialization.workspaces.save(ws) })); } catch {}
+      workspaceStatusRef.current = WORKSPACE_STATUS.DESTROYED;
+      setWorkspaceStatus(WORKSPACE_STATUS.DESTROYED);
+      setProgramSnapshot(null);
+      try { if (!legacyWorkspaceBlockedRef.current && ws) sessionStorage.setItem('aura-effect-draft', JSON.stringify({ name: effectNameRef.current, publication: publicationRef.current, json: Blockly.serialization.workspaces.save(ws) })); } catch {}
       ws.dispose();
       workspaceRef.current = null;
+      chatToolsRef.current.cancel();
       storageRef.current?.dispose(); storageRef.current = null;
     };
   }, []);
 
   // 当 activeEffectName 从外部改变时载入
   useEffect(() => {
-    if (activeEffectName && workspaceRef.current && (activeEffectName !== effectNameRef.current || !configLoadedRef.current && config)) {
+    if (activeEffectName && workspaceRef.current && (activeEffectName !== effectNameRef.current || !configLoadedRef.current && config || legacyWorkspaceBlockedRef.current)) {
+      if (legacyWorkspaceBlockedRef.current && retainedWorkspaceValidRef.current && activeEffectName === effectNameRef.current) {
+        legacyWorkspaceBlockedRef.current = false; setLegacyWorkspaceError(null);
+        return; // Returning to the retained project preserves unsaved edits.
+      }
       configLoadedRef.current = !!config;
       setBenchOpen(false);
       const effectData = config?.blockly_effects?.[activeEffectName];
-      publicationRef.current = normalizePublication(effectData?.publication); setPublication(publicationRef.current);
       Blockly.Events.disable();
-      try { workspaceRef.current.clear();
-      if (effectData?.blockly_json) {
-        try { loadSafeWorkspaceJson(effectData.blockly_json, workspaceRef.current); legacyWorkspaceBlockedRef.current = false; setLegacyWorkspaceError(null); }
-        catch (err) { legacyWorkspaceBlockedRef.current = true; setLegacyWorkspaceError(err.message); }
-      } else {
+      try {
+        loadSafeWorkspaceJson(effectData?.blockly_json || { blocks: [] }, workspaceRef.current);
+        retainedWorkspaceValidRef.current = true;
         legacyWorkspaceBlockedRef.current = false;
         setLegacyWorkspaceError(null);
-      }
+      } catch (err) {
+        legacyWorkspaceBlockedRef.current = true;
+        setLegacyWorkspaceError(err.message);
+        showToast?.(err.message, 'error');
+        return; // Keep the retained draft and its identity; never autosave under the rejected name.
       } finally { Blockly.Events.enable(); }
+      publicationRef.current = normalizePublication(effectData?.publication); setPublication(publicationRef.current);
       setBuildResult('尚未构建'); setPluginLoadStatus(effectData?.applied_plugin_name ? '已有发布记录' : '未发布');
       setEffectName(activeEffectName);
       effectNameRef.current = activeEffectName;
-      setCapabilityManifest(deriveEffectCapabilities(currentDraft()));
+      const draft = currentDraft();
+      if (draft) {
+        setProgramSnapshot(draft);
+        setCapabilityManifest(deriveEffectCapabilities(draft));
+      }
       postRevision();
       observeDraft();
     }
@@ -348,9 +416,10 @@ export default function EffectStudio({
   // 加载预设模板
   const handleLoadPreset = (preset) => {
     if (!workspaceRef.current || !preset.blocklyJson) return;
-    workspaceRef.current.clear();
-    loadSafeWorkspaceJson(preset.blocklyJson, workspaceRef.current);
+    try { loadSafeWorkspaceJson(preset.blocklyJson, workspaceRef.current); }
+    catch (err) { showToast?.(err.message, 'error'); return; }
     legacyWorkspaceBlockedRef.current = false;
+    retainedWorkspaceValidRef.current = true;
     setLegacyWorkspaceError(null);
     updateEffectName(preset.id);
     showToast?.(`已加载预设: ${preset.name}`, 'info');
@@ -481,96 +550,6 @@ export default function EffectStudio({
       diagnostics: (compilerLog || '').slice(0, 16384) });
   }, [effectName, isPlaying, isCompiling, buildResult, pluginLoadStatus, compilerSuccess, compilerLog, editError, legacyWorkspaceError, capabilityManifest, config, onShellState, recovery, snapshots, embedded, bundleDialog]);
 
-  useEffect(() => {
-    if (!embedded || !window.chrome?.webview) return;
-    const webview = window.chrome.webview;
-    webview.postMessage({ type: "studio_ai_catalog", presets: EFFECT_PRESETS.map(p => ({ id: p.id, name: p.name })) });
-    const receive = async event => {
-      const m = event.data;
-      if (m?.type === 'studio_chat_clear') { chatToolsRef.current.clear(); chatTurnRef.current = null; return; }
-      if (m?.type === 'studio_chat_cancel' && m.request_id === chatTurnRef.current) { chatToolsRef.current.cancel(); chatTurnRef.current = null; aiSessionRef.current.reject(); return; }
-      if (m?.type === 'studio_chat_begin' && /^[a-f0-9]{32}$/.test(m.request_id || '')) {
-        try {
-          if (isCompiling || recovery || !workspaceRef.current) throw new Error('工程暂不可请求');
-          const snapshot = currentDraft();
-          chatTurnRef.current = m.request_id;
-          const context = await chatToolsRef.current.begin(snapshot);
-          aiRequestRef.current = { id: m.request_id, intent: 'modify', snapshot };
-          webview.postMessage({ type: 'studio_chat_result', request_id: m.request_id, call_id: 'begin', result: context });
-        } catch { webview.postMessage({ type: 'studio_chat_result', request_id: m.request_id, call_id: 'begin', error: '请先解决工程状态或恢复草稿' }); }
-        return;
-      }
-      if (m?.type === 'studio_chat_tool' && m.request_id === chatTurnRef.current) {
-        try {
-          if (isCompiling || recovery || !workspaceRef.current) throw new Error('工程暂不可请求');
-          const result = await chatToolsRef.current.execute(m.name, m.arguments, currentDraft(), {
-            validation: legacyWorkspaceError || editError || deriveEffectCapabilities(currentDraft()).diagnostics.map(c => CAPABILITY_DIAGNOSTICS[c]).join(' '),
-            build: compilerSuccess === false ? (compilerLog || '').split('\n').filter(line => /error|错误|失败|确认|加载/i.test(line)).slice(0, 3).join('\n') : ''
-          });
-          if (m.request_id !== chatTurnRef.current) return;
-          webview.postMessage({ type: 'studio_chat_result', request_id: m.request_id, call_id: m.call_id, result });
-        } catch (error) { webview.postMessage({ type: 'studio_chat_result', request_id: m.request_id, call_id: m.call_id, error: error.message }); }
-        return;
-      }
-      if (m?.type === 'studio_ai_context' && /^[a-f0-9]{32}$/.test(m.request_id || '') && ['generate', 'modify', 'explain', 'error_analysis'].includes(m.intent)) {
-        if (isCompiling || !workspaceRef.current || aiApplyingRef.current) return;
-        aiApplyingRef.current = true;
-        try {
-          const snapshot = { name: effectNameRef.current, publication: publicationRef.current, json: Blockly.serialization.workspaces.save(workspaceRef.current) };
-          let intent = m.intent;
-          if (m.repair === true) {
-            if (!aiRequestRef.current || JSON.stringify(snapshot) !== JSON.stringify(aiSessionRef.current.base)) throw new Error('工程已变化，请重新生成');
-            aiSessionRef.current.reserveRepair(); intent = 'error_analysis';
-          } else aiSessionRef.current.begin(snapshot);
-          const previousError = aiRequestRef.current?.validationError || '';
-          aiRequestRef.current = { id: m.request_id, intent, snapshot, presetId: m.preset_id, validationError: previousError };
-          // Selected compiler errors only; omit arbitrary logs and successful build output.
-          const diagnostic = legacyWorkspaceError || editError || (compilerSuccess === false ? (compilerLog || '').split('\n').filter(line => /error|错误|失败|确认|加载/i.test(line)).slice(0, 3).join('\n') : '');
-          webview.postMessage({ type: 'studio_ai_context', request_id: m.request_id, context: assistantContext(snapshot, intent, (m.repair === true ? previousError : '') || diagnostic, legacyWorkspaceError || editError ? 'validation' : compilerFailureStage, m.preset_id) });
-        } catch { webview.postMessage({ type: 'studio_ai_context_error', request_id: m.request_id }); }
-      }
-      if (m?.type === 'studio_ai_reply' && m.request_id === aiRequestRef.current?.id) {
-        try {
-          const proposal = parseProposal(m.reply);
-          if (proposal.preset !== null && proposal.preset !== aiRequestRef.current.presetId) throw new Error('建议采用了未选择的模板');
-          const prepared = aiSessionRef.current.stage(proposal, aiRequestRef.current.intent);
-          if (prepared) {
-            const validation = prepared.validation;
-            webview.postMessage({ type: 'studio_ai_preview', request_id: m.request_id, valid: true,
-              preview: validation.preview, text: proposal.summary + '\n\n' + prepared.changes.map(c => `${c.field}: ${c.before} → ${c.after}`).join('\n') + '\n验证通过 · 本地模拟通过 · 尚未应用' });
-          } else webview.postMessage({ type: 'studio_ai_preview', request_id: m.request_id, valid: false, text: proposal.summary });
-        } catch (err) { aiRequestRef.current.validationError = err.message; webview.postMessage({ type: 'studio_ai_preview', request_id: m.request_id, valid: false, text: '建议已拒绝：' + err.message }); }
-      }
-      if (['studio_ai_apply', 'studio_ai_reject', 'studio_ai_undo'].includes(m?.type) && m.request_id === aiRequestRef.current?.id) {
-        if (isCompiling || !workspaceRef.current) return;
-        const current = () => ({ name: effectNameRef.current, publication: publicationRef.current, json: Blockly.serialization.workspaces.save(workspaceRef.current) });
-        try {
-          if (m.type === 'studio_ai_reject') { chatToolsRef.current.mark('dismissed'); aiSessionRef.current.reject(); webview.postMessage({ type: 'studio_ai_applied', request_id: m.request_id, text: '建议已放弃。', undo: !!aiSessionRef.current.undoState }); return; }
-          if (recovery) throw new Error('请先恢复或放弃可恢复草稿。');
-          if (m.type === 'studio_ai_apply') await checkpointDraft('before_ai_apply');
-          const next = m.type === 'studio_ai_apply' ? aiSessionRef.current.apply(current()) : aiSessionRef.current.undo(current());
-          setBenchOpen(false);
-          // Pause streaming before replacing a draft; proposal preview itself is local-only.
-          setIsPlaying(false);
-          {
-            loadAiSnapshot(workspaceRef.current, next.json);
-            publicationRef.current = next.publication; setPublication(next.publication);
-            compiledJsRef.current = JsTranspiler.compile(workspaceRef.current, next.publication);
-            setCppCode(CppTranspiler.transpile(next.name, workspaceRef.current, next.publication));
-            setEditError(null); setCompilerSuccess(null); setCompilerLog(null); setBuildResult('尚未构建');
-          }
-          if (m.type === 'studio_ai_apply') aiSessionRef.current.markApplied(current());
-          chatToolsRef.current.mark(m.type === 'studio_ai_apply' ? 'applied' : 'undone');
-          postRevision();
-          webview.postMessage({ type: 'studio_ai_applied', request_id: m.request_id, text: m.type === 'studio_ai_apply' ? '已应用至草稿；预览已暂停。可撤销或保存草稿。' : 'AI 修改已撤销。', undo: m.type === 'studio_ai_apply' });
-        } catch (err) { webview.postMessage({ type: 'studio_ai_applied', request_id: m.request_id, text: err.message, undo: !!aiSessionRef.current.undoState }); }
-        finally { aiApplyingRef.current = false; }
-      }
-    };
-    webview.addEventListener('message', receive);
-    return () => webview.removeEventListener('message', receive);
-  }, [embedded, isCompiling, compilerSuccess, compilerLog, compilerFailureStage, editError, legacyWorkspaceError, recovery]);
-
   const handleCompileAndReload = () => saveWorkspace(true);
   const handleSaveToConfig = () => saveWorkspace(false);
 
@@ -578,7 +557,7 @@ export default function EffectStudio({
   const lifecycle = getEffectLifecycleStatus(currentEffectData);
 
   return (
-    <div className={`flex min-w-0 flex-col gap-3 p-1 h-full ${embedded ? 'min-h-[320px]' : 'min-h-[560px]'}`}>
+    <div data-workspace-status={workspaceStatus} className={`flex min-w-0 flex-col gap-3 p-1 h-full ${embedded ? 'min-h-[320px]' : 'min-h-[560px]'}`}>
       {embedded && <div className="shrink-0 flex flex-wrap items-center gap-2 text-xs" data-studio-storage>
         <span data-autosave-status role="status">{storageStatus || '草稿自动保存就绪'}</span>
         {recovery && <div role="alert" data-recovery-offer className="flex flex-wrap gap-2"><strong>可恢复草稿 · {new Date(recovery.updated_utc).toLocaleString()}</strong>
@@ -591,6 +570,21 @@ export default function EffectStudio({
         工程输入：{capabilityManifest.inputs.map(c => CAPABILITY_LABELS[c]).join('、') || '无需外部输入'} · 输出：{capabilityManifest.outputs.map(c => CAPABILITY_LABELS[c]).join('、') || '无'}
         {capabilityManifest.diagnostics.map(code => <p role="alert" key={code}>{CAPABILITY_DIAGNOSTICS[code]}</p>)}
       </div>}
+      {embedded && <details data-effect-extensions className="shrink-0 rounded-md-lg border border-md-outline-variant bg-md-surface-container-low p-3 text-xs">
+        <summary className="cursor-pointer font-semibold">灯效扩展 · {Object.values(config?.blockly_effects || {}).filter(x => x?.applied_plugin_name).length} 个已发布 / {Object.keys(config?.blockly_effects || {}).length} 个工程</summary>
+        <p className="mt-2 text-md-on-surface-variant">导入 .auraeffect 源工程包后可先预览、验证，再由你手动发布为独立插件 DLL；后续添加新灯效无需重新打包 Aura。导入不会直接执行第三方代码或改写正在运行的灯效。</p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <button type="button" disabled={isCompiling || !!recovery || !!bundleDialog} onClick={() => bundleAction('import')}
+            className="rounded-md-full bg-md-primary-container px-3 py-1.5 font-semibold text-md-on-primary-container disabled:opacity-50">导入灯效包</button>
+          <span className="text-md-on-surface-variant">需要发布时使用工作室上方的「发布」；原生 DLL 的运行仍需要本机 MSVC 编译环境。</span>
+        </div>
+        <ul className="mt-2 max-h-28 overflow-y-auto">
+          {Object.entries(config?.blockly_effects || {}).map(([name, value]) =>
+            <li key={name} className="py-1"><span className="font-mono">{name}</span> · {value?.applied_plugin_name ? '已发布插件' : '未发布草稿'}</li>)}
+        </ul>
+      </details>}
+      <ProgramCatalog embedded={embedded} snapshot={workspaceStatus === WORKSPACE_STATUS.READY ? programSnapshot : null} onStatus={setStorageStatus} onLinkLighting={linkProgramToLighting} />
+      <InputSourcesControl embedded={embedded} />
       <div className="flex shrink-0 flex-wrap items-center gap-2 rounded-md-lg border border-md-primary/40 bg-md-primary-container/30 px-3 py-2 text-xs text-md-on-surface" aria-label="当前光效生命周期">
         {!embedded && <button onClick={openBench} disabled={isCompiling}>测试台</button>}
         <strong className="font-mono min-w-0 max-w-full break-all" title={effectName}>{effectName}</strong>
@@ -782,9 +776,7 @@ export default function EffectStudio({
       </div>
 
       </details>
-      {(legacyWorkspaceError || editError) && <div role="alert" className="text-sm text-md-error">{legacyWorkspaceError || editError}
-        {embedded && <button onClick={() => window.chrome?.webview?.postMessage({ type: 'studio_ai_ask', kind: 'validation' })}>询问 AI</button>}
-      </div>}
+      {(legacyWorkspaceError || editError) && <div role="alert" className="text-sm text-md-error">{legacyWorkspaceError || editError}</div>}
       </div>
       {/* Google Blockly 主画布 */}
       {bundleDialog && createPortal(<div data-bundle-dialog role="dialog" aria-modal="true" aria-label="工程包确认" className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-3" onKeyDown={e => { if (e.key === 'Escape' && !isCompiling) setBundleDialog(null); }}>
@@ -811,7 +803,6 @@ export default function EffectStudio({
       </div>
 
       {/* 编译器输出控制台抽屉 (如果有编译结果或正在编译) */}
-      {embedded && compilerSuccess === false && <button onClick={() => window.chrome?.webview?.postMessage({ type: 'studio_ai_ask', kind: compilerFailureStage })} className="text-left text-sm">询问 AI：分析此错误</button>}
       {compilerLog && (
         <div className="p-3 bg-md-surface-container-lowest border border-md-outline-variant rounded-md-md flex flex-col gap-2 max-h-40 overflow-y-auto">
           <div className="flex items-center justify-between">

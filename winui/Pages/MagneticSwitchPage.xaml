@@ -2,8 +2,17 @@
 <Page x:Class="Aura_WinUI.Pages.MagneticSwitchPage"
       xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-      xmlns:controls="using:CommunityToolkit.WinUI.Controls"
-      Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+      Background="Transparent">
+
+    <Page.Resources>
+        <Style x:Key="WorkbenchCardStyle" TargetType="Border">
+            <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+            <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Padding" Value="16" />
+        </Style>
+    </Page.Resources>
 
     <ScrollViewer x:Name="PageScroll"
                   HorizontalScrollBarVisibility="Disabled"
@@ -11,25 +20,25 @@
                   HorizontalContentAlignment="Stretch">
         <Grid x:Name="PageHost">
             <StackPanel x:Name="PageContent"
-                        Spacing="20"
+                        Spacing="16"
                         HorizontalAlignment="Center"
-                        MaxWidth="1380">
+                        MaxWidth="1280">
 
-                <!-- 1. 页头与紧凑状态指示 (Area A: Header & Health) -->
-                <Grid x:Name="HeaderGrid" ColumnSpacing="16" RowSpacing="10">
+                <!-- 1. 紧凑页头与硬件状态胶囊 -->
+                <Grid x:Name="HeaderGrid" ColumnSpacing="16" RowSpacing="8">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
-                    <StackPanel Spacing="4" VerticalAlignment="Center">
+                    <StackPanel Spacing="2" VerticalAlignment="Center">
                         <TextBlock Text="磁轴设置" Style="{ThemeResource TitleTextBlockStyle}" />
-                        <TextBlock Text="配置按键触发、快速触发、动态按键与其他磁轴功能。"
-                                   TextWrapping="Wrap"
-                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <TextBlock Text="ROG Falchion Ace HFX · 68 键霍尔磁轴工作台"
+                                   Style="{ThemeResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   TextWrapping="Wrap" />
                     </StackPanel>
 
-                    <!-- 紧凑状态徽章：正常状态不占用大幅 InfoBar -->
                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                         <Border x:Name="HealthBadgeBorder"
                                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
@@ -38,7 +47,8 @@
                                 CornerRadius="6"
                                 Padding="10,6">
                             <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                <Ellipse x:Name="HealthStatusDot" Width="8" Height="8" Fill="#107C41" />
+                                <Ellipse x:Name="HealthStatusDot" Width="8" Height="8"
+                                         Fill="{ThemeResource SystemFillColorSuccessBrush}" />
                                 <TextBlock x:Name="HealthStatusText"
                                            Text="设备已连接 · 状态正常"
                                            Style="{ThemeResource CaptionTextBlockStyle}"
@@ -62,456 +72,925 @@
                     </StackPanel>
                 </Grid>
 
-                <!-- 故障与安全升级报警栏：仅在安全隔离、离线或严重故障时展开 -->
+                <!-- 仅在安全隔离、离线或故障时展开 -->
                 <InfoBar x:Name="HealthBar"
                          IsOpen="False"
                          Severity="Informational"
                          IsClosable="False" />
 
-                <!-- 2. 主体内容布局 (Area B: 键盘 + Area C1: 选中按键配置) -->
-                <Grid x:Name="ContentColumns" ColumnSpacing="20" RowSpacing="20" HorizontalAlignment="Stretch">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="0" />
-                    </Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
-
-                    <!-- 键盘区域 (Column 0, Row 0) -->
+                <!-- 2. 全宽交互式 68 键工作台 -->
+                <Border Style="{StaticResource WorkbenchCardStyle}">
                     <StackPanel x:Name="KeyboardPanel" Spacing="12">
-                        <Grid>
+
+                        <!-- 顶部工具栏：选择模式 (左) + 实时霍尔开关 (右) -->
+                        <Grid ColumnSpacing="12" RowSpacing="8">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                                <TextBlock Text="ROG Falchion Ace HFX · 68 键" Style="{ThemeResource SubtitleTextBlockStyle}" />
-                                <Border Background="{ThemeResource SubtleFillColorSecondaryBrush}" CornerRadius="4" Padding="6,2" VerticalAlignment="Center">
-                                    <TextBlock Text="68 键紧凑配列" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                </Border>
+
+                            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <Button x:Name="GlobalSelectButton"
+                                        Click="GlobalSelectButton_Click"
+                                        AutomationProperties.AutomationId="MagneticGlobalSelect"
+                                        AutomationProperties.Name="全部按键"
+                                        ToolTipService.ToolTip="切换至全键盘全局基线设置">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <FontIcon Glyph="&#xE756;" FontSize="13" />
+                                        <TextBlock Text="全局基线" />
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="MultiSelectButton"
+                                        Content="多选"
+                                        Click="MultiSelectButton_Click"
+                                        AutomationProperties.AutomationId="MagneticMultiSelect"
+                                        AutomationProperties.Name="多选按键" />
+                                <Button x:Name="ClearSelectionButton"
+                                        Content="清除选择"
+                                        Click="ClearSelectionButton_Click"
+                                        AutomationProperties.AutomationId="MagneticClearSelection"
+                                        Visibility="Collapsed" />
+                                <TextBlock Text="点击选单键 · Ctrl+点击多选"
+                                           Margin="4,0,0,0"
+                                           VerticalAlignment="Center"
+                                           Style="{ThemeResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
                             </StackPanel>
 
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <Border x:Name="HallTelemetryStatsBorder"
+                                        Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                        CornerRadius="4"
+                                        Padding="8,4"
+                                        VerticalAlignment="Center"
+                                        Visibility="Collapsed">
+                                    <TextBlock x:Name="HallTelemetryStatsText"
+                                               Text=""
+                                               Style="{ThemeResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                </Border>
+                                <ToggleButton x:Name="HallTelemetryToggle"
+                                              Click="HallTelemetryToggle_Click"
+                                              AutomationProperties.AutomationId="MagneticHallToggle"
+                                              AutomationProperties.Name="实时行程"
+                                              ToolTipService.ToolTip="开启实时霍尔行程采集并同步至 Wooting Analog SDK 共享内存">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <FontIcon Glyph="&#xE9D9;" FontSize="13" />
+                                        <TextBlock Text="实时行程" />
+                                    </StackPanel>
+                                </ToggleButton>
+                            </StackPanel>
                         </Grid>
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Button x:Name="GlobalSelectButton"
-                                    Click="GlobalSelectButton_Click"
-                                    AutomationProperties.AutomationId="MagneticGlobalSelect"
-                                    AutomationProperties.Name="全部按键"
-                                    ToolTipService.ToolTip="切换至全键盘基础磁轴设置">
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <FontIcon Glyph="&#xE756;" FontSize="13" />
-                                    <TextBlock Text="全部按键" />
-                                </StackPanel>
-                            </Button>
-                            <Button x:Name="MultiSelectButton" Content="多选" Click="MultiSelectButton_Click"
-                                    AutomationProperties.AutomationId="MagneticMultiSelect" AutomationProperties.Name="多选按键" />
-                            <Button x:Name="ClearSelectionButton" Content="清除选择" Click="ClearSelectionButton_Click"
-                                    AutomationProperties.AutomationId="MagneticClearSelection" Visibility="Collapsed" />
-                        </StackPanel>
-                        <TextBlock Text="点击按键进入单键设置；Ctrl+点击切换多选。多选模式中点击按键可切换选择。选择不会写入硬件。"
-                                   TextWrapping="Wrap"
-                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                   Style="{ThemeResource CaptionTextBlockStyle}" />
-                        <TextBlock Text="键帽参数单位：mm · 左上 触发点 · 右上 ↓RT按下 · 右下 ↑RT抬起 · 浅色数值为全局基线 · — 为未知或不适用"
-                                   TextWrapping="Wrap"
-                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                   Style="{ThemeResource CaptionTextBlockStyle}" />
 
-                        <!-- 键盘物理外壳容器 -->
-                        <Border x:Name="KeyboardHousing"
-                                Padding="16"
-                                CornerRadius="10"
-                                BorderThickness="1"
+                        <!-- 键盘物理数组托盘 -->
+                        <Border Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
                                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                Padding="12"
+                                HorizontalAlignment="Stretch">
                             <ScrollViewer x:Name="KeyboardViewport"
                                           HorizontalScrollBarVisibility="Auto"
                                           HorizontalScrollMode="Enabled"
                                           VerticalScrollBarVisibility="Disabled">
-                                <StackPanel x:Name="KeyboardRows" Spacing="5" HorizontalAlignment="Left" />
+                                <StackPanel x:Name="KeyboardRows" Spacing="5" HorizontalAlignment="Center" />
                             </ScrollViewer>
                         </Border>
 
-                    </StackPanel>
-
-                    <!-- 选中按键详细设置面板 (DetailsPanel: 宽屏下位于 Column 1, 窄屏下位于 Row 1) -->
-                    <StackPanel x:Name="DetailsPanel" Grid.Column="1" Spacing="14" MinWidth="340">
-
-                        <!-- 选中按键标识 Hero Header (Requirement 6) -->
+                        <!-- 选中按键摘要 + 实时行程栏 -->
                         <Border x:Name="SelectedKeyHeroCard"
-                                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                BorderThickness="1"
-                                CornerRadius="8"
-                                Padding="14,12">
-                            <Grid ColumnSpacing="14">
+                                BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                                BorderThickness="0,1,0,0"
+                                Padding="0,12,0,0">
+                            <Grid ColumnSpacing="16" RowSpacing="8">
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
 
-                                <!-- 键盘键帽可视化微缩卡片 -->
-                                <Border x:Name="KeyCapVisualBorder"
-                                        Width="44" Height="44"
-                                        CornerRadius="6"
-                                        Background="{ThemeResource AccentFillColorDefaultBrush}"
-                                        VerticalAlignment="Center"
-                                        HorizontalAlignment="Center">
-                                    <TextBlock x:Name="KeyCapVisualText"
-                                               Text="--"
-                                               FontSize="18"
-                                               FontWeight="Bold"
-                                               Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
-                                               HorizontalAlignment="Center"
-                                               VerticalAlignment="Center" />
-                                </Border>
-
-                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                    <StackPanel Orientation="Horizontal" Spacing="8">
-                                        <TextBlock x:Name="SelectedKeyHeroTitle"
-                                                   Text="未选择按键"
-                                                   Style="{ThemeResource SubtitleTextBlockStyle}" />
-                                        <Border x:Name="SelectedKeyTag"
-                                                Background="{ThemeResource SubtleFillColorSecondaryBrush}"
-                                                CornerRadius="4" Padding="6,2"
-                                                VerticalAlignment="Center">
-                                            <TextBlock x:Name="SelectedKeyTagText"
-                                                       Text="选中按键"
+                                <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                                    <Border x:Name="KeyCapVisualBorder"
+                                            Width="38" Height="38"
+                                            CornerRadius="6"
+                                            Background="{ThemeResource AccentFillColorDefaultBrush}"
+                                            VerticalAlignment="Center">
+                                        <TextBlock x:Name="KeyCapVisualText"
+                                                   Text="--"
+                                                   FontSize="16"
+                                                   FontWeight="Bold"
+                                                   Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center" />
+                                    </Border>
+                                    <StackPanel VerticalAlignment="Center" Spacing="2">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <TextBlock x:Name="SelectedKeyHeroTitle"
+                                                       Text="未选择按键"
+                                                       Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                                            <Border x:Name="SelectedKeyTag"
+                                                    Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                                    CornerRadius="4"
+                                                    Padding="6,1"
+                                                    VerticalAlignment="Center">
+                                                <TextBlock x:Name="SelectedKeyTagText"
+                                                           Text="未选择"
+                                                           Style="{ThemeResource CaptionTextBlockStyle}"
+                                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                            </Border>
+                                            <TextBlock x:Name="SelectedKeyDebugInfo"
+                                                       Text=""
+                                                       VerticalAlignment="Center"
                                                        Style="{ThemeResource CaptionTextBlockStyle}"
-                                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                        </Border>
+                                                       Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                                        </StackPanel>
+                                        <TextBlock x:Name="SelectedKeyHeroDesc"
+                                                   Text="在上方键盘中点击任意实体按键即可编辑或校验"
+                                                   Style="{ThemeResource CaptionTextBlockStyle}"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                     </StackPanel>
-                                    <TextBlock x:Name="SelectedKeyHeroDesc"
-                                               Text="请在左侧键盘中点击任意实体按键开始配置"
-                                               Style="{ThemeResource CaptionTextBlockStyle}"
-                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                 </StackPanel>
 
-                                <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right">
-                                    <TextBlock x:Name="SelectedKeyDebugInfo"
-                                               Text=""
+                                <StackPanel x:Name="SelectedKeyLiveDepthPanel"
+                                            Grid.Column="1"
+                                            Orientation="Horizontal"
+                                            Spacing="10"
+                                            VerticalAlignment="Center"
+                                            Visibility="Collapsed">
+                                    <ProgressBar x:Name="SelectedKeyDepthBar"
+                                                 Width="140"
+                                                 Minimum="0"
+                                                 Maximum="4"
+                                                 Value="0"
+                                                 VerticalAlignment="Center" />
+                                    <TextBlock x:Name="SelectedKeyDepthText"
+                                               Text="0.00 mm"
+                                               MinWidth="110"
                                                Style="{ThemeResource CaptionTextBlockStyle}"
-                                               Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                                               FontWeight="SemiBold"
+                                               Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                               VerticalAlignment="Center" />
                                 </StackPanel>
                             </Grid>
                         </Border>
 
-                        <!-- 全局设置基础值提示 (当处于全部按键模式时展开) -->
+                        <!-- 上下文通知与批量结果 -->
                         <InfoBar x:Name="GlobalContextNotice"
                                  IsOpen="False"
                                  Severity="Informational"
                                  IsClosable="False"
-                                 Message="全局设置作为基础值；存在逐键覆盖的按键仍使用对应逐键设置。" />
-                        <InfoBar x:Name="MultiContextNotice" IsOpen="False" Severity="Informational"
-                                 IsClosable="False" Message="批量设置会逐个安全应用；选择的按键较多时可能需要一些时间。" />
-                        <InfoBar x:Name="BatchResultBar" IsOpen="False" IsClosable="False"
-                                 Severity="Informational" Title="批量应用结果" />
-                        <TextBlock x:Name="BatchResultDetailsText" Visibility="Collapsed" TextWrapping="Wrap"
+                                 Message="全局基线作为未逐键覆盖按键的默认参考值。" />
+                        <InfoBar x:Name="MultiContextNotice"
+                                 IsOpen="False"
+                                 Severity="Informational"
+                                 IsClosable="False"
+                                 Message="批量设置会按按键顺序安全应用，请稍候。" />
+                        <InfoBar x:Name="BatchResultBar"
+                                 IsOpen="False"
+                                 IsClosable="False"
+                                 Severity="Informational"
+                                 Title="批量应用结果" />
+                        <TextBlock x:Name="BatchResultDetailsText"
+                                   Visibility="Collapsed"
+                                   TextWrapping="Wrap"
+                                   Style="{ThemeResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                    AutomationProperties.AutomationId="MagneticBatchResultDetails" />
-
-                        <!-- 单键/全局特性 1: 触发点 (Actuation) -->
-                        <controls:SettingsCard x:Name="ActuationCard"
-                                               Header="触发点"
-                                               Description="按键按下触发深度 (0.1–4.0 mm)；移动滑杆仅修改草稿"
-                                               IsClickEnabled="False">
-                            <controls:SettingsCard.HeaderIcon>
-                                <FontIcon Glyph="&#xE759;" />
-                            </controls:SettingsCard.HeaderIcon>
-                            <StackPanel Spacing="6" MinWidth="260">
-                                <Grid ColumnSpacing="8">
-                                    <TextBlock x:Name="ActuationDraftText" Text="草稿：未指定" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                    <TextBlock x:Name="ActuationValueDisplay" Text="2.0 mm" Style="{ThemeResource BodyStrongTextBlockStyle}" HorizontalAlignment="Right" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
-                                </Grid>
-                                <Slider x:Name="ActuationSlider"
-                                        ValueChanged="ActuationSlider_ValueChanged" AutomationProperties.Name="触发点草稿" />
-                                <ComboBox x:Name="BatchActuationPicker" Header="批量草稿：选择触发点"
-                                          PlaceholderText="选择批量触发点" Visibility="Collapsed"
-                                          SelectionChanged="BatchActuationPicker_SelectionChanged"
-                                          AutomationProperties.AutomationId="MagneticBatchActuationPicker" />
-                                <TextBlock x:Name="ActuationAppliedText" Text="本次会话：未知" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                <Button x:Name="ActuationApplyButton" Content="应用触发点" Click="ActuationApplyButton_Click"
-                                        AutomationProperties.AutomationId="MagneticActuationApply" HorizontalAlignment="Right" />
-                            </StackPanel>
-                        </controls:SettingsCard>
-
                     </StackPanel>
+                </Border>
 
-                    <Grid x:Name="CommonLowerGrid" Grid.Row="1" Grid.ColumnSpan="2" ColumnSpacing="16" RowSpacing="16">
-                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
-                        <StackPanel x:Name="RapidTriggerHost" Grid.Column="0">
-                        <!-- 单键/全局特性 2: 快速触发 (Rapid Trigger) -->
-                        <controls:SettingsCard x:Name="RapidTriggerCard"
-                                               Header="快速触发"
-                                               Description="根据移动方向即时重置与重新触发"
-                                               IsClickEnabled="False">
-                            <controls:SettingsCard.HeaderIcon>
-                                <FontIcon Glyph="&#xE945;" />
-                            </controls:SettingsCard.HeaderIcon>
-                            <StackPanel Spacing="6" MinWidth="260">
-                                <Border x:Name="RapidTriggerMasterBanner"
-                                        Background="{ThemeResource SubtleFillColorSecondaryBrush}"
-                                        CornerRadius="4" Padding="8,6" Margin="0,0,0,4">
-                                    <StackPanel Spacing="2">
-                                        <TextBlock x:Name="RapidTriggerMasterStatusText"
-                                                   Text="硬件总开关：未知"
+                <!-- 3. 原生 Win11 SelectorBar 分区选项卡 -->
+                <SelectorBar x:Name="MagneticSectionBar"
+                             SelectionChanged="MagneticSectionBar_SelectionChanged"
+                             HorizontalAlignment="Left">
+                    <SelectorBarItem x:Name="TabBasic" Text="触发与死区" Tag="basic" IsSelected="True">
+                        <SelectorBarItem.Icon>
+                            <FontIcon Glyph="&#xE759;" />
+                        </SelectorBarItem.Icon>
+                    </SelectorBarItem>
+                    <SelectorBarItem x:Name="TabHall" Text="闭环校验" Tag="hall">
+                        <SelectorBarItem.Icon>
+                            <FontIcon Glyph="&#xE9D9;" />
+                        </SelectorBarItem.Icon>
+                    </SelectorBarItem>
+                    <SelectorBarItem x:Name="TabAdvanced" Text="DKS 与急停" Tag="advanced">
+                        <SelectorBarItem.Icon>
+                            <FontIcon Glyph="&#xE7FC;" />
+                        </SelectorBarItem.Icon>
+                    </SelectorBarItem>
+                    <SelectorBarItem x:Name="TabUtility" Text="压感灯效与维护" Tag="utility">
+                        <SelectorBarItem.Icon>
+                            <FontIcon Glyph="&#xE713;" />
+                        </SelectorBarItem.Icon>
+                    </SelectorBarItem>
+                </SelectorBar>
+
+                <!-- 分区 A: 垂直霍尔行程可视化 + 触发点 / 快速触发 / 死区 -->
+                <StackPanel x:Name="SectionBasicPanel" Spacing="16" Visibility="Visible">
+                    <Grid x:Name="BasicWorkbenchGrid" ColumnSpacing="16" RowSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="252" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <!-- 左侧: 垂直 0.0–4.0mm 霍尔实时行程预览 -->
+                        <Border x:Name="HallSwitchVisualizerCard"
+                                Grid.Row="0" Grid.Column="0"
+                                Style="{StaticResource WorkbenchCardStyle}"
+                                VerticalAlignment="Top">
+                            <StackPanel Spacing="12">
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <FontIcon Glyph="&#xE9D9;" FontSize="15" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="1" Text="垂直行程预览" Style="{ThemeResource BodyStrongTextBlockStyle}" VerticalAlignment="Center" />
+                                    <Border Background="{ThemeResource SubtleFillColorSecondaryBrush}" CornerRadius="4" Padding="7,2" VerticalAlignment="Center">
+                                        <TextBlock x:Name="HallVizKeyBadgeText" Text="—" Style="{ThemeResource CaptionTextBlockStyle}" />
+                                    </Border>
+                                </Grid>
+
+                                <!-- 刻度尺 + 垂直轴体轨道 + 阈值浮动标签 -->
+                                <Grid Height="240" HorizontalAlignment="Center" ColumnSpacing="6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="34" />
+                                        <ColumnDefinition Width="92" />
+                                        <ColumnDefinition Width="72" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- 0.0–4.0mm 刻度 -->
+                                    <Canvas Grid.Column="0" Height="240" Width="34">
+                                        <TextBlock Canvas.Top="-6" Width="32" TextAlignment="Right" Text="0.0" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                                        <TextBlock Canvas.Top="53" Width="32" TextAlignment="Right" Text="1.0" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                                        <TextBlock Canvas.Top="113" Width="32" TextAlignment="Right" Text="2.0" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                                        <TextBlock Canvas.Top="173" Width="32" TextAlignment="Right" Text="3.0" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                                        <TextBlock Canvas.Top="226" Width="32" TextAlignment="Right" Text="4.0" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                                    </Canvas>
+
+                                    <!-- 垂直导轨容器 -->
+                                    <Border Grid.Column="1" Width="92" Height="240" CornerRadius="8"
+                                            Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                            BorderThickness="1">
+                                        <Canvas x:Name="HallVizTrackCanvas" Width="90" Height="238">
+                                            <Border Canvas.Top="59" Width="90" Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                                            <Border Canvas.Top="119" Width="90" Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                                            <Border Canvas.Top="178" Width="90" Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
+                                            <!-- 顶部与底部死区阴影 -->
+                                            <Border x:Name="HallVizTopDzBand" Canvas.Top="0" Width="90" Height="0"
+                                                    CornerRadius="6,6,0,0"
+                                                    Background="{ThemeResource SystemFillColorCautionBrush}"
+                                                    Opacity="0.22" Visibility="Collapsed" />
+                                            <Border x:Name="HallVizBottomDzBand" Canvas.Top="238" Width="90" Height="0"
+                                                    CornerRadius="0,0,6,6"
+                                                    Background="{ThemeResource SystemFillColorCautionBrush}"
+                                                    Opacity="0.22" Visibility="Collapsed" />
+
+                                            <!-- RT 灵敏度窗口提示带 -->
+                                            <Border x:Name="HallVizRtBand" Canvas.Top="0" Width="90" Height="0"
+                                                    Background="{ThemeResource AccentFillColorDefaultBrush}"
+                                                    Opacity="0.20" Visibility="Collapsed" />
+
+                                            <!-- 实时霍尔下压深度柱 -->
+                                            <Border x:Name="HallVizDepthFill" Canvas.Top="0" Width="90" Height="0"
+                                                    CornerRadius="6,6,2,2"
+                                                    Background="{ThemeResource AccentFillColorSecondaryBrush}"
+                                                    Opacity="0.60" />
+                                            <Border x:Name="HallVizDepthTip" Canvas.Top="0" Width="90" Height="3"
+                                                    Background="{ThemeResource AccentFillColorDefaultBrush}"
+                                                    Visibility="Collapsed" />
+
+                                            <!-- 触发点横线 -->
+                                            <Border x:Name="HallVizActuationLine" Canvas.Top="118" Width="90" Height="2"
+                                                    Background="{ThemeResource AccentFillColorDefaultBrush}" />
+                                        </Canvas>
+                                    </Border>
+
+                                    <!-- 右侧浮动数值标签 -->
+                                    <Canvas x:Name="HallVizLabelCanvas" Grid.Column="2" Width="72" Height="240">
+                                        <Border x:Name="HallVizActuationTag" Canvas.Top="108"
+                                                Background="{ThemeResource AccentFillColorDefaultBrush}"
+                                                CornerRadius="4" Padding="6,2">
+                                            <TextBlock x:Name="HallVizActuationTagText" Text="2.0 mm" FontSize="10" FontWeight="SemiBold"
+                                                       Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                                        </Border>
+                                        <Border x:Name="HallVizLiveTag" Canvas.Top="0"
+                                                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                                BorderBrush="{ThemeResource AccentFillColorDefaultBrush}"
+                                                BorderThickness="1" CornerRadius="4" Padding="5,1" Visibility="Collapsed">
+                                            <TextBlock x:Name="HallVizLiveTagText" Text="0.00" FontSize="10" FontWeight="SemiBold"
+                                                       Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                        </Border>
+                                    </Canvas>
+                                </Grid>
+
+                                <!-- 实时数值与快捷控制 -->
+                                <Border BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                                        BorderThickness="0,1,0,0" Padding="0,10,0,0">
+                                    <StackPanel Spacing="8">
+                                        <Grid>
+                                            <TextBlock x:Name="HallVizDepthReadout" Text="0.00 mm"
+                                                       Style="{ThemeResource SubtitleTextBlockStyle}"
+                                                       Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                                       VerticalAlignment="Center" />
+                                            <Border x:Name="HallVizStatePill" HorizontalAlignment="Right"
+                                                    Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                                    CornerRadius="4" Padding="7,2" VerticalAlignment="Center">
+                                                <TextBlock x:Name="HallVizStateText" Text="未开启"
+                                                           Style="{ThemeResource CaptionTextBlockStyle}"
+                                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                            </Border>
+                                        </Grid>
+                                        <TextBlock x:Name="HallVizRawReadout"
+                                                   Text="拖动滑杆可实时预览阈值与死区"
                                                    Style="{ThemeResource CaptionTextBlockStyle}"
-                                                   FontWeight="SemiBold"
-                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                        <TextBlock x:Name="RapidTriggerMasterExplanationText"
-                                                   Text="快速触发总开关由键盘物理开关控制。"
-                                                   Style="{ThemeResource CaptionTextBlockStyle}"
-                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                   TextWrapping="Wrap" />
+                                        <StackPanel Orientation="Horizontal" Spacing="10">
+                                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                                <Border Width="8" Height="3" VerticalAlignment="Center" Background="{ThemeResource AccentFillColorDefaultBrush}" />
+                                                <TextBlock Text="触发点" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                                            </StackPanel>
+                                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                                <Border Width="8" Height="8" CornerRadius="2" VerticalAlignment="Center" Background="{ThemeResource SystemFillColorCautionBrush}" Opacity="0.45" />
+                                                <TextBlock Text="死区" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                                            </StackPanel>
+                                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                                <Border Width="8" Height="8" CornerRadius="2" VerticalAlignment="Center" Background="{ThemeResource AccentFillColorDefaultBrush}" Opacity="0.35" />
+                                                <TextBlock Text="RT 窗口" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                                            </StackPanel>
+                                        </StackPanel>
+                                        <Button x:Name="HallVizToggleButton"
+                                                Content="开启实时行程"
+                                                Click="HallVizToggleButton_Click"
+                                                HorizontalAlignment="Stretch"
+                                                AutomationProperties.AutomationId="MagneticHallVizToggle" />
                                     </StackPanel>
                                 </Border>
-                                <ToggleSwitch x:Name="RapidTriggerToggle" OnContent="此键使用快速触发" OffContent="关闭"
-                                              Toggled="RapidTriggerToggle_Toggled" AutomationProperties.AutomationId="MagneticRapidTriggerToggle" />
-                                <ComboBox x:Name="BatchRtActionPicker" Header="批量操作" Visibility="Collapsed"
+                            </StackPanel>
+                        </Border>
+
+                        <!-- 右侧: 触发点 / 快速触发 / 死区设置卡 -->
+                        <Grid x:Name="CommonLowerGrid" Grid.Row="0" Grid.Column="1" ColumnSpacing="16" RowSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <!-- 卡片 1: 触发点 (Actuation) -->
+                        <Border x:Name="ActuationCard" Grid.Row="0" Grid.Column="0" Style="{StaticResource WorkbenchCardStyle}">
+                            <StackPanel Spacing="10">
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <FontIcon Glyph="&#xE759;" FontSize="16" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" VerticalAlignment="Center" />
+                                    <TextBlock x:Name="ActuationCardTitle" Grid.Column="1" Text="触发点" Style="{ThemeResource BodyStrongTextBlockStyle}" VerticalAlignment="Center" />
+                                    <TextBlock x:Name="ActuationValueDisplay" Grid.Column="2" Text="2.0 mm" Style="{ThemeResource SubtitleTextBlockStyle}" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" VerticalAlignment="Center" />
+                                </Grid>
+                                <TextBlock x:Name="ActuationCardDesc"
+                                           Text="按键按下触发深度 (0.1–4.0 mm)"
+                                           Style="{ThemeResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           TextWrapping="Wrap" />
+                                <Slider x:Name="ActuationSlider"
+                                        HorizontalAlignment="Stretch"
+                                        ValueChanged="ActuationSlider_ValueChanged"
+                                        AutomationProperties.Name="触发点草稿" />
+                                <ComboBox x:Name="BatchActuationPicker"
+                                          Header="批量目标触发点"
+                                          PlaceholderText="选择触发点"
+                                          Visibility="Collapsed"
+                                          HorizontalAlignment="Stretch"
+                                          SelectionChanged="BatchActuationPicker_SelectionChanged"
+                                          AutomationProperties.AutomationId="MagneticBatchActuationPicker" />
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Spacing="2" VerticalAlignment="Center">
+                                        <TextBlock x:Name="ActuationDraftText" Text="草稿：未指定" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        <TextBlock x:Name="ActuationAppliedText" Text="本次会话：未知" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorTertiaryBrush}" TextWrapping="Wrap" />
+                                    </StackPanel>
+                                    <Button x:Name="ActuationApplyButton" Grid.Column="1" Content="应用触发点"
+                                            Click="ActuationApplyButton_Click"
+                                            VerticalAlignment="Center"
+                                            AutomationProperties.AutomationId="MagneticActuationApply" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- 卡片 2: 快速触发 (Rapid Trigger) -->
+                        <Border x:Name="RapidTriggerCard" Grid.Row="0" Grid.Column="1" Style="{StaticResource WorkbenchCardStyle}">
+                            <StackPanel Spacing="10">
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <FontIcon Glyph="&#xE945;" FontSize="16" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" VerticalAlignment="Center" />
+                                    <TextBlock x:Name="RapidTriggerCardTitle" Grid.Column="1" Text="快速触发" Style="{ThemeResource BodyStrongTextBlockStyle}" VerticalAlignment="Center" />
+                                    <Border x:Name="RapidTriggerMasterBanner" Grid.Column="2"
+                                            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                            CornerRadius="4" Padding="8,3" VerticalAlignment="Center">
+                                        <TextBlock x:Name="RapidTriggerMasterStatusText"
+                                                   Text="硬件开关：未知"
+                                                   Style="{ThemeResource CaptionTextBlockStyle}"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    </Border>
+                                </Grid>
+                                <StackPanel Spacing="2">
+                                    <TextBlock x:Name="RapidTriggerCardDesc"
+                                               Text="根据移动方向即时重置与重新触发"
+                                               Style="{ThemeResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                               TextWrapping="Wrap" />
+                                    <TextBlock x:Name="RapidTriggerMasterExplanationText"
+                                               Text="快速触发总开关由键盘物理开关控制。"
+                                               Style="{ThemeResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                               TextWrapping="Wrap" />
+                                </StackPanel>
+
+                                <StackPanel Orientation="Horizontal" Spacing="16">
+                                    <ToggleSwitch x:Name="RapidTriggerToggle"
+                                                  OnContent="此键使用快速触发"
+                                                  OffContent="关闭"
+                                                  Toggled="RapidTriggerToggle_Toggled"
+                                                  AutomationProperties.AutomationId="MagneticRapidTriggerToggle" />
+                                    <ToggleSwitch x:Name="SeparateModeToggle"
+                                                  Header="灵敏度模式"
+                                                  OnContent="独立按下/抬起"
+                                                  OffContent="同步灵敏度"
+                                                  Toggled="SeparateModeToggle_Toggled"
+                                                  AutomationProperties.AutomationId="MagneticGlobalSeparateModeToggle"
+                                                  Visibility="Collapsed" />
+                                </StackPanel>
+
+                                <ComboBox x:Name="BatchRtActionPicker"
+                                          Header="批量操作"
+                                          Visibility="Collapsed"
+                                          HorizontalAlignment="Stretch"
                                           SelectionChanged="BatchRtActionPicker_SelectionChanged"
                                           AutomationProperties.AutomationId="MagneticBatchRtAction">
                                     <ComboBoxItem Content="不修改" Tag="Unchanged" />
                                     <ComboBoxItem Content="启用" Tag="Enable" />
                                     <ComboBoxItem Content="禁用" Tag="Disable" />
                                 </ComboBox>
-                                <ToggleSwitch x:Name="SeparateModeToggle" Header="灵敏度模式" OnContent="独立按下/抬起灵敏度" OffContent="同步按下/抬起灵敏度"
-                                              Toggled="SeparateModeToggle_Toggled" AutomationProperties.AutomationId="MagneticGlobalSeparateModeToggle"
-                                              Visibility="Collapsed" />
-                                <Grid ColumnSpacing="8">
-                                    <TextBlock x:Name="PressDraftText" Text="按下草稿：未指定" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                    <TextBlock x:Name="PressValueDisplay" Text="0.2 mm" Style="{ThemeResource BodyStrongTextBlockStyle}" HorizontalAlignment="Right" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
-                                </Grid>
-                                <Slider x:Name="PressSlider"
-                                        ValueChanged="PressSlider_ValueChanged" AutomationProperties.Name="RT 按下灵敏度草稿" />
-                                <ComboBox x:Name="BatchRtPressPicker" Header="批量按下灵敏度" PlaceholderText="选择按下值"
-                                          Visibility="Collapsed" SelectionChanged="BatchRtPressPicker_SelectionChanged" />
-                                <Grid ColumnSpacing="8">
-                                    <TextBlock x:Name="ReleaseDraftText" Text="抬起草稿：未指定" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                    <TextBlock x:Name="ReleaseValueDisplay" Text="0.2 mm" Style="{ThemeResource BodyStrongTextBlockStyle}" HorizontalAlignment="Right" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
-                                </Grid>
-                                <Slider x:Name="ReleaseSlider"
-                                        ValueChanged="ReleaseSlider_ValueChanged" AutomationProperties.Name="RT 抬起灵敏度草稿" />
-                                <ComboBox x:Name="BatchRtReleasePicker" Header="批量抬起灵敏度" PlaceholderText="选择抬起值"
-                                          Visibility="Collapsed" SelectionChanged="BatchRtReleasePicker_SelectionChanged" />
-                                <TextBlock x:Name="RapidTriggerAppliedText" Text="本次会话：未知" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                <TextBlock x:Name="RapidTriggerDisableWarningText" Text="当前无法确认已保存的全局灵敏度基线，暂无法安全禁用单键 RT。"
-                                           TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource SystemFillColorCautionBrush}" Visibility="Collapsed" />
-                                <Button x:Name="RapidTriggerApplyButton" Content="应用快速触发" Click="RapidTriggerApplyButton_Click"
-                                        AutomationProperties.AutomationId="MagneticRapidTriggerApply" HorizontalAlignment="Right" />
-                            </StackPanel>
-                        </controls:SettingsCard>
 
-                        </StackPanel>
-                        <StackPanel x:Name="DeadzoneHost" Grid.Column="1">
-                        <!-- 单键特性 3: 死区设置 (Deadzone) -->
-                        <controls:SettingsCard x:Name="DeadzoneCard"
-                                               Header="死区设置"
-                                               Description="消除微触误触与触底杂音 (0.0–0.5 mm)"
-                                               IsClickEnabled="False">
-                            <controls:SettingsCard.HeaderIcon>
-                                <FontIcon Glyph="&#xE755;" />
-                            </controls:SettingsCard.HeaderIcon>
-                            <StackPanel Spacing="6" MinWidth="260">
-                                <Grid ColumnSpacing="8">
-                                    <TextBlock x:Name="TopDraftText" Text="顶部草稿：未指定" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                    <TextBlock x:Name="TopValueDisplay" Text="0.0 mm" Style="{ThemeResource BodyStrongTextBlockStyle}" HorizontalAlignment="Right" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                <Grid ColumnSpacing="16" RowSpacing="6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Spacing="4">
+                                        <Grid>
+                                            <TextBlock x:Name="PressDraftText" Text="按下草稿：未指定" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
+                                            <TextBlock x:Name="PressValueDisplay" Text="0.2 mm" Style="{ThemeResource BodyStrongTextBlockStyle}" HorizontalAlignment="Right" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                        </Grid>
+                                        <Slider x:Name="PressSlider" ValueChanged="PressSlider_ValueChanged" AutomationProperties.Name="RT 按下灵敏度草稿" />
+                                        <ComboBox x:Name="BatchRtPressPicker" Header="批量按下灵敏度" PlaceholderText="选择按下值" Visibility="Collapsed" HorizontalAlignment="Stretch" SelectionChanged="BatchRtPressPicker_SelectionChanged" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" Spacing="4">
+                                        <Grid>
+                                            <TextBlock x:Name="ReleaseDraftText" Text="抬起草稿：未指定" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
+                                            <TextBlock x:Name="ReleaseValueDisplay" Text="0.2 mm" Style="{ThemeResource BodyStrongTextBlockStyle}" HorizontalAlignment="Right" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                        </Grid>
+                                        <Slider x:Name="ReleaseSlider" ValueChanged="ReleaseSlider_ValueChanged" AutomationProperties.Name="RT 抬起灵敏度草稿" />
+                                        <ComboBox x:Name="BatchRtReleasePicker" Header="批量抬起灵敏度" PlaceholderText="选择抬起值" Visibility="Collapsed" HorizontalAlignment="Stretch" SelectionChanged="BatchRtReleasePicker_SelectionChanged" />
+                                    </StackPanel>
                                 </Grid>
-                                <Slider x:Name="TopSlider"
-                                        ValueChanged="TopSlider_ValueChanged" AutomationProperties.Name="顶部死区草稿" />
-                                <ComboBox x:Name="BatchTopPicker" Header="批量顶部死区" PlaceholderText="选择顶部值"
-                                          Visibility="Collapsed" SelectionChanged="BatchTopPicker_SelectionChanged" />
-                                <Grid ColumnSpacing="8">
-                                    <TextBlock x:Name="BottomDraftText" Text="底部草稿：未指定" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                    <TextBlock x:Name="BottomValueDisplay" Text="0.0 mm" Style="{ThemeResource BodyStrongTextBlockStyle}" HorizontalAlignment="Right" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
-                                </Grid>
-                                <Slider x:Name="BottomSlider"
-                                        ValueChanged="BottomSlider_ValueChanged" AutomationProperties.Name="底部死区草稿" />
-                                <ComboBox x:Name="BatchBottomPicker" Header="批量底部死区" PlaceholderText="选择底部值"
-                                          Visibility="Collapsed" SelectionChanged="BatchBottomPicker_SelectionChanged" />
-                                <TextBlock x:Name="BatchDeadzoneNote" Text="将为每个所选按键创建或更新逐键死区覆盖。"
-                                           Visibility="Collapsed" TextWrapping="Wrap" />
-                                <TextBlock x:Name="DeadzoneAppliedText" Text="本次会话：未知" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                <Button x:Name="DeadzoneApplyButton" Content="应用单键死区" Click="DeadzoneApplyButton_Click"
-                                        AutomationProperties.AutomationId="MagneticDeadzoneApply" HorizontalAlignment="Right" />
-                            </StackPanel>
-                        </controls:SettingsCard>
 
-                        </StackPanel>
-                    </Grid>
-
-                    <!-- 3. 全局功能区域 (Area C2: Global Features) 跨全宽独立呈现 -->
-                    <StackPanel x:Name="GlobalFeaturesPanel" Grid.Row="2" Grid.ColumnSpan="2" Spacing="14">
-                        <StackPanel Spacing="4" Margin="0,10,0,4">
-                            <TextBlock Text="全局功能与高级设置" Style="{ThemeResource SubtitleTextBlockStyle}" />
-                            <TextBlock Text="适用于键盘全局或按键对的功能配置；不影响单键选择。"
-                                       Style="{ThemeResource CaptionTextBlockStyle}"
-                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        </StackPanel>
-
-                        <StackPanel x:Name="DksSection" Spacing="10" Visibility="Collapsed">
-                            <TextBlock Text="动态按键（DKS）" Style="{ThemeResource SubtitleTextBlockStyle}" />
-                            <TextBlock x:Name="DksStatusText" Text="当前 DKS 状态未知"
-                                       AutomationProperties.AutomationId="MagneticDksStatus"
-                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <Button x:Name="DksConfigureButton" Content="配置 DKS" Click="DksConfigureButton_Click"
-                                        AutomationProperties.AutomationId="MagneticDksConfigure" />
-                                <Button x:Name="DksStandardButton" Content="恢复标准按键行为" Click="DksStandardButton_Click"
-                                        AutomationProperties.AutomationId="MagneticDksStandard" />
-                            </StackPanel>
-                        <!-- 单键特性 4: 动态按键（DKS） -->
-                        <controls:SettingsExpander x:Name="DksExpander"
-                                                   Header="动态按键（DKS）"
-                                                   Description="单次按压深度分段触发最多 4 组自定义按键动作"
-                                                   IsExpanded="False">
-                            <controls:SettingsExpander.HeaderIcon>
-                                <FontIcon Glyph="&#xE765;" />
-                            </controls:SettingsExpander.HeaderIcon>
-                            <StackPanel Spacing="10" MinWidth="260">
-                                <TextBlock Text="行程阶段阈值" Style="{ThemeResource BodyStrongTextBlockStyle}" />
-                                <Grid ColumnSpacing="8">
-                                    <TextBlock Text="起始位置 (0.1–4.0 mm)" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                    <TextBlock x:Name="DksStartValueDisplay" Text="1.0 mm" Style="{ThemeResource BodyStrongTextBlockStyle}" HorizontalAlignment="Right" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
-                                </Grid>
-                                <Slider x:Name="DksStartSlider"
-                                        ValueChanged="DksStartSlider_ValueChanged" AutomationProperties.AutomationId="MagneticDksStart" />
-                                <Grid ColumnSpacing="8">
-                                    <TextBlock Text="结束位置 (不得小于起点)" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                    <TextBlock x:Name="DksEndValueDisplay" Text="3.0 mm" Style="{ThemeResource BodyStrongTextBlockStyle}" HorizontalAlignment="Right" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
-                                </Grid>
-                                <Slider x:Name="DksEndSlider"
-                                        ValueChanged="DksEndSlider_ValueChanged" AutomationProperties.AutomationId="MagneticDksEnd" />
-                                <TextBlock x:Name="DksDraftText" Text="起止行程：未指定" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-
-                                <TextBlock Text="四段动作槽" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,4,0,0" />
-                                <Grid x:Name="DksSlotsHost" ColumnSpacing="10" RowSpacing="10" />
-
-                                <TextBlock x:Name="DksAppliedText" Text="当前来源：未知" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-                                    <Button x:Name="DksApplyButton" Content="应用 DKS" Click="DksApplyButton_Click"
-                                            AutomationProperties.AutomationId="MagneticDksApply" />
-                                </StackPanel>
-                            </StackPanel>
-                        </controls:SettingsExpander>
-                        </StackPanel>
-                        <!-- 全局 1: SpeedTap 快速急停 -->
-                        <controls:SettingsCard x:Name="SpeedTapCard"
-                                               Header="SpeedTap 快速急停"
-                                               Description="优先判定后按下的方向键，实现射击游戏中快速急停切换"
-                                               IsClickEnabled="False">
-                            <controls:SettingsCard.HeaderIcon>
-                                <FontIcon Glyph="&#xE7FC;" />
-                            </controls:SettingsCard.HeaderIcon>
-                            <StackPanel Spacing="8" MinWidth="300">
-                                <TextBlock x:Name="SpeedTapStateText" Text="键对与 Master 来源：未知" TextWrapping="Wrap"
-                                           Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                <StackPanel Orientation="Horizontal" Spacing="10">
-                                    <ComboBox x:Name="SpeedTapKey1" Header="键 1" MinWidth="130" SelectionChanged="SpeedTapPair_SelectionChanged"
-                                              AutomationProperties.AutomationId="MagneticSpeedTapKey1" />
-                                    <ComboBox x:Name="SpeedTapKey2" Header="键 2" MinWidth="130" SelectionChanged="SpeedTapPair_SelectionChanged"
-                                              AutomationProperties.AutomationId="MagneticSpeedTapKey2" />
-                                </StackPanel>
-                                <TextBlock x:Name="SpeedTapUnknownBaselineText"
-                                           Text="当前无法确认已保存的键对配置，因此暂不允许新增键对。"
-                                           Foreground="{ThemeResource SystemFillColorCautionBrush}"
-                                           Style="{ThemeResource CaptionTextBlockStyle}"
+                                <TextBlock x:Name="RapidTriggerDisableWarningText"
+                                           Text="当前无法确认已保存的全局灵敏度基线，暂无法安全禁用单键 RT。"
                                            TextWrapping="Wrap"
+                                           Style="{ThemeResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource SystemFillColorCautionBrush}"
                                            Visibility="Collapsed" />
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <Button x:Name="SpeedTapPairOnButton" Content="启用键对" Click="SpeedTapPairOnButton_Click"
-                                            AutomationProperties.AutomationId="MagneticSpeedTapPairOn" />
-                                    <Button x:Name="SpeedTapPairOffButton" Content="定向禁用键对" Click="SpeedTapPairOffButton_Click"
-                                            AutomationProperties.AutomationId="MagneticSpeedTapPairOff" />
-                                </StackPanel>
-                                <Grid ColumnSpacing="12" Margin="0,4,0,0">
+
+                                <Grid ColumnSpacing="8">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <ToggleSwitch x:Name="SpeedTapMasterToggle"
-                                                  OnContent="总开关：开启" OffContent="总开关：关闭"
-                                                  Toggled="SpeedTapMasterToggle_Toggled"
-                                                  AutomationProperties.AutomationId="MagneticSpeedTapMaster" />
-                                    <Button x:Name="SpeedTapMasterApplyButton" Grid.Column="1" Content="应用总开关"
-                                            Click="SpeedTapMasterApplyButton_Click"
-                                            AutomationProperties.AutomationId="MagneticSpeedTapMasterApply"
-                                            VerticalAlignment="Center" />
+                                    <TextBlock x:Name="RapidTriggerAppliedText"
+                                               Text="本次会话：未知"
+                                               TextWrapping="Wrap"
+                                               VerticalAlignment="Center"
+                                               Style="{ThemeResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                                    <Button x:Name="RapidTriggerApplyButton" Grid.Column="1" Content="应用快速触发"
+                                            Click="RapidTriggerApplyButton_Click"
+                                            VerticalAlignment="Center"
+                                            AutomationProperties.AutomationId="MagneticRapidTriggerApply" />
                                 </Grid>
-                                <Button x:Name="SpeedTapProfileResetButton" Content="恢复活动配置键对基线…"
-                                        Click="SpeedTapProfileResetButton_Click"
-                                        AutomationProperties.AutomationId="MagneticSpeedTapProfileReset" />
                             </StackPanel>
-                        </controls:SettingsCard>
+                        </Border>
 
-                        <!-- 全局 2: 磁轴按压灯效 -->
-                        <controls:SettingsCard x:Name="PressLightingCard"
-                                               Header="硬件压感灯效（实验性 / 有前置条件）"
-                                               Description="由键盘固件根据磁轴行程渲染；仅验证固件恒亮模式"
-                                               IsClickEnabled="False">
-                            <controls:SettingsCard.HeaderIcon>
-                                <FontIcon Glyph="&#xE790;" />
-                            </controls:SettingsCard.HeaderIcon>
-                            <StackPanel Spacing="8" MinWidth="300" MaxWidth="360">
-                                <TextBlock x:Name="AnalogDescriptionText"
-                                           TextWrapping="Wrap"
-                                           AutomationProperties.AutomationId="MagneticAnalogLimitation" />
-                                <TextBlock x:Name="AnalogBlockedReasonText"
-                                           TextWrapping="Wrap"
+                        <!-- 卡片 3: 死区设置 (宽屏跨双列) -->
+                        <Border x:Name="DeadzoneCard" Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Style="{StaticResource WorkbenchCardStyle}">
+                            <StackPanel Spacing="10">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE755;" FontSize="16" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" VerticalAlignment="Center" />
+                                    <TextBlock x:Name="DeadzoneCardTitle" Text="死区设置" Style="{ThemeResource BodyStrongTextBlockStyle}" VerticalAlignment="Center" />
+                                    <TextBlock x:Name="DeadzoneCardDesc"
+                                               Text="消除微触误触与触底杂音 (0.0–0.5 mm)"
+                                               Style="{ThemeResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                               VerticalAlignment="Center" />
+                                </StackPanel>
+
+                                <Grid x:Name="DeadzoneSlidersGrid" ColumnSpacing="20" RowSpacing="10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+
+                                    <StackPanel Grid.Row="0" Grid.Column="0" Spacing="4">
+                                        <Grid>
+                                            <TextBlock x:Name="TopDraftText" Text="顶部草稿：未指定" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                            <TextBlock x:Name="TopValueDisplay" Text="0.0 mm" Style="{ThemeResource BodyStrongTextBlockStyle}" HorizontalAlignment="Right" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                        </Grid>
+                                        <Slider x:Name="TopSlider" ValueChanged="TopSlider_ValueChanged" AutomationProperties.Name="顶部死区草稿" />
+                                        <ComboBox x:Name="BatchTopPicker" Header="批量顶部死区" PlaceholderText="选择顶部值" Visibility="Collapsed" HorizontalAlignment="Stretch" SelectionChanged="BatchTopPicker_SelectionChanged" />
+                                    </StackPanel>
+
+                                    <StackPanel x:Name="BottomDzCol" Grid.Row="0" Grid.Column="1" Spacing="4">
+                                        <Grid>
+                                            <TextBlock x:Name="BottomDraftText" Text="底部草稿：未指定" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                            <TextBlock x:Name="BottomValueDisplay" Text="0.0 mm" Style="{ThemeResource BodyStrongTextBlockStyle}" HorizontalAlignment="Right" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                        </Grid>
+                                        <Slider x:Name="BottomSlider" ValueChanged="BottomSlider_ValueChanged" AutomationProperties.Name="底部死区草稿" />
+                                        <ComboBox x:Name="BatchBottomPicker" Header="批量底部死区" PlaceholderText="选择底部值" Visibility="Collapsed" HorizontalAlignment="Stretch" SelectionChanged="BatchBottomPicker_SelectionChanged" />
+                                    </StackPanel>
+                                </Grid>
+
+                                <TextBlock x:Name="BatchDeadzoneNote"
+                                           Text="将为每个所选按键创建或更新逐键死区覆盖。"
                                            Style="{ThemeResource CaptionTextBlockStyle}"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                           AutomationProperties.AutomationId="MagneticAnalogBlockedReason" />
-                                <TextBlock x:Name="AnalogStateText" Text="当前来源：未知"
-                                           Style="{ThemeResource CaptionTextBlockStyle}"
-                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                <Grid ColumnSpacing="12">
+                                           Visibility="Collapsed"
+                                           TextWrapping="Wrap" />
+
+                                <Grid ColumnSpacing="8">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <ToggleSwitch x:Name="AnalogToggle"
-                                                  OnContent="硬件压感：开启" OffContent="硬件压感：关闭"
-                                                  Toggled="AnalogToggle_Toggled"
-                                                  AutomationProperties.AutomationId="MagneticAnalogEffect" />
-                                    <Button x:Name="AnalogApplyButton" Grid.Column="1" Content="应用硬件压感"
-                                            Click="AnalogApplyButton_Click"
-                                            AutomationProperties.AutomationId="MagneticAnalogApply"
-                                            VerticalAlignment="Center" />
+                                    <TextBlock x:Name="DeadzoneAppliedText"
+                                               Text="本次会话：未知"
+                                               TextWrapping="Wrap"
+                                               VerticalAlignment="Center"
+                                               Style="{ThemeResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                                    <Button x:Name="DeadzoneApplyButton" Grid.Column="1" Content="应用单键死区"
+                                            Click="DeadzoneApplyButton_Click"
+                                            VerticalAlignment="Center"
+                                            AutomationProperties.AutomationId="MagneticDeadzoneApply" />
                                 </Grid>
                             </StackPanel>
-                        </controls:SettingsCard>
+                        </Border>
+                    </Grid>
+                    </Grid>
+                </StackPanel>
 
-                        <!-- 全局 3: 高级设置与全键死区清除 -->
-                        <controls:SettingsExpander Header="高级设置"
-                                                   Description="包含键盘全局重置与破坏性操作"
-                                                   IsExpanded="False">
-                            <controls:SettingsExpander.HeaderIcon>
-                                <FontIcon Glyph="&#xE713;" />
-                            </controls:SettingsExpander.HeaderIcon>
-                            <controls:SettingsExpander.Items>
-                                <controls:SettingsCard Header="清除所有逐键死区设置"
-                                                       Description="所有按键将重新继承当前全局顶部/底部死区设置；不限于所选单键。"
-                                                       IsClickEnabled="False">
-                                    <StackPanel Spacing="6">
-                                        <TextBlock x:Name="GlobalDeadzoneText" Text="活动配置全局值：未知"
-                                                   Style="{ThemeResource CaptionTextBlockStyle}"
-                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                        <Button x:Name="ResetAllDeadzoneButton"
-                                                Content="清除所有逐键死区设置…"
-                                                Click="ResetAllDeadzoneButton_Click"
-                                                AutomationProperties.AutomationId="MagneticDeadzoneResetAll"
-                                                Style="{ThemeResource AccentButtonStyle}"
-                                                Background="{ThemeResource SystemFillColorCriticalBrush}"
-                                                Foreground="White" />
+                <!-- 分区 B: 霍尔闭环校验 · Wooting Analog SDK 桥接 -->
+                <StackPanel x:Name="SectionHallPanel" Spacing="16" Visibility="Collapsed">
+                    <Grid x:Name="HallSectionGrid" ColumnSpacing="16" RowSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="2*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <!-- 闭环校验工作卡 -->
+                        <Border x:Name="HallVerifyCard" Grid.Row="0" Grid.Column="0" Style="{StaticResource WorkbenchCardStyle}">
+                            <StackPanel Spacing="12">
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <FontIcon Glyph="&#xE9D9;" FontSize="16" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="1" Text="单键霍尔闭环校验" Style="{ThemeResource BodyStrongTextBlockStyle}" VerticalAlignment="Center" />
+                                    <Border Background="{ThemeResource SubtleFillColorSecondaryBrush}" CornerRadius="4" Padding="8,3" VerticalAlignment="Center">
+                                        <TextBlock x:Name="HallVerifyTargetText" Text="当前选中：未选择" Style="{ThemeResource CaptionTextBlockStyle}" />
+                                    </Border>
+                                </Grid>
+
+                                <TextBlock Text="结合 0xFF00 霍尔行程流与 0xFFC0 固件触发沿位图，实测验证触发点、Rapid Trigger 与死区实际偏差。"
+                                           Style="{ThemeResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           TextWrapping="Wrap" />
+
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <ComboBox x:Name="HallVerifyModeCombo"
+                                              Header="校验模式"
+                                              MinWidth="170"
+                                              SelectedIndex="0"
+                                              SelectionChanged="HallVerifyModeCombo_SelectionChanged"
+                                              AutomationProperties.AutomationId="MagneticHallVerifyMode">
+                                        <ComboBoxItem Content="触发点校验" Tag="actuation" />
+                                        <ComboBoxItem Content="RT 灵敏度校验" Tag="rt" />
+                                        <ComboBoxItem Content="死区校验" Tag="deadzone" />
+                                    </ComboBox>
+                                    <TextBox x:Name="HallVerifyParamsBox"
+                                             Grid.Column="1"
+                                             Header="目标触发点列表 (mm，逗号分隔)"
+                                             Text="0.8, 2.0, 3.2"
+                                             AutomationProperties.AutomationId="MagneticHallVerifyParams" />
+                                </Grid>
+
+                                <CheckBox x:Name="HallUnlockFaCheckBox"
+                                          Content="兼容未打补丁原厂固件 (FA 00 / FA 10)"
+                                          AutomationProperties.AutomationId="MagneticHallUnlockFa" />
+
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Button x:Name="HallVerifyStartButton"
+                                            Content="开始校验当前选中按键"
+                                            Click="HallVerifyStartButton_Click"
+                                            Style="{ThemeResource AccentButtonStyle}"
+                                            AutomationProperties.AutomationId="MagneticHallVerifyStart" />
+                                    <Button x:Name="HallVerifyStopButton"
+                                            Content="停止校验"
+                                            Click="HallVerifyStopButton_Click"
+                                            IsEnabled="False"
+                                            AutomationProperties.AutomationId="MagneticHallVerifyStop" />
+                                </StackPanel>
+
+                                <InfoBar x:Name="HallVerifyGuideBar"
+                                         IsOpen="False"
+                                         IsClosable="False"
+                                         Severity="Informational" />
+
+                                <StackPanel x:Name="HallVerifyLivePanel" Spacing="4" Visibility="Collapsed">
+                                    <ProgressBar x:Name="HallVerifyDepthBar" Minimum="0" Maximum="4" Value="0" />
+                                    <TextBlock x:Name="HallVerifyLiveText"
+                                               Text="当前深度 0.00 mm · 数字触发：未触发"
+                                               Style="{ThemeResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                </StackPanel>
+
+                                <StackPanel x:Name="HallVerifyResultsPanel" Spacing="4" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- 插件与 Wooting 桥接入口卡 -->
+                        <Border x:Name="WootingBridgeCard" Grid.Row="0" Grid.Column="1" Style="{StaticResource WorkbenchCardStyle}">
+                            <StackPanel Spacing="10">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xEA86;" FontSize="16" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" VerticalAlignment="Center" />
+                                    <TextBlock Text="扩展与 Wooting 桥接" Style="{ThemeResource BodyStrongTextBlockStyle}" VerticalAlignment="Center" />
+                                </StackPanel>
+                                <TextBlock Text="扩展与 Wooting 桥接已整合至「插件」页，可在此统一查看原生插件（含压感灯效）与 Wooting Analog SDK 共享内存桥接状态。"
+                                           Style="{ThemeResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           TextWrapping="Wrap" />
+                                <Button Content="打开插件页"
+                                        Click="OpenPluginsPageButton_Click"
+                                        Style="{ThemeResource AccentButtonStyle}"
+                                        AutomationProperties.AutomationId="MagneticOpenPluginsPage" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </StackPanel>
+
+                <!-- 分区 C: DKS 与 SpeedTap 急停 -->
+                <StackPanel x:Name="SectionAdvancedPanel" Spacing="16" Visibility="Collapsed">
+                    <!-- 单键 DKS -->
+                    <Border x:Name="DksSection" Style="{StaticResource WorkbenchCardStyle}" Visibility="Collapsed">
+                        <StackPanel Spacing="12">
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <FontIcon Glyph="&#xE765;" FontSize="16" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" VerticalAlignment="Center" />
+                                <StackPanel Grid.Column="1" Spacing="2">
+                                    <TextBlock Text="动态按键（DKS）" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                                    <TextBlock x:Name="DksStatusText"
+                                               Text="当前 DKS 状态未知"
+                                               Style="{ThemeResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                               AutomationProperties.AutomationId="MagneticDksStatus" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <Button x:Name="DksConfigureButton" Content="展开编辑器" Click="DksConfigureButton_Click"
+                                            AutomationProperties.AutomationId="MagneticDksConfigure" />
+                                    <Button x:Name="DksStandardButton" Content="恢复标准行为" Click="DksStandardButton_Click"
+                                            AutomationProperties.AutomationId="MagneticDksStandard" />
+                                </StackPanel>
+                            </Grid>
+
+                            <StackPanel x:Name="DksEditorBody" Spacing="12" Visibility="Collapsed">
+                                <Grid ColumnSpacing="16">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Spacing="4">
+                                        <Grid>
+                                            <TextBlock Text="起始位置 (0.1–4.0 mm)" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                            <TextBlock x:Name="DksStartValueDisplay" Text="1.0 mm" Style="{ThemeResource BodyStrongTextBlockStyle}" HorizontalAlignment="Right" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                        </Grid>
+                                        <Slider x:Name="DksStartSlider" ValueChanged="DksStartSlider_ValueChanged" AutomationProperties.AutomationId="MagneticDksStart" />
                                     </StackPanel>
-                                </controls:SettingsCard>
-                            </controls:SettingsExpander.Items>
-                        </controls:SettingsExpander>
-                    </StackPanel>
-                </Grid>
+                                    <StackPanel Grid.Column="1" Spacing="4">
+                                        <Grid>
+                                            <TextBlock Text="结束位置 (不得小于起点)" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                            <TextBlock x:Name="DksEndValueDisplay" Text="3.0 mm" Style="{ThemeResource BodyStrongTextBlockStyle}" HorizontalAlignment="Right" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                        </Grid>
+                                        <Slider x:Name="DksEndSlider" ValueChanged="DksEndSlider_ValueChanged" AutomationProperties.AutomationId="MagneticDksEnd" />
+                                    </StackPanel>
+                                </Grid>
+
+                                <Grid x:Name="DksSlotsHost" ColumnSpacing="10" RowSpacing="10" />
+
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Spacing="2" VerticalAlignment="Center">
+                                        <TextBlock x:Name="DksDraftText" Text="起止行程：未指定" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        <TextBlock x:Name="DksAppliedText" Text="当前来源：未知" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                                    </StackPanel>
+                                    <Button x:Name="DksApplyButton" Grid.Column="1" Content="应用 DKS"
+                                            Click="DksApplyButton_Click"
+                                            AutomationProperties.AutomationId="MagneticDksApply" />
+                                </Grid>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- SpeedTap 快速急停 -->
+                    <Border x:Name="SpeedTapCard" Style="{StaticResource WorkbenchCardStyle}">
+                        <StackPanel Spacing="12">
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <FontIcon Glyph="&#xE7FC;" FontSize="16" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" VerticalAlignment="Center" />
+                                <StackPanel Grid.Column="1" Spacing="2">
+                                    <TextBlock Text="SpeedTap 快速急停" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                                    <TextBlock Text="优先判定后按下的方向键（如 A / D），实现 FPS 快速急停切换"
+                                               Style="{ThemeResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                               TextWrapping="Wrap" />
+                                </StackPanel>
+                                <Button x:Name="SpeedTapProfileResetButton" Grid.Column="2"
+                                        Content="恢复配置基线…"
+                                        Click="SpeedTapProfileResetButton_Click"
+                                        VerticalAlignment="Center"
+                                        AutomationProperties.AutomationId="MagneticSpeedTapProfileReset" />
+                            </Grid>
+
+                            <TextBlock x:Name="SpeedTapStateText"
+                                       Text="键对与 Master 来源：未知"
+                                       TextWrapping="Wrap"
+                                       Style="{ThemeResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+
+                            <TextBlock x:Name="SpeedTapUnknownBaselineText"
+                                       Text="当前无法确认已保存的键对配置，因此暂不允许新增键对。"
+                                       Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                       Style="{ThemeResource CaptionTextBlockStyle}"
+                                       TextWrapping="Wrap"
+                                       Visibility="Collapsed" />
+
+                            <Grid ColumnSpacing="16" RowSpacing="10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Bottom">
+                                    <ComboBox x:Name="SpeedTapKey1" Header="键 1" MinWidth="130"
+                                              SelectionChanged="SpeedTapPair_SelectionChanged"
+                                              AutomationProperties.AutomationId="MagneticSpeedTapKey1" />
+                                    <ComboBox x:Name="SpeedTapKey2" Header="键 2" MinWidth="130"
+                                              SelectionChanged="SpeedTapPair_SelectionChanged"
+                                              AutomationProperties.AutomationId="MagneticSpeedTapKey2" />
+                                    <Button x:Name="SpeedTapPairOnButton" Content="启用键对" VerticalAlignment="Bottom"
+                                            Click="SpeedTapPairOnButton_Click"
+                                            AutomationProperties.AutomationId="MagneticSpeedTapPairOn" />
+                                    <Button x:Name="SpeedTapPairOffButton" Content="定向禁用键对" VerticalAlignment="Bottom"
+                                            Click="SpeedTapPairOffButton_Click"
+                                            AutomationProperties.AutomationId="MagneticSpeedTapPairOff" />
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Bottom">
+                                    <ToggleSwitch x:Name="SpeedTapMasterToggle"
+                                                  OnContent="总开关：开启"
+                                                  OffContent="总开关：关闭"
+                                                  Toggled="SpeedTapMasterToggle_Toggled"
+                                                  AutomationProperties.AutomationId="MagneticSpeedTapMaster" />
+                                    <Button x:Name="SpeedTapMasterApplyButton"
+                                            Content="应用总开关"
+                                            Click="SpeedTapMasterApplyButton_Click"
+                                            VerticalAlignment="Center"
+                                            AutomationProperties.AutomationId="MagneticSpeedTapMasterApply" />
+                                </StackPanel>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- 分区 D: 硬件压感灯效与重置维护 -->
+                <StackPanel x:Name="SectionUtilityPanel" Spacing="16" Visibility="Collapsed">
+                    <Border x:Name="PressLightingCard" Style="{StaticResource WorkbenchCardStyle}">
+                        <StackPanel Spacing="10">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE790;" FontSize="16" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" VerticalAlignment="Center" />
+                                <TextBlock Text="硬件压感灯效（实验性）" Style="{ThemeResource BodyStrongTextBlockStyle}" VerticalAlignment="Center" />
+                            </StackPanel>
+                            <TextBlock x:Name="AnalogDescriptionText"
+                                       TextWrapping="Wrap"
+                                       Style="{ThemeResource BodyTextBlockStyle}"
+                                       AutomationProperties.AutomationId="MagneticAnalogLimitation" />
+                            <TextBlock x:Name="AnalogBlockedReasonText"
+                                       TextWrapping="Wrap"
+                                       Style="{ThemeResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       AutomationProperties.AutomationId="MagneticAnalogBlockedReason" />
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="2" VerticalAlignment="Center">
+                                    <TextBlock x:Name="AnalogStateText" Text="当前来源：未知"
+                                               Style="{ThemeResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                                    <ToggleSwitch x:Name="AnalogToggle"
+                                                  OnContent="硬件压感：开启"
+                                                  OffContent="硬件压感：关闭"
+                                                  Toggled="AnalogToggle_Toggled"
+                                                  AutomationProperties.AutomationId="MagneticAnalogEffect" />
+                                </StackPanel>
+                                <Button x:Name="AnalogApplyButton" Grid.Column="1" Content="应用硬件压感"
+                                        Click="AnalogApplyButton_Click"
+                                        VerticalAlignment="Center"
+                                        AutomationProperties.AutomationId="MagneticAnalogApply" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource WorkbenchCardStyle}">
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="4" VerticalAlignment="Center">
+                                <TextBlock Text="清除所有逐键死区设置" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                                <TextBlock Text="所有按键将重新继承当前全局顶部/底部死区设置（破坏性全局重置）。"
+                                           Style="{ThemeResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           TextWrapping="Wrap" />
+                                <TextBlock x:Name="GlobalDeadzoneText"
+                                           Text="活动配置全局值：未知"
+                                           Style="{ThemeResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                            </StackPanel>
+                            <Button x:Name="ResetAllDeadzoneButton" Grid.Column="1"
+                                    Content="清除所有逐键死区设置…"
+                                    Click="ResetAllDeadzoneButton_Click"
+                                    VerticalAlignment="Center"
+                                    AutomationProperties.AutomationId="MagneticDeadzoneResetAll" />
+                        </Grid>
+                    </Border>
+                </StackPanel>
+
             </StackPanel>
         </Grid>
     </ScrollViewer>

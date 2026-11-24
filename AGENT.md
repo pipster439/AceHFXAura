@@ -29,6 +29,7 @@ Use current code as the source of truth. Start with [README](README.md) and the 
 - **No source duplication**: Strictly prohibit copying full or partial source trees into audit directories and committing them to Git.
 - **Default exclusion**: `/audit_artifacts/` is ignored by `.gitignore` by default and must never enter Git version control.
 - **Curation of long-term findings**: If an audit or research finding needs long-term retention, curate it into formal documentation under `docs/archive/reports/`, `docs/architecture/`, `docs/hardware/`, or other appropriate `docs/` subdirectories. Never commit raw audit workspaces.
+- **Task delivery**: Deliver a patch containing only this task's changes and exclude preexisting/concurrent edits. Complex work also requires a report recording conclusions, changes, actual validation, risks, unresolved work and evidence paths. Keep categorized artifacts in one ignored task directory; no ZIP is required. Verify its contents before handoff.
 - Refer to [Repository Hygiene Policy](docs/development/REPOSITORY_HYGIENE.md) for detailed guidelines.
 
 ## Local Windows toolchain and CI

@@ -146,6 +146,15 @@ public sealed class MagneticSpeedTapState
     [JsonPropertyName("master")] public MagneticKnownBool Master { get; set; } = new();
 }
 
+public sealed class MagneticFirmwareCompatibility
+{
+    [JsonPropertyName("state")] public string State { get; set; } = "Unknown";
+    [JsonPropertyName("version")] public string? Version { get; set; }
+    [JsonPropertyName("reason")] public string Reason { get; set; } = "固件版本尚未读取";
+    [JsonPropertyName("session_generation")] public ulong SessionGeneration { get; set; }
+    [JsonPropertyName("source")] public string Source { get; set; } = "";
+}
+
 public sealed class MagneticStatus
 {
     [JsonPropertyName("status")] public string Status { get; set; } = "error";
@@ -154,6 +163,7 @@ public sealed class MagneticStatus
     [JsonPropertyName("available")] public bool Available { get; set; }
     [JsonPropertyName("persistent_safety_quarantine")] public bool PersistentSafetyQuarantine { get; set; }
     [JsonPropertyName("last_error")] public string LastError { get; set; } = "";
+    [JsonPropertyName("firmware_compatibility")] public MagneticFirmwareCompatibility FirmwareCompatibility { get; set; } = new();
     [JsonPropertyName("actuation")] public List<MagneticActuationValue> Actuation { get; set; } = [];
     [JsonPropertyName("rapid_trigger")] public List<MagneticRapidTriggerValue> RapidTrigger { get; set; } = [];
     [JsonPropertyName("deadzone")] public List<MagneticDeadzoneValue> Deadzone { get; set; } = [];

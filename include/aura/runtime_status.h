@@ -27,6 +27,9 @@ struct RuntimeStatusSnapshot {
     bool gsi_active = false;
     std::string gsi_source = "real";
     std::string foreground_process;
+    nlohmann::json inputs = nlohmann::json::object();
+    nlohmann::json render = nlohmann::json::object();
+    nlohmann::json last_frame = nlohmann::json::array();
 
     nlohmann::json ToJson() const {
         nlohmann::json j;
@@ -56,6 +59,9 @@ struct RuntimeStatusSnapshot {
         j["gsi"] = {
             {"active", gsi_active}, {"source", gsi_source}
         };
+        j["inputs"] = inputs;
+        j["render"] = render;
+        j["last_frame"] = last_frame;
 
         return j;
     }

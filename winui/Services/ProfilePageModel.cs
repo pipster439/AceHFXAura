@@ -26,6 +26,18 @@ public sealed class ProfilePageModel(IProfileControlClient client)
     public DeviceProfile? Draft => _draft;
     public Guid? EditingId => _draft?.Id;
     public bool IsHardwareSlotDraft => _draft?.ActivationBackend == "hardware_slot";
+    public string LightingOwnershipText => _snapshot?.LightingControlOwnerSupported != true ?
+        "当前守护进程未声明独立灯光控制支持，请更新守护进程后编辑。" :
+        _snapshot?.HardwareSlotStatus?.LightingDiagnostic == "FirmwareLightingRestoreUnverified" ?
+        "Aura 已抑制灯光帧；固件灯效是否恢复尚未验证。" :
+        $"当前灯光控制：{_snapshot?.HardwareSlotStatus?.LightingOwner ?? "未确认"}。保存草稿后需应用。";
+    public void SetLightingOwner(string owner)
+    {
+        if (_draft is null || IsBusy || _snapshot?.LightingControlOwnerSupported != true) return;
+        if (owner is not ("AuraDirectRgb" or "FirmwareBank")) throw new ArgumentException("Unknown lighting owner");
+        _draft.Lighting.ControlOwner = owner;
+        ReconcileDraftValidationNotice();
+    }
     public string HardwareSlotText => $"目标槽位：{_draft?.HardwareSlot?.ToString() ?? "未选择"} · 键盘当前槽位：{_snapshot?.HardwareSlotStatus?.ObservedHardwareSlot?.ToString() ?? "未确认"}";
     public bool HardwareSlotMismatch => IsHardwareSlotDraft && _snapshot?.HardwareSlotStatus?.HardwareSlotMatch == false;
     public void SetActivationBackend(string backend)

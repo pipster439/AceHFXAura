@@ -69,6 +69,13 @@ public sealed class DeviceProfileAutomationModel(IProfileControlClient client)
     public bool NeedsConfigurationRefresh => Decision is not null && Decision.ConfigurationDocumentRevision != 0 &&
         Decision.ConfigurationDocumentRevision != DocumentRevision;
     public bool HasConflict { get; private set; }
+    public bool CanCreateHardware => IsAvailable && !IsBusy && !HasConflict && HardwareCreateSupported;
+    public bool HardwareCreateSupported { get; private set; }
+    public bool SupportsIndependentLighting { get; private set; }
+    public string LightingCompatibilityNotice => "当前后台未声明独立灯光控制支持。板载磁轴 + Aura 灯光等独立组合不能保存为自动切换目标，请更新并重启匹配版本。";
+    public string HardwareCreateHint => HardwareCreateSupported ?
+        "创建只保存 Profile 引用，不改写板载磁轴参数。规则仍需单独保存。" :
+        "当前后台不支持原子创建板载配置或独立灯光控制，请更新并重启匹配版本。";
     public string Notice { get; private set; } = "";
     public ProfileNoticeKind NoticeKind { get; private set; }
     public bool HasUnsavedChanges => Draft is not null && Serialize(Draft) != _savedJson;
@@ -111,7 +118,10 @@ public sealed class DeviceProfileAutomationModel(IProfileControlClient client)
         { DecisionReason: "ProfileDocumentUnavailable" } => "配置文件暂时无法读取",
         _ => "正在读取匹配结果…"
     };
-    public string ProfileName(Guid id) => Profiles.FirstOrDefault(p => p.Id == id)?.Name ?? "配置文件已不存在";
+    public static string TargetLabel(DeviceProfile profile) =>
+        $"{(profile.ActivationBackend == "hardware_slot" ? $"板载槽位 {profile.HardwareSlot}" : "Aura 管理")} · {profile.Name} · {(profile.EffectiveLightingOwner == "FirmwareBank" ? "板载灯光" : "Aura 动态灯光")}";
+    public string ProfileName(Guid id) => Profiles.FirstOrDefault(p => p.Id == id) is { } profile ?
+        TargetLabel(profile) : "配置文件已不存在";
     public IReadOnlyList<DeviceProfileRuleRow> Rules => Draft?.Bindings
         .OrderByDescending(r => r.Priority).ThenBy(r => r.RuleId.ToString("D"), StringComparer.Ordinal)
         .Select(r => new DeviceProfileRuleRow(r.RuleId, r.ProcessName,
@@ -119,10 +129,60 @@ public sealed class DeviceProfileAutomationModel(IProfileControlClient client)
         .ToList() ?? [];
     public IReadOnlyList<DeviceProfileTargetChoice> TargetChoices(Guid? current, bool includeNone)
     {
-        var choices = Profiles.Select(p => new DeviceProfileTargetChoice(p.Id, p.Name)).ToList();
+        var choices = Profiles.Select(p => new DeviceProfileTargetChoice(p.Id, TargetLabel(p))).ToList();
         if (current is { } id && !Profiles.Any(p => p.Id == id)) choices.Insert(0, new(id, "配置文件已不存在"));
         if (includeNone) choices.Insert(0, new(null, "不执行任何操作"));
         return choices;
+    }
+    public IReadOnlyList<DeviceProfileTargetChoice> SlotChoices(int slot) => Profiles
+        .Where(p => p.ActivationBackend == "hardware_slot" && p.HardwareSlot == slot)
+        .Select(p => new DeviceProfileTargetChoice(p.Id, TargetLabel(p))).ToList();
+
+    // One atomic document mutation, followed by a separate explicit automation save.
+    // Never retry a create whose response may have been lost.
+    public async Task<Guid?> CreateHardwareAsync(string name, int slot, string owner, CancellationToken token = default)
+    {
+        if (!CanCreateHardware) { Notice = HardwareCreateHint; NoticeKind = ProfileNoticeKind.Warning; return null; }
+        name = name.Trim();
+        if (name.Length == 0 || System.Text.Encoding.UTF8.GetByteCount(name) > 100 || name.Any(char.IsControl) ||
+            slot is < 1 or > 5 || owner is not ("AuraDirectRgb" or "FirmwareBank")) {
+            Notice = "请输入有效名称（最多 100 字节）、槽位 1–5 和灯光来源。"; NoticeKind = ProfileNoticeKind.Warning; return null;
+        }
+        if (Profiles.Any(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase))) {
+            Notice = "名称已存在，请选择现有配置或使用不同名称。"; NoticeKind = ProfileNoticeKind.Warning; return null;
+        }
+        IsBusy = true;
+        try {
+            var response = await client.CreateHardwareAsync(name, slot, owner, DocumentRevision, token);
+            var created = response.Profile;
+            if (created is null || created.Id == Guid.Empty || Profiles.Any(p => p.Id == created.Id) ||
+                created.Name != name || created.ActivationBackend != "hardware_slot" || created.HardwareSlot != slot ||
+                created.Lighting?.ControlOwner != owner || response.DocumentRevision != DocumentRevision + 1)
+                throw new ProfileApiException("Unexpected hardware Profile response", category: ProfileApiErrorCategory.InvalidResponse);
+            Profiles = Profiles.Append(created).ToList(); DocumentRevision = response.DocumentRevision;
+            Notice = "板载配置已创建；请选择并保留到草稿，再保存规则。取消编辑不会删除已创建的配置。";
+            NoticeKind = ProfileNoticeKind.Information;
+            return created.Id;
+        } catch (ProfileApiException ex) {
+            if (ex.RevisionConflict) {
+                HasConflict = true;
+                try { Accept(await client.GetAutomationAsync(token), preserveDraft: true); }
+                catch (ProfileApiException reload) { ApiError(reload); }
+                Notice = "创建发生修订冲突，未重试；草稿和输入已保留，请重新读取后确认。";
+                NoticeKind = ProfileNoticeKind.Warning;
+            } else if (ex.StatusCode == System.Net.HttpStatusCode.UnprocessableEntity) {
+                Notice = "创建被拒绝（名称可能已存在或参数无效）。输入和草稿已保留，请检查后重试。";
+                NoticeKind = ProfileNoticeKind.Warning;
+            } else {
+                ApiError(ex);
+                Notice = "创建未确认：" + Notice + " 请重新读取并检查配置列表后再决定是否创建，勿直接重复请求。";
+            }
+            return null;
+        } catch (OperationCanceledException) {
+            IsAvailable = false; Decision = null;
+            Notice = "创建请求已中断，结果未确认。输入和规则草稿已保留，请重新读取并检查配置列表；不会自动重试。";
+            NoticeKind = ProfileNoticeKind.Warning; return null;
+        } finally { IsBusy = false; }
     }
     public static string NormalizeProcessInput(string input)
     {
@@ -184,7 +244,13 @@ public sealed class DeviceProfileAutomationModel(IProfileControlClient client)
                 r.ProcessName = NormalizeProcessInput(r.ProcessName);
                 if (r.ProfileId == Guid.Empty || r.RuleId == Guid.Empty) throw new InvalidDataException("规则缺少有效的配置文件或规则标识。");
             }
-            if (Draft.FallbackProfileId == Guid.Empty) throw new InvalidDataException("请选择有效的后备配置文件。");
+            if (Draft.Bindings.Any(r => !Profiles.Any(p => p.Id == r.ProfileId)) ||
+                Draft.FallbackProfileId is { } fallback && !Profiles.Any(p => p.Id == fallback))
+                throw new InvalidDataException("目标配置文件已不存在，请重新选择规则和后备配置。");
+            var targets = Draft.Bindings.Select(r => r.ProfileId).Append(Draft.FallbackProfileId ?? Guid.Empty);
+            if (!SupportsIndependentLighting && Profiles.Any(p => targets.Contains(p.Id) &&
+                p.EffectiveLightingOwner != (p.ActivationBackend == "hardware_slot" ? "FirmwareBank" : "AuraDirectRgb")))
+                throw new InvalidDataException(LightingCompatibilityNotice);
             Accept(await client.UpdateAutomationAsync(Draft.Clone(), DocumentRevision, token), preserveDraft: false);
             Notice = Decision?.HardwareActivationAllowed == true && Draft?.Enabled == true ?
                 "规则已保存，后台将按已保存的规则自动应用配置文件。" : "规则已保存。";
@@ -199,8 +265,16 @@ public sealed class DeviceProfileAutomationModel(IProfileControlClient client)
                 Notice = IsAvailable ? "配置已在其他位置发生变化，已重新读取。草稿已保留，请检查后决定是否重新保存。" :
                     "配置发生冲突，暂无法重新读取。草稿已保留，请恢复连接后重试。";
                 NoticeKind = ProfileNoticeKind.Warning;
-            } else ApiError(ex);
+            } else {
+                ApiError(ex);
+                Notice = "规则保存未确认；草稿已保留。" + Notice + " 请重新读取并检查已保存规则后再决定是否重试。";
+            }
             return false;
+        }
+        catch (OperationCanceledException) {
+            IsAvailable = false; Decision = null;
+            Notice = "规则保存请求已中断，结果未确认。草稿已保留，请重新读取并检查已保存规则；不会自动重试。";
+            NoticeKind = ProfileNoticeKind.Warning; return false;
         }
         catch (InvalidDataException ex) { Notice = ex.Message; NoticeKind = ProfileNoticeKind.Warning; return false; }
         finally { IsBusy = false; }
@@ -211,6 +285,8 @@ public sealed class DeviceProfileAutomationModel(IProfileControlClient client)
         if (response.AutomationDecision is null)
             throw new ProfileApiException("Invalid automation response", category: ProfileApiErrorCategory.InvalidResponse);
         Profiles = response.Profiles ?? [];
+        SupportsIndependentLighting = response.LightingControlOwnerSupported;
+        HardwareCreateSupported = response.HardwareProfileCreateSupported && response.LightingControlOwnerSupported;
         Decision = response.AutomationDecision;
         if (response.AutomationConfigurationAvailable == false || !Decision.ConfigurationAvailable) {
             DocumentRevision = response.DocumentRevision; IsAvailable = false;
@@ -228,7 +304,8 @@ public sealed class DeviceProfileAutomationModel(IProfileControlClient client)
             HasConflict = true; Notice = "配置已在其他位置更改。草稿已保留，请检查后再保存。"; NoticeKind = ProfileNoticeKind.Warning;
         }
         var recovering = !IsAvailable;
-        _saved = config; DocumentRevision = response.DocumentRevision; IsAvailable = true;
+        _saved = config; _savedJson = Serialize(config);
+        DocumentRevision = response.DocumentRevision; IsAvailable = true;
         if (!preserveDraft) { Draft = config.Clone(); _savedJson = Serialize(Draft); HasConflict = false; if (recovering) Notice = ""; }
         if (NoticeKind == ProfileNoticeKind.Error) { Notice = ""; NoticeKind = ProfileNoticeKind.None; }
     }

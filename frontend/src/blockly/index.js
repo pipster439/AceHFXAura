@@ -2,6 +2,7 @@ import * as Blockly from 'blockly';
 import 'blockly/blocks';
 import * as En from 'blockly/msg/en';
 import * as ZhHans from 'blockly/msg/zh-hans';
+import { loadEffectWorkspace, validateEffectWorkspace } from './workspaceSafety.js';
 
 // Set English base locale, then overlay Simplified Chinese locale
 if (typeof Blockly.setLocale === 'function') {
@@ -47,17 +48,9 @@ export function assertNoLegacyEventPulse(jsonState) {
 }
 
 export function loadSafeWorkspaceJson(jsonState, ws, strict = false) {
-  if (!jsonState || !ws) return;
-  assertNoLegacyEventPulse(jsonState);
-  try {
-    const state = (jsonState.blocks && !Array.isArray(jsonState.blocks))
-      ? jsonState
-      : { blocks: jsonState };
-    Blockly.serialization.workspaces.load(state, ws);
-  } catch (err) {
-    if (strict) throw new Error('积木数据无法完整加载：' + err.message);
-    console.warn('Error loading workspace JSON:', err);
-  }
+  const { state } = validateEffectWorkspace(jsonState);
+  assertNoLegacyEventPulse(state);
+  loadEffectWorkspace(Blockly, state, ws);
 }
 
 export default Blockly;

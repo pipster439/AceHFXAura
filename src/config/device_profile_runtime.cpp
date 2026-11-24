@@ -1,4 +1,5 @@
 #include "config/device_profile_runtime.h"
+#include "aura/hardware/m605_firmware_json.h"
 #include "config/config_writer_util.h"
 #include "aura/hardware/m605_key_mapping.h"
 #include "aura_version.h"
@@ -30,7 +31,9 @@ Json HardwareGateJson(const HardwareRtGateObservation& gate) {
 }
 struct ProfileError : std::runtime_error {
     int code;
-    ProfileError(int status, std::string message) : std::runtime_error(std::move(message)), code(status) {}
+    std::string error_code;
+    ProfileError(int status, std::string message, std::string classification = {})
+        : std::runtime_error(std::move(message)), code(status), error_code(std::move(classification)) {}
 };
 bool Tenth(const Json& value, int low, int high) {
     if (!value.is_number()) return false;
@@ -333,6 +336,10 @@ void DeviceProfileRuntime::Validate(const Json& doc) {
         const auto backend = profile.value("activation_backend", Json("host_managed"));
         if (backend != "host_managed" && backend != "hardware_slot")
             throw ProfileError(422, "Unsupported Profile activation backend");
+        if (profile.at("lighting").contains("control_owner") &&
+            profile.at("lighting").at("control_owner") != "AuraDirectRgb" &&
+            profile.at("lighting").at("control_owner") != "FirmwareBank")
+            throw ProfileError(422, "Unsupported lighting control owner");
         if (backend == "hardware_slot" && (!profile.contains("hardware_slot") ||
             !profile.at("hardware_slot").is_number_integer() ||
             profile.at("hardware_slot").get<int64_t>() < 1 || profile.at("hardware_slot").get<int64_t>() > 5))
@@ -398,15 +405,24 @@ DeviceProfileRuntime::DeviceProfileRuntime(std::filesystem::path path,
     if (load_error_.empty()) MigrateLegacyRtLocked();
     if (load_error_.empty()) TrackDeclaredFootprintLocked();
     RefreshAutomationConfigurationLocked();
-    if (load_error_.empty()) firmware_lighting_owned_ =
-        HardwareSlotSnapshotLocked().at("profile_activation_backend") == "hardware_slot";
+    if (load_error_.empty()) for (const auto& profile : document_.at("profiles"))
+        if (profile.at("id") == document_.at("selected_profile_id"))
+            lighting_owner_ = ResolveLightingOwner(profile);
+}
+
+DeviceProfileRuntime::LightingOwner DeviceProfileRuntime::ResolveLightingOwner(const Json& profile) {
+    // Additive policy; LegacyUnmanaged still describes the legacy effect reference.
+    const auto fallback = profile.value("activation_backend", Json("host_managed")) == "hardware_slot" ?
+        "FirmwareBank" : "AuraDirectRgb";
+    return profile.at("lighting").value("control_owner", std::string(fallback)) == "FirmwareBank" ?
+        LightingOwner::FirmwareBank : LightingOwner::AuraDirectRgb;
 }
 
 bool DeviceProfileRuntime::WithAuraLightingOwnership(const std::function<bool()>& write_frame) {
     // Same lock order as activation: mutation gate, then DeviceWriteMutex in
     // the frame writer. No frame can race past successful bank selection.
     std::lock_guard<std::mutex> gate(mutation_gate_);
-    return !firmware_lighting_owned_ && write_frame();
+    return load_error_.empty() && lighting_owner_ == LightingOwner::AuraDirectRgb && write_frame();
 }
 
 void DeviceProfileRuntime::ObserveHardwareSlot() {
@@ -650,6 +666,7 @@ DeviceProfileRuntime::Json DeviceProfileRuntime::StateLocked() {
         last_slot_observation_ms_ = observation_clock_();
         ReconcileHardwareSlotLocked();
         if (result.success && HardwareSlotSnapshotLocked().at("hardware_slot_match") == true &&
+            device_.GetDiagnosticSnapshot().firmware.Supported() &&
             device_.GetHealth() == M605RuntimeHealth::Clean && !device_.IsPersistentSafetyQuarantined()) {
             active_ = document_.at("selected_profile_id").get<std::string>(); dirty_ = false;
             last_outcome_ = {{"outcome", "confirmed"}, {"error", ""}}; // observation is not a manual success event
@@ -662,10 +679,11 @@ DeviceProfileRuntime::Json DeviceProfileRuntime::StateLocked() {
 
 DeviceProfileRuntime::Json DeviceProfileRuntime::HardwareSlotSnapshotLocked() const {
     const auto observed = device_.GetHardwareSlotObservation();
-    Json desired = nullptr, backend = nullptr;
+    Json desired = nullptr, backend = nullptr, desired_owner = nullptr;
     if (load_error_.empty()) for (const auto& p : document_.at("profiles"))
         if (p.at("id") == document_.at("selected_profile_id")) {
             backend = p.value("activation_backend", Json("host_managed"));
+            desired_owner = ResolveLightingOwner(p) == LightingOwner::FirmwareBank ? "FirmwareBank" : "AuraDirectRgb";
             if (backend == "hardware_slot") desired = p.at("hardware_slot");
         }
     const bool current = observed.session_generation == device_.GetSessionGeneration();
@@ -680,7 +698,11 @@ DeviceProfileRuntime::Json DeviceProfileRuntime::HardwareSlotSnapshotLocked() co
         {"observed_hardware_slot", actual}, {"hardware_slot_match", desired.is_null() || actual.is_null() ?
             Json(nullptr) : Json(desired == actual)}, {"slot_observation_time", actual.is_null() ? Json(nullptr) : Json(observed.observed_at_utc)},
         {"source", "BasicInfo"}, {"last_slot_select", last_select},
-        {"lighting_owner", firmware_lighting_owned_ ? "FirmwareBank" : "AuraDirectRgb"},
+        {"lighting_owner", lighting_owner_ == LightingOwner::FirmwareBank ? "FirmwareBank" : "AuraDirectRgb"},
+        {"desired_lighting_owner", desired_owner},
+        {"lighting_diagnostic", lighting_owner_ == LightingOwner::FirmwareBank ?
+            Json("FirmwareLightingRestoreUnverified") : Json(nullptr)},
+        {"firmware_lighting_restored", nullptr},
         {"selector_count", hardware_slot_selector_count_},
         {"external_drift_observation", {{"interval_ms", 10000}, {"auto_reclaim", false},
             {"last_attempt_monotonic_ms", last_slot_observation_ms_ ? Json(*last_slot_observation_ms_) : Json(nullptr)}}},
@@ -719,6 +741,7 @@ DeviceProfileRuntime::Json DeviceProfileRuntime::RefreshHardwareSlot() {
     // Reconnect/query can confirm the already selected slot, but never select it.
     const auto slot = HardwareSlotSnapshotLocked();
     if (queried.success && slot.at("profile_activation_backend") == "hardware_slot" && slot.at("hardware_slot_match") == true &&
+        device_.GetDiagnosticSnapshot().firmware.Supported() &&
         device_.GetHealth() == M605RuntimeHealth::Clean && !device_.IsPersistentSafetyQuarantined()) {
         active_ = document_.at("selected_profile_id").get<std::string>(); dirty_ = false;
         last_outcome_ = {{"outcome", "confirmed"}, {"error", ""}};
@@ -731,12 +754,15 @@ DeviceProfileRuntime::Json DeviceProfileRuntime::StateSnapshotLocked() const {
         {"schema_version", 1}, {"runtime_revision", mutation_revision_},
         {"m605_session_generation", session_generation_}};
     return {{"status", "ok"}, {"api_version", 1},
+        {"lighting_control_owner_supported", true},
+        {"hardware_profile_create_supported", true},
         {"selected_profile_id", document_.at("selected_profile_id")},
         {"active_profile_id", active_ ? Json(*active_) : Json(nullptr)},
         {"dirty", dirty_}, {"document_revision", document_.at("revision")},
         {"runtime_revision", mutation_revision_}, {"mutation_revision", mutation_revision_},
         {"m605_session_generation", session_generation_},
         {"hardware_rt_gate", HardwareGateJson(device_.GetHardwareRtGateObservation())},
+        {"firmware_compatibility", m605::FirmwareCompatibilityJson(device_.GetDiagnosticSnapshot().firmware)},
         {"hardware_slot_status", HardwareSlotSnapshotLocked()},
         {"last_activation_reason", last_reason_.empty() ? Json(nullptr) : Json(last_reason_)},
         {"last_apply_outcome", last_outcome_.is_null() ? Json(nullptr) : last_outcome_},
@@ -754,7 +780,9 @@ DeviceProfileRuntime::Json DeviceProfileRuntime::State() {
 
 DeviceProfileRuntime::Json DeviceProfileRuntime::AutomationSnapshotLocked() const {
     if (!load_error_.empty()) throw ProfileError(503, "Profile document unavailable");
-    return {{"status", "ok"}, {"api_version", 1}, {"document_revision", document_.at("revision")},
+    return {{"status", "ok"}, {"api_version", 1},
+        {"lighting_control_owner_supported", true}, {"hardware_profile_create_supported", true},
+        {"document_revision", document_.at("revision")},
         {"runtime_revision", mutation_revision_}, {"mutation_revision", mutation_revision_},
         {"selected_profile_id", document_.at("selected_profile_id")},
         {"active_profile_id", active_ ? Json(*active_) : Json(nullptr)}, {"dirty", dirty_},
@@ -969,6 +997,7 @@ DeviceProfileRuntime::Json DeviceProfileRuntime::Diagnostics() {
         {"last_plan", last_plan}, {"last_failed_operation", failed},
         {"automation", AutomationDecisionSnapshotCached()},
         {"m605", {{"health", health[static_cast<size_t>(device.health)]},
+            {"firmware_compatibility", m605::FirmwareCompatibilityJson(device.firmware)},
             {"persistent_safety_quarantine", device.persistent_safety_quarantine}, {"session_generation", device.session_generation},
             {"transport", {{"open_at_last_lifecycle_observation", device.transport_open_at_last_observation},
                 {"connected_now", nullptr}, {"fresh_session_now", nullptr}, {"last_open_generation", device.last_open_generation},
@@ -1515,9 +1544,10 @@ DeviceProfileRuntime::Json DeviceProfileRuntime::ActivateHardwareSlotLocked(cons
     const std::string& reason, const std::function<bool()>& cancelled,
     const std::function<bool()>& admission) {
     const auto requested = profile.at("hardware_slot").get<uint8_t>();
-    // Conservative on failed/deferred selection too: don't paint over firmware
-    // while this mode is pending. Only a successful HostManaged apply resumes.
-    firmware_lighting_owned_ = true;
+    // Failed/deferred selection keeps conservative suppression. The gate stays
+    // held through selector verification AND policy publication; no old frame
+    // can cross that boundary. RGB never confirms a magnetic activation.
+    lighting_owner_ = LightingOwner::FirmwareBank;
     HardwareSlotResult slot;
     slot.requested_slot = requested;
     const auto fresh = [&] { return !cancelled() && (!admission || admission()); };
@@ -1539,6 +1569,7 @@ DeviceProfileRuntime::Json DeviceProfileRuntime::ActivateHardwareSlotLocked(cons
             outcome = "succeeded";
             active_ = profile.at("id").get<std::string>(); dirty_ = false;
             observed_bank_ = requested;
+            lighting_owner_ = ResolveLightingOwner(profile);
         } else if (!fresh() && !slot.selector_sent) outcome = "stale";
     }
     ++mutation_revision_;
@@ -1583,6 +1614,14 @@ DeviceProfileRuntime::Json DeviceProfileRuntime::ActivateLocked(const std::strin
         throw ProfileError(422, "Hardware slot activation does not accept magnetic overrides");
     if (!temporary.is_null()) ValidateMagnetic(temporary);
     const auto canonical_id = selected_profile.at("id").get<std::string>();
+    // Refuse a connected-device compatibility failure before persisting a new
+    // desired selection or reserving firmware lighting ownership. Disconnected
+    // authoring/deferred selection retains the existing offline intent contract.
+    if (available_() && device_.GetHealth() == M605RuntimeHealth::Clean &&
+        !device_.IsPersistentSafetyQuarantined() &&
+        !device_.PrepareTransportSession()) {
+        throw ProfileError(409, "M605 mutation admission rejected: " + device_.GetLastError(), "FirmwareAdmissionDenied");
+    }
     if (!SameGuid(document_.at("selected_profile_id"), canonical_id)) {
         const auto document_start = std::chrono::steady_clock::now();
         auto next = document_;
@@ -1864,7 +1903,7 @@ DeviceProfileRuntime::Json DeviceProfileRuntime::ActivateLocked(const std::strin
     dirty_ = false;
     rt_submission_valid_ = true;
     session_generation_ = observed_generation;
-    firmware_lighting_owned_ = false;
+    lighting_owner_ = ResolveLightingOwner(selected_profile);
     return finish("succeeded", "");
 }
 
@@ -1907,6 +1946,20 @@ DeviceProfileRuntime::Json DeviceProfileRuntime::HandleMutation(const std::strin
             throw ProfileError(422, "Invalid Profile name");
         changed = DefaultDocument({}).at("profiles")[0];
         changed["name"] = request.at("name");
+        // Additive document-only creation; no activation, selector or magnetic writes.
+        if (request.contains("activation_backend") || request.contains("hardware_slot") || request.contains("lighting_control_owner")) {
+            if (!request.contains("activation_backend") || request.at("activation_backend") != "hardware_slot" ||
+                !request.contains("hardware_slot") || !request.at("hardware_slot").is_number_integer() ||
+                request.at("hardware_slot").get<int64_t>() < 1 || request.at("hardware_slot").get<int64_t>() > 5 ||
+                !request.contains("lighting_control_owner") ||
+                (request.at("lighting_control_owner") != "AuraDirectRgb" && request.at("lighting_control_owner") != "FirmwareBank"))
+                throw ProfileError(422, "Invalid hardware Profile creation request");
+            for (const auto& existing : next.at("profiles"))
+                if (existing.at("name") == changed.at("name")) throw ProfileError(422, "Profile name already exists");
+            changed["activation_backend"] = "hardware_slot";
+            changed["hardware_slot"] = request.at("hardware_slot");
+            changed["lighting"]["control_owner"] = request.at("lighting_control_owner");
+        }
         next["profiles"].push_back(changed);
     } else if (action == "duplicate") {
         if (!request.contains("profile_id") || !request.at("profile_id").is_string() ||
@@ -2064,7 +2117,12 @@ void DeviceProfileRuntime::RegisterRoutes(httplib::Server& server) {
                     Reply(res, result, result.value("outcome", std::string{}) == "deferred" ? 202 :
                         result.value("outcome", std::string{}) == "failed" ? 409 : 200);
                 } catch (const ProfileError& ex) {
-                    Reply(res, {{"status", "error"}, {"error", ex.what()}}, ex.code);
+                    Json failure = {{"status", "error"}, {"error", ex.what()}};
+                    if (!ex.error_code.empty()) {
+                        failure["error_code"] = ex.error_code;
+                        failure["firmware_compatibility"] = m605::FirmwareCompatibilityJson(device_.GetDiagnosticSnapshot().firmware);
+                    }
+                    Reply(res, failure, ex.code);
                 } catch (const std::exception& ex) {
                     Reply(res, {{"status", "error"}, {"error", ex.what()}}, 500);
                 }

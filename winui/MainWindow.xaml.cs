@@ -186,6 +186,7 @@ public sealed partial class MainWindow : Window
             "profiles" => typeof(ProfilesPage),
             "gsi" => typeof(GameIntegrationPage),
             "studio" => typeof(StudioPage),
+            "plugins" => typeof(PluginsPage),
             _ => null
         };
     }

@@ -54,6 +54,7 @@ set(DAEMON_SOURCES
     src/aura/aura_adapter.cpp
     src/aura/native_hid_backend.cpp
     src/aura/hardware/m605_key_mapping.cpp
+    src/aura/hardware/m605_hall_telemetry.cpp
     src/aura/hardware/m605_protocol.cpp
     src/aura/hardware/m605_runtime.cpp
     src/aura/hal_compat.cpp
@@ -66,6 +67,9 @@ set(DAEMON_SOURCES
     src/engine/automation_effect_runtime.cpp
     src/engine/builtin_effects.cpp
     src/engine/plugin_manager.cpp
+    src/engine/effect_program.cpp
+    src/engine/program_catalog.cpp
+    src/engine/input_capture_service.cpp
     src/supervisor/web_supervisor.cpp
     src/gsi/gsi_adapter.cpp
     src/config/lighting_service.cpp
@@ -73,6 +77,7 @@ set(DAEMON_SOURCES
     src/config/automation_authoring.cpp
     src/config/device_profile_automation_coordinator.cpp
     src/config/magnetic_control_service.cpp
+    src/config/plugin_overview_service.cpp
     src/config/device_profile_runtime.cpp
     src/config/device_profile_binding_engine.cpp
     src/config/magnetic_host_profile.cpp
@@ -83,6 +88,7 @@ set(DAEMON_HEADERS
     include/aura/aura_adapter.h
     include/aura/native_hid_backend.h
     include/aura/hardware/m605_key_mapping.h
+    include/aura/hardware/m605_hall_telemetry.h
     include/aura/hardware/m605_protocol.h
     include/aura/hardware/m605_runtime.h
     include/aura/aura_types.h
@@ -93,6 +99,7 @@ set(DAEMON_HEADERS
     include/config/lighting_service.h
     include/config/automation_service.h
     include/config/magnetic_control_service.h
+    include/config/plugin_overview_service.h
     include/config/device_profile_runtime.h
     include/config/config_writer_util.h
     include/engine/effect.h
@@ -100,6 +107,9 @@ set(DAEMON_HEADERS
     include/engine/effect_engine.h
     include/engine/plugin_interface.h
     include/engine/plugin_manager.h
+    include/engine/effect_program.h
+    include/engine/program_catalog.h
+    include/engine/input_capture_service.h
     include/supervisor/web_supervisor.h
     include/gsi/gsi_adapter.h
     include/utils/logger.h
@@ -172,6 +182,8 @@ add_executable(test_gsi_rules
     src/aura/keymap.cpp
     src/aura/aura_adapter.cpp
     src/aura/native_hid_backend.cpp
+    src/aura/hardware/m605_protocol.cpp
+    src/aura/hardware/m605_key_mapping.cpp
     src/aura/hal_compat.cpp
     src/web/web_server.cpp
     src/config/lighting_service.cpp
@@ -197,6 +209,8 @@ target_link_libraries(test_gsi_rules PRIVATE
 add_executable(test_native_hid
     tests/test_native_hid.cpp
     src/aura/native_hid_backend.cpp
+    src/aura/hardware/m605_protocol.cpp
+    src/aura/hardware/m605_key_mapping.cpp
     src/aura/aura_adapter.cpp
     src/aura/hal_compat.cpp
     src/aura/keymap.cpp
@@ -216,11 +230,31 @@ target_link_libraries(test_native_hid PRIVATE
 add_executable(test_m605_protocol
     tests/test_m605_protocol.cpp
     src/aura/hardware/m605_key_mapping.cpp
+    src/aura/hardware/m605_hall_telemetry.cpp
     src/aura/hardware/m605_protocol.cpp
     src/aura/hardware/m605_runtime.cpp
     src/aura/native_hid_backend.cpp
 )
 target_link_libraries(test_m605_protocol PRIVATE setupapi hid user32)
+
+add_executable(test_firmware_gate
+    tests/test_firmware_gate.cpp
+    src/aura/hardware/m605_key_mapping.cpp
+    src/aura/hardware/m605_hall_telemetry.cpp
+    src/aura/hardware/m605_protocol.cpp
+    src/aura/hardware/m605_runtime.cpp
+    src/aura/native_hid_backend.cpp
+)
+target_link_libraries(test_firmware_gate PRIVATE setupapi hid user32)
+add_executable(test_firmware_unknown_seam
+    tests/test_firmware_unknown_seam.cpp
+    src/aura/hardware/m605_key_mapping.cpp
+    src/aura/hardware/m605_hall_telemetry.cpp
+    src/aura/hardware/m605_protocol.cpp
+    src/aura/hardware/m605_runtime.cpp
+    src/aura/native_hid_backend.cpp
+)
+target_link_libraries(test_firmware_unknown_seam PRIVATE setupapi hid user32)
 
 add_executable(test_magnetic_control
     src/config/device_profile_automation_coordinator.cpp
@@ -232,6 +266,7 @@ add_executable(test_magnetic_control
     src/config/magnetic_host_profile.cpp
     src/config/config_writer_util.cpp
     src/aura/hardware/m605_key_mapping.cpp
+    src/aura/hardware/m605_hall_telemetry.cpp
     src/aura/hardware/m605_protocol.cpp
     src/aura/hardware/m605_runtime.cpp
     src/aura/native_hid_backend.cpp
@@ -239,6 +274,8 @@ add_executable(test_magnetic_control
 target_link_libraries(test_magnetic_control PRIVATE setupapi hid user32 ws2_32)
 
 add_executable(test_device_profile_runtime
+    src/aura/keymap.cpp
+    src/engine/builtin_effects.cpp
     src/config/device_profile_automation_coordinator.cpp
     src/monitor/hardware_rt_gate_monitor.cpp
     tests/test_device_profile_runtime.cpp
@@ -248,6 +285,7 @@ add_executable(test_device_profile_runtime
     src/config/magnetic_host_profile.cpp
     src/config/config_writer_util.cpp
     src/aura/hardware/m605_key_mapping.cpp
+    src/aura/hardware/m605_hall_telemetry.cpp
     src/aura/hardware/m605_protocol.cpp
     src/aura/hardware/m605_runtime.cpp
     src/aura/native_hid_backend.cpp
@@ -263,6 +301,8 @@ add_executable(test_runtime_status
     tests/test_runtime_status.cpp
     src/aura/aura_adapter.cpp
     src/aura/native_hid_backend.cpp
+    src/aura/hardware/m605_protocol.cpp
+    src/aura/hardware/m605_key_mapping.cpp
     src/aura/hal_compat.cpp
     src/aura/keymap.cpp
 )
@@ -294,6 +334,8 @@ add_executable(test_lighting_service
     src/aura/keymap.cpp
     src/aura/aura_adapter.cpp
     src/aura/native_hid_backend.cpp
+    src/aura/hardware/m605_protocol.cpp
+    src/aura/hardware/m605_key_mapping.cpp
     src/aura/hal_compat.cpp
     src/web/web_server.cpp
 )
@@ -313,6 +355,18 @@ target_link_libraries(test_lighting_service PRIVATE
 # 6. CTest 测试体系集成
 enable_testing()
 add_test(NAME m605_protocol COMMAND test_m605_protocol)
+add_executable(test_m605_hall_telemetry
+    tests/test_m605_hall_telemetry.cpp
+    src/aura/hardware/m605_hall_telemetry.cpp
+    src/aura/hardware/m605_key_mapping.cpp
+    src/aura/hardware/m605_protocol.cpp
+    src/aura/native_hid_backend.cpp
+)
+target_link_libraries(test_m605_hall_telemetry PRIVATE setupapi hid user32)
+add_test(NAME m605_hall_telemetry COMMAND test_m605_hall_telemetry)
+add_test(NAME firmware_gate COMMAND test_firmware_gate "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/m605_firmware_basic_info.json")
+set_tests_properties(firmware_gate PROPERTIES TIMEOUT 60)
+add_test(NAME firmware_unknown_seam COMMAND test_firmware_unknown_seam)
 add_test(NAME magnetic_control COMMAND test_magnetic_control)
 add_test(NAME device_profile_runtime COMMAND test_device_profile_runtime)
 add_executable(test_hardware_rt_gate tests/test_hardware_rt_gate.cpp src/monitor/hardware_rt_gate_monitor.cpp)
@@ -335,6 +389,57 @@ add_dependencies(test_plugin_runtime plugin_fixture_v1 plugin_fixture_v2)
 add_test(NAME plugin_runtime COMMAND test_plugin_runtime
     $<TARGET_FILE:plugin_fixture_v1> $<TARGET_FILE:plugin_fixture_v2>)
 set_tests_properties(plugin_runtime PROPERTIES TIMEOUT 30)
+
+# Optional logical-keyboard C extension; never changes ABI-v1 class layouts.
+function(add_keyboard_fixture name)
+    add_library(${name} SHARED tests/fixtures/plugin_keyboard_fixture.cpp)
+    target_compile_definitions(${name} PRIVATE ${ARGN})
+    if(MSVC)
+        # Throwing variants intentionally violate the C contract for containment tests.
+        target_compile_options(${name} PRIVATE /EHs)
+    endif()
+endfunction()
+add_keyboard_fixture(keyboard_valid)
+add_keyboard_fixture(keyboard_new KEYBOARD_FIXTURE_VALUE=93)
+add_keyboard_fixture(keyboard_unknown KEYBOARD_FIXTURE_VERSION=2)
+add_keyboard_fixture(keyboard_no_bind KEYBOARD_FIXTURE_NO_BIND)
+add_keyboard_fixture(keyboard_no_version KEYBOARD_FIXTURE_NO_VERSION)
+add_keyboard_fixture(keyboard_version_throw KEYBOARD_FIXTURE_VERSION_THROW)
+add_keyboard_fixture(keyboard_bind_reject KEYBOARD_FIXTURE_BIND_REJECT)
+add_keyboard_fixture(keyboard_bind_throw KEYBOARD_FIXTURE_BIND_THROW)
+add_executable(test_plugin_keyboard tests/test_plugin_keyboard.cpp src/engine/plugin_manager.cpp)
+add_dependencies(test_plugin_keyboard keyboard_valid keyboard_new keyboard_unknown keyboard_no_bind keyboard_no_version
+    keyboard_version_throw keyboard_bind_reject keyboard_bind_throw plugin_fixture_v1)
+add_test(NAME plugin_keyboard COMMAND test_plugin_keyboard $<TARGET_FILE_DIR:keyboard_valid>
+    "${CMAKE_CURRENT_BINARY_DIR}/plugin_keyboard_scratch")
+set_tests_properties(plugin_keyboard PROPERTIES TIMEOUT 30)
+
+add_library(effect_hall_reactive SHARED
+    plugins/src/effect_hall_reactive.cpp
+    src/aura/keymap.cpp
+)
+add_executable(test_plugin_hall_analog
+    tests/test_plugin_hall_analog.cpp
+    src/engine/plugin_manager.cpp
+    src/aura/hardware/m605_hall_telemetry.cpp
+    src/aura/hardware/m605_key_mapping.cpp
+    src/aura/hardware/m605_protocol.cpp
+    src/aura/native_hid_backend.cpp
+)
+target_link_libraries(test_plugin_hall_analog PRIVATE setupapi hid user32)
+add_dependencies(test_plugin_hall_analog effect_hall_reactive)
+add_test(NAME plugin_hall_analog COMMAND test_plugin_hall_analog $<TARGET_FILE:effect_hall_reactive>)
+set_tests_properties(plugin_hall_analog PROPERTIES TIMEOUT 30)
+
+add_library(aura_input_compositor STATIC src/engine/input_sources.cpp src/engine/layer_compositor.cpp)
+if(WIN32)
+    target_link_libraries(aura_input_compositor PUBLIC ole32 gdi32 user32)
+endif()
+
+add_executable(test_effect_program tests/test_effect_program.cpp src/engine/effect_program.cpp src/aura/keymap.cpp)
+target_link_libraries(test_effect_program PRIVATE aura_input_compositor)
+add_test(NAME effect_program COMMAND test_effect_program "${CMAKE_CURRENT_SOURCE_DIR}/calibrated_keymap.json")
+set_tests_properties(effect_program PROPERTIES TIMEOUT 30)
 
 # Stage 1 generated regression DLLs are separate from frozen Stage 0 evidence.
 function(add_abi_fixture name)
@@ -442,6 +547,24 @@ foreach(studio_fixture studio_old studio_continuous studio_one_shot)
     add_library(${studio_fixture} SHARED "${STUDIO_FIXTURE_DIR}/${studio_fixture}.cpp")
     add_dependencies(${studio_fixture} studio_publication_sources)
 endforeach()
+
+add_executable(test_program_catalog tests/test_program_catalog.cpp src/engine/program_catalog.cpp
+    src/engine/plugin_manager.cpp src/config/config_writer_util.cpp src/aura/hal_compat.cpp)
+target_link_libraries(test_program_catalog PRIVATE aura_effect_program crypt32 advapi32 version ws2_32)
+add_test(NAME program_catalog COMMAND test_program_catalog "${CMAKE_CURRENT_BINARY_DIR}/catalog_scratch")
+set_tests_properties(program_catalog PROPERTIES TIMEOUT 30)
+
+add_executable(test_input_sources tests/test_input_sources.cpp)
+target_link_libraries(test_input_sources PRIVATE aura_input_compositor)
+add_test(NAME input_sources COMMAND test_input_sources)
+add_executable(test_layer_compositor tests/test_layer_compositor.cpp)
+target_link_libraries(test_layer_compositor PRIVATE aura_input_compositor)
+add_test(NAME layer_compositor COMMAND test_layer_compositor)
+
+add_executable(test_g5_reliability_benchmark tests/test_g5_reliability_benchmark.cpp src/engine/effect_program.cpp src/aura/keymap.cpp)
+target_link_libraries(test_g5_reliability_benchmark PRIVATE aura_input_compositor)
+add_test(NAME g5_reliability_benchmark COMMAND test_g5_reliability_benchmark "${CMAKE_CURRENT_SOURCE_DIR}/calibrated_keymap.json")
+set_tests_properties(g5_reliability_benchmark PROPERTIES TIMEOUT 60)
 add_library(automation_reload_old SHARED tests/fixtures/automation_lifecycle_fixture.cpp)
 target_compile_definitions(automation_reload_old PRIVATE LIFECYCLE_FINISH=10000)
 add_library(automation_reload_new SHARED tests/fixtures/automation_lifecycle_fixture.cpp)
@@ -466,8 +589,22 @@ if(Python3_Interpreter_FOUND)
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_native_hardware_ci_guard.py" "$<TARGET_FILE:test_native_hid>")
     add_test(NAME ci_infrastructure COMMAND ${Python3_EXECUTABLE} -X utf8
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_ci_infrastructure.py")
+    add_test(NAME generated_cleanup COMMAND ${Python3_EXECUTABLE} -X utf8
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_generated_cleanup.py")
 endif()
 
 # Windows 11 release sidecars use UTF-8 for argv, filesystem and JSON paths.
 target_sources(aura_daemon PRIVATE tools/runtime.manifest)
 target_sources(aura_web_ui PRIVATE tools/runtime.manifest)
+
+# Every host that loads PluginManager must carry the restricted data interpreter.
+# Link one static implementation per process; DLL fixtures stay on ABI-v1 headers.
+add_library(aura_effect_program STATIC src/engine/effect_program.cpp src/aura/keymap.cpp)
+target_link_libraries(aura_effect_program PUBLIC aura_input_compositor)
+get_property(AURA_LOCAL_TARGETS DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
+foreach(aura_target IN LISTS AURA_LOCAL_TARGETS)
+    get_target_property(aura_sources ${aura_target} SOURCES)
+    if("src/engine/plugin_manager.cpp" IN_LIST aura_sources)
+        target_link_libraries(${aura_target} PRIVATE aura_effect_program)
+    endif()
+endforeach()

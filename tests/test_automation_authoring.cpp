@@ -1,5 +1,6 @@
 #include "config/automation_service.h"
 #include "config/rule_engine.h"
+#include "engine/plugin_manager.h"
 #include <fstream>
 #include <iostream>
 #include <thread>
@@ -140,8 +141,27 @@ void Concurrent(Harness& h) {
     std::thread second([&]{b=other.Author("create",{{"expected_revision",revision},{"rule",Rule("second")}});});first.join();second.join();
     Check((a.http_status==201 && b.http_status==409)||(b.http_status==201 && a.http_status==409),"concurrent writers cannot lose updates");
 }
+void ProgramCatalog(Harness& h) {
+    auto& manager=aura::PluginManager::Instance();
+    auto program=aura::EffectProgram::Compile({{"schema_version",1},{"entry",0},{"variables",0},{"slots",0},
+        {"publication",{{"mode","one_shot"},{"fade_out_ms",0}}},{"nodes",Json::array({{{"kind","end"}}})}});
+    const auto prepared=manager.PrepareProgram("ir_authoring",program,h.path.parent_path()/"authoring.aurair");
+    Check(manager.PublishReload(prepared),"restricted program catalog fixture publishes");
+    auto config=Config();config["profiles"]["ir_base"]={{"type","plugin"},{"plugin_name","ir_authoring"}};h.Write(config);
+    const auto bytes=h.Raw();auto catalog=h.Call("effects").body["effects"];bool direct=false,profile=false;
+    for(const auto& entry:catalog) {
+        if(entry["reference"]["name"]=="ir_authoring")direct=entry["available"]==true&&entry["lifecycle"]["kind"]=="lifecycle_capable";
+        if(entry["reference"]["name"]=="ir_base")profile=entry["available"]==true&&entry["lifecycle"]["kind"]=="lifecycle_capable";
+    }
+    Check(direct&&profile&&h.Raw()==bytes,"read-only authoring exposes host program lifecycle for both references");
+    Check(manager.UnregisterProgram("ir_authoring",prepared.candidate->generation_id),"catalog fixture disabled");
+    catalog=h.Call("effects").body["effects"];direct=false;profile=false;
+    for(const auto& entry:catalog){if(entry["reference"]["name"]=="ir_authoring")direct=true;
+        if(entry["reference"]["name"]=="ir_base")profile=entry["available"]==false;}
+    Check(!direct&&profile,"disabled program disappears and dependent profile is unavailable");
+}
 int main() {
     const auto path=fs::temp_directory_path()/("aura-authoring-"+std::to_string(GetCurrentProcessId())+".json");
-    try {Harness h(path);Crud(h);AtomicAndCatalog(h);Concurrent(h);EventWitnessAuthority(h);fs::remove(path);std::cout<<"PASS: "<<checks<<" V2 authoring assertions\n";return 0;}
+    try {Harness h(path);Crud(h);AtomicAndCatalog(h);Concurrent(h);EventWitnessAuthority(h);ProgramCatalog(h);fs::remove(path);std::cout<<"PASS: "<<checks<<" V2 authoring assertions\n";return 0;}
     catch(const std::exception& error){std::cerr<<"FAIL after "<<checks<<": "<<error.what()<<"\n";return 1;}
 }

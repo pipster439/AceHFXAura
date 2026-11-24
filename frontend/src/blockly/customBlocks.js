@@ -412,6 +412,37 @@ export function registerCustomBlocks() {
       tooltip: '判定 CS2 炸弹当前状态 (底层映射 round.bomb)',
       helpUrl: ''
     },
+    {
+      type: 'sensor_audio_feature',
+      message0: '系统音频特征 %1 缺省: %2',
+      args0: [
+        {
+          type: 'field_dropdown',
+          name: 'FEATURE',
+          options: [
+            ['RMS 能量 (0-1)', 'rms'],
+            ['峰值 (0-1)', 'peak'],
+            ['频谱重心 (Hz)', 'centroid']
+          ]
+        },
+        { type: 'input_value', name: 'DEFAULT', check: 'Number' }
+      ],
+      output: 'Number',
+      style: 'math_blocks',
+      tooltip: '获取系统实时音频特征（需开启音频输入），未开启或无信号时返回缺省值',
+      helpUrl: ''
+    },
+    {
+      type: 'sensor_screen_color',
+      message0: '屏幕环境颜色 缺省: %1',
+      args0: [
+        { type: 'input_value', name: 'DEFAULT', check: 'Colour' }
+      ],
+      output: 'Colour',
+      style: 'colour_blocks',
+      tooltip: '获取屏幕实时环境颜色（需开启屏幕输入），未开启时返回缺省值',
+      helpUrl: ''
+    },
 
     // =========================================================================
     // 7. ORCHESTRATOR STUDIO BLOCKS

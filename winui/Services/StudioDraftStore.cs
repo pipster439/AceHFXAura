@@ -24,7 +24,15 @@ public sealed record StudioDraft(string Name, JsonElement Json, JsonElement Publ
         Identity(Name); Exact(Publication, "mode", "fade_out_ms");
         var mode = Publication.GetProperty("mode").GetString(); var fade = Publication.GetProperty("fade_out_ms").GetInt32();
         if (mode is not ("continuous" or "one_shot") || fade is < 0 or > 60000 || mode == "continuous" && fade != 0 ||
-            Json.ValueKind != JsonValueKind.Object || !Json.TryGetProperty("blocks", out _)) throw new StudioPersistenceException("草稿结构或播放方式无效。");
+            Json.ValueKind != JsonValueKind.Object) throw new StudioPersistenceException("草稿结构或播放方式无效。");
+        // Blockly 13 omits the blocks serializer for a blank, variable-only or
+        // workspace-comment-only draft. Accept those real serialization forms
+        // without admitting arbitrary serializer/config objects as empty graphs.
+        if (!Json.TryGetProperty("blocks", out _) && Json.EnumerateObject().Any(p => p.Name is not ("variables" or "workspaceComments")))
+            throw new StudioPersistenceException("空工程包含不支持的工作区字段。");
+        foreach (var name in new[] { "variables", "workspaceComments" })
+            if (Json.TryGetProperty(name, out var collection) && collection.ValueKind != JsonValueKind.Array)
+                throw new StudioPersistenceException("工作区变量或注释必须为列表。");
         var bytes = Encoding.UTF8.GetByteCount(Json.GetRawText());
         if (bytes > 262144) throw new StudioPersistenceException("草稿超过 256 KiB 限制。");
         var count = 0;
@@ -69,7 +77,7 @@ public sealed record StudioDraft(string Name, JsonElement Json, JsonElement Publ
     }
 }
 public sealed record StudioRecovery(long Revision, DateTimeOffset UpdatedUtc, string SavedHash, string DraftHash, StudioDraft Draft);
-public sealed record StudioSnapshot(string Id, string Reason, DateTimeOffset CreatedUtc, StudioDraft Draft);
+public sealed record StudioSnapshot(string Id, string Reason, DateTimeOffset CreatedUtc, StudioDraft Draft, string? AiRequestId = null);
 public sealed record StudioJournal(int SchemaVersion, string Project, StudioRecovery? Recovery, List<StudioSnapshot> Snapshots, long Revision = 0);
 
 // Separate draft journal. This class never reads/writes the daemon config or any
@@ -107,7 +115,8 @@ public sealed class StudioDraftStore(string dataRoot, Action<string>? beforeRepl
             if (j == null || j.SchemaVersion != 1 || j.Project != name || j.Snapshots == null || j.Snapshots.Count > 10 || j.Revision < 0)
                 throw new StudioPersistenceException("草稿日志无效；原文件保留。");
             if (j.Recovery != null) { j.Recovery.Draft.Validate(); if (j.Recovery.Draft.Name != name || j.Recovery.Draft.Fingerprint() != j.Recovery.DraftHash) throw new StudioPersistenceException("恢复草稿校验失败。"); }
-            foreach (var s in j.Snapshots) { s.Draft.Validate(); if (s.Draft.Name != name || !Regex.IsMatch(s.Id, "^[a-f0-9]{32}$") || s.Reason is not ("before_ai_apply" or "before_publish")) throw new StudioPersistenceException("快照无效。"); }
+            foreach (var s in j.Snapshots) { s.Draft.Validate(); if (s.Draft.Name != name || !Regex.IsMatch(s.Id, "^[a-f0-9]{32}$") || s.Reason is not ("before_ai_apply" or "before_publish") ||
+                s.AiRequestId is { } request && (s.Reason != "before_ai_apply" || !Regex.IsMatch(request, "^[a-f0-9]{32}$"))) throw new StudioPersistenceException("快照无效。"); }
             return j;
         } catch (JsonException) { throw new StudioPersistenceException("草稿日志格式无效；原文件保留。"); }
     }
@@ -151,10 +160,11 @@ public sealed class StudioDraftStore(string dataRoot, Action<string>? beforeRepl
         lock (_gate) { var value = Read(name).Recovery ?? throw new StudioPersistenceException("没有可恢复草稿。"); _offered.Remove(name); return value.Draft; }
     }
     public IReadOnlyList<StudioSnapshot> Snapshots(string name) { lock (_gate) return Read(name).Snapshots.ToArray(); }
-    public StudioSnapshot Snapshot(StudioDraft draft, string reason) {
+    public StudioSnapshot Snapshot(StudioDraft draft, string reason, string? aiRequestId = null) {
         if (reason is not ("before_ai_apply" or "before_publish")) throw new StudioPersistenceException("快照来源无效。");
+        if (aiRequestId != null && (reason != "before_ai_apply" || !Regex.IsMatch(aiRequestId, "^[a-f0-9]{32}$"))) throw new StudioPersistenceException("AI 检查点请求标识无效。");
         draft.Validate(); lock (_gate) {
-            var j = Read(draft.Name); var s = new StudioSnapshot(Guid.NewGuid().ToString("N"), reason, _time.GetUtcNow(), draft);
+            var j = Read(draft.Name); var s = new StudioSnapshot(Guid.NewGuid().ToString("N"), reason, _time.GetUtcNow(), draft, aiRequestId);
             Write(j with { Snapshots = new[] { s }.Concat(j.Snapshots).Take(10).ToList() }); return s;
         }
     }

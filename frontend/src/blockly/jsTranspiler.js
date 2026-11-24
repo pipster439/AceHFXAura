@@ -1,27 +1,28 @@
 import { normalizePublication } from './publication.js';
 import { compileSequence } from './sequenceCompiler.js';
+import { effectVariables, effectVariableSymbol, validateEffectVariableTypes } from './workspaceSafety.js';
 /**
  * JavaScript Runtime & Transpiler for Real-Time Google Blockly Live Preview
  * Executes within browser animation loop (60 FPS) with sub-millisecond execution budget.
  */
 
 import { KEYBOARD_LAYOUT } from '../constants/keyboardLayout.js';
+import calibratedKeymap from '../../../calibrated_keymap.json' with { type: 'json' };
 
 // Build the standard 68-key topological map for the preview engine
 export const PREVIEW_68_KEYS = [];
 {
-  let ledIdx = 0;
   KEYBOARD_LAYOUT.forEach((row, rowIdx) => {
-    let colOffset = 0.5;
-    row.forEach((k) => {
+    let colOffset = 0;
+    row.forEach((k, column) => {
       PREVIEW_68_KEYS.push({
         name: k.name,
         label: k.label,
         row: rowIdx + 1,
-        col: Math.round(colOffset),
-        physical_x: colOffset,
+        col: column + 1,
+        physical_x: colOffset + k.width / 2,
         physical_y: (rowIdx + 1) * 1.0,
-        led_id: ledIdx++,
+        led_id: calibratedKeymap.keys[k.name].led_id,
         width: k.width
       });
       colOffset += k.width;
@@ -55,9 +56,11 @@ export class JsTranspiler {
     const publication = normalizePublication(options);
     const oneShot = publication.mode === "one_shot";
     const ws = topBlocks[0]?.workspace || { getTopBlocks: () => topBlocks };
+    validateEffectVariableTypes(ws);
     const program = compileSequence(ws, { language: 'js', oneShot, value: this.valueToJs.bind(this), statement: this.blockToJs.bind(this) });
-    const variables = (ws.getAllVariables?.() || []).map(v => `var_${v.name.replace(/[^a-zA-Z0-9_]/g, '_')}`);
+    const variables = effectVariables(ws).map(effectVariableSymbol);
     return `
+      "use strict";
       if (!state.frame ${oneShot ? '' : '|| elapsed_ms < state.last'}) {
         state.frame = keymap.map(() => [0, 0, 0]);
         state.pc = ${program.entry}; state.wake = 0;
@@ -71,6 +74,20 @@ export class JsTranspiler {
         return state.frame.map(rgb => rgb.map(channel => Math.floor(channel * opacity)));
       }` : ''}
       const frame = state.frame, info = null;
+      // Versioned snapshots are deterministic logical input; the historical
+      // energy-map argument remains accepted for existing local preview callers.
+      const logicalKeys = decays?.schema_version === 1 ? decays : null;
+      const keyState = key => logicalKeys?.source_available === true ? logicalKeys.keys?.[key] : null;
+      const keyPressed = key => logicalKeys ? keyState(key)?.held === true : Boolean(decays[key] > 0.05);
+      const keyDecay = (key, rate) => {
+        if (!logicalKeys) return decays[key] || 0;
+        const value = keyState(key);
+        if (!value) return 0;
+        if (value.held === true) return 1;
+        if (!Number.isFinite(value.released_at_ms) || value.released_at_ms > logicalKeys.observed_at_ms) return 0;
+        const speed = Number.isFinite(rate) ? Math.max(0, Math.min(100, rate)) : 0;
+        return Math.exp(-speed * (logicalKeys.observed_at_ms - value.released_at_ms) / 1000);
+      };
       let _pc = state.pc, _wake = state.wake;
       const _indices = state.indices, _limits = state.limits;
       ${variables.map(v => `let ${v} = state.vars.${v} ?? 0;`).join('\n')}
@@ -108,9 +125,10 @@ export class JsTranspiler {
         const color = this.valueToJs(block, 'COLOR', '[255, 255, 255]');
         const next = this.blockToJs(block.getNextBlock());
         return `(() => {
-          const id = Math.max(0, Math.min(frame.length - 1, Math.round(${ledId})));
+          const led = Math.trunc(${ledId});
+          const id = keymap.findIndex(key => key.led_id === led);
           const c = ${color};
-          frame[id] = [c[0], c[1], c[2]];
+          if (id >= 0 && led >= 0 && led < 128) frame[id] = [c[0], c[1], c[2]];
         })();\n${next}`;
       }
 
@@ -218,20 +236,18 @@ export class JsTranspiler {
 
       case 'variables_set': {
         const varModel = block.getField('VAR')?.getVariable?.();
-        const varName = varModel ? varModel.name : (block.getFieldValue('VAR') || 'x');
-        const cleanName = varName.replace(/[^a-zA-Z0-9_]/g, '_');
+        const symbol = effectVariableSymbol(varModel);
         const val = this.valueToJs(block, 'VALUE', '0');
         const next = this.blockToJs(block.getNextBlock());
-        return `var_${cleanName} = ${val};\n${next}`;
+        return `${symbol} = ${val};\n${next}`;
       }
 
       case 'math_change': {
         const varModel = block.getField('VAR')?.getVariable?.();
-        const varName = varModel ? varModel.name : (block.getFieldValue('VAR') || 'x');
-        const cleanName = varName.replace(/[^a-zA-Z0-9_]/g, '_');
+        const symbol = effectVariableSymbol(varModel);
         const delta = this.valueToJs(block, 'DELTA', '1');
         const next = this.blockToJs(block.getNextBlock());
-        return `var_${cleanName} = (var_${cleanName} || 0) + (${delta});\n${next}`;
+        return `${symbol} = (${symbol} || 0) + (${delta});\n${next}`;
       }
 
       default: {
@@ -364,11 +380,11 @@ export class JsTranspiler {
       }
 
       case 'key_is_pressed':
-        return 'Boolean(decays && decays[info ? info.name : ""] > 0.05)';
+        return 'keyPressed(info ? info.name : "")';
 
       case 'key_decay': {
         const rate = this.valueToJs(target, 'DECAY_RATE', '0.85');
-        return `((decays && decays[info ? info.name : ""]) || 0.0)`;
+        return `keyDecay(info ? info.name : "", ${rate})`;
       }
 
       case 'text':
@@ -454,6 +470,17 @@ export class JsTranspiler {
         })()`;
       }
 
+      case 'sensor_audio_feature': {
+        const feat = target.getFieldValue('FEATURE') || 'rms';
+        const def = this.valueToJs(target, 'DEFAULT', '0');
+        return `(inputs?.audio?.health === 'Fresh' ? (inputs.audio.${feat} ?? ${def}) : ${def})`;
+      }
+
+      case 'sensor_screen_color': {
+        const def = this.valueToJs(target, 'DEFAULT', '{ r: 0, g: 0, b: 0 }');
+        return `(inputs?.screen?.health === 'Fresh' ? (inputs.screen.color ?? ${def}) : ${def})`;
+      }
+
       case 'gsi_enum_constant': {
         const val = target.getFieldValue('VALUE') || '';
         return JSON.stringify(val);
@@ -514,6 +541,7 @@ export class JsTranspiler {
         if (op === 'MINUS') opSym = '-';
         else if (op === 'MULTIPLY') opSym = '*';
         else if (op === 'DIVIDE') opSym = '/';
+        else if (op === 'POWER') return `Math.pow(${a}, ${b})`;
         return `(${a} ${opSym} ${b})`;
       }
 
@@ -532,9 +560,7 @@ export class JsTranspiler {
 
       case 'variables_get': {
         const varModel = target.getField('VAR')?.getVariable?.();
-        const varName = varModel ? varModel.name : (target.getFieldValue('VAR') || 'x');
-        const cleanName = varName.replace(/[^a-zA-Z0-9_]/g, '_');
-        return `var_${cleanName}`;
+        return effectVariableSymbol(varModel);
       }
 
       case 'math_single': {

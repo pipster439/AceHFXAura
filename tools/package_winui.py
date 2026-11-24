@@ -160,8 +160,8 @@ Typed proposals require validation and an explicit user Apply; AI cannot automat
 Chat history is session-only. AI Undo, bounded snapshots, autosave/recovery and recent projects retain draft authority.
 Test Bench is local simulation only. Source-only .auraeffect import/export and Ctrl+Shift+P reuse Studio commands.
 SSE and cross-restart chat history are deferred. Native 125% DPI has not been manually accepted.
-Unsupported/malformed cross-workspace graphs may show a blank editor/context timeout instead of a graceful error;
-the supported project and bundle paths have been accepted.
+Malformed or cross-workspace Studio graphs are guarded by import validation to preserve existing drafts;
+alpha.9 software tests cover these paths, but installed-runtime and 125% DPI acceptance are still pending.
 
 ## Third-party runtime components
 Windows App SDK/.NET dependencies retain their upstream licenses. Microsoft VC runtime DLLs are redistributed from the installed Visual Studio Redist directory under the applicable Microsoft redistribution terms.

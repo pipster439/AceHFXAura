@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <optional>
 #include <cstddef>
+#include <string>
 
 namespace aura::m605 {
 
@@ -14,6 +15,35 @@ using Report = std::array<uint8_t, 65>;
 std::optional<Report> BuildSelectHardwareProfileSlot(uint8_t slot);
 Report BuildBasicInfoQuery();
 std::optional<uint8_t> ParseBasicInfoActiveSlot(const uint8_t* report, size_t length);
+
+enum class FirmwareState { Unknown, Supported, Unsupported, ReadFailed };
+struct FirmwareCompatibility {
+    FirmwareState state = FirmwareState::Unknown;
+    std::string version;
+    std::string reason = "FirmwareUnknown: no current-session BasicInfo observation";
+    uint64_t session_generation = 0; // host provenance only; never provided by JSON
+    bool Supported() const { return state == FirmwareState::Supported; }
+};
+const char* FirmwareStateName(FirmwareState state);
+FirmwareCompatibility ParseBasicInfoFirmware(const uint8_t* report, size_t length);
+bool IsConfigurationMutation(const Report& report);
+
+// Same fixed 12 00 protocol as the existing slot query. There is no wire nonce:
+// a window bounds acquisition and rejects a host-observed stale handle/epoch,
+// but cannot prove which same-session identical request caused a reply.
+class BasicInfoReplyWindow {
+public:
+    enum class Result { Accept, Ignore, Expired, StaleSession };
+    BasicInfoReplyWindow(uint64_t epoch, uint64_t started_ms)
+        : epoch_(epoch), started_ms_(started_ms) {}
+    Result Consider(const uint8_t* report, size_t length, uint64_t epoch,
+                    uint64_t now_ms, bool current_session);
+    const std::string& Error() const { return error_; }
+private:
+    uint64_t epoch_, started_ms_;
+    unsigned received_ = 0;
+    std::string error_;
+};
 
 enum class DksTriggerState : uint8_t {
     Inactive = 0, Tap = 1, Release = 2, Hold = 3

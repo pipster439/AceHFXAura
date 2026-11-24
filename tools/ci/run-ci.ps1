@@ -5,13 +5,17 @@ param(
     [switch]$SkipFrontend,
     [switch]$SkipWinUI,
     [switch]$KeepBuild,
-    [string]$OutputDirectory = 'artifacts/ci'
+    [string]$OutputDirectory = ''
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 . "$PSScriptRoot/ci-common.ps1"
+. "$PSScriptRoot/../dev/generated-common.ps1"
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
+$hosted = $env:GITHUB_ACTIONS -eq 'true'
+$runId = [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss') + '-' + [Guid]::NewGuid().ToString('N').Substring(0, 8)
+if (-not $OutputDirectory) { $OutputDirectory = $hosted ? 'artifacts/ci' : "artifacts/ci/runs/$runId" }
 $output = [IO.Path]::GetFullPath($OutputDirectory, $repo)
 New-Item -ItemType Directory -Force -Path $output | Out-Null
 $summary = [ordered]@{
@@ -26,14 +30,16 @@ $environment = @{
     AURA_PACKAGE_DIR = $null; AURA_UI_EXE = $null; AURA_UI_VALIDATION_DIR = $null
     AURA_STUDIO_EXE = $null; AURA_STUDIO_VALIDATION_DIR = $null
 }
-$runId = if ($KeepBuild) { 'kept' } else { [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss') + '-' + [Guid]::NewGuid().ToString('N').Substring(0, 8) }
-$build = Join-Path $repo "build/ci/$runId"
+$build = Join-Path $repo ("build/ci/" + ($KeepBuild ? 'kept' : $runId))
+$summary.build_directory = [IO.Path]::GetRelativePath($repo, $build)
+$summary.output_directory = [IO.Path]::GetRelativePath($repo, $output)
 $testResults = Join-Path $output ("dotnet-test/" + [Guid]::NewGuid().ToString('N'))
 $summary.test_results_directory = [IO.Path]::GetRelativePath($output, $testResults)
 $environment.AURA_BIN_DIR = Join-Path $build $Configuration
 $environment.AURA_INTEGRATION_BIN = $environment.AURA_BIN_DIR
 Push-Location $repo
 $success = $false
+$storageState = $null
 try {
     # Stamp all known logs upfront; an early failure must not present old build logs as fresh evidence.
     $planned = [ordered]@{
@@ -58,6 +64,11 @@ try {
     $summary.working_tree_clean = (@(& git status --porcelain).Count -eq 0)
     Invoke-CiStage $summary $output 'guards' 'guards.log' {
         if (-not $IsWindows) { throw 'Windows/MSVC software CI requires PowerShell 7 on Windows.' }
+        if (-not $hosted) {
+            $script:storageState = Start-AuraLocalCiStorage $repo $build $runId $output -KeepBuild:$KeepBuild
+            $summary.storage = $script:storageState.telemetry
+            "Storage: $([Math]::Round($summary.storage.free_bytes_before/1GB,2)) GiB free; estimated requirement $($summary.storage.estimated_required_bytes/1GB) GiB."
+        } else { $summary.storage = @{mode='github-hosted';policy='Ephemeral runner; local retention disabled'} }
         foreach ($tool in @('git', 'python', 'node', 'npm', 'cmake', 'ctest', 'dotnet')) {
             if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) { throw "Required tool missing: $tool" }
         }
@@ -122,7 +133,8 @@ try {
         # Dependencies cannot silently remove permanent suites from a fresh configure.
         foreach ($name in @('device_profile_runtime', 'device_profile_automation_coordinator',
             'device_profile_binding_engine', 'automation_reconciliation', 'automation_migration',
-            'stage0_fixture_integrity', 'ci_infrastructure', 'native_hardware_ci_guard')) {
+            'stage0_fixture_integrity', 'ci_infrastructure', 'native_hardware_ci_guard',
+            'firmware_gate', 'firmware_unknown_seam')) {
             if ($name -notin $tests.name) { throw "Required permanent suite not registered: $name" }
         }
         "Discovered $($tests.Count) tests; executing the entire registry."
@@ -177,8 +189,26 @@ try {
     Write-Host "CI failed: $($_.Exception.Message)" -ForegroundColor Red
 } finally {
     $summary.completed_at_utc = [DateTime]::UtcNow.ToString('o')
-    Write-CiSummary $summary $output
-    foreach ($key in $savedEnv.Keys) { [Environment]::SetEnvironmentVariable($key, $savedEnv[$key]) }
-    Pop-Location
+    if ($storageState) {
+        try { Complete-AuraLocalCiStorage $storageState $summary.overall }
+        catch {
+            $summary.storage.cleanup_error = $_.Exception.Message
+            $summary.overall = 'failed'; $success = $false
+            Write-Host "Storage lifecycle failed; retained output: $($_.Exception.Message)" -ForegroundColor Red
+        }
+    }
+    try {
+        Write-CiSummary $summary $output
+        if (-not $hosted -and $output -ne (Join-Path $repo 'artifacts/ci')) {
+            # Pointer contains only the summary and its base path; logs/TRX stay in the run directory.
+            $latest = Join-Path $repo 'artifacts/ci'
+            New-Item -ItemType Directory -Force -Path $latest | Out-Null
+            Copy-Item -LiteralPath (Join-Path $output 'ci-summary.json') -Destination (Join-Path $latest 'latest-summary.json')
+            Write-Host "CI result: $($summary.overall). Evidence: $output"
+        }
+    } finally {
+        foreach ($key in $savedEnv.Keys) { [Environment]::SetEnvironmentVariable($key, $savedEnv[$key]) }
+        Pop-Location
+    }
 }
 if (-not $success) { exit 1 }

@@ -1,10 +1,12 @@
 # Release checklist — WinUI desktop entry
 
-Alpha.7 current acceptance records: [release closure](../release/HARDWARE_SLOT_RELEASE_CLOSURE.md) and [package candidate](../release/PACKAGE_CANDIDATE_AUDIT.md). Candidate PASS is not final release approval. Exact final commit hosted CI, clean rebuild and final runtime acceptance are distinct gates.
+CURRENT: alpha.8 is a published [prerelease](https://github.com/pipster439/AceHFXAura/releases/tag/v0.1.0-alpha.8) at `c52398bef2738f71b927594424736a42da5184ab`. Its [Studio acceptance checkpoint](../release/ALPHA8_FEATURE_ACCEPTANCE.md) is HISTORICAL and predates publication. Alpha.7 [release closure](../release/HARDWARE_SLOT_RELEASE_CLOSURE.md) and [package candidate](../release/PACKAGE_CANDIDATE_AUDIT.md) remain historical evidence. This checklist applies to future candidates; existing checkpoint PASS does not approve a new release. Exact final commit hosted CI, clean rebuild and final runtime acceptance remain distinct gates.
 
 Version source: [`VERSION`](../../VERSION). A generated ZIP is a candidate, not approval to publish. Record the candidate SHA-256, commit/patch, Windows version and test date. Never substitute dry-run tests for physical results.
 
 ## Automated gates
+
+Alpha.9 candidate tracking: [integrated acceptance matrix](../testing/ALPHA9_ACCEPTANCE_MATRIX.md).
 
 - [ ] C++ Release ALL_BUILD and CTest pass (including original Native HID/Automation/GSI/Plugin tests).
 - [ ] Frontend `npm test` and `npm run build` pass; explain any skips.
@@ -35,7 +37,7 @@ Version source: [`VERSION`](../../VERSION). A generated ZIP is a candidate, not 
 - [ ] GUI-owned exit stops only its core/web tree; externally started daemon survives GUI exit. Restart/reconnect and abrupt GUI termination leave no owned orphan process.
 - [ ] Home reports actual hardware/backend/profile/FPS and REAL/SIMULATION correctly; unplugged hardware is not reported as connected.
 - [ ] Lighting preset/schema fields, sparse save, advanced plugin notice, dirty navigation, concurrent Studio revision conflict and cancelled in-flight save behave correctly.
-- [ ] Test 600 DIP minimum width, 500 DIP minimum height, 100/150/200% DPI, light/dark/system themes. No clipped Settings controls, slider value jumps, notification-driven page jumps or stale page notifications.
+- [ ] Test 600 DIP minimum width, 500 DIP minimum height, 100/125/150/200% DPI, light/dark/system themes. Record actual monitor DPI; model checks and screenshots at other scales do not accept Native 125% DPI. No clipped Settings controls, slider value jumps, notification-driven page jumps or stale page notifications.
 - [ ] Rapid navigation and back/Settings/titlebar selection remain synchronized; background page work stops. Repeated Studio navigation retains one WebView/editor and its draft.
 - [ ] WebView2 absent: actionable install link/error; installed: Studio loads. Suppress web: core/Home/Lighting/GSI continue; Studio reports web unavailability and recovers without discarding a retained draft automatically.
 

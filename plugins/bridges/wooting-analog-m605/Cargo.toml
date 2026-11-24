@@ -1,0 +1,12 @@
+[package]
+name = "wooting_analog_plugin_aura_m605"
+version = "0.1.0"
+edition = "2021"
+description = "Wooting Analog SDK plugin bridging ASUS ROG Falchion Ace HFX (M605) Hall telemetry from Aura"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+wooting-analog-plugin-dev = "0.7.1"
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_System_Memory"] }

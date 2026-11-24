@@ -1,0 +1,64 @@
+{
+  "conclusion": "INCONCLUSIVE",
+  "version": "0.1.0-alpha.8",
+  "head": "c52398bef2738f71b927594424736a42da5184ab",
+  "STATIC": {
+    "inherited_zip_sha256": "bb4bd64b712258b022af83546cd79cf335edbee4d5ebf98e389edbeda1ac00bd",
+    "crc_and_internal_hashes": "PASS",
+    "route_73_74": "UNKNOWN",
+    "usb_field_layout": "UNKNOWN",
+    "current_firmware": "UNKNOWN"
+  },
+  "OFFLINE_TEST": {
+    "passed": 21,
+    "failed": 0,
+    "fixtures": "SYNTHETIC",
+    "native_delivery_lifecycle_coexistence": "NOT RUN"
+  },
+  "READ_ONLY_PREFLIGHT": [
+    {
+      "classification": "READ_ONLY_PREFLIGHT",
+      "local_unlocked_console": true,
+      "collection": "MI_02_Col03",
+      "matching_collections": 1,
+      "capture_started": false,
+      "raw_registration": false,
+      "physical_test": "NOT RUN"
+    },
+    {
+      "classification": "READ_ONLY_PREFLIGHT",
+      "local_unlocked_console": true,
+      "collection": "MI_01",
+      "matching_collections": 1,
+      "capture_started": false,
+      "raw_registration": false,
+      "physical_test": "NOT RUN"
+    }
+  ],
+  "PHYSICAL_PASS": {
+    "status": "NOT RUN",
+    "trials": 0,
+    "captured_seconds": 0,
+    "verified_keys": 0,
+    "target_keys": 68,
+    "blocker": "No explicit Owner entry into dedicated physical test session"
+  },
+  "semantics": {
+    "press_release": "UNKNOWN",
+    "dks": "UNKNOWN",
+    "copilot_independence": "UNKNOWN",
+    "all_68_coverage": "UNKNOWN",
+    "reactive_ripple_provider": "GATE CLOSED"
+  },
+  "preexisting_files_unchanged": 634,
+  "new_files": [
+    "docs/research/physical-key-state/STAGE_B_REPORT.md",
+    "docs/research/physical-key-state/evidence/STAGE_B_VALIDATION.json",
+    "tools/research/physical-key-stage-b/CMakeLists.txt",
+    "tools/research/physical-key-stage-b/README.md",
+    "tools/research/physical-key-stage-b/observation_core.h",
+    "tools/research/physical-key-stage-b/observer_win32.cpp",
+    "tools/research/physical-key-stage-b/offline_tests.cpp"
+  ],
+  "hardware_writes_or_queries": false
+}

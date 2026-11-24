@@ -97,3 +97,7 @@ automatic selector, and firmware lighting restoration with zero C0 81 submission
 The privacy-filtered collector counts target Direct RGB OUT submissions without
 retaining their RGB/key bodies. A body omitted from a capture is not by itself
 proof of zero submissions; use its accompanying privacy manifest counter.
+
+## Offline firmware admission
+
+CTest firmware_gate and firmware_unknown_seam are mandatory discovery entries. The capture fixture replays 62 historical BasicInfo payloads with a statically reconstructed Windows Report ID prefix; synthetic cases remain labelled separately. Tests use FakeTransport/FakeSettleWait and never open a keyboard. Passing these suites does not close native query timing, same-session stale reply ambiguity or physical firmware acceptance. See [admission contract](../architecture/M605_FIRMWARE_ADMISSION.md).

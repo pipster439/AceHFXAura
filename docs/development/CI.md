@@ -45,7 +45,7 @@ pwsh ./tools/ci/run-ci.ps1 -KeepBuild
 pwsh ./tools/ci/run-ci.ps1 -SkipFrontend -SkipWinUI
 ```
 
-默认每次使用新的 `build/ci/<run-id>/`，无递归删除。
+默认每次使用新的 `build/ci/<run-id>/`。本地 CI 对具有本入口 ownership manifest 的旧输出执行安全 retention；历史未知目录、release/audit 默认保护。
 `KeepBuild` 每次仍 configure，但复用专属 `build/ci/kept/`。
 `SkipFrontend` 只跳过 frontend test/build，**不跳过 npm ci / native Studio fixture**。
 任何 skip 都将 summary 标为 `partial`，不是完整 required CI PASS。
@@ -80,7 +80,7 @@ CI 不启动正常 daemon，不执行任何 M605/51 54/reset/Apply gate 真机�
 
 ## Artifacts
 
-默认 `artifacts/ci/`（Git ignored）：
+GitHub 默认 `artifacts/ci/`；本地默认 `artifacts/ci/runs/<run-id>/`（Git ignored）：
 
 - `ci-summary.json`：schema_version1、configuration、informational working_tree_clean、
   complete_required_run、UTC timestamps、stages(name/outcome/duration_ms/exit_code/log)、overall。
@@ -90,7 +90,32 @@ CI 不启动正常 daemon，不执行任何 M605/51 54/reset/Apply gate 真机�
 - `step-summary.md`。
 
 不要上传整个 artifacts 或 build/user home；workflow 明确只上传上述软件证据。
-每次复用相同 OutputDirectory 会更新同名日志；未执行的stage预先标记not-run，避免旧日志冒充本轮。TRX使用独立run目录；以summary的test_results_directory定位本轮结果。需要长期比较时使用独立目录。
+本地默认日志按 run-id 保存，`artifacts/ci/latest-summary.json` 提供最近结果指针；控制台显示完整证据目录。显式复用 OutputDirectory 仍会更新同名日志；自定义输出目录不会被自动 retention 接管。未执行 stage 预先标记 not-run，TRX 用 summary 的 test_results_directory 定位。
+
+### 本地空间与 retention
+
+开始：取得工作区 exclusive canonical lock，测量历史 native 输出，先对明确拥有的旧 runs 安全 prune，再做 low-disk preflight。估算为 `max(1 GiB,历史 native 观测)*1.5 + 2 GiB`，向上取整；本机历史 0.860 GiB 对应最低 4 GiB、warning 6 GiB。不足时拒绝新 build，报告剩余空间、估算需求和 cleanup 命令。估算不是实测 peak；summary 明确标注 start/end logical-byte 观测。
+
+运行中：`build/ci/<run-id>/.aura-generated.json` 标记 running，exclusive `.aura-active.lock` 保护当前 build；默认日志目录单独标记 SHORT_RETENTION。与 git worktree、当前 cwd、活动命令/可执行文件、reparse 或未知数据相交的候选全部跳过。构建/日志按各自 status 分组，保留最近 3 项及所有 <24h 的项。失败 runs 默认需要 IncludeFailedRuns；CI 生命周期显式启用，但仍保留最后 3 个失败、近期失败和当前失败。被终止而留下 running 的 run 不会推测为可删。
+
+成功：只删除本次拥有的 `.obj/.tlog/.pch/.ilk` 中间文件，保留二进制、生成源、日志和测试结果；`-KeepBuild` 保留可增量构建数据。失败保留当前完整 build。结束执行旧 run retention，summary 添加 free/generated/build approximate/reclaimed storage section，区分保留 run 数与产物目录数。`cleanup-start.json` / `cleanup-end.json` 保存逐路径分类、跳过/删除原因及字节数；错误计数在 summary 显示。GitHub-hosted runner 不执行这些本地清理。
+
+三份 configure-time probe/review headers 只在路径与生成字节 SHA-256 同时匹配时允许随整个旧 run 删除；ABI、generator 或 review 漂移后自动转为保护，必须重新审核 hash。普通源码、修改后的 header 和手工 evidence 继续保护。`config_writer_util.obj` 等已知中间格式不被仅凭 config/settings 名称误判为用户配置。
+
+手动工具默认只预览；实际删除必须显式 `-Apply`：
+
+```powershell
+pwsh tools/dev/cleanup-generated.ps1 -DryRun -IncludeFailedRuns
+pwsh tools/dev/cleanup-generated.ps1 -Apply -KeepLast 3 -OlderThanDays 1 -IncludeFailedRuns
+pwsh tools/dev/temporary-worktrees.ps1
+python -B tests/test_generated_cleanup.py
+```
+
+只有 `build/ci` 和 `artifacts/ci/runs` 的立即子目录可被常规 cleanup 接管；manifest 必须同时证明 owner/repo/path/category/status。`-LegacyBuildNames` 是显式一次性旧 CMake 校验路径，不自动发现/接管；存在 config、真实 .auraeffect、截图、源码副本、release/audit 等时跳过。所有删除逐项检查 literal path，拒绝 traversal、root 和 reparse escape。
+
+Worktree helper 默认 report-only。仅 `.git/aura-temporary-worktrees.json` 中 owner=`Aura.dev-worktrees`、schema_version=1 的明确记录，并且位于 `build/dev-worktrees/<name>`、completed >7天、无活动进程、完全 clean（包括 ignored/untracked）的 worktree 才可 `-Apply`。记录字段为 path/status/completed_utc/pid；未登记历史 worktree 永不自动接管。无 force remove/global prune。
+
+快速子系统入口见 [Testing](../testing/TESTING.md)；无需每次 full canonical：`npm --prefix frontend test`、`dotnet test tests/Aura.Tests/Aura.Tests.csproj --filter FullyQualifiedName~Studio`，或 `ctest --test-dir <保留build> -C Release -R <suite> --output-on-failure`。
 
 ## 本地硬件 smoke（不属于 required CI）
 

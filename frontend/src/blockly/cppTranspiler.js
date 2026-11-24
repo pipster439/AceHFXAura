@@ -1,5 +1,7 @@
 import { normalizePublication } from './publication.js';
 import { compileSequence } from './sequenceCompiler.js';
+import { effectVariables, effectVariableSymbol, validateEffectVariableTypes } from './workspaceSafety.js';
+
 /**
  * C++17 Transpiler for Google Blockly Lighting Effects
  * Emits zero-heap allocation classes conforming to aura::Effect and Aura Plugin ABI v1.0.0.
@@ -13,12 +15,15 @@ export class CppTranspiler {
    * @returns {string} C++ source code
    */
   static transpile(effectName, workspace, options = {}) {
+    validateEffectVariableTypes(workspace);
     const publication = normalizePublication(options);
     const oneShot = publication.mode === "one_shot";
     const safeName = this.sanitizeIdentifier(effectName);
+    const keyboard = (workspace?.getAllBlocks?.(false) || []).some(block =>
+      block.isEnabled?.() !== false && ['key_is_pressed', 'key_decay'].includes(block.type));
     const program = compileSequence(workspace, { language: 'cpp', oneShot, value: this.valueToCpp.bind(this), statement: this.blockToCpp.bind(this) });
-    const members = (workspace?.getAllVariables?.() || []).map(v => `double var_${v.name.replace(/[^a-zA-Z0-9_]/g, '_')} = 0.0;`).join('\n');
-    const resetVars = (workspace?.getAllVariables?.() || []).map(v => `var_${v.name.replace(/[^a-zA-Z0-9_]/g, '_')} = 0.0;`).join('\n');
+    const members = effectVariables(workspace).map(v => `double ${effectVariableSymbol(v)} = 0.0;`).join('\n');
+    const resetVars = effectVariables(workspace).map(v => `${effectVariableSymbol(v)} = 0.0;`).join('\n');
     const bodyCode = `
         if (!_initialized ${oneShot ? '' : '|| elapsed_ms < _last'}) {
             static constexpr const char* _key_names[68] = { ${program.keyNames} };
@@ -30,6 +35,7 @@ export class CppTranspiler {
             ${resetVars}
         }
         _last = elapsed_ms;
+        ${keyboard ? 'ReadKeyboard();' : ''}
         ${oneShot ? `if (_terminal) {
             if (${publication.fade_out_ms} == 0 || _zero_rendered) _finished = true;
             else {
@@ -57,6 +63,7 @@ export class CppTranspiler {
 #include <cstdint>
 #include <string_view>
 #include <string>
+#include <stdexcept>
 
 namespace aura {
 
@@ -90,6 +97,42 @@ public:
     int _indices[${program.slots}]{};
     int _limits[${program.slots}]{};
     ${members}
+    ${keyboard ? `AuraLogicalKeyboardHostV1 _keyboardHost{};
+    AuraLogicalKeyboardSnapshotV1 _keyboard{};
+    bool BindKeyboard(const AuraLogicalKeyboardHostV1* host) {
+        if (!host || host->struct_size != sizeof(AuraLogicalKeyboardHostV1) ||
+            host->version != AURA_LOGICAL_KEYBOARD_VERSION || !host->read_snapshot) return false;
+        _keyboardHost = *host; return true;
+    }
+    void ReadKeyboard() {
+        if (!_keyboardHost.read_snapshot) throw std::runtime_error("logical_keyboard_host_required");
+        _keyboard = {};
+        if (_keyboardHost.read_snapshot(_keyboardHost.context, &_keyboard, sizeof(_keyboard)) != 1 ||
+            _keyboard.struct_size != sizeof(_keyboard) || _keyboard.version != AURA_LOGICAL_KEYBOARD_VERSION ||
+            _keyboard.source_available != 1 || _keyboard.count > AURA_LOGICAL_KEYBOARD_MAX_KEYS) _keyboard = {};
+    }
+    const AuraLogicalKeyStateV1* KeyState(const KeyInfo& key) const {
+        if (_keyboard.source_available != 1 || key.key_name.empty()) return nullptr;
+        for (uint32_t i = 0; i < _keyboard.count; ++i) {
+            const auto& state = _keyboard.keys[i];
+            size_t length = 0;
+            while (length < AURA_LOGICAL_KEYBOARD_NAME_BYTES && state.name[length]) ++length;
+            if (length < AURA_LOGICAL_KEYBOARD_NAME_BYTES && std::string_view(state.name, length) == key.key_name) return &state;
+        }
+        return nullptr;
+    }
+    bool KeyPressed(const KeyInfo& key) const {
+        const auto* state = KeyState(key); return state && state->held == 1;
+    }
+    double KeyDecay(const KeyInfo& key, double rate) const {
+        const auto* state = KeyState(key);
+        if (!state) return 0.0;
+        if (state->held == 1) return 1.0;
+        if (state->has_release != 1 || state->last_up_ms > _keyboard.observed_at_ms) return 0.0;
+        const auto age = _keyboard.observed_at_ms - state->last_up_ms;
+        rate = std::isfinite(rate) ? std::clamp(rate, 0.0, 100.0) : 0.0;
+        return std::exp(-rate * static_cast<double>(age) / 1000.0);
+    }` : ''}
     Effect_${safeName}() = default;
     virtual ~Effect_${safeName}() = default;
 
@@ -109,6 +152,10 @@ ${bodyCode}
 } // namespace aura
 
 extern "C" {
+    ${keyboard ? `__declspec(dllexport) uint32_t AURA_PLUGIN_CALL AuraGetLogicalKeyboardVersion() { return AURA_LOGICAL_KEYBOARD_VERSION; }
+    __declspec(dllexport) uint32_t AURA_PLUGIN_CALL AuraBindLogicalKeyboard(aura::Effect* effect, const AuraLogicalKeyboardHostV1* host) {
+        return effect && static_cast<aura::Effect_${safeName}*>(effect)->BindKeyboard(host) ? 1 : 0;
+    }` : ''}
     ${oneShot ? `__declspec(dllexport) uint32_t AURA_PLUGIN_CALL AuraGetEffectLifecycleVersion() { return 1; }
     __declspec(dllexport) uint32_t AURA_PLUGIN_CALL AuraIsEffectFinished(const aura::Effect* effect, uint64_t) {
         return static_cast<const aura::Effect_${safeName}*>(effect)->_finished ? 1 : 0;
@@ -148,17 +195,15 @@ extern "C" {
    */
   static generateBodyCode(workspace) {
     if (!workspace) return '        // No-op safe pass';
+    validateEffectVariableTypes(workspace);
     const topBlocks = workspace.getTopBlocks(true);
     if (!topBlocks || topBlocks.length === 0) {
       return '        out_frame.Fill(0, 0, 0);';
     }
 
     let statements = [];
-    if (workspace && typeof workspace.getAllVariables === 'function') {
-      for (const v of workspace.getAllVariables()) {
-        const cleanName = v.name.replace(/[^a-zA-Z0-9_]/g, '_');
-        statements.push(`        double var_${cleanName} = 0.0;`);
-      }
+    for (const v of effectVariables(workspace)) {
+      statements.push(`        double ${effectVariableSymbol(v)} = 0.0;`);
     }
 
     for (const block of topBlocks) {
@@ -208,7 +253,7 @@ extern "C" {
                `${indent}        const double _dist = std::hypot(_keys[_i]->physical_x - _cx, _keys[_i]->physical_y - _cy);\n` +
                `${indent}        const double _phase = std::fmod(std::fmod(_dist - (static_cast<double>(elapsed_ms) / 1000.0) * _sp, 4.0) + 4.0, 4.0);\n` +
                `${indent}        const double _wave = std::max(0.0, 1.0 - std::fabs(_phase - 1.0));\n` +
-               `${indent}        out_frame.SetKey(_i, ScaleBrightness(_base_col, _wave));\n` +
+               `${indent}        out_frame.SetKey(_keys[_i]->led_id, ScaleBrightness(_base_col, _wave));\n` +
                `${indent}    }\n` +
                `${indent}}${next ? '\n' + next : ''}`;
       }
@@ -296,20 +341,18 @@ extern "C" {
 
       case 'variables_set': {
         const varModel = block.getField('VAR')?.getVariable?.();
-        const varName = varModel ? varModel.name : (block.getFieldValue('VAR') || 'x');
-        const cleanName = varName.replace(/[^a-zA-Z0-9_]/g, '_');
+        const symbol = effectVariableSymbol(varModel);
         const val = this.valueToCpp(block, 'VALUE', '0.0');
         const next = this.blockToCpp(block.getNextBlock(), indent);
-        return `${indent}var_${cleanName} = static_cast<double>(${val});${next ? '\n' + next : ''}`;
+        return `${indent}${symbol} = static_cast<double>(${val});${next ? '\n' + next : ''}`;
       }
 
       case 'math_change': {
         const varModel = block.getField('VAR')?.getVariable?.();
-        const varName = varModel ? varModel.name : (block.getFieldValue('VAR') || 'x');
-        const cleanName = varName.replace(/[^a-zA-Z0-9_]/g, '_');
+        const symbol = effectVariableSymbol(varModel);
         const delta = this.valueToCpp(block, 'DELTA', '1.0');
         const next = this.blockToCpp(block.getNextBlock(), indent);
-        return `${indent}var_${cleanName} += static_cast<double>(${delta});${next ? '\n' + next : ''}`;
+        return `${indent}${symbol} += static_cast<double>(${delta});${next ? '\n' + next : ''}`;
       }
 
       default: {
@@ -435,10 +478,10 @@ extern "C" {
       }
 
       case 'key_is_pressed':
-        return 'false';
+        return 'KeyPressed(info)';
 
       case 'key_decay':
-        return '0.0';
+        return `KeyDecay(info, ${this.valueToCpp(target, 'DECAY_RATE', '0.85')})`;
 
       case 'text':
         return JSON.stringify(target.getFieldValue('TEXT') || '');
@@ -495,6 +538,17 @@ extern "C" {
         return `(std::string_view(gsi ? gsi->GetString("round.bomb", "") : "") == ${JSON.stringify(expectedVal)})`;
       }
 
+      case 'sensor_audio_feature': {
+        const feat = target.getFieldValue('FEATURE') || 'rms';
+        const def = this.valueToCpp(target, 'DEFAULT', '0.0');
+        return `(ctx.audio && ctx.audio->Read(ctx.elapsed_ms).health.availability == aura::InputAvailability::Fresh ? (std::string("${feat}") == "peak" ? ctx.audio->Read(ctx.elapsed_ms).sample.peak : std::string("${feat}") == "centroid" ? ctx.audio->Read(ctx.elapsed_ms).sample.spectral_centroid_hz : ctx.audio->Read(ctx.elapsed_ms).sample.rms) : ${def})`;
+      }
+
+      case 'sensor_screen_color': {
+        const def = this.valueToCpp(target, 'DEFAULT', 'ColorRGB(0, 0, 0)');
+        return `(ctx.screen && ctx.screen->Read(ctx.elapsed_ms).health.availability == aura::InputAvailability::Fresh ? ctx.screen->Read(ctx.elapsed_ms).sample.color : ${def})`;
+      }
+
       case 'gsi_enum_constant': {
         const val = target.getFieldValue('VALUE') || '';
         return JSON.stringify(val);
@@ -527,6 +581,7 @@ extern "C" {
         if (op === 'MINUS') opSym = '-';
         else if (op === 'MULTIPLY') opSym = '*';
         else if (op === 'DIVIDE') opSym = '/';
+        else if (op === 'POWER') return `std::pow(static_cast<double>(${a}), static_cast<double>(${b}))`;
         return `(${a} ${opSym} ${b})`;
       }
 
@@ -545,9 +600,7 @@ extern "C" {
 
       case 'variables_get': {
         const varModel = target.getField('VAR')?.getVariable?.();
-        const varName = varModel ? varModel.name : (target.getFieldValue('VAR') || 'x');
-        const cleanName = varName.replace(/[^a-zA-Z0-9_]/g, '_');
-        return `var_${cleanName}`;
+        return effectVariableSymbol(varModel);
       }
 
       case 'math_single': {

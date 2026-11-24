@@ -744,6 +744,7 @@ nlohmann::json GsiAdapter::CurrentStatus() const {
     std::lock_guard<std::mutex> lock(source_mutex_);
     auto snapshot = state_.ToJson();
     snapshot["studio_runtime"] = 2;
+    snapshot["logical_keyboard_version"] = AURA_LOGICAL_KEYBOARD_VERSION;
     snapshot["gsi_api_version"] = 1;
     snapshot["instance_id"] = instance_id_;
     snapshot["source"] = simulation_ ? "simulation" : "real";
@@ -804,6 +805,77 @@ AutomationEvaluation GsiAdapter::EvaluateAutomation(RuleEngine& engine, const st
     return result;
 }
 
+// Shared production handler keeps the reload write boundary directly testable without
+// opening a listener or invoking the real generation/publication callback.
+void HandlePluginReloadRequest(const httplib::Request& req, httplib::Response& res,
+                               const std::function<bool(const std::string&, bool)>& reload) {
+    if (!IsAllowedLoopbackHost(req.get_header_value("Host")) ||
+        !ValidateLoopbackOriginAndReferer(req.get_header_value("Origin"), req.get_header_value("Referer"))) {
+        res.status = 403;
+        res.set_content(R"({"status":"error","message":"forbidden"})", "application/json; charset=utf-8");
+        return;
+    }
+    if (!IsJsonContentType(req.get_header_value("Content-Type"))) {
+        res.status = 415;
+        res.set_content(R"({"status":"error","message":"application/json required"})", "application/json; charset=utf-8");
+        return;
+    }
+    constexpr size_t kMaxReloadRequestBytes = 4096;
+    if (req.body.size() > kMaxReloadRequestBytes) {
+        res.status = 413;
+        res.set_content(R"({"status":"error","message":"request too large"})", "application/json; charset=utf-8");
+        return;
+    }
+
+    std::string name;
+    bool require_lifecycle = false;
+    try {
+        std::set<std::string> fields;
+        const auto j = nlohmann::json::parse(req.body, [&fields](int depth, nlohmann::json::parse_event_t event, nlohmann::json& value) {
+            if (event == nlohmann::json::parse_event_t::key && !fields.insert(value.get<std::string>()).second)
+                throw std::invalid_argument("duplicate reload field");
+            if (depth > 0 && (event == nlohmann::json::parse_event_t::object_start ||
+                event == nlohmann::json::parse_event_t::array_start))
+                throw std::invalid_argument("reload fields must be scalar values");
+            return true;
+        });
+        if (!j.is_object() || j.empty()) throw std::invalid_argument("expected nonempty reload object");
+        for (const auto& field : j.items()) {
+            if (field.key() != "name" && field.key() != "plugin_name" && field.key() != "require_lifecycle")
+                throw std::invalid_argument("unsupported reload field");
+        }
+        if (j.contains("name") && !j.at("name").is_string())
+            throw std::invalid_argument("name must be a string");
+        if (j.contains("plugin_name") && !j.at("plugin_name").is_string())
+            throw std::invalid_argument("plugin_name must be a string");
+        if (j.contains("require_lifecycle") && !j.at("require_lifecycle").is_boolean())
+            throw std::invalid_argument("require_lifecycle must be a boolean");
+        if (j.contains("name") && j.contains("plugin_name") &&
+            j.at("name").get<std::string>() != j.at("plugin_name").get<std::string>())
+            throw std::invalid_argument("conflicting plugin names");
+        name = j.value("name", j.value("plugin_name", std::string{}));
+        if (name.empty() || name.size() > 64 ||
+            !std::all_of(name.begin(), name.end(), [](unsigned char c) {
+                return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                    (c >= '0' && c <= '9') || c == '_';
+            }))
+            throw std::invalid_argument("plugin name must be a logical alphanumeric/underscore name");
+        require_lifecycle = j.value("require_lifecycle", false);
+    } catch (const std::exception& error) {
+        res.status = 400;
+        res.set_content(nlohmann::json({{"status", "error"}, {"message", error.what()}}).dump(),
+            "application/json; charset=utf-8");
+        return;
+    }
+
+    bool ok = false;
+    if (reload) {
+        ok = reload(name, require_lifecycle);
+    }
+    res.status = ok ? 200 : 400;
+    res.set_content(ok ? "{\"status\":\"ok\",\"message\":\"Plugin reloaded\"}" : "{\"status\":\"error\",\"message\":\"Plugin reload failed\"}", "application/json; charset=utf-8");
+}
+
 void GsiAdapter::SetupRoutes() {
     if (!svr_) return;
     // 限制请求体上限为 256KB，防止超大 payload 引发内存拒绝服务 (DoS)
@@ -855,18 +927,7 @@ void GsiAdapter::SetupRoutes() {
 
     // 守护进程插件热重载 IPC 入口
     svr_->Post("/api/plugin/reload", [this](const httplib::Request& req, httplib::Response& res) {
-        std::string name; bool require_lifecycle = false;
-        try {
-            auto j = nlohmann::json::parse(req.body);
-            name = j.value("name", j.value("plugin_name", ""));
-            require_lifecycle = j.value("require_lifecycle", false);
-        } catch (...) {}
-        bool ok = false;
-        if (on_reload_plugin_) {
-            ok = on_reload_plugin_(name, require_lifecycle);
-        }
-        res.status = ok ? 200 : 400;
-        res.set_content(ok ? "{\"status\":\"ok\",\"message\":\"Plugin reloaded\"}" : "{\"status\":\"error\",\"message\":\"Plugin reload failed\"}", "application/json; charset=utf-8");
+        HandlePluginReloadRequest(req, res, on_reload_plugin_);
     });
 
     // 守护进程编辑态硬件推流预览 IPC 入口

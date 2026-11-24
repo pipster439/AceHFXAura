@@ -55,7 +55,7 @@ public sealed class StudioBundleTests
         }
     }
     [TestMethod] public void PaletteCommandsUseExistingTypedTransport() {
-        foreach(var id in new[]{"palette","run_scenario","restore_snapshot","export_bundle","import_bundle","ask_ai","diagnostics"}) {
+        foreach(var id in new[]{"palette","run_scenario","restore_snapshot","export_bundle","import_bundle","diagnostics"}) {
             using var doc=JsonDocument.Parse(StudioShellModel.Command(id)); Assert.AreEqual(id,doc.RootElement.GetProperty("command").GetString());
         }
     }

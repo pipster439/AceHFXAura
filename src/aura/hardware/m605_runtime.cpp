@@ -16,6 +16,7 @@ public:
     bool WriteStage(const m605::Report& report) override { return backend_.SendReport(report); }
     bool WriteApply(const m605::Report& report) override { return backend_.SendReport(report); }
     bool QueryBasicInfo(m605::Report& response) override { return backend_.QueryBasicInfo(response); }
+    m605::FirmwareCompatibility ReadFirmwareCompatibility() override { return backend_.ReadFirmwareCompatibility(); }
     void Disconnect() override { backend_.Disconnect(); }
     std::string GetLastError() const override { return backend_.GetLastError(); }
 
@@ -135,6 +136,17 @@ void M605Runtime::Stop() {
     ResolveCancelled(cancelled);
     queue_cv_.notify_one();
     if (worker_.joinable()) worker_.join();
+    // Explicit Stop owns transport cleanup too, rather than retaining the HID
+    // handle/notification until this already-stopped object is destroyed.
+    // Join first, then serialize against synchronous queries and RGB output.
+    {
+        std::lock_guard<std::mutex> device_lock(NativeHidBackend::DeviceWriteMutex());
+        if (transport_->IsConnected()) transport_->Disconnect();
+        transport_session_open_ = false;
+        std::lock_guard<std::mutex> lock(mutex_);
+        diagnostic_transport_open_ = false;
+        firmware_ = {};
+    }
     {
         std::lock_guard<std::mutex> lock(mutex_);
         health_ = M605RuntimeHealth::Stopped;
@@ -516,6 +528,11 @@ bool M605Runtime::Execute(const Job& job, M605TimingSnapshot& timing) {
         return false; // Fail closed before opening a handle or writing a report.
     }
     if (!EnsureTransportReady(timing)) return false;
+    if (!EnsureFirmwareAdmission()) return false;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (stopping_) { last_error_ = "Stopped before firmware-admitted mutation"; return false; }
+    }
     // From this point a stage may be submitted. A crash after Arm remains
     // quarantined on the next daemon start, even before the first WriteFile.
     if (!measure([&] { return safety_latch_->Arm(); }, timing.safety_latch_ms)) {
@@ -621,12 +638,42 @@ bool M605Runtime::EnsureTransportReady(M605TimingSnapshot& timing) {
         transport_session_open_ = true;
         std::lock_guard<std::mutex> lock(mutex_);
         applied_state_ = {};
+        firmware_ = {};
         ++session_generation_;
         diagnostic_transport_open_ = true;
         last_open_generation_ = session_generation_;
         RecordSessionTransitionLocked("transport_opened");
     }
     timing.connect_ms += Milliseconds(start);
+    return true;
+}
+
+bool M605Runtime::EnsureFirmwareAdmission() {
+    if (safety_latch_->IsQuarantined()) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        last_error_ = "SafetyQuarantined: existing mutation latch blocks firmware admission";
+        return false;
+    }
+    const auto generation = GetSessionGeneration();
+    m605::FirmwareCompatibility identity;
+    try { identity = transport_->ReadFirmwareCompatibility(); }
+    catch (const std::exception& error) {
+        identity = {m605::FirmwareState::ReadFailed, {}, "FirmwareReadFailed: acquisition exception: " + std::string(error.what())};
+    }
+    if (identity.Supported() && identity.version != "1.00.59")
+        identity = {m605::FirmwareState::Unknown, {}, "FirmwareUnknown: inconsistent transport version attestation"};
+    const bool current = transport_->IsConnected() && transport_->IsCurrentSession() &&
+        generation == GetSessionGeneration();
+    if (!current) identity = {m605::FirmwareState::ReadFailed, {},
+        "FirmwareReadFailed: device identity/session changed during compatibility acquisition"};
+    identity.session_generation = generation;
+    std::lock_guard<std::mutex> lock(mutex_);
+    firmware_ = identity;
+    if (!identity.Supported()) {
+        applied_state_ = {};
+        last_error_ = identity.reason;
+        return false;
+    }
     return true;
 }
 
@@ -638,6 +685,7 @@ void M605Runtime::DiscardStaleTransport() {
     std::lock_guard<std::mutex> lock(mutex_);
     applied_state_ = {};
     ++session_generation_;
+    firmware_ = {};
     diagnostic_transport_open_ = false;
     RecordSessionTransitionLocked("stale_transport_discarded");
 }
@@ -659,7 +707,7 @@ bool M605Runtime::PrepareTransportSession() {
         if (stopping_ || health_ != M605RuntimeHealth::Clean || !queue_.empty()) return false;
     }
     M605TimingSnapshot ignored;
-    return EnsureTransportReady(ignored);
+    return EnsureTransportReady(ignored) && EnsureFirmwareAdmission();
 }
 
 HardwareSlotResult M605Runtime::SelectHardwareProfileSlot(uint8_t slot,
@@ -706,14 +754,21 @@ HardwareSlotResult M605Runtime::RunHardwareSlot(std::optional<uint8_t> requested
     if (!permitted) { result.error = "M605 unhealthy, busy or safety quarantined"; return finish(); }
     M605TimingSnapshot ignored;
     if (!EnsureTransportReady(ignored)) { result.error = GetLastError(); return finish(); }
+    if (requested && !EnsureFirmwareAdmission()) { result.error = GetLastError(); return finish(); }
     const auto generation = GetSessionGeneration();
     const auto query = [&] {
         m605::Report report{}; ++result.query_count;
         if (!transport_->IsCurrentSession() || !transport_->QueryBasicInfo(report) || !transport_->IsCurrentSession()) {
-            result.observed_slot.reset(); result.error = "BasicInfo unavailable: " + transport_->GetLastError(); return false;
+            result.observed_slot.reset(); result.error = "FirmwareReadFailed: BasicInfo unavailable: " + transport_->GetLastError();
+            { std::lock_guard<std::mutex> lock(mutex_); firmware_ = {m605::FirmwareState::ReadFailed, {}, result.error, generation}; }
+            return false;
         }
+        auto identity = m605::ParseBasicInfoFirmware(report.data(), report.size());
+        identity.session_generation = generation;
+        { std::lock_guard<std::mutex> lock(mutex_); firmware_ = identity; }
         result.observed_slot = m605::ParseBasicInfoActiveSlot(report.data(), report.size());
         if (!result.observed_slot) { result.error = "Malformed BasicInfo active slot"; return false; }
+        if (requested && !identity.Supported()) { result.error = identity.reason; return false; }
         SYSTEMTIME time{}; GetSystemTime(&time); char text[40]{};
         std::snprintf(text, sizeof(text), "%04u-%02u-%02uT%02u:%02u:%02u.%03uZ",
             time.wYear,time.wMonth,time.wDay,time.wHour,time.wMinute,time.wSecond,time.wMilliseconds);
@@ -760,6 +815,7 @@ void M605Runtime::MarkIndeterminate(std::string cause) {
         std::lock_guard<std::mutex> lock(mutex_);
         applied_state_ = {};
         health_ = M605RuntimeHealth::IndeterminateStagedState;
+        firmware_ = {};
         ++session_generation_;
         diagnostic_transport_open_ = transport_->IsConnected(); // handle observation, no presence probe
         RecordSessionTransitionLocked("transaction_indeterminate");
@@ -819,6 +875,7 @@ bool M605Runtime::AcknowledgeExternalResynchronization() {
     }
     transport_session_open_ = true;
     std::lock_guard<std::mutex> lock(mutex_);
+    firmware_ = {};
     applied_state_ = {};
     ++session_generation_; // freshly opened host session, even if latch clear fails
     diagnostic_transport_open_ = true;
@@ -864,7 +921,7 @@ M605DiagnosticSnapshot M605Runtime::GetDiagnosticSnapshot() const {
         health_ != M605RuntimeHealth::TransactionInProgress,
         diagnostic_transport_open_, session_generation_, last_open_generation_,
         queue_.size(), applied_state_, timing_, last_error_, session_transitions_,
-        last_failed_kind_, last_failed_error_, last_failed_logical_id_, last_failed_generation_, hardware_rt_gate_};
+        last_failed_kind_, last_failed_error_, last_failed_logical_id_, last_failed_generation_, hardware_rt_gate_, firmware_};
 }
 
 void M605Runtime::ObserveHardwareRtGate(const HardwareRtGateObservation& observation) {

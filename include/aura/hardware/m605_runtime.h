@@ -34,6 +34,7 @@ public:
     virtual bool WriteStage(const Report& report) = 0;
     virtual bool WriteApply(const Report& report) = 0;
     virtual bool QueryBasicInfo(Report&) { return false; } // unsupported seams fail closed
+    virtual FirmwareCompatibility ReadFirmwareCompatibility() { return {}; }
     virtual void Disconnect() = 0;
     virtual std::string GetLastError() const = 0;
 };
@@ -162,6 +163,7 @@ struct M605DiagnosticSnapshot {
     uint16_t last_failed_logical_id = 0;
     uint64_t last_failed_generation = 0;
     HardwareRtGateObservation hardware_rt_gate; // passive input; NOT SessionApplied
+    m605::FirmwareCompatibility firmware;
 };
 
 class M605Runtime {
@@ -279,6 +281,7 @@ private:
     void WorkerLoop();
     bool Execute(const Job& job, M605TimingSnapshot& timing); // DeviceWriteMutex held
     bool EnsureTransportReady(M605TimingSnapshot& timing); // DeviceWriteMutex held
+    bool EnsureFirmwareAdmission(); // DeviceWriteMutex held, before any latch/stage
     void DiscardStaleTransport(); // DeviceWriteMutex held
     void MarkIndeterminate(std::string cause);
     HardwareSlotResult RunHardwareSlot(std::optional<uint8_t> requested,
@@ -308,6 +311,7 @@ private:
     M605TimingSnapshot timing_;
     std::string last_error_;
     HardwareSlotResult hardware_slot_observation_;
+    m605::FirmwareCompatibility firmware_; // cached host provenance, never admission input
     std::thread worker_;
 };
 

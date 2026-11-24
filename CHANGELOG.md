@@ -1,4 +1,16 @@
-## [0.1.0-alpha.8] — Release candidate (not released)
+## [Unreleased] — Stabilization
+
+- Blockly 工程在隔离工作区验证结构、大小、节点类型与输入 Schema 后加载；拒绝未知或跨工作室工程并保留当前草稿，AI Apply/Undo 复用同一加载边界。
+- Copilot 短窗口回撤仅作用于尚未被任何灯效消费的事件，保留已消费 Down/Up 的释放生命周期；Windows 逻辑事件仍不能可靠区分物理 Copilot 宏与真实组合键。
+- M605Runtime 显式 Stop 等待当前事务完成后释放 transport；停止和析构重复调用不重复提交写入、不清除 quarantine。
+- 整理 alpha.8 历史报告与当前文档引用；固件 Gate 的离线软件验证已接入生产路径，真实 BasicInfo 读取与 Native 125% DPI 人工验收仍待 Owner 验证。VERSION 未改变，本节不代表 alpha.9 已发布。
+
+- M605 配置写入要求当前设备 Session 的 BasicInfo 版本为 1.00.59；Unknown / Unsupported / ReadFailed 在 stage、Apply 和硬件槽位选择前拒绝，Direct RGB 独立保留。协议无 nonce，同 Session 延迟重复响应不能被证明为新请求的响应，详见 [固件准入契约](docs/architecture/M605_FIRMWARE_ADMISSION.md)。
+- 兼容 Blockly 13 的空工程、变量与工作区注释序列化，覆盖原生草稿、Bundle、AI Apply/Undo；固件拒绝不再误报为 Profile revision conflict。
+
+## [0.1.0-alpha.8] — Published prerelease
+
+Published 2026-10-06 UTC at `c52398bef2738f71b927594424736a42da5184ab`: [public release](https://github.com/pipster439/AceHFXAura/releases/tag/v0.1.0-alpha.8). The limitations below describe the published bits; subsequent working-tree fixes are listed above.
 
 - Studio 的 WinUI 原生命令与状态界面继续保留 WebView2 / Blockly 编辑器，改善窄窗口、主题、长名称与错误展示。
 - 对话式 AI Assistant 支持自然多轮聊天、快捷提示、取消与显式重试；OpenAI-compatible provider 设置提供 Auto / JSON Object / JSON Schema 响应模式，API 密钥保存在 Windows 受保护凭据存储。

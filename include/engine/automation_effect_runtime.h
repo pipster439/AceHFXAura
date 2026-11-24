@@ -2,6 +2,7 @@
 #include "config/rule_engine.h"
 #include "config/automation_limits.h"
 #include "engine/plugin_manager.h"
+#include "engine/layer_compositor.h"
 #include <functional>
 #include <mutex>
 #include <set>
@@ -43,6 +44,8 @@ public:
     void Consume(const AutomationEvaluation& evaluation, const Resolver& resolve, uint64_t now,
                  uint64_t expected_revision, const Preparer& prepare = {});
     void Apply(bool persistent, uint64_t now, FrameBuffer& lower, const Keymap& keymap, const IGsiReader* gsi = nullptr);
+    void RenderLayers(bool persistent, uint64_t now, LayerStack& output, const Keymap& keymap,
+                      const EffectContext& context);
     size_t ActiveCount() const;
     size_t DiagnosticCount() const;
     size_t PendingCount() const;
@@ -74,7 +77,7 @@ private:
     std::deque<Token> pending_;
     Counters counters_;
     void Diagnose(const std::string& id, const char* reason);
-    bool Render(Layer& layer, uint64_t now, FrameBuffer& lower, const Keymap& keymap, const IGsiReader* gsi);
+    bool Render(Layer& layer, uint64_t now, LayerStack& output, const EffectContext& context);
     mutable std::mutex mutex_;
     uint64_t revision_{0}, config_generation_{0}, sequence_{0};
     std::vector<Layer> layers_;
@@ -84,5 +87,6 @@ private:
     std::set<std::string> diagnostics_; // bounded to 64 messages until explicit reset
     std::vector<ActivationRecord> activations_;
     FrameBuffer temporary_;
+    LayerCompositor compositor_;
 };
 } // namespace aura

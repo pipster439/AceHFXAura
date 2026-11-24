@@ -13,6 +13,52 @@ def powershell(code):
                           encoding="utf-8", errors="replace", capture_output=True)
 
 class CiInfrastructure(unittest.TestCase):
+    def test_profile_frame_gate_precedes_startup_and_crash_blackout(self):
+        # Structural entry-point guard, separate from executed fake-transport
+        # admission tests. Never initialize an adapter or query real hardware.
+        source = (ROOT / 'src/main.cpp').read_text(encoding='utf-8')
+        lifecycle = source[source.index('aura::AuraAdapter adapter(dry_run, resolved_backend);'):]
+        admission = lifecycle.index('adapter.SetFrameAdmission(')
+        scope = lifecycle.index('frame_admission_scope{adapter}')
+        self.assertLess(admission, scope)
+        self.assertLess(scope, lifecycle.index('adapter.Initialize(&keymap)'))
+        self.assertLess(scope, lifecycle.index('adapter.ForceReset()'))
+        self.assertLess(lifecycle.index('adapter.Shutdown();'), lifecycle.index('adapter.SetFrameAdmission({})'))
+        probe = source[source.index('aura::AuraAdapter probe_adapter(false, cli_backend);'):]
+        self.assertLess(probe.index('probe_adapter.SetFrameAdmission('), probe.index('probe_adapter.Initialize('))
+        self.assertIn('[](const std::function<bool()>&) { return false; }', probe.split('probe_adapter.Initialize(')[0])
+
+    def test_running_summary_is_visible_during_stage_action(self):
+        with tempfile.TemporaryDirectory(prefix='aura-stage-progress-') as temp:
+            output = str(Path(temp)).replace("'", "''")
+            code = f'''
+. ./tools/ci/ci-common.ps1
+$summary=[ordered]@{{overall='running';stages=[Collections.Generic.List[object]]::new()}}
+Invoke-CiStage $summary '{output}' 'fixture' 'fixture.log' {{
+ $current=Get-Content -LiteralPath '{output}/ci-summary.json' -Raw | ConvertFrom-Json
+ if($current.stages[0].outcome -ne 'running') {{ throw 'Stale not-run status during active stage' }}
+ 'Active progress observed'
+}}
+'''
+            result = powershell(code)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            summary = json.loads((Path(temp) / 'ci-summary.json').read_text(encoding='utf-8-sig'))
+            self.assertEqual(summary['stages'][0]['outcome'], 'passed')
+
+    def test_local_wrapper_uses_owned_default_logs_and_preserves_explicit_output(self):
+        for custom in (None, 'fixture-evidence'):
+            code = "$env:CI='false';$env:GITHUB_ACTIONS='false';function global:pwsh { $args | ConvertTo-Json -Compress; $global:LASTEXITCODE=0 }; "
+            code += '& ./tools/ci/run-local-validation.ps1'
+            if custom:
+                code += f" -OutputDirectory '{custom}'"
+            result = powershell(code)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            arguments = json.loads(result.stdout)
+            if custom:
+                self.assertEqual(arguments[-2:], ['-OutputDirectory', custom])
+            else:
+                self.assertNotIn('-OutputDirectory', arguments)
+
     def test_selector_dedup_uses_decision_identity_not_noop_attempts(self):
         result = powershell(r'''
 . ./tools/hardware/smoke-common.ps1
@@ -74,9 +120,18 @@ function global:Invoke-RestMethod {
         before = [hashlib.sha256(p.read_bytes()).hexdigest() for p in watched]
         with tempfile.TemporaryDirectory(prefix="aura-ci-test-") as temp:
             output = str(Path(temp) / "evidence").replace("'", "''")
+            # Canonical now holds a workspace lease. Failure-accounting must own an isolated repo,
+            # rather than starting a nested canonical against the outer run's shared build/obj.
+            fixture = Path(temp) / 'repo'
+            for relative in ('tools/ci/run-ci.ps1', 'tools/ci/ci-common.ps1', 'tools/dev/generated-common.ps1'):
+                destination = fixture / relative
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_bytes((ROOT / relative).read_bytes())
+            subprocess.run(['git', 'init', '-q', str(fixture)], check=True)
+            entry = str(fixture / 'tools/ci/run-ci.ps1').replace("'", "''")
             # Mock external guard command, exercise the real stage and failure path.
             result = powershell("function global:python { 'intentional mocked guard failure'; $global:LASTEXITCODE = 23 }; "
-                                f"& ./tools/ci/run-ci.ps1 -OutputDirectory '{output}'")
+                                f"& '{entry}' -OutputDirectory '{output}'")
             self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
             summary = json.loads((Path(temp) / "evidence/ci-summary.json").read_text(encoding="utf-8-sig"))
             self.assertEqual(summary["schema_version"], 1)

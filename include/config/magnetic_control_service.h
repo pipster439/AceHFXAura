@@ -1,5 +1,6 @@
 #pragma once
 
+#include "aura/hardware/m605_hall_telemetry.h"
 #include "aura/hardware/m605_runtime.h"
 #include "aura/runtime_status.h"
 #include "config/magnetic_host_profile.h"
@@ -33,6 +34,7 @@ public:
     void StartDeviceProfileAutomation(); // exactly one daemon worker; excluded from dry run
     void StopDeviceProfileAutomation();
     void Stop();
+    m605::hall::HallTelemetrySnapshot GetHallSnapshot() const;
 
 private:
     bool HardwareAvailable() const;
@@ -46,6 +48,7 @@ private:
     std::unique_ptr<DeviceProfileRuntime> profiles_;
     std::unique_ptr<HardwareRtGateMonitor> rt_gate_monitor_;
     std::unique_ptr<DeviceProfileAutomationCoordinator> automation_coordinator_;
+    std::unique_ptr<m605::hall::M605HallTelemetry> hall_telemetry_;
 };
 
 } // namespace aura

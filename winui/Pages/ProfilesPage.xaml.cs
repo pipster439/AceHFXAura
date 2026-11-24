@@ -270,6 +270,9 @@ public sealed partial class ProfilesPage : Page
             EditorSurface.IsEnabled = available && draft is not null && !_model.IsBusy;
             EditorName.Text = draft is null ? "配置文件" : $"{draft.Name} · {(_model.IsHardwareSlotDraft ? "板载槽位" : "磁轴配置")}";
             ActivationBackendPicker.SelectedIndex = _model.IsHardwareSlotDraft ? 1 : 0;
+            LightingOwnerPicker.SelectedIndex = draft?.EffectiveLightingOwner == "FirmwareBank" ? 1 : 0;
+            LightingOwnerPicker.IsEnabled = _model.Snapshot?.LightingControlOwnerSupported == true && !_model.IsBusy;
+            LightingOwnershipText.Text = _model.LightingOwnershipText;
             HardwareSlotPicker.SelectedIndex = _model.IsHardwareSlotDraft && draft?.HardwareSlot is >= 1 and <= 5 ? draft.HardwareSlot.Value - 1 : -1;
             HostManagedEditor.Visibility = _model.IsHardwareSlotDraft ? Visibility.Collapsed : Visibility.Visible;
             HardwareSlotPanel.Visibility = _model.IsHardwareSlotDraft ? Visibility.Visible : Visibility.Collapsed;
@@ -618,6 +621,11 @@ public sealed partial class ProfilesPage : Page
     {
         if (_rendering || ActivationBackendPicker.SelectedIndex < 0) return;
         _model.SetActivationBackend(ActivationBackendPicker.SelectedIndex == 1 ? "hardware_slot" : "host_managed"); Render();
+    }
+    private void LightingOwnerPicker_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_rendering || LightingOwnerPicker.SelectedIndex < 0) return;
+        _model.SetLightingOwner(LightingOwnerPicker.SelectedIndex == 1 ? "FirmwareBank" : "AuraDirectRgb"); Render();
     }
     private void HardwareSlotPicker_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {

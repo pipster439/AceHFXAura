@@ -1,4 +1,6 @@
 #include "engine/plugin_publication_queue.h"
+#include "engine/program_catalog.h"
+#include "engine/input_capture_service.h"
 #include "aura/aura_adapter.h"
 #include "aura/hal_compat.h"
 #include "aura/keymap.h"
@@ -12,6 +14,7 @@
 #include "config/automation_service.h"
 #include "config/daemon_process_identity.h"
 #include "config/magnetic_control_service.h"
+#include "config/plugin_overview_service.h"
 #include "aura/runtime_status.h"
 #include "aura_version.h"
 #include "utils/logger.h"
@@ -342,7 +345,7 @@ int main(int argc, char* argv[]) {
         // 屏蔽 Windows 错误报告 (WER) 崩溃弹窗，确保底层异常时静默终止以触发通道复位
         SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
 
-        LOG_INFO("[Probe] 正在执行硬件隔离探测与通道复位...");
+        LOG_INFO("[Probe] 正在执行硬件隔离连接探测...");
         if (!std::filesystem::exists(keymap_path) && !current_exe_dir.empty()) {
             auto cand = current_exe_dir / keymap_path;
             if (std::filesystem::exists(cand)) {
@@ -355,6 +358,9 @@ int main(int argc, char* argv[]) {
             return 1;
         }
         aura::AuraAdapter probe_adapter(false, cli_backend);
+        // A crash-recovery probe never owns lighting. Suppress its shutdown
+        // blackout too; the parent installs the persisted Profile policy.
+        probe_adapter.SetFrameAdmission([](const std::function<bool()>&) { return false; });
         if (!probe_adapter.Initialize(&probe_keymap)) {
             LOG_WARN("[Probe] 底层硬件初次挂载未就绪");
             return 2;
@@ -513,7 +519,7 @@ int main(int argc, char* argv[]) {
     // 8. 挂载华硕底层驱动适配器 (在主线程完全拥有，杜绝多线程 COM 激活冲突)
     bool probe_failed = false;
     if (had_abnormal_exit && !dry_run) {
-        LOG_INFO("【异常退出自愈】检测到上次非正常退出，正在启动硬件探测隔离子进程以安全复位驱动通道...");
+        LOG_INFO("【异常退出自愈】检测到上次非正常退出，正在启动硬件隔离子进程以安全探测驱动通道...");
 
         wchar_t exe_path[MAX_PATH];
         DWORD len = GetModuleFileNameW(NULL, exe_path, MAX_PATH);
@@ -576,21 +582,6 @@ int main(int argc, char* argv[]) {
     }
 
     aura::AuraAdapter adapter(dry_run, resolved_backend);
-    if (!adapter.Initialize(&keymap)) {
-        LOG_WARN("底层硬件初次挂载未就绪，将在推流循环中自动重连");
-    } else {
-        LOG_INFO("AuraAdapter 硬件初始化成功: backend=" + adapter.GetActiveBackendName() + 
-                 (adapter.GetDevicePath().empty() ? "" : (", path=" + adapter.GetDevicePath())));
-    }
-
-    // 异常退出强制复位兜底
-    if (had_abnormal_exit) {
-        if (!dry_run) {
-            adapter.ForceReset();
-        }
-        RemoveAllStateFiles();
-    }
-
     // 9. 启动 CS2 GSI 适配器 (严格监听 127.0.0.1:19897)
     // 核心线程隔离纪律：网络 I/O 线程仅在内存中维护 GsiState 键值字典与只读 RuntimeStatusSnapshot，严禁直接触碰 COM/HAL
     auto status_store = std::make_shared<aura::RuntimeStatusStore>();
@@ -601,7 +592,6 @@ int main(int argc, char* argv[]) {
         std::make_unique<aura::M605Runtime>(),
         std::filesystem::absolute(config_path).parent_path() / "device-profiles.json",
         std::filesystem::absolute(config_path));
-    if (!dry_run) magnetic_service.StartHardwareRtGateObservation();
     adapter.SetFrameAdmission([&](const std::function<bool()>& writer) {
         return magnetic_service.WithProfileLightingOwnership(writer);
     });
@@ -609,14 +599,35 @@ int main(int argc, char* argv[]) {
         aura::AuraAdapter& adapter;
         ~FrameAdmissionScope() { adapter.Shutdown(); adapter.SetFrameAdmission({}); }
     } frame_admission_scope{adapter}; // destroy before magnetic_service, including unwind
+    // Install ownership and its lifetime guard before initialization or crash
+    // recovery can submit any frame, including ForceReset's first black frame.
+    if (!adapter.Initialize(&keymap)) {
+        LOG_WARN("底层硬件初次挂载未就绪，将在推流循环中自动重连");
+    } else {
+        LOG_INFO("AuraAdapter 硬件初始化成功: backend=" + adapter.GetActiveBackendName() +
+                 (adapter.GetDevicePath().empty() ? "" : (", path=" + adapter.GetDevicePath())));
+    }
+    if (had_abnormal_exit) {
+        if (!dry_run) adapter.ForceReset();
+        RemoveAllStateFiles();
+    }
+    if (!dry_run) magnetic_service.StartHardwareRtGateObservation();
     if (!dry_run) magnetic_service.StartDeviceProfileAutomation();
+    aura::ProgramCatalog program_catalog(std::filesystem::absolute(config_path).parent_path() / "plugins" / "programs", aura::PluginManager::Instance());
+    aura::InputCaptureService input_capture;
+    aura::PluginOverviewService plugin_overview(
+        std::filesystem::absolute(config_path).parent_path(),
+        [&magnetic_service] { return magnetic_service.GetHallSnapshot(); });
     aura::GsiAdapter gsi_adapter;
     gsi_adapter.SetInstanceId(instance_id);
     gsi_adapter.SetStatusStore(status_store);
     gsi_adapter.SetLightingService(lighting_service);
     gsi_adapter.SetAutomationService(automation_service);
-    gsi_adapter.SetMagneticRouteRegistrar([&magnetic_service](httplib::Server& server) {
+    gsi_adapter.SetMagneticRouteRegistrar([&magnetic_service, &program_catalog, &input_capture, &plugin_overview](httplib::Server& server) {
         magnetic_service.RegisterRoutes(server);
+        program_catalog.RegisterRoutes(server);
+        input_capture.RegisterRoutes(server);
+        plugin_overview.RegisterRoutes(server);
     });
     if (!gsi_adapter.Start(19897)) {
         LOG_WARN("CS2 GSI 适配器监听 127.0.0.1:19897 失败 (可能端口已被占用)");
@@ -626,9 +637,11 @@ int main(int argc, char* argv[]) {
 
     // 9.5 自动加载已安装的动态光效插件 (plugins/)
     aura::PluginManager::Instance().LoadAllFromDirectory("plugins");
+    program_catalog.RestoreEnabled();
 
     // 10. 构建效果引擎
     aura::EffectEngine effect_engine;
+    effect_engine.SetInputSources(&input_capture.Audio(), &input_capture.Screen());
     std::shared_ptr<const aura::Profile> initial_profile = rule_engine.MatchProfile("", &gsi_adapter.GetState());
     std::string current_active_profile_name = initial_profile ? initial_profile->name : "(None)";
     effect_engine.SetActiveProfile(initial_profile);
@@ -766,6 +779,18 @@ int main(int argc, char* argv[]) {
         snap.gsi_active = gsi_adapter.GetState().IsActive();
         snap.gsi_source = gsi_adapter.SimulationStatus()["source"].get<std::string>();
         snap.foreground_process = evaluated_foreground;
+        snap.inputs = input_capture.Status(effect_engine.GetElapsedMs());
+        const auto render = effect_engine.GetRenderDiagnostics();
+        snap.render = {{"rendered_frames", render.rendered_frames}, {"last_render_us", render.last_render_us},
+            {"compositor_calls", render.compositor_calls}, {"composited_layers", render.composited_layers},
+            {"active_program", render.active_program}, {"program_faulted", render.program_faulted},
+            {"program_generation", render.program_generation}, {"program_error", render.program_error},
+            {"audio_used", render.audio_used}, {"audio_available", render.audio_available},
+            {"screen_used", render.screen_used}, {"screen_available", render.screen_available}};
+        const auto& last_frame = effect_engine.GetLastFrame();
+        const auto& names = aura::Keymap::GetStandardLayoutKeys();
+        for (const auto& name : names) { int led = -1; if (keymap.FindLedId(name, led) && led >= 0 && led < aura::TOTAL_LEDS)
+            snap.last_frame.push_back({{"key", name}, {"led_id", led}, {"rgb", {last_frame.buffer[led*3], last_frame.buffer[led*3+1], last_frame.buffer[led*3+2]}}}); }
         status_store->Update(snap);
     };
 
@@ -789,7 +814,9 @@ int main(int argc, char* argv[]) {
             last_reload_check = reload_now;
             config_reloaded = rule_engine.CheckAndReload();
         }
-        const bool plugin_reloaded = plugin_publications.ApplyAtFrameBoundary(aura::PluginManager::Instance());
+        const bool native_plugin_reloaded = plugin_publications.ApplyAtFrameBoundary(aura::PluginManager::Instance());
+        const bool program_reloaded = program_catalog.ApplyAtFrameBoundary();
+        (void)(native_plugin_reloaded || program_reloaded);
 
         // 主线程统一评估当前前台进程与 GSI 状态驱动的灯效方案
         // (严格遵循主线程独占 COM/HAL 纪律，绝不在网络线程执行硬件调用)
@@ -953,6 +980,7 @@ int main(int argc, char* argv[]) {
     }
 
     // 14. 优雅停机与资源回收
+    input_capture.Shutdown();
     magnetic_service.StopDeviceProfileAutomation();
     LOG_INFO("正在停止网页配置服务监护器...");
     web_supervisor.Shutdown();

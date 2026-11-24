@@ -4,7 +4,7 @@ Aura 是面向 **ROG Falchion Ace HFX** 的高性能独立 Windows 灯光控制�
 
 当前 alpha 版本号以仓库根目录的 [`VERSION`](VERSION) 为单一事实源；核心能力与已知限制见 [`CHANGELOG.md`](CHANGELOG.md)。
 
-当前 `0.1.0-alpha.8` 进入源码冻结与最终发行候选验证，尚未正式发布。WinUI 为发行入口；本版集中改进 Studio、对话式 AI 与本地测试/恢复工具，沿用 Native HID、Automation v2、GSI 与 publication 语义。硬件、hosted CI 与软件包验收分别记录；使用方式见 [Studio 指南](docs/studio/STUDIO_WORKFLOW.md)，版本变化见 [CHANGELOG](CHANGELOG.md)。
+`0.1.0-alpha.8` 已公开发布为 [GitHub prerelease](https://github.com/pipster439/AceHFXAura/releases/tag/v0.1.0-alpha.8)，发布提交为 `c52398bef2738f71b927594424736a42da5184ab`。WinUI 为发行入口；本版改进 Studio、对话式 AI 与本地测试/恢复工具，沿用 Native HID、Automation v2、GSI 与 publication 语义。当前工作树的后续稳定性修复尚未发布；硬件、hosted CI 与软件包验收分别记录。使用方式见 [Studio 指南](docs/studio/STUDIO_WORKFLOW.md)，版本变化见 [CHANGELOG](CHANGELOG.md)。
 
 ## 硬件后端架构 (Hardware Backends)
 

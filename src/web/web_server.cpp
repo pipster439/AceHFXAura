@@ -1292,6 +1292,43 @@ void WebServer::SetupRoutes() {
         }
     });
 
+    // Restricted source-program catalog: daemon owns durable transactions.
+    // Forward only this fixed loopback route, never user-supplied paths.
+    svr_.Get("/api/programs", [](const httplib::Request& req, httplib::Response& res) {
+        if (!IsAllowedLoopbackHost(req.get_header_value("Host"))) { res.status = 403; return; }
+        std::string route = "/api/programs";
+        if (req.has_param("operation_id")) { const auto id = req.get_param_value("operation_id"); if (id.size() != 32 || !std::all_of(id.begin(), id.end(), [](unsigned char c) { return (c >= 'a' && c <= 'f') || (c >= '0' && c <= '9'); })) { res.status = 422; return; } route += "?operation_id=" + id; }
+        httplib::Client client("127.0.0.1", 19897); client.set_connection_timeout(1, 0); client.set_read_timeout(3, 0);
+        const auto response = client.Get(route);
+        if (!response) { res.status = 503; res.set_content(R"({"error":"daemon_unavailable"})", "application/json"); return; }
+        res.status = response->status; res.set_header("Cache-Control", "no-store"); res.set_content(response->body, "application/json");
+    });
+    svr_.Post("/api/programs", [this](const httplib::Request& req, httplib::Response& res) {
+        if (!ValidateWriteRequest(req, res)) return;
+        if (req.body.size() > 240 * 1024) { res.status = 413; return; }
+        httplib::Client client("127.0.0.1", 19897); client.set_connection_timeout(1, 0); client.set_read_timeout(10, 0);
+        const auto response = client.Post("/api/programs", req.body, "application/json");
+        if (!response) { res.status = 503; res.set_content(R"({"error":"confirmation_unavailable","message":"Query the same operation ID before retrying; do not create another mutation."})", "application/json"); return; }
+        res.status = response->status; res.set_content(response->body, "application/json");
+    });
+
+    // Dynamic input capture consent & status proxy (forwarded to daemon 127.0.0.1:19897)
+    svr_.Get("/api/inputs", [](const httplib::Request& req, httplib::Response& res) {
+        if (!IsAllowedLoopbackHost(req.get_header_value("Host"))) { res.status = 403; return; }
+        httplib::Client client("127.0.0.1", 19897); client.set_connection_timeout(1, 0); client.set_read_timeout(3, 0);
+        const auto response = client.Get("/api/inputs");
+        if (!response) { res.status = 503; res.set_content(R"({"error":"daemon_unavailable"})", "application/json"); return; }
+        res.status = response->status; res.set_header("Cache-Control", "no-store"); res.set_content(response->body, "application/json");
+    });
+    svr_.Post("/api/inputs", [this](const httplib::Request& req, httplib::Response& res) {
+        if (!ValidateWriteRequest(req, res)) return;
+        if (req.body.size() > 1024) { res.status = 413; return; }
+        httplib::Client client("127.0.0.1", 19897); client.set_connection_timeout(1, 0); client.set_read_timeout(3, 0);
+        const auto response = client.Post("/api/inputs", req.body, "application/json");
+        if (!response) { res.status = 503; res.set_content(R"({"error":"daemon_unavailable"})", "application/json"); return; }
+        res.status = response->status; res.set_content(response->body, "application/json");
+    });
+
     // 守护进程插件热重载触发接口
     svr_.Post("/api/reload_plugin", [this](const httplib::Request& req, httplib::Response& res) {
         if (!ValidateWriteRequest(req, res)) {

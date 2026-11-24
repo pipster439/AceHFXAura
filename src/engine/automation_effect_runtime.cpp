@@ -184,8 +184,7 @@ AutomationEffectRuntime::Layer AutomationEffectRuntime::MakeLayer(const std::str
     layer.replace = action.value("composition", "overlay") == "replace";
     layer.additive = action.value("blend", "alpha") == "additive";
     layer.order = {action.value("priority", 10), order, ++sequence_};
-    const auto& generation = layer.instance.GetGeneration();
-    layer.capable = generation && generation->lifecycle.version == 1 && generation->lifecycle.is_finished;
+    layer.capable = layer.instance.HasLifecycle();
     const auto envelope = action.value("compatibility", nlohmann::json::object());
     layer.duration = envelope.value("duration_ms", uint64_t{1200});
     layer.fade = envelope.value("fade_out_ms", uint64_t{400});
@@ -195,8 +194,8 @@ AutomationEffectRuntime::Layer AutomationEffectRuntime::MakeLayer(const std::str
     if (!layer.persistent) layer.watchdog = action.value("watchdog_ms", layer.capable ? uint64_t{5000} : std::max(uint64_t{5000}, layer.duration));
     return layer;
 }
-bool AutomationEffectRuntime::Render(Layer& layer, uint64_t now, FrameBuffer& lower,
-                                     const Keymap& keymap, const IGsiReader* gsi) {
+bool AutomationEffectRuntime::Render(Layer& layer, uint64_t now, LayerStack& output,
+                                     const EffectContext& context) {
     const uint64_t elapsed = now >= layer.started ? now - layer.started : 0;
     if (!layer.persistent && elapsed >= layer.watchdog) { Diagnose(layer.id, "watchdog expired"); return false; }
     if (!layer.capable && !layer.persistent && elapsed >= layer.duration) return false;
@@ -211,16 +210,17 @@ bool AutomationEffectRuntime::Render(Layer& layer, uint64_t now, FrameBuffer& lo
     };
     try {
         temporary_.Clear();
-        layer.instance.GetEffect()->RenderWithContext(EffectContext(elapsed, keymap, gsi), temporary_);
+        EffectContext layer_context(elapsed, context.keymap, context.gsi, context.audio, context.screen, context.monotonic_ms);
+        layer.instance.GetEffect()->RenderWithContext(layer_context, temporary_);
+        if(layer.instance.Faulted()){Diagnose(layer.id,"restricted program failed; instance retired");return false;}
         if (overdue()) { Diagnose(layer.id, "watchdog expired"); return false; }
         double opacity = 1;
         if (layer.capable) {
-            const auto& lifecycle = layer.instance.GetGeneration()->lifecycle;
-            const auto finished = lifecycle.is_finished(layer.instance.GetEffect().get(), elapsed);
+            const auto finished = layer.instance.Finished(elapsed);
             if (finished > 1) { Diagnose(layer.id, "invalid finished status"); return false; }
             if (finished == 1) return false;
             if (overdue()) { Diagnose(layer.id, "watchdog expired"); return false; }
-            if (lifecycle.get_opacity) opacity = lifecycle.get_opacity(layer.instance.GetEffect().get(), elapsed);
+            opacity = layer.instance.Opacity(elapsed);
             if (!std::isfinite(opacity)) { Diagnose(layer.id, "non-finite opacity"); return false; }
             opacity = std::clamp(opacity, 0.0, 1.0);
             if (overdue()) { Diagnose(layer.id, "watchdog expired"); return false; }
@@ -233,29 +233,43 @@ bool AutomationEffectRuntime::Render(Layer& layer, uint64_t now, FrameBuffer& lo
                 opacity = std::clamp(1.0-static_cast<double>(elapsed-(layer.duration-layer.fade))/layer.fade,0.0,1.0);
 
         }
+        LayerSubmission submission;
+        submission.blend = layer.additive ? LayerBlend::Additive : (layer.replace ? LayerBlend::Replace : LayerBlend::Alpha);
+        submission.opacity = static_cast<float>(opacity);
+        submission.priority = std::get<0>(layer.order);
+        submission.order = std::get<1>(layer.order);
+        submission.sequence = std::get<2>(layer.order);
         for (size_t led = 0; led < TOTAL_LEDS; ++led) {
             const size_t offset = led * RGB_CHANNELS;
-            const bool covered = layer.replace || temporary_.buffer[offset] || temporary_.buffer[offset+1] || temporary_.buffer[offset+2];
+            const auto* coverage=layer.instance.Coverage();
+            const bool covered = layer.replace || (coverage ? coverage->test(led) :
+                temporary_.buffer[offset] || temporary_.buffer[offset+1] || temporary_.buffer[offset+2]);
             if (!covered) continue;
-            for (size_t channel = 0; channel < RGB_CHANNELS; ++channel) {
-                const size_t i = offset + channel;
-                const double value = (layer.additive ? lower.buffer[i] : (1-opacity)*lower.buffer[i]) + opacity*temporary_.buffer[i];
-                lower.buffer[i] = static_cast<uint8_t>(std::clamp(value, 0.0, 255.0));
-            }
+            submission.frame.SetKey(led, ColorRGB(temporary_.buffer[offset], temporary_.buffer[offset+1], temporary_.buffer[offset+2]));
         }
-        return true;
+        return output.Add(std::move(submission));
     } catch (...) { Diagnose(layer.id, "effect render/lifecycle callback threw; instance retired"); return false; }
 }
-void AutomationEffectRuntime::Apply(bool persistent, uint64_t now, FrameBuffer& lower,
-                                    const Keymap& keymap, const IGsiReader* gsi) {
+void AutomationEffectRuntime::RenderLayers(bool persistent, uint64_t now, LayerStack& output,
+                                           const Keymap& keymap, const EffectContext& context) {
+    (void)keymap;
     std::vector<Layer> retired_layers;
     retired_layers.reserve(AutomationRetriggerLimits::active_global);
     std::lock_guard<std::mutex> lock(mutex_);
     for (auto it = layers_.begin(); it != layers_.end();) {
-        if (it->persistent == persistent && !Render(*it, now, lower, keymap, gsi)) {
+        if (it->persistent == persistent && !Render(*it, now, output, context)) {
             retired_layers.push_back(std::move(*it)); it = layers_.erase(it);
-        }
-        else ++it;
+        } else ++it;
     }
+}
+void AutomationEffectRuntime::Apply(bool persistent, uint64_t now, FrameBuffer& lower,
+                                    const Keymap& keymap, const IGsiReader* gsi) {
+    LayerStack layers;
+    EffectContext context(now, keymap, gsi);
+    RenderLayers(persistent, now, layers, keymap, context);
+    auto base = LayerPixelFrame::FromFrame(lower, true);
+    std::bitset<TOTAL_LEDS> coverage;
+    LayerStack transient;
+    compositor_.Compose(base, persistent ? layers : transient, persistent ? transient : layers, lower, coverage);
 }
 } // namespace aura

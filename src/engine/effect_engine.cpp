@@ -1,6 +1,8 @@
 #include "engine/effect_engine.h"
 #include "engine/plugin_manager.h"
 #include "engine/builtin_effects.h"
+#include "engine/input_sources.h"
+#include "gsi/automation_input.h"
 #include "utils/logger.h"
 
 namespace aura {
@@ -22,6 +24,16 @@ EffectEngine::EffectEngine()
     : start_time_(std::chrono::steady_clock::now()),
       preview_active_(false) {
     preview_frame_.Clear();
+    last_frame_.Clear();
+}
+
+void EffectEngine::SetInputSources(const AudioFeatureSource* audio, const ScreenColorSource* screen) {
+    audio_source_ = audio; screen_source_ = screen;
+}
+
+EffectEngine::RenderDiagnostics EffectEngine::GetRenderDiagnostics() const {
+    std::lock_guard<std::mutex> lock(render_diagnostics_mutex_);
+    return render_diagnostics_;
 }
 
 void EffectEngine::SetActiveProfile(std::shared_ptr<const Profile> profile) {
@@ -97,10 +109,28 @@ bool EffectEngine::HasActivePreview() const {
 }
 
 void EffectEngine::Tick(FrameBuffer& out_frame, const Keymap& keymap, const IGsiReader* gsi) {
-    TickAt(GetElapsedMs(), out_frame, keymap, gsi);
+    const auto elapsed = GetElapsedMs();
+    TickAt(elapsed, out_frame, keymap, EffectContext(elapsed, keymap, gsi, audio_source_, screen_source_, AutomationMonotonicMs()));
 }
 
 void EffectEngine::TickAt(uint64_t elapsed_ms, FrameBuffer& out_frame, const Keymap& keymap, const IGsiReader* gsi) {
+    TickAt(elapsed_ms, out_frame, keymap, EffectContext(elapsed_ms, keymap, gsi, audio_source_, screen_source_));
+}
+
+void EffectEngine::TickAt(uint64_t elapsed_ms, FrameBuffer& out_frame, const Keymap& keymap, const EffectContext& context) {
+    const auto render_start = std::chrono::steady_clock::now();
+    const auto* gsi = context.gsi;
+    {
+        std::lock_guard<std::mutex> lock(render_diagnostics_mutex_);
+        render_diagnostics_.active_program = false;
+        render_diagnostics_.program_faulted = false;
+        render_diagnostics_.audio_used = false;
+        render_diagnostics_.audio_available = false;
+        render_diagnostics_.screen_used = false;
+        render_diagnostics_.screen_available = false;
+        render_diagnostics_.program_generation = 0;
+        render_diagnostics_.program_error.clear();
+    }
 
     // 1. Check edit-time preview frame
     bool is_preview = false;
@@ -125,15 +155,52 @@ void EffectEngine::TickAt(uint64_t elapsed_ms, FrameBuffer& out_frame, const Key
         uint64_t started;
         { std::lock_guard<std::mutex> lock(profile_mutex_); profile = active_profile_; started = profile_started_ms_; }
         if (profile) {
-            profile->Render(elapsed_ms >= started ? elapsed_ms - started : 0, out_frame, keymap, gsi);
+            if(auto program=std::dynamic_pointer_cast<ProgramEffect>(profile->base_effect)) {
+                program->RenderWithContext(EffectContext(elapsed_ms >= started ? elapsed_ms - started : 0,keymap,gsi,context.audio,context.screen,context.monotonic_ms),out_frame);
+                const auto& status = program->Status();
+                const auto generation = program->GenerationId();
+                std::lock_guard<std::mutex> lock(render_diagnostics_mutex_);
+                render_diagnostics_.active_program = true;
+                render_diagnostics_.program_faulted = status.faulted;
+                render_diagnostics_.audio_used = program->Program()->UsesAudio();
+                render_diagnostics_.audio_available = status.audio_available;
+                render_diagnostics_.screen_used = program->Program()->UsesScreen();
+                render_diagnostics_.screen_available = status.screen_available;
+                render_diagnostics_.program_generation = generation;
+                render_diagnostics_.program_error = status.error.message;
+                const auto opacity=program->Finished()?0.0f:program->Opacity();
+                for(auto& channel:out_frame.buffer)channel=static_cast<uint8_t>(channel*opacity);
+                // Profile overrides and brightness retain their established order
+                // after the effect's own lifecycle opacity, without ABI changes.
+                for(const auto& override:profile->key_overrides){std::vector<int> ids;if(keymap.ResolveKeys(override.key_spec,ids))
+                    for(int id:ids)out_frame.SetKey(id,override.color);}
+                if(profile->brightness<255)for(auto& channel:out_frame.buffer)
+                    channel=static_cast<uint8_t>((static_cast<uint32_t>(channel)*profile->brightness)/255);
+            } else profile->Render(elapsed_ms >= started ? elapsed_ms - started : 0, out_frame, keymap, gsi);
         } else {
             out_frame.Clear();
         }
     }
 
     // Fixed V2 class placement: Base -> persistent -> transient.
-    automation_effects_.Apply(true, elapsed_ms, out_frame, keymap, gsi);
-    automation_effects_.Apply(false, elapsed_ms, out_frame, keymap, gsi);
+    LayerStack persistent, transient;
+    automation_effects_.RenderLayers(true, elapsed_ms, persistent, keymap, context);
+    automation_effects_.RenderLayers(false, elapsed_ms, transient, keymap, context);
+    const auto base = LayerPixelFrame::FromFrame(out_frame, true);
+    std::bitset<TOTAL_LEDS> coverage;
+    compositor_.Compose(base, persistent, transient, out_frame, coverage);
+    last_frame_ = out_frame;
+    const auto elapsed_us = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(
+        std::chrono::steady_clock::now() - render_start).count());
+    std::lock_guard<std::mutex> lock(render_diagnostics_mutex_);
+    ++render_diagnostics_.rendered_frames;
+    render_diagnostics_.last_render_us = elapsed_us;
+    render_diagnostics_.compositor_calls = compositor_.Metrics().compose_calls;
+    render_diagnostics_.composited_layers = persistent.Size() + transient.Size();
+    if (!render_diagnostics_.active_program) {
+        render_diagnostics_.program_generation = 0;
+        render_diagnostics_.program_error.clear();
+    }
 }
 
 } // namespace aura

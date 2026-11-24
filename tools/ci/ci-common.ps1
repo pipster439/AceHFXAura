@@ -32,6 +32,20 @@ function Write-CiSummary {
     foreach ($stage in $Summary.stages) {
         $table += "| $($stage.name) | $($stage.outcome) | $([Math]::Round($stage.duration_ms / 1000, 2)) s |"
     }
+    if ($Summary.Contains('storage')) {
+        $storage = $Summary.storage
+        $table += @('', '### Storage', '', "Mode: $($storage.mode). $($storage.policy)")
+        if ($storage.mode -eq 'local') {
+            $table += @('', '| Measurement | GiB |', '|---|---|')
+            foreach ($key in @('free_bytes_before','estimated_required_bytes','generated_bytes_before','approximate_build_bytes','generated_bytes_after','reclaimed_logical_bytes','free_bytes_after')) {
+                $value = $storage[$key]
+                $table += "| $key | $(if ($null -eq $value) { 'pending' } else { [Math]::Round($value/1GB,3) }) |"
+            }
+            $table += @('', "Retained runs (including protected/unknown): $($storage.retained_run_count); artifact entries: $($storage.retained_artifact_entries). $($storage.measurement)")
+            $table += "Cleanup errors: $($storage.cleanup_error_count). Decisions: $($storage.cleanup_records -join ', ')."
+            if ($storage.Contains('cleanup_error')) { $table += "Cleanup error: $($storage.cleanup_error)" }
+        }
+    }
     $table | Set-Content -LiteralPath (Join-Path $Directory 'step-summary.md') -Encoding utf8
 }
 
@@ -45,6 +59,7 @@ function Invoke-CiStage {
         $Summary.stages.Add($result)
     }
     $result.outcome = 'running'
+    Write-CiSummary $Summary $Directory
     $path = Join-Path $Directory $Log
     New-Item -ItemType Directory -Force -Path (Split-Path $path) | Out-Null
     try {

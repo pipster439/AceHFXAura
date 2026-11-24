@@ -12,6 +12,7 @@
 #include <thread>
 #include <atomic>
 #include <condition_variable>
+#include "m605_firmware_fixture.h"
 
 namespace aura {
 struct M605RuntimeTestAccess {
@@ -26,6 +27,8 @@ struct M605RuntimeTestAccess {
 namespace {
 using Json = nlohmann::json;
 struct Io : aura::m605::detail::Transport {
+    aura::m605::FirmwareCompatibility firmware = SupportedM605FirmwareFixture();
+    aura::m605::FirmwareCompatibility ReadFirmwareCompatibility() override { return firmware; }
     bool connected = false;
     bool current_session = true;
     int stages = 0, connects = 0;
@@ -1884,9 +1887,21 @@ bool TestHardwareRtGateIsolation(bool enabled) {
 #include "test_phase4b_runtime.inc"
 #include "test_hardware_slot_runtime.inc"
 #include "test_legacy_rt_migration.inc"
-int main() {
+#include "test_firmware_profile_runtime.inc"
+#include "test_lighting_ownership.inc"
+#include "test_automation_quick_create.inc"
+int main(int argc, char** argv) {
+    if (argc == 2 && std::string(argv[1]) == "--automation-quick-create") { try { return TestAutomationQuickCreate() ? 0 : 1; } catch(const std::exception& ex) { std::cerr << ex.what() << "\n"; return 1; } }
+    if (argc == 2 && std::string(argv[1]) == "--lighting-combinations") return TestLightingCombinations() ? 0 : 1;
     if (!TestHardwareSlotRuntime()) { std::cerr << "hardware slot runtime failed\n"; return 1; }
-    const std::pair<const char*, bool(*)()> cases[] = {{"cutover", Test},
+    const std::pair<const char*, bool(*)()> cases[] = {
+        {"automation_quick_create", TestAutomationQuickCreate},
+        {"lighting_combinations", TestLightingCombinations},
+        {"lighting_failures", TestLightingFailures},
+        {"lighting_firmware_admission", TestLightingFirmwareAdmission},
+        {"lighting_persistence_api", TestLightingPersistenceApi},
+        {"lighting_concurrency", TestLightingConcurrency},
+        {"firmware_profile_admission", TestFirmwareProfileAdmission}, {"cutover", Test},
         {"legacy_rt_conversion", TestLegacyMigrationConversion},
         {"legacy_rt_idempotence_absent", TestLegacyMigrationIdempotence},
         {"legacy_rt_explicit_disabled_unmanaged", TestLegacyMigrationExplicitPrecedence},
@@ -1953,7 +1968,9 @@ int main() {
         {"serialization", TestApplyCannotInterleaveManualWrite},
         {"migration", TestVersionlessEnvelopeMigration}};
     bool okay = true;
-    for (const auto& [name, run] : cases)
+    for (const auto& [name, run] : cases) {
+        std::cout << "Running device profile contract: " << name << std::endl;
         if (!run()) { std::cerr << "device profile runtime contract failed: " << name << '\n'; okay = false; }
+    }
     return okay ? 0 : 1;
 }

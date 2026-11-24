@@ -7,25 +7,20 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     Background="Transparent"
     mc:Ignorable="d">
-    <Page.Resources>
-        <Style x:Key="ChatUserBubble" TargetType="Border"><Setter Property="Background" Value="{ThemeResource AccentFillColorDefaultBrush}"/></Style>
-        <Style x:Key="ChatAssistantBubble" TargetType="Border"><Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}"/></Style>
-        <Style x:Key="ChatUserText" TargetType="TextBlock"><Setter Property="Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}"/></Style>
-    </Page.Resources>
     <Page.KeyboardAccelerators>
         <KeyboardAccelerator Key="P" Modifiers="Control,Shift" Invoked="PaletteShortcut_Invoked"/>
     </Page.KeyboardAccelerators>
 
-    <Grid x:Name="ShellRoot" RowSpacing="4" SizeChanged="Shell_SizeChanged">
-        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition x:Name="AssistantColumn" Width="0"/></Grid.ColumnDefinitions>
-        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-        <CommandBar Grid.ColumnSpan="2" x:Name="StudioCommands" Background="Transparent" DefaultLabelPosition="Right" IsDynamicOverflowEnabled="True">
+    <Grid x:Name="ShellRoot" RowSpacing="4">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <CommandBar x:Name="StudioCommands" Background="Transparent" DefaultLabelPosition="Right" IsDynamicOverflowEnabled="True">
             <AppBarButton x:Name="NewCommand" Icon="Add" Label="新建" Tag="new" Click="StudioCommand_Click" AutomationProperties.AutomationId="StudioNew"/>
             <AppBarButton x:Name="OpenCommand" Icon="OpenFile" Label="打开" Tag="open" Click="StudioCommand_Click" AutomationProperties.AutomationId="Studio1122"/>
             <AppBarButton x:Name="SaveCommand" Icon="Save" Label="保存草稿" Tag="save" Click="StudioCommand_Click" AutomationProperties.AutomationId="SaveCommand"/>
             <AppBarButton x:Name="PreviewCommand" Icon="Play" Label="预览" Tag="preview" Click="StudioCommand_Click" AutomationProperties.AutomationId="PreviewCommand"/>
             <AppBarButton x:Name="BuildCommand" Icon="Repair" Label="构建" Tag="build" Click="StudioCommand_Click" AutomationProperties.AutomationId="BuildCommand"/>
             <AppBarButton x:Name="PublishCommand" Icon="Upload" Label="发布" Tag="publish" Click="StudioCommand_Click" AutomationProperties.AutomationId="StudioPublish"/>
+            <AppBarButton Label="导入灯效扩展" Icon="Add" Tag="import_bundle" Click="StudioCommand_Click" AutomationProperties.AutomationId="StudioInstallEffect"/>
             <CommandBar.SecondaryCommands>
                 <AppBarButton Label="命令面板（Ctrl+Shift+P）" Tag="palette" Click="StudioCommand_Click" AutomationProperties.AutomationId="StudioPalette"/>
                 <AppBarButton Label="导出工程包" Tag="export_bundle" Click="StudioCommand_Click" AutomationProperties.AutomationId="StudioExportBundle"/>
@@ -35,11 +30,10 @@
                 <AppBarButton Label="开发详情" Tag="details" Click="StudioCommand_Click" AutomationProperties.AutomationId="StudioDetails"/>
                 <AppBarButton x:Name="ClearRecentCommand" Label="清除最近记录" Click="ClearRecent_Click" AutomationProperties.AutomationId="StudioClearRecent"/>
                 <AppBarButton Label="诊断" Click="Diagnostics_Click" AutomationProperties.AutomationId="StudioDiagnostics"/>
-                <AppBarButton Label="AI 助手" Click="AssistantToggle_Click" AutomationProperties.AutomationId="StudioAssistant"/>
-                <AppBarButton Label="AI 服务设置" Click="LlmSettings_Click" AutomationProperties.AutomationId="StudioLlmSettings"/>
+                <AppBarButton Label="MCP 外部接入" Click="McpSetup_Click" AutomationProperties.AutomationId="StudioMcpSetup"/>
             </CommandBar.SecondaryCommands>
         </CommandBar>
-        <Grid Grid.Row="1" Grid.ColumnSpan="2" Margin="12,0" ColumnSpacing="12">
+        <Grid Grid.Row="1" Margin="12,0" ColumnSpacing="12">
             <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
             <TextBlock x:Name="ProjectStatus" Text="等待编辑器…" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
             <ComboBox x:Name="RecentProjects" Grid.Column="1" Header="最近 / 工程" MaxWidth="220" MinWidth="120" SelectionChanged="ProjectSelection_Changed" AutomationProperties.Name="选择工程" AutomationProperties.AutomationId="RecentProjects"/>
@@ -86,56 +80,9 @@
             </InfoBar.ActionButton>
         </InfoBar>
         </Grid>
-        <Border x:Name="AiPanel" Grid.Row="2" Grid.Column="1" Margin="8" Padding="12" CornerRadius="8" Background="{ThemeResource SolidBackgroundFillColorBaseBrush}" Visibility="Collapsed">
-            <Grid RowSpacing="8">
-                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                <Grid ColumnSpacing="8"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                    <StackPanel><TextBlock Text="AI 助手" Style="{ThemeResource SubtitleTextBlockStyle}"/><TextBlock Text="一起调整当前草稿；应用由你决定。" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}"/></StackPanel>
-                    <Button x:Name="AiClear" Grid.Column="1" Content="清空" Click="AssistantClear_Click" AutomationProperties.AutomationId="AiClear" AutomationProperties.Name="清空当前工程会话"/>
-                </Grid>
-                <ScrollViewer x:Name="AiHistoryScroll" Grid.Row="1" HorizontalScrollBarVisibility="Disabled" ViewChanged="AssistantScroll_Changed">
-                    <StackPanel Spacing="10">
-                        <StackPanel x:Name="AiEmptyPrompts" Spacing="6">
-                            <TextBlock Text="从一个问题开始" TextWrapping="Wrap"/>
-                            <Button Content="做一个按键扩散波纹" Tag="做一个按键按下后向外扩散的波纹" Click="AssistantExample_Click" AutomationProperties.AutomationId="AiExampleReactive"/>
-                            <Button Content="解释当前效果" Tag="解释一下当前效果" Click="AssistantExample_Click" AutomationProperties.AutomationId="AiExampleExplain"/>
-                            <Button Content="让它柔和一点" Tag="让这个效果柔和一点，颜色别变" Click="AssistantExample_Click" AutomationProperties.AutomationId="AiExampleSoften"/>
-                            <Button Content="为什么验证失败？" Tag="为什么当前工程验证失败？" Click="AssistantExample_Click" AutomationProperties.AutomationId="AiExampleError"/>
-                            <Button Content="推荐测试场景" Tag="给我推荐一个适合这个效果的 Test Bench 场景" Click="AssistantExample_Click" AutomationProperties.AutomationId="AiExampleBench"/>
-                        </StackPanel>
-                        <StackPanel x:Name="AiMessages" Spacing="10" AutomationProperties.AutomationId="AiMessages"/>
-                        <Border x:Name="AiProposalCard" Padding="10" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" CornerRadius="6" Visibility="Collapsed">
-                            <StackPanel Spacing="8">
-                                <TextBlock x:Name="AiProposalTitle" Text="建议修改 · 尚未应用" FontWeight="SemiBold"/>
-                                <TextBlock x:Name="AiProposal" TextWrapping="Wrap" IsTextSelectionEnabled="True" AutomationProperties.AutomationId="AiProposal"/>
-                                <StackPanel x:Name="AiPreviewSwatches" Orientation="Horizontal" Spacing="4" Visibility="Collapsed"/>
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <Button x:Name="AiPreview" Content="预览" Click="AssistantPreview_Click" AutomationProperties.AutomationId="AiPreview"/>
-                                    <Button x:Name="AiApply" Content="应用至草稿" Click="AssistantApply_Click" IsEnabled="False" AutomationProperties.AutomationId="AiApply"/>
-                                    <Button x:Name="AiReject" Content="放弃" Click="AssistantReject_Click" IsEnabled="False" AutomationProperties.AutomationId="AiReject"/>
-                                </StackPanel>
-                                <Button x:Name="AiBench" Content="在测试台查看当前草稿" Click="AssistantBench_Click" AutomationProperties.AutomationId="AiBench"/>
-                            </StackPanel>
-                        </Border>
-                    </StackPanel>
-                </ScrollViewer>
-                <StackPanel Grid.Row="2" Spacing="6">
-                    <TextBlock x:Name="AiStatus" TextWrapping="Wrap" MaxHeight="64" AutomationProperties.LiveSetting="Polite"/>
-                    <TextBox x:Name="AiPrompt" Header="消息" PlaceholderText="继续聊聊这个效果…" AcceptsReturn="True" TextWrapping="Wrap" MaxLength="4000" MinHeight="68" MaxHeight="140" PreviewKeyDown="AssistantPrompt_KeyDown" AutomationProperties.AutomationId="AiPrompt"/>
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <Button x:Name="AiSend" Content="发送" Click="AssistantSend_Click" AutomationProperties.AutomationId="AiSend"/>
-                        <Button x:Name="AiCancel" Content="取消" Click="AssistantCancel_Click" IsEnabled="False" AutomationProperties.AutomationId="AiCancel"/>
-                        <Button x:Name="AiRetry" Content="重试" Click="AssistantRetry_Click" IsEnabled="False" AutomationProperties.AutomationId="AiRetry"/>
-                    </StackPanel>
-                    <Button x:Name="AiUndo" Content="撤销 AI 修改" Click="AssistantUndo_Click" IsEnabled="False" AutomationProperties.AutomationId="AiUndo"/>
-                    <TextBlock Text="Enter 发送 · Shift+Enter 换行 · 会话仅保留到退出" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}"/>
-                </StackPanel>
-            </Grid>
-        </Border>
-        <StackPanel Grid.Row="4" Grid.ColumnSpan="2" Margin="12,4" Spacing="4">
+        <StackPanel Grid.Row="3" Margin="12,4" Spacing="4">
             <TextBlock x:Name="RuntimeSummary" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}"/>
             <ScrollViewer MaxHeight="72" HorizontalScrollBarVisibility="Disabled"><TextBlock x:Name="ValidationSummary" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}"/></ScrollViewer>
-            <Button x:Name="AskAiError" Content="询问 AI：分析验证、构建或插件错误" Click="AssistantError_Click" Visibility="Collapsed" AutomationProperties.AutomationId="AskAiError"/>
             <TextBox x:Name="DiagnosticsText" Header="构建与诊断" IsReadOnly="True" TextWrapping="Wrap" MaxHeight="150" Visibility="Collapsed" AutomationProperties.AutomationId="DiagnosticsText"/>
         </StackPanel>
     </Grid>

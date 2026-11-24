@@ -11,6 +11,8 @@ def reply_for(context, requests, rejection_case='publish'):
                      'history_count': len(context['conversation']), 'fingerprint': context['current_project']['fingerprint'],
                      'tools': [r['tool'] for r in rounds], 'diagnostics': [r['result'].get('diagnostic', '') for r in rounds if r['tool'] in ('get_build_errors', 'get_validation_errors')]})
     if prompt == 'cancel-wait': time.sleep(4)
+    if prompt in ('stream-progress', 'stream-close'):
+        return '流式进度已到达。' + '这是本机测试服务分段发送的自然文字，正在逐步显示。' * 12 + '流式输出已完成。'
     node = next((n for n in studio['nodes'] if n['input'] == 'PERIOD_SEC'), None)
     def tool(name, arguments=None): return {'message': '我先检查当前工程。', 'tool_calls': [{'name': name, 'arguments': arguments or {}}]}
     def text(message): return {'message': message, 'tool_calls': []}
@@ -35,7 +37,7 @@ def reply_for(context, requests, rejection_case='publish'):
             return text('C2039 表示成员不存在；当前可用工具无法安全自动修改这一部分。')
         if last['tool'] == 'get_active_proposal':
             return text('刚才的候选验证结果：' + last['result'].get('diagnostic', '验证通过'))
-        if last['tool'] == 'propose_effect_change':
+        if last['tool'] in ('propose_effect_change', 'propose_graph_change', 'validate_candidate'):
             proposal = last['result']
             if not proposal['valid']: return text('候选未通过验证：' + proposal['diagnostic'])
             return text(('已检查 C2039，原生成员错误超出安全工具范围。' if any(r['tool'] == 'get_build_errors' for r in rounds) else '') + '保持颜色，周期 ' + proposal['changes'][0]['before'] + ' → ' + proposal['changes'][0]['after'] + ' 秒；请查看 Diff 后决定应用。')

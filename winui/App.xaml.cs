@@ -57,21 +57,15 @@ public partial class App : Application
         if (IsShuttingDown) return;
         if (_window is MainWindow existing) { existing.ShowAndBringToFront(); return; }
         // 1. 启动后台守护进程探测与自动拉起 (异步非阻塞，内部通过共享 Task 实现串行化)
-        if (!StudioAiValidation.Requested && !MagneticLayoutValidation.Requested &&
+        if (!MagneticLayoutValidation.Requested &&
             Environment.GetEnvironmentVariable("AURA_MAGNETIC_VALIDATION_OFFLINE") != "1")
             _ = DaemonSupervisor.Instance.EnsureStartedAsync();
 
         // 2. 创建并激活主窗口
         var mainWindow = new MainWindow();
-        if (StudioAiValidation.Requested || StudioToolingValidation.Requested) Common.TrayIconManager.MinimizeToTrayEnabled = false;
         _window = mainWindow;
         mainWindow.Activate();
-        if (StudioToolingValidation.Requested) _ = StudioToolingValidation.RunAsync(mainWindow);
-        else if (StudioAiValidation.SettingsOnly) _ = StudioAiValidation.RunSettingsAsync(mainWindow);
-        else if (StudioOwnerAcceptance.Requested) _ = StudioOwnerAcceptance.OpenAsync(mainWindow);
-        else if (StudioConversationValidation.Requested) _ = StudioConversationValidation.RunAsync(mainWindow);
-        else if (StudioAiValidation.FullSmoke) _ = StudioAiValidation.RunSmokeAsync(mainWindow);
-        else if (Validation.LayoutValidation.Requested) _ = Validation.LayoutValidation.RunAsync(mainWindow);
+        if (Validation.LayoutValidation.Requested) _ = Validation.LayoutValidation.RunAsync(mainWindow);
         else if (Validation.StudioValidation.Requested) _ = Validation.StudioValidation.RunAsync(mainWindow);
         else if (MagneticLayoutValidation.Requested) _ = MagneticLayoutValidation.RunAsync(mainWindow);
 

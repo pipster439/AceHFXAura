@@ -6,6 +6,7 @@
 #include <chrono>
 #include <unordered_set>
 #include <windows.h>
+#include "engine/plugin_interface.h"
 
 namespace aura {
 
@@ -21,12 +22,45 @@ struct KeyInputEvent {
 class KeyInputHub {
 public:
     static KeyInputHub& Instance() {
-        static KeyInputHub instance;
-        return instance;
+        // Native plugin DestroyEffect/DllMain may run during process static
+        // teardown. Keep this bounded host callback context valid until exit,
+        // independently of singleton construction/destruction order.
+        static KeyInputHub* instance = new KeyInputHub;
+        return *instance;
     }
 
     void RecordKeyEvent(const std::string& key_name, KeyEventType type) {
         RecordKeyEventAt(key_name, type, MonotonicMs());
+    }
+
+    // Called by the existing logical keyboard observer on hook start/stop. A
+    // registered source is distinct from a previously observed key press.
+    void SetSourceAvailable(bool available) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (source_available_ == available) return;
+        const uint64_t now = MonotonicMs();
+        for (const auto& key : held_) events_.push_back({key, KeyEventType::Up, ++sequence_, now});
+        held_.clear();
+        TrimEvents();
+        source_available_ = available;
+        ++source_epoch_;
+        logical_snapshot_ = {};
+        snapshot_overflow_ = false;
+    }
+
+    void ReadLogicalSnapshot(AuraLogicalKeyboardSnapshotV1& output) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        output = logical_snapshot_;
+        output.struct_size = sizeof(output);
+        output.version = AURA_LOGICAL_KEYBOARD_VERSION;
+        output.source_available = source_available_ && !snapshot_overflow_ ? 1u : 0u;
+        output.observed_at_ms = MonotonicMs();
+        output.sequence = sequence_;
+        output.source_epoch = source_epoch_;
+        if (!output.source_available) output.count = 0;
+        // Snapshot consumers have observed these Down states too: preserve the
+        // existing Copilot rule that an observed Down must retain its paired Up.
+        if (output.source_available) observed_sequence_ = sequence_;
     }
 
     void ReadSince(uint64_t& cursor, std::vector<KeyInputEvent>& out_events,
@@ -37,6 +71,7 @@ public:
             if (event.sequence > cursor) out_events.push_back(event);
         }
         cursor = sequence_;
+        observed_sequence_ = sequence_;
         held = held_;
         if (observed_at_ms) *observed_at_ms = MonotonicMs();
     }
@@ -53,6 +88,9 @@ public:
             events_.push_back({key, KeyEventType::Up, ++sequence_, now});
         }
         held_.clear();
+        logical_snapshot_ = {};
+        snapshot_overflow_ = false;
+        ++source_epoch_;
         TrimEvents();
     }
 
@@ -70,17 +108,32 @@ private:
         if (type == KeyEventType::Down && !held_.insert(key_name).second) return;
         if (type == KeyEventType::Up && held_.erase(key_name) == 0) return;
         if (type == KeyEventType::Down && key_name == "COPILOT") {
-            // Windows 11 Copilot 键硬件发送合成宏: Win + Shift + F23
-            // 若 50ms 内刚压入了由该宏产生的合成 L_WIN 或 L_SHIFT，则消除前置假事件，避免左下角误闪
+            // Logical Win/Shift/F23 may be a macro or a real chord; this
+            // heuristic cannot establish physical origin. Already observed
+            // events must retain held state until Up for paired release/fade.
             while (!events_.empty() && 
                    (events_.back().key_name == "L_SHIFT" || events_.back().key_name == "L_WIN") &&
                    (now - events_.back().timestamp_ms < 50) &&
                    events_.back().type == KeyEventType::Down) {
+                if (events_.back().sequence <= observed_sequence_) break;
+                if (auto* state = LogicalKey(events_.back().key_name)) {
+                    state->held = 0; state->has_release = 0;
+                    state->last_down_ms = state->last_up_ms = 0;
+                    state->down_sequence = state->up_sequence = 0;
+                }
                 held_.erase(events_.back().key_name);
                 events_.pop_back();
             }
         }
         events_.push_back({key_name, type, ++sequence_, now});
+        if (auto* state = LogicalKey(key_name)) {
+            state->held = type == KeyEventType::Down ? 1u : 0u;
+            if (type == KeyEventType::Down) {
+                state->last_down_ms = now; state->down_sequence = sequence_; state->has_release = 0;
+            } else {
+                state->last_up_ms = now; state->up_sequence = sequence_; state->has_release = 1;
+            }
+        }
         // 环形上限保护：当活跃灯效不消费按键事件时 (常亮/呼吸/波浪等)，
         // 防止长时间运行下事件队列无界增长；仅保留最近 MAX_PENDING_EVENTS 条
         TrimEvents();
@@ -92,6 +145,21 @@ private:
     std::vector<KeyInputEvent> events_;
     std::unordered_set<std::string> held_;
     uint64_t sequence_{0};
+    uint64_t observed_sequence_{0};
+    bool source_available_{false};
+    bool snapshot_overflow_{false};
+    uint64_t source_epoch_{1};
+    AuraLogicalKeyboardSnapshotV1 logical_snapshot_{};
+    AuraLogicalKeyStateV1* LogicalKey(const std::string& name) {
+        if (name.empty() || name.size() >= AURA_LOGICAL_KEYBOARD_NAME_BYTES || name.find('\0') != std::string::npos)
+            return nullptr;
+        for (uint32_t i = 0; i < logical_snapshot_.count; ++i)
+            if (name == logical_snapshot_.keys[i].name) return &logical_snapshot_.keys[i];
+        if (logical_snapshot_.count == AURA_LOGICAL_KEYBOARD_MAX_KEYS) { snapshot_overflow_ = true; return nullptr; }
+        auto& state = logical_snapshot_.keys[logical_snapshot_.count++];
+        std::memcpy(state.name, name.c_str(), name.size() + 1);
+        return &state;
+    }
     void TrimEvents() {
         if (events_.size() > MAX_PENDING_EVENTS)
             events_.erase(events_.begin(), events_.begin() + (events_.size() - MAX_PENDING_EVENTS));

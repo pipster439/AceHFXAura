@@ -23,7 +23,8 @@ export function createStudioStorage(webview, status) {
   const request = (operation, draft, extra = {}) => new Promise((resolve, reject) => {
     if (!webview?.postMessage) { reject(new Error('草稿恢复与快照需要 Aura 桌面宿主。')); return; }
     if (!['observe', 'autosave', 'saved', 'snapshot', 'list', 'restore_recovery', 'discard', 'restore_snapshot'].includes(operation) ||
-        Object.keys(extra).some(k => !['reason', 'snapshot_id'].includes(k))) { reject(new Error('未知草稿操作')); return; }
+        Object.keys(extra).some(k => !['reason', 'snapshot_id', 'ai_request_id'].includes(k)) ||
+        (extra.ai_request_id !== undefined && (operation !== 'snapshot' || extra.reason !== 'before_ai_apply' || !/^[a-f0-9]{32}$/.test(extra.ai_request_id)))) { reject(new Error('未知草稿操作')); return; }
     const request_id = crypto.randomUUID().replaceAll('-', '');
     const timer = setTimeout(() => { pending.delete(request_id); reject(new Error('草稿存储响应超时')); }, 10000);
     pending.set(request_id, { resolve, reject, timer }); webview.postMessage({ type: 'studio_storage', request_id, operation, draft, ...extra });

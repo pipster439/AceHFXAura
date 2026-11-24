@@ -9,3 +9,5 @@ These snapshots preserve decisions and evidence; they are not current requiremen
 - `patches/`: Phase 3, 3.5 and 3.6 design/implementation snapshots. Preserve as historical diffs; do not apply to the current tree. Duplicate root Phase 3.6 export was removed.
 
 Return to [current documentation](../README.md). Hardware mappings and Light Bar research remain discoverable in [Hardware](../hardware/README.md).
+
+- `reports/alpha8/`: completed Studio AI, tooling, polish and conversational compatibility reports. Their candidate/freeze status describes the recorded checkpoints; alpha.8 has since been publicly released. The historical [design audit](../architecture/STUDIO_ALPHA8_DESIGN.md) and [acceptance summary](../release/ALPHA8_FEATURE_ACCEPTANCE.md) remain discoverable in their formal directories.

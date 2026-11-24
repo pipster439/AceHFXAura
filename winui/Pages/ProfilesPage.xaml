@@ -113,13 +113,23 @@
                     <Button x:Name="DiscardDraftButton" Content="放弃草稿并使用最新版本"
                             Click="DiscardDraftButton_Click" Visibility="Collapsed" HorizontalAlignment="Left" />
 
-                    <controls:SettingsCard Header="激活方式" IsClickEnabled="False">
+                    <controls:SettingsCard Header="磁轴配置来源" IsClickEnabled="False">
                         <ComboBox x:Name="ActivationBackendPicker" SelectionChanged="ActivationBackendPicker_SelectionChanged"
                                   AutomationProperties.Name="配置文件激活方式" AutomationProperties.AutomationId="ProfileActivationBackend">
                             <x:String>Aura 管理磁轴设置</x:String>
                             <x:String>板载配置槽位</x:String>
                         </ComboBox>
                     </controls:SettingsCard>
+                    <controls:SettingsCard Header="灯光控制来源" IsClickEnabled="False">
+                        <ComboBox x:Name="LightingOwnerPicker" SelectionChanged="LightingOwnerPicker_SelectionChanged"
+                                  AutomationProperties.Name="灯光控制来源" AutomationProperties.AutomationId="ProfileLightingOwner">
+                            <x:String>Aura 动态灯光</x:String>
+                            <x:String>板载固件灯光</x:String>
+                        </ComboBox>
+                    </controls:SettingsCard>
+                    <TextBlock x:Name="LightingOwnershipText" TextWrapping="Wrap" />
+                    <TextBlock Text="灯光控制独立于磁轴配置。切回板载灯光后，停止 Aura 推帧不代表固件灯效已恢复；恢复行为仍需实机验证。"
+                               TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     <StackPanel x:Name="HardwareSlotPanel" Spacing="10" Visibility="Collapsed">
                         <ComboBox x:Name="HardwareSlotPicker" Header="目标板载槽位" PlaceholderText="选择配置文件 1–5"
                                   SelectionChanged="HardwareSlotPicker_SelectionChanged" AutomationProperties.AutomationId="ProfileHardwareSlot">
@@ -128,7 +138,7 @@
                         </ComboBox>
                         <TextBlock Text="切换到此配置文件时，Aura只会激活键盘中的对应板载配置。板载配置的按键、磁轴和固件灯效内容请在 ASUS Gear Link / Armoury Crate 中编辑。"
                                    TextWrapping="Wrap" />
-                        <TextBlock Text="此槽位仍可被 Gear Link、Armoury Crate 或键盘硬件切换修改。Aura不会覆盖槽位内容。板载模式下 Aura 停止灯光帧输出，由键盘呈现板载灯效。"
+                        <TextBlock Text="此槽位仍可被 Gear Link、Armoury Crate 或键盘硬件切换修改。Aura不会覆盖槽位内容。选择 Aura 动态灯光后，磁轴仍由板载槽位管理。"
                                    TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                         <TextBlock x:Name="HardwareSlotStateText" TextWrapping="Wrap" />
                         <InfoBar x:Name="HardwareSlotWarning" Severity="Warning" IsClosable="False"

@@ -290,6 +290,24 @@ export const EFFECT_STUDIO_TOOLBOX = {
               inputs: {
                 DEFAULT: { shadow: { type: 'logic_boolean', fields: { BOOL: 'FALSE' } } }
               }
+            },
+            {
+              kind: 'block',
+              type: 'sensor_audio_feature',
+              inputs: {
+                DEFAULT: { shadow: { type: 'math_number', fields: { NUM: 0 } } }
+              }
+            },
+            {
+              kind: 'block',
+              type: 'sensor_screen_color',
+              inputs: {
+                DEFAULT: { shadow: { type: 'color_rgb', inputs: {
+                  R: { shadow: { type: 'math_number', fields: { NUM: 0 } } },
+                  G: { shadow: { type: 'math_number', fields: { NUM: 0 } } },
+                  B: { shadow: { type: 'math_number', fields: { NUM: 0 } } }
+                } } }
+              }
             }
           ]
         }

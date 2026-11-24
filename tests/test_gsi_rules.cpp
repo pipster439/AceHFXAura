@@ -30,12 +30,95 @@ public:
 double ParseAndClampThickness(const std::string& pname, const nlohmann::json& pval, double def_val = 1.0);
 double ParseAndClampThickness(const nlohmann::json& pval, double def_val = 1.0);
 std::shared_ptr<Effect> CreateEffectFromProfile(const std::string& pname, const nlohmann::json& pval);
+void HandlePluginReloadRequest(const httplib::Request&, httplib::Response&,
+                              const std::function<bool(const std::string&, bool)>&);
 }
 
-int main() {
+static int TestPluginReloadSecurity() {
+    int failures = 0, reload_calls = 0;
+    std::string reloaded_name;
+    bool lifecycle_required = false, reload_succeeds = true;
+    const std::function<bool(const std::string&, bool)> reload = [&](const std::string& name, bool lifecycle) {
+        ++reload_calls; reloaded_name = name; lifecycle_required = lifecycle; return reload_succeeds;
+    };
+    auto request = [](const std::string& body) {
+        httplib::Request req;
+        req.method = "POST"; req.path = "/api/plugin/reload"; req.body = body;
+        req.headers.emplace("Host", "127.0.0.1:19897");
+        req.headers.emplace("Content-Type", "application/json");
+        return req;
+    };
+    auto accepted = [&](httplib::Request req, const std::string& name, bool lifecycle) {
+        const int before = reload_calls;
+        httplib::Response res;
+        aura::HandlePluginReloadRequest(req, res, reload);
+        CHECK(res.status == 200 && reload_calls == before + 1 && reloaded_name == name && lifecycle_required == lifecycle,
+              "reload accepts validated logical identity: " + name);
+    };
+    auto rejected = [&](httplib::Request req, int expected, const std::string& label) {
+        const int before = reload_calls;
+        httplib::Response res;
+        aura::HandlePluginReloadRequest(req, res, reload);
+        CHECK(res.status == expected && reload_calls == before,
+              "reload rejects " + label + " before callback (HTTP " + std::to_string(expected) + ")");
+    };
+    const std::string published = "studio_abcdefghijklmnopqrst_0123456789abcdefabcd";
+    accepted(request(nlohmann::json({{"name", published}, {"require_lifecycle", true}}).dump()), published, true);
+    accepted(request(R"({"plugin_name":"effect_demo"})"), "effect_demo", false);
+    accepted(request(R"({"plugin_name":"effect_demo","name":"effect_demo","require_lifecycle":false})"), "effect_demo", false);
+    accepted(request(nlohmann::json({{"name", std::string(64, 'a')}}).dump()), std::string(64, 'a'), false);
+    for (const auto* host : {"localhost:19897", "[::1]:19897"}) {
+        auto req = request(R"({"name":"local"})"); req.headers.erase("Host"); req.headers.emplace("Host", host);
+        req.headers.emplace("Origin", "http://localhost:19898"); req.headers.emplace("Referer", "http://127.0.0.1:19898/");
+        req.headers.erase("Content-Type"); req.headers.emplace("Content-Type", "Application/JSON; charset=utf-8");
+        accepted(std::move(req), "local", false);
+    }
+    auto exact_limit = request(R"({"name":"limit"})"); exact_limit.body.resize(4096, ' ');
+    accepted(exact_limit, "limit", false);
+    exact_limit.body.push_back(' '); rejected(std::move(exact_limit), 413, "body over 4 KiB");
+    for (const auto& name : std::vector<std::string>{"", "..\\outside", "../outside", "C:\\outside.dll", "\\\\server\\share\\x.dll",
+             "effect_demo.dll", "/absolute", "name with space", "demo-name", "demo%2fname", std::string(65, 'a'),
+             std::string("safe\0suffix", 11), "光效"})
+        rejected(request(nlohmann::json({{"name", name}}).dump()), 400, "unsafe or oversized logical name");
+    for (const auto* body : {"{", "{}", "[]", "null", "true", "0", R"({"name":1})", R"({"plugin_name":false})",
+             R"({"name":"demo","unexpected":true})", R"({"name":"demo","require_lifecycle":"true"})",
+             R"({"name":"demo","require_lifecycle":1})", R"({"name":"demo","require_lifecycle":null})",
+             R"({"name":"one","plugin_name":"two"})", R"({"name":"demo","plugin_name":null})",
+             R"({"require_lifecycle":true})", R"({"name":"demo","name":"other"})",
+             R"({"name":"demo","require_lifecycle":false,"require_lifecycle":true})",
+             R"({"name":{"nested":"demo"}})"})
+        rejected(request(body), 400, "malformed, ambiguous or unsupported JSON");
+    for (const auto& header : std::vector<std::pair<std::string, std::string>>{
+             {"Host", "example.com"}, {"Host", "127.0.0.1.example.com"}, {"Host", ""},
+             {"Origin", "https://example.com"}, {"Origin", "null"}, {"Referer", "https://example.com/"},
+             {"Referer", "http://localhost@example.com/"}}) {
+        auto req = request(R"({"name":"demo"})"); req.headers.erase(header.first); req.headers.emplace(header.first, header.second);
+        rejected(std::move(req), 403, header.first + " authority");
+    }
+    auto missing_host = request(R"({"name":"demo"})"); missing_host.headers.erase("Host");
+    rejected(std::move(missing_host), 403, "missing Host");
+    for (const auto* content_type : {"text/plain", "application/x-www-form-urlencoded", ""}) {
+        auto req = request(R"({"name":"demo"})"); req.headers.erase("Content-Type");
+        if (*content_type) req.headers.emplace("Content-Type", content_type);
+        rejected(std::move(req), 415, "non-JSON content type");
+    }
+    reload_succeeds = false;
+    const int before = reload_calls;
+    httplib::Response failed;
+    aura::HandlePluginReloadRequest(request(R"({"name":"failed_generation"})"), failed, reload);
+    CHECK(failed.status == 400 && reload_calls == before + 1 && failed.body == R"({"status":"error","message":"Plugin reload failed"})",
+          "validated generation rejection preserves previous failure response");
+    httplib::Response missing;
+    aura::HandlePluginReloadRequest(request(R"({"name":"no_handler"})"), missing, {});
+    CHECK(missing.status == 400 && reload_calls == before + 1, "missing reload handler remains a failed reload");
+    return failures;
+}
+
+int main(int argc, char** argv) {
     // 真实失败计数器。在 Release 构建下普通 assert() 会被 /DNDEBUG 消除，
     // 因此全面使用 CHECK 宏，保证在 Release 与 Debug 下均具有真实校验力。
-    int failures = 0;
+    int failures = TestPluginReloadSecurity();
+    if (argc == 2 && std::string(argv[1]) == "--plugin-reload-security") return failures == 0 ? 0 : 1;
 
     // Discovery uses exact bytes, so older cadence files are reported for reinstall.
     {
@@ -1705,7 +1788,68 @@ int main() {
     }
 
     // =========================================================================
+    // Consumed Copilot-prefix events must keep a paired logical Up.
+    {
+        auto& hub = aura::KeyInputHub::Instance();
+        hub.Reset();
+        uint64_t cursor = hub.CurrentSequence();
+        const auto now = aura::KeyInputHubTestPeer::Now();
+        std::vector<aura::KeyInputEvent> events;
+        std::unordered_set<std::string> held;
+        aura::KeyInputHubTestPeer::RecordAt(hub, "L_WIN", aura::KeyEventType::Down, now);
+        hub.ReadSince(cursor, events, held);
+        CHECK(events.size() == 1 && held.count("L_WIN"), "Copilot prefix consumed before F23");
+        aura::KeyInputHubTestPeer::RecordAt(hub, "L_SHIFT", aura::KeyEventType::Down, now + 1);
+        aura::KeyInputHubTestPeer::RecordAt(hub, "COPILOT", aura::KeyEventType::Down, now + 2);
+        hub.ReadSince(cursor, events, held);
+        CHECK(held.count("L_WIN") && !held.count("L_SHIFT") && held.count("COPILOT"), "Only unread modifier is retracted");
+        aura::KeyInputHubTestPeer::RecordAt(hub, "L_WIN", aura::KeyEventType::Up, now + 3);
+        hub.ReadSince(cursor, events, held);
+        CHECK(events.size() == 1 && events[0].type == aura::KeyEventType::Up, "Consumed Down retains paired Up for fading");
+        hub.Reset();
+    }
+
     // 20. thickness 参数解析、边界钳制与非有限/非法类型防御专项测试
+    {
+        auto& hub = aura::KeyInputHub::Instance();
+        for (const auto& order : std::vector<std::vector<std::string>>{
+                 {"L_WIN", "L_SHIFT", "COPILOT"}, {"L_SHIFT", "L_WIN", "COPILOT"},
+                 {"COPILOT", "L_WIN", "L_SHIFT"}, {"L_WIN", "COPILOT", "L_SHIFT"}}) {
+            hub.Reset(); uint64_t cursor = hub.CurrentSequence();
+            const auto now = aura::KeyInputHubTestPeer::Now();
+            uint64_t at = now;
+            for (const auto& key : order) {
+                aura::KeyInputHubTestPeer::RecordAt(hub, key, aura::KeyEventType::Down, at++);
+                aura::KeyInputHubTestPeer::RecordAt(hub, key, aura::KeyEventType::Down, at++);
+            }
+            std::vector<aura::KeyInputEvent> events;
+            std::unordered_set<std::string> held;
+            hub.ReadSince(cursor, events, held);
+            CHECK(std::count_if(events.begin(), events.end(), [](const auto& e) {
+                return e.key_name == "COPILOT" && e.type == aura::KeyEventType::Down;
+            }) == 1, "Copilot order/repeat produces one Down");
+            const auto before = hub.CurrentSequence();
+            hub.RecordKeyEvent("A", aura::KeyEventType::Up);
+            CHECK(hub.CurrentSequence() == before, "Unpaired Up creates no event");
+            for (const auto& key : order) { hub.RecordKeyEvent(key, aura::KeyEventType::Up); hub.RecordKeyEvent(key, aura::KeyEventType::Up); }
+            hub.ReadSince(cursor, events, held);
+            CHECK(held.empty(), "Copilot order and duplicate Up fully release held state");
+        }
+        hub.Reset(); uint64_t cursor = hub.CurrentSequence();
+        const auto now = aura::KeyInputHubTestPeer::Now();
+        aura::KeyInputHubTestPeer::RecordAt(hub, "L_WIN", aura::KeyEventType::Down, now);
+        aura::KeyInputHubTestPeer::RecordAt(hub, "COPILOT", aura::KeyEventType::Down, now + 50);
+        std::vector<aura::KeyInputEvent> events;
+        std::unordered_set<std::string> held;
+        hub.ReadSince(cursor, events, held);
+        CHECK(held.count("L_WIN"), "50ms boundary preserves earlier real modifier");
+        for (int i = 0; i < 600; ++i) { hub.RecordKeyEvent("A", aura::KeyEventType::Down); hub.RecordKeyEvent("A", aura::KeyEventType::Up); }
+        cursor = 0; hub.ReadSince(cursor, events, held);
+        CHECK(events.size() == 1024 && held.count("L_WIN"), "Queue bounded; missing Up retains logical held until reset");
+        hub.Reset(); hub.ReadSince(cursor, events, held);
+        CHECK(held.empty(), "Reset releases missing Up without inventing physical provenance");
+    }
+
     // =========================================================================
     std::cout << "\n[测试 20] ParseAndClampThickness 参数边界与容错测试...\n";
     {

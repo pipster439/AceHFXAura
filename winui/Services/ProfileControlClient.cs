@@ -11,6 +11,8 @@ public sealed class ProfileApiResponse
     public HardwareSlotStatus? HardwareSlotStatus { get; set; }
     public string Status { get; set; } = "";
     public int ApiVersion { get; set; }
+    public bool LightingControlOwnerSupported { get; set; }
+    public bool HardwareProfileCreateSupported { get; set; }
     public long DocumentRevision { get; set; }
     public ulong RuntimeRevision { get; set; }
     public ulong MutationRevision { get; set; }
@@ -23,6 +25,7 @@ public sealed class ProfileApiResponse
     public ProfileApiLastOutcome? LastApplyOutcome { get; set; }
     public string? Outcome { get; set; }
     public string? Error { get; set; }
+    public string? ErrorCode { get; set; }
     public string? ImportWarning { get; set; }
     public DeviceProfile? Profile { get; set; }
     public List<DeviceProfile>? Profiles { get; set; }
@@ -36,12 +39,16 @@ public sealed class ProfileApiResponse
     public bool? AutomationConfigurationAvailable { get; set; }
     public string? AutomationWarning { get; set; }
     public bool PriorIntentResubmitted { get; set; }
+    public MagneticFirmwareCompatibility? FirmwareCompatibility { get; set; }
     [JsonExtensionData] public Dictionary<string, JsonElement>? Extensions { get; set; }
 }
 
 // Observed device status, never a Profile desired field or submission shadow.
 public sealed class HardwareSlotStatus
 {
+    public string? LightingOwner { get; set; }
+    public string? DesiredLightingOwner { get; set; }
+    public string? LightingDiagnostic { get; set; }
     public string? ProfileActivationBackend { get; set; }
     public int? DesiredHardwareSlot { get; set; }
     public int? ObservedHardwareSlot { get; set; }
@@ -78,7 +85,7 @@ public sealed class ProfileApiOperation
     public bool PriorIntentResubmission { get; set; }
 }
 
-public enum ProfileApiErrorCategory { Api, Transport, InvalidResponse, IncompatibleDaemon }
+public enum ProfileApiErrorCategory { Api, Transport, InvalidResponse, IncompatibleDaemon, FirmwareAdmission }
 
 public sealed class ProfileApiException(string message, HttpStatusCode? statusCode = null,
     ProfileApiErrorCategory category = ProfileApiErrorCategory.Api, string? responsePreview = null) : Exception(message)
@@ -104,6 +111,8 @@ public interface IProfileControlClient
     Task<ProfileApiResponse> UpdateAutomationAsync(DeviceProfileAutomationConfig configuration, long expectedRevision,
         CancellationToken token = default) => throw new NotSupportedException();
     Task<ProfileApiResponse> CreateAsync(string name, long expectedRevision, CancellationToken token = default);
+    Task<ProfileApiResponse> CreateHardwareAsync(string name, int slot, string lightingOwner, long expectedRevision,
+        CancellationToken token = default) => throw new NotSupportedException();
     Task<ProfileApiResponse> DuplicateAsync(Guid id, string name, long expectedRevision, CancellationToken token = default);
     Task<ProfileApiResponse> RenameAsync(Guid id, string name, long expectedRevision, CancellationToken token = default);
     Task<ProfileApiResponse> UpdateAsync(DeviceProfile profile, long expectedRevision, CancellationToken token = default);
@@ -141,6 +150,10 @@ public sealed class ProfileControlClient(HttpClient? http = null) : IProfileCont
             device_profile_automation = configuration, expected_revision = expectedRevision }, token);
     public Task<ProfileApiResponse> CreateAsync(string name, long expectedRevision, CancellationToken token = default) =>
         Mutation("create", new { name, expected_revision = expectedRevision }, token);
+    public Task<ProfileApiResponse> CreateHardwareAsync(string name, int slot, string lightingOwner, long expectedRevision,
+        CancellationToken token = default) => Mutation("create", new {
+            name, activation_backend = "hardware_slot", hardware_slot = slot,
+            lighting_control_owner = lightingOwner, expected_revision = expectedRevision }, token);
     public Task<ProfileApiResponse> DuplicateAsync(Guid id, string name, long expectedRevision,
         CancellationToken token = default) => Mutation("duplicate", new {
             profile_id = id, name, expected_revision = expectedRevision }, token);
@@ -209,7 +222,8 @@ public sealed class ProfileControlClient(HttpClient? http = null) : IProfileCont
             var applyFailure = response.StatusCode == HttpStatusCode.Conflict &&
                 result.Status == "ok" && result.Outcome == "failed";
             if ((!response.IsSuccessStatusCode && !applyFailure) || result.Status != "ok")
-                throw new ProfileApiException(result.Error ?? "Daemon Profile request failed", response.StatusCode);
+                throw new ProfileApiException(result.Error ?? "Daemon Profile request failed", response.StatusCode,
+                    result.ErrorCode == "FirmwareAdmissionDenied" ? ProfileApiErrorCategory.FirmwareAdmission : ProfileApiErrorCategory.Api);
             if (result.ApiVersion != 1) throw new ProfileApiException("Unsupported daemon Profile API version",
                 response.StatusCode, ProfileApiErrorCategory.IncompatibleDaemon);
             return result;

@@ -318,7 +318,6 @@ export default function Studio({
     new: () => { setIsNewModalOpen(true); setOpenPanel(null); },
     open: () => fileInputRef.current?.click(),
     select: m => { if (effectKeys.includes(m.name)) { setActiveEffectName(m.name); setActiveWorkType('effect'); } },
-    ask_ai: () => window.chrome?.webview?.postMessage({ type: 'studio_host_action', action: 'ask_ai' }),
     diagnostics: () => window.chrome?.webview?.postMessage({ type: 'studio_host_action', action: 'diagnostics' })
   }, () => ({ ...shellStateRef.current, workType: activeWorkType, embedded })), [embedded, effectKeys, activeWorkType]);
 

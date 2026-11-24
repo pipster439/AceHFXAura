@@ -19,6 +19,8 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
+#include <psapi.h>
+#include "m605_firmware_fixture.h"
 
 namespace aura {
 struct M605RuntimeTestAccess {
@@ -101,6 +103,9 @@ public:
     std::atomic<bool> current_session{true};
     int fail_stage_call = 0;
     std::function<bool()> stage_precondition;
+    aura::m605::FirmwareCompatibility ReadFirmwareCompatibility() override {
+        return SupportedM605FirmwareFixture();
+    }
     bool IsConnected() const override { return connected_; }
     bool IsCurrentSession() const override { return current_session.load(); }
     bool Connect() override { Record("connect"); connected_ = connect_succeeds;
@@ -698,6 +703,48 @@ bool TestFifo() {
             "stage-c", "pre-wait", "apply", "post-wait"};
 }
 
+bool TestStopReleasesTransport() {
+    auto fixture = MakeFixture();
+    if (!fixture.runtime->SetPerKeyActuation(0x0402, 1.0).get()) return false;
+    fixture.runtime->Stop();
+    const auto events = fixture.io->Events();
+    fixture.runtime->Stop();
+    return !fixture.io->IsConnected() && !events.empty() && events.back() == "disconnect" &&
+        fixture.io->Events() == events &&
+        !fixture.runtime->SetPerKeyActuation(0x0402, 1.0).get();
+}
+
+bool TestOfflineLifecycleStress() {
+    const auto sample = [] {
+        DWORD handles = 0;
+        PROCESS_MEMORY_COUNTERS_EX memory{}; memory.cb = sizeof(memory);
+        if (!GetProcessHandleCount(GetCurrentProcess(), &handles) ||
+            !K32GetProcessMemoryInfo(GetCurrentProcess(),
+                reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&memory), sizeof(memory)))
+            return std::pair<DWORD, SIZE_T>{0, 0};
+        return std::pair<DWORD, SIZE_T>{handles, memory.PrivateUsage};
+    };
+    DWORD baseline = 0;
+    for (int batch = 0; batch < 4; ++batch) {
+        for (int cycle = 0; cycle < 500; ++cycle) {
+            auto fixture = MakeFixture(); // FakeTransport + instant FakeSettleWait only.
+            if (cycle % 3 == 0) fixture.io->connect_succeeds = false;
+            if (cycle % 3 == 1) fixture.io->stage_succeeds = false;
+            const bool succeeded = fixture.runtime->SetPerKeyActuation(0x0402, 1.0).get();
+            if (succeeded != (cycle % 3 == 2)) return false;
+            fixture.runtime->Stop(); fixture.runtime->Stop();
+            if (fixture.io->IsConnected()) return false;
+        }
+        const auto [handles, bytes] = sample();
+        std::cout << "Offline lifecycle cycles=" << (batch + 1) * 500
+                  << " handles=" << handles << " private_bytes=" << bytes << '\n';
+        if (handles == 0) return false;
+        if (batch == 0) baseline = handles; // First batch warms allocator/runtime.
+        else if (handles > baseline + 2) return false;
+    }
+    return true; // Private Bytes are evidence samples, not a claimed hardware leak bound.
+}
+
 bool TestShutdownCancelsQueuedWork() {
     auto fixture = MakeFixture(BlockPhase::AfterApply);
     auto in_flight = fixture.runtime->SetPerKeyActuation(0x0402, 4.0);
@@ -718,7 +765,7 @@ bool TestShutdownCancelsQueuedWork() {
         stopped_during_post_wait && in_flight.get() &&
         fixture.wait->BeforeCount() == 1 && fixture.wait->AfterCount() == 1 &&
         fixture.io->Events() == std::vector<std::string>{
-            "connect", "stage-v", "pre-wait", "apply", "post-wait"} &&
+            "connect", "stage-v", "pre-wait", "apply", "post-wait", "disconnect"} &&
         fixture.runtime->GetHealth() == aura::M605RuntimeHealth::Stopped &&
         !fixture.runtime->SetAnalogEffect(0, false).get();
 }
@@ -1027,7 +1074,8 @@ bool TestStopDuringRapidTriggerPostWait() {
     return entered && cancelled && still_in_flight && in_flight.get() &&
         fixture.runtime->GetHealth() == aura::M605RuntimeHealth::Stopped &&
         fixture.io->Events() == std::vector<std::string>{
-            "connect", "stage-rt-press", "stage-rt-release", "pre-wait", "apply", "post-wait"};
+            "connect", "stage-rt-press", "stage-rt-release", "pre-wait", "apply", "post-wait", "disconnect"} &&
+        !fixture.io->IsConnected();
 }
 
 bool TestSpeedTapPairPostSettleAndTargetedDisable() {
@@ -1154,7 +1202,8 @@ bool TestSpeedTapFifoAndStop() {
     return entered && cancelled && still_in_flight && in_flight.get() &&
         fixture.runtime->GetHealth() == aura::M605RuntimeHealth::Stopped &&
         fixture.io->Events() == std::vector<std::string>{
-            "connect", "stage-speedtap-pair-on", "pre-wait", "apply", "post-wait"};
+            "connect", "stage-speedtap-pair-on", "pre-wait", "apply", "post-wait", "disconnect"} &&
+        !fixture.io->IsConnected();
 }
 
 bool TestSpeedTapFifo() {
@@ -2027,7 +2076,7 @@ int main() {
         !TestStageFailure() ||
         !TestApplyFailureLocksRuntime() || !TestFailureInvalidatesEarlierShadowAndQueuedWork() ||
         !TestFailureCancelsQueuedWork() || !TestFifo() ||
-        !TestShutdownCancelsQueuedWork() || !TestDestructorCancelsQueuedWork() ||
+        !TestStopReleasesTransport() || !TestOfflineLifecycleStress() || !TestShutdownCancelsQueuedWork() || !TestDestructorCancelsQueuedWork() ||
         !TestInvalidInputsDoNotTouchTransport() ||
         !TestRapidTriggerFirstStageBoundary() ||
         !TestRapidTriggerSecondStageAndPostApplyBoundary() ||

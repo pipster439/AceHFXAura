@@ -3,7 +3,7 @@
 param(
     [switch]$HardwareSmoke, [switch]$AllowHardwareWrites,
     [string]$ProfileA, [string]$ProfileB,
-    [string]$OutputDirectory = 'artifacts/ci',
+    [string]$OutputDirectory = '',
     [string]$DaemonUrl = 'http://127.0.0.1:19897'
 )
 Set-StrictMode -Version Latest
@@ -13,7 +13,9 @@ if ($AllowHardwareWrites -and (-not $HardwareSmoke -or (Test-CiEnvironment))) {
     throw 'Hardware writes require local HardwareSmoke and are forbidden in CI.'
 }
 # Separate processes retain the software summary even if the optional smoke fails.
-& pwsh -NoProfile -File "$PSScriptRoot/run-ci.ps1" -OutputDirectory $OutputDirectory
+$softwareArguments = @('-NoProfile', '-File', "$PSScriptRoot/run-ci.ps1")
+if ($OutputDirectory) { $softwareArguments += @('-OutputDirectory', $OutputDirectory) }
+& pwsh @softwareArguments
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 if ($HardwareSmoke) {
     if (-not (Test-CiEnvironment)) {

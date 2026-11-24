@@ -7,6 +7,26 @@ namespace Aura.Tests;
 public sealed class ProfilePageModelTests
 {
     [TestMethod]
+    public async Task IndependentLightingSelectionSaveApplyAndOldDaemonCapability()
+    {
+        var api = new Fake(); var model = new ProfilePageModel(api); await model.LoadAsync();
+        model.SetActivationBackend("hardware_slot"); model.Draft!.HardwareSlot = 5;
+        Assert.AreEqual("FirmwareBank", model.Draft.EffectiveLightingOwner);
+        model.SetLightingOwner("AuraDirectRgb");
+        Assert.AreEqual("AuraDirectRgb", model.Draft.EffectiveLightingOwner);
+        Assert.IsTrue(await model.SaveAsync()); Assert.IsEmpty(api.Activated);
+        Assert.AreEqual("AuraDirectRgb", api.Profiles[0].Lighting.ControlOwner);
+        Assert.IsTrue(await model.ApplyAsync()); Assert.HasCount(1, api.Activated);
+        api.SlotStatus = new() { LightingOwner = "FirmwareBank", DesiredLightingOwner = "AuraDirectRgb",
+            LightingDiagnostic = "FirmwareLightingRestoreUnverified" };
+        await model.LoadAsync();
+        StringAssert.Contains(model.LightingOwnershipText, "尚未验证");
+        api.LightingSupported = false; await model.LoadAsync();
+        model.SetLightingOwner("FirmwareBank");
+        Assert.AreEqual("AuraDirectRgb", model.Draft!.EffectiveLightingOwner);
+        StringAssert.Contains(model.LightingOwnershipText, "未声明");
+    }
+    [TestMethod]
     public async Task HardwareBackendSaveApplyPollingKeepDraftAndOneNotification()
     {
         var api = new Fake(); var model = new ProfilePageModel(api); await model.LoadAsync();
@@ -290,6 +310,7 @@ public sealed class ProfilePageModelTests
         public bool Corrupt;
         public HardwareRtGateStatus? HardwareGate;
         public HardwareSlotStatus? SlotStatus;
+        public bool LightingSupported = true;
         public string? NextOutcome;
         public string? FailureError;
         public TaskCompletionSource<bool>? ActivationGate;
@@ -322,6 +343,7 @@ public sealed class ProfilePageModelTests
         {
             Available();
             return new ProfileApiResponse { Status = "ok", ApiVersion = 1,
+                LightingControlOwnerSupported = LightingSupported,
                 DocumentRevision = Revision, MutationRevision = (ulong)Revision,
                 SelectedProfileId = Selected, ActiveProfileId = Active, Dirty = Dirty,
                 Profiles = Profiles.Select(p => p.Clone()).ToList(),

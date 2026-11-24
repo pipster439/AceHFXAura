@@ -8,6 +8,7 @@
 #include <mutex>
 #include <thread>
 #include <vector>
+#include "m605_firmware_fixture.h"
 
 namespace aura {
 struct M605RuntimeTestAccess {
@@ -25,6 +26,8 @@ namespace {
 using Json = nlohmann::json;
 
 struct FakeTransport final : aura::m605::detail::Transport {
+    aura::m605::FirmwareCompatibility firmware = SupportedM605FirmwareFixture();
+    aura::m605::FirmwareCompatibility ReadFirmwareCompatibility() override { return firmware; }
     bool connected = false;
     int fail_at_stage = 0;
     int stages = 0;
@@ -184,6 +187,22 @@ bool TestService() {
     snapshot.hardware_connected = true;
     snapshot.active_backend = "native_hid";
     status->Update(snapshot);
+    for (const auto state : {aura::m605::FirmwareState::Unknown, aura::m605::FirmwareState::Unsupported, aura::m605::FirmwareState::ReadFailed}) {
+        io_ptr->firmware = {state, state == aura::m605::FirmwareState::Unsupported ? "1.00.58" : "",
+            std::string("Firmware") + aura::m605::FirmwareStateName(state) + ": synthetic API rejection"};
+        const auto denied = post("/api/magnetic/actuation", R"({"logical_id":1026,"mm":1.0})");
+        if (!denied || denied->status != (state == aura::m605::FirmwareState::ReadFailed ? 503 : 409) ||
+            io_ptr->stages || io_ptr->applies || latch->arms || latch->armed)
+            return finish((std::cerr << "Firmware API bypass line " << __LINE__ << '\n', false));
+        const auto denied_json = Json::parse(denied->body);
+        if (denied_json.at("status") != "error" || denied_json.at("firmware_compatibility").at("state") != aura::m605::FirmwareStateName(state) ||
+            !denied_json.at("actuation").empty())
+            return finish((std::cerr << "Firmware API fake applied state line " << __LINE__ << '\n', false));
+    }
+    const auto forged = post("/api/magnetic/actuation", R"({"logical_id":1026,"mm":1.0,"supported":true,"firmware_version":"1.00.59"})");
+    if (!forged || forged->status != 422 || io_ptr->stages || io_ptr->applies || latch->arms)
+        return finish((std::cerr << "Firmware trust boundary line " << __LINE__ << '\n', false));
+    io_ptr->firmware = SupportedM605FirmwareFixture();
     const auto actuation = post("/api/magnetic/actuation", R"({"logical_id":1026,"mm":1.0})");
     if (!actuation || actuation->status != 200 || io_ptr->reports.size() != 2 || latch->armed)
         return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));

@@ -1,7 +1,7 @@
 // Native UI is a command surface; the retained editor remains the document owner.
 export const STUDIO_COMMAND_DEFINITIONS = Object.freeze([
   ['new', '新建光效', 'New Effect'], ['open', '打开工程', 'Open'], ['save', '保存草稿', 'Save'], ['validate', '验证工程', 'Validate'],
-  ['bench', '打开测试台', 'Test Bench'], ['run_scenario', '运行当前场景', 'Run Scenario'], ['ask_ai', '打开 AI 助手', 'Ask AI'],
+  ['bench', '打开测试台', 'Test Bench'], ['run_scenario', '运行当前场景', 'Run Scenario'],
   ['build', '构建（不发布）', 'Build'], ['publish', '发布光效', 'Publish'], ['restore_snapshot', '恢复草稿快照', 'Restore Snapshot'],
   ['export_bundle', '导出工程包', 'Export Bundle'], ['import_bundle', '导入工程包', 'Import Bundle'], ['diagnostics', '打开诊断', 'Diagnostics']
 ].map(([id, label, search]) => Object.freeze({ id, label, search })));
@@ -15,7 +15,7 @@ export function commandAvailability(id, state = {}) {
   if (state.recovery) return '请先恢复或放弃可恢复草稿';
   if (['build', 'publish', 'bench', 'run_scenario', 'export_bundle'].includes(id) && state.validation !== '验证通过') return '请先解决工程验证错误';
   if (id === 'restore_snapshot' && !state.hasSnapshots) return '当前工程没有可恢复快照';
-  if (['ask_ai', 'export_bundle', 'import_bundle'].includes(id) && state.embedded === false) return '此命令需要 Aura 桌面宿主';
+  if (['export_bundle', 'import_bundle'].includes(id) && state.embedded === false) return '此命令需要 Aura 桌面宿主';
   return '';
 }
 export function filterStudioCommands(query) {

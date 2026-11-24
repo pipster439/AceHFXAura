@@ -7,7 +7,21 @@ import { JsTranspiler } from '../src/blockly/jsTranspiler.js';
 import { normalizePublication } from '../src/blockly/publication.js';
 import { stageEffect, effectConfig } from '../src/utils/applyEffect.js';
 import { ConfigSaveCoordinator } from '../src/utils/configSaveCoordinator.js';
+import { EFFECT_PRESETS } from '../src/blockly/presets.js';
 registerCustomBlocks();
+test('logical keyboard publication requires the daemon input extension before compiling', async () => {
+ const w = new Blockly.Workspace(), originalFetch = globalThis.fetch, calls = [];
+ try {
+  Blockly.serialization.workspaces.load({ blocks: EFFECT_PRESETS.find(p => p.id === 'template_reactive').blocklyJson }, w);
+  let supported = false;
+  globalThis.fetch = async url => { calls.push(url); return { ok: true, json: async () =>
+   url === '/api/status' ? { web_api_version: 2 } : url === '/api/gsi/current' ? { studio_runtime: 2, logical_keyboard_version: supported ? 1 : undefined } : { success: true, daemon_synced: true } }; };
+  await assert.rejects(stageEffect('reactive', w, CppTranspiler), /逻辑按键输入/);
+  assert.ok(!calls.includes('/api/compile_effect'));
+  supported = true;
+  assert.ok((await stageEffect('reactive', w, CppTranspiler)).pluginName.startsWith('studio_'));
+ } finally { globalThis.fetch = originalFetch; w.dispose(); }
+});
 function workspace() {
  const w=new Blockly.Workspace();
  const num=n=>({type:'math_number',fields:{NUM:n}});

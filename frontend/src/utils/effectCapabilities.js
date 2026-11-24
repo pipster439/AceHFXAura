@@ -6,11 +6,12 @@ controls_if controls_repeat_ext controls_whileUntil controls_flow_statements eff
 math_number time_elapsed_ms time_phase math_waveform geometry_coords geometry_distance geometry_radial_phase
 color_rgb color_hsv color_lerp color_brightness color_cycle key_is_pressed key_decay text logic_boolean logic_negate
 logic_operation gsi_state_match gsi_numeric_compare gsi_player_health_condition gsi_c4_state_condition gsi_enum_constant
-gsi_get_number gsi_get_string gsi_get_boolean math_arithmetic logic_compare variables_get math_single math_trig math_round math_modulo`.split(/\s+/));
+gsi_get_number gsi_get_string gsi_get_boolean math_arithmetic logic_compare variables_get math_single math_trig math_round math_modulo sensor_audio_feature sensor_screen_color`.split(/\s+/));
+export const EFFECT_BLOCK_TYPES = supported;
 const time = new Set(['time_elapsed_ms', 'time_phase', 'geometry_radial_phase', 'color_cycle', 'key_ripple_effect', 'effect_wait_ms']);
 const state = new Set(['variables_get', 'variables_set', 'math_change', 'effect_wait_ms', 'controls_repeat_ext', 'controls_whileUntil']);
 const gsiFields = new Set([...NUMERIC_GSI_STATES, ...DISCRETE_GSI_STATES, ...BOOLEAN_GSI_STATES].map(x => x.key));
-export const CAPABILITY_LABELS = Object.freeze({ keyboard: '模拟按键', cs2_gsi: 'CS2 状态', foreground_process: '前台状态', time: '模拟时间', keyboard_rgb: '键盘光效' });
+export const CAPABILITY_LABELS = Object.freeze({ keyboard: '模拟按键', cs2_gsi: 'CS2 状态', foreground_process: '前台状态', time: '模拟时间', keyboard_rgb: '键盘光效', audio: '系统音频', screen: '屏幕环境' });
 export const CAPABILITY_DIAGNOSTICS = Object.freeze({ unsupported_block: '工程包含测试台不支持的积木。',
   foreground_automation_only: '前台条件属于自动化工作室，光效模拟器不读取该条件。', legacy_event_pulse: '旧事件布尔脉冲已退役，请使用自动化事件规则。',
   unsupported_gsi_field: '此 GSI 字段不在测试场景允许的状态字典中。', unsupported_declaration: '工程声明了不支持的能力。', invalid_graph: '工程图结构无效或超过能力分析限制。' });
@@ -37,13 +38,17 @@ export function deriveEffectCapabilities(project) {
     if (type === 'gsi_state_match') field(b.fields?.STATE || 'round.bomb');
     if (type === 'gsi_numeric_compare') field(b.fields?.FIELD || 'player.state.health');
     if (type.startsWith('gsi_get_')) field(b.fields?.PATH || ({ gsi_get_number: 'player.state.health', gsi_get_string: 'round.bomb', gsi_get_boolean: 'player.state.helmet' })[type]);
+    if (type === 'sensor_audio_feature') { inputs.add('audio'); features.add('event_driven'); }
+    if (type === 'sensor_screen_color') { inputs.add('screen'); features.add('event_driven'); }
     // A connected real block hides its fallback shadow in Blockly execution.
     for (const c of Object.values(b.inputs || {})) { const active = c?.block || c?.shadow; if (active) visit(active, depth + 1); }
     if (b.next?.block) visit(b.next.block, depth + 1);
   };
-  const roots = Array.isArray(graph?.blocks) ? graph.blocks : graph?.blocks?.blocks;
+  const emptyWorkspace = graph && typeof graph === 'object' && !Array.isArray(graph) &&
+    !Object.hasOwn(graph, 'blocks') && Object.keys(graph).every(k => ['variables', 'workspaceComments'].includes(k));
+  const roots = Array.isArray(graph) ? graph : Array.isArray(graph?.blocks) ? graph.blocks : graph?.blocks?.blocks ?? (emptyWorkspace ? [] : undefined);
   if (!Array.isArray(roots)) diagnostics.add('invalid_graph'); else for (const b of roots) visit(b);
-  if (graph?.declared_capabilities && (!Array.isArray(graph.declared_capabilities) || graph.declared_capabilities.some(c => !['keyboard', 'cs2_gsi', 'time', 'keyboard_rgb'].includes(c)))) diagnostics.add('unsupported_declaration');
+  if (graph?.declared_capabilities && (!Array.isArray(graph.declared_capabilities) || graph.declared_capabilities.some(c => !['keyboard', 'cs2_gsi', 'time', 'keyboard_rgb', 'audio', 'screen'].includes(c)))) diagnostics.add('unsupported_declaration');
   if (project?.publication?.mode === 'one_shot') { inputs.add('time'); features.add('stateful'); }
   if (!diagnostics.size) features.add('simulation_supported');
   const sort = set => [...set].sort();

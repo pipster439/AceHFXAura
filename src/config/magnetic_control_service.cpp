@@ -1,4 +1,5 @@
 #include "config/magnetic_control_service.h"
+#include "aura/hardware/m605_firmware_json.h"
 #include "monitor/hardware_rt_gate_monitor.h"
 #include "config/config_writer_util.h"
 #include "config/device_profile_runtime.h"
@@ -134,6 +135,65 @@ Json KnownRaw(std::optional<uint8_t> raw) {
                  Json{{"known", false}, {"source", "Unknown"}};
 }
 
+Json HallSnapshotJson(const m605::hall::HallTelemetrySnapshot& snap) {
+    Json keys = Json::array();
+    for (const auto& k : snap.keys) {
+        keys.push_back({
+            {"logical_id", k.logical_id},
+            {"hid_usage", k.hid_usage},
+            {"name", k.name},
+            {"raw", k.raw},
+            {"depth_mm", std::round(k.depth_mm * 100.0) / 100.0},
+            {"normalized", std::round(k.normalized * 10000.0) / 10000.0},
+            {"digital_down", k.digital_down}
+        });
+    }
+    return {
+        {"status", "ok"},
+        {"api_version", 1},
+        {"active", snap.active},
+        {"event_channel_ok", snap.event_channel_ok},
+        {"shared_memory_ok", snap.shared_memory_ok},
+        {"shared_memory_name", m605::hall::kHallShmNameUtf8},
+        {"packet_count", snap.packet_count},
+        {"packet_rate_hz", std::round(snap.packet_rate_hz * 10.0) / 10.0},
+        {"last_error", snap.last_error},
+        {"keys", keys}
+    };
+}
+
+Json VerifyStatusJson(const m605::hall::VerifyStatusSnapshot& snap) {
+    Json results = Json::array();
+    for (const auto& r : snap.results) {
+        results.push_back({
+            {"kind", r.kind},
+            {"label", r.label},
+            {"target_mm", r.target_mm},
+            {"measured_mm", r.measured_mm},
+            {"error_mm", r.error_mm},
+            {"passed", r.passed},
+            {"detail", r.detail}
+        });
+    }
+    return {
+        {"status", "ok"},
+        {"api_version", 1},
+        {"state", snap.state},
+        {"logical_id", snap.logical_id},
+        {"key_name", snap.key_name},
+        {"mode", snap.mode},
+        {"instruction", snap.instruction},
+        {"step_index", snap.step_index},
+        {"step_total", snap.step_total},
+        {"live_depth_mm", snap.live_depth_mm},
+        {"live_raw", snap.live_raw},
+        {"digital_down", snap.digital_down},
+        {"bound_bit", snap.bound_bit},
+        {"error", snap.error},
+        {"results", results}
+    };
+}
+
 enum class Mutation {
     Actuation, RtOn, RtOff, Deadzone, ResetAllDeadzone, Dks,
     DksStandard, SpeedTapPairOn, SpeedTapPairOff, SpeedTapMaster,
@@ -146,7 +206,8 @@ MagneticControlService::MagneticControlService(std::shared_ptr<const RuntimeStat
     std::function<MagneticHostProfile()> host_profile, std::unique_ptr<M605Runtime> runtime,
     std::filesystem::path profile_path, std::filesystem::path legacy_config)
     : status_store_(std::move(status_store)), host_profile_(std::move(host_profile)),
-      runtime_(std::move(runtime)) {
+      runtime_(std::move(runtime)),
+      hall_telemetry_(std::make_unique<m605::hall::M605HallTelemetry>()) {
     if (!profile_path.empty())
         profiles_ = std::make_unique<DeviceProfileRuntime>(std::move(profile_path),
             std::move(legacy_config), *runtime_, write_mutex_, host_profile_,
@@ -162,8 +223,12 @@ void MagneticControlService::StartHardwareRtGateObservation() {
 }
 void MagneticControlService::Stop() {
     StopDeviceProfileAutomation();
+    if (hall_telemetry_) hall_telemetry_->Stop();
     if (rt_gate_monitor_) rt_gate_monitor_->Stop();
     runtime_->Stop();
+}
+m605::hall::HallTelemetrySnapshot MagneticControlService::GetHallSnapshot() const {
+    return hall_telemetry_ ? hall_telemetry_->GetSnapshot() : m605::hall::HallTelemetrySnapshot{};
 }
 void MagneticControlService::StartDeviceProfileAutomation() {
     if (!profiles_ || automation_coordinator_) return;
@@ -187,6 +252,9 @@ bool MagneticControlService::ObserveDeviceProfileForeground(const std::string& n
 }
 
 void MagneticControlService::ObserveHardwareSlot() {
+    auto hall_pause = hall_telemetry_ ?
+        std::optional<m605::hall::M605HallTelemetry::ScopedPause>(hall_telemetry_->PauseForTransaction()) :
+        std::nullopt;
     if (profiles_) profiles_->ObserveHardwareSlot();
 }
 bool MagneticControlService::WithProfileLightingOwnership(const std::function<bool()>& write_frame) {
@@ -211,6 +279,7 @@ void MagneticControlService::WriteStatus(httplib::Response& response, bool resul
                  {"applied_state_source", "SessionApplied: completed AceHFXAura runtime sequence, not device readback"},
                  {"last_error", detail.empty() ? runtime_->GetLastError() : std::string(detail)}};
     body["m605_session_generation"] = runtime_->GetSessionGeneration();
+    body["firmware_compatibility"] = m605::FirmwareCompatibilityJson(runtime_->GetDiagnosticSnapshot().firmware);
     body["host_profile"] = {{"source", host.active_profile_id ? "HostProfile" : "Unknown"},
                              {"active_profile_id", host.active_profile_id ? Json(*host.active_profile_id) : Json(nullptr)},
                              {"global_actuation", KnownRaw(host.global_actuation_raw)},
@@ -410,9 +479,20 @@ void MagneticControlService::RegisterRoutes(httplib::Server& server) {
             if (!valid) { WriteStatus(response, false, 422, "Invalid or unsupported magnetic setting input"); return; }
             std::unique_lock<std::mutex> write_lock(write_mutex_, std::try_to_lock);
             if (!write_lock.owns_lock()) { WriteStatus(response, false, 409, "Another magnetic setting is applying"); return; }
-            if (!HardwareAvailable() || runtime_->GetHealth() != M605RuntimeHealth::Clean ||
+            if (!HardwareAvailable()) {
+                WriteStatus(response, false, 409, "DeviceDisconnected: connected native_hid device required"); return;
+            }
+            if (runtime_->GetHealth() != M605RuntimeHealth::Clean ||
                 runtime_->IsPersistentSafetyQuarantined()) {
-                WriteStatus(response, false, 409, "Magnetic runtime unavailable or safety quarantined"); return;
+                WriteStatus(response, false, 409, "SafetyQuarantined: magnetic runtime is unhealthy or isolated"); return;
+            }
+            auto hall_pause = hall_telemetry_ ?
+                std::optional<m605::hall::M605HallTelemetry::ScopedPause>(hall_telemetry_->PauseForTransaction()) :
+                std::nullopt;
+            if (!runtime_->PrepareTransportSession()) {
+                const auto firmware = runtime_->GetDiagnosticSnapshot().firmware;
+                WriteStatus(response, false, firmware.state == m605::FirmwareState::ReadFailed ? 503 : 409);
+                return; // no conflict resolution, baseline persistence, latch or stage
             }
             const auto host = host_profile_();
             const auto shadow = runtime_->GetAppliedRuntimeState();
@@ -521,8 +601,11 @@ void MagneticControlService::RegisterRoutes(httplib::Server& server) {
                 "DKS standard rewrite completed before RT failure; current device state is uncertain" :
                 kind == Mutation::Dks && (rt_active || !rt_known) ?
                 "RT disable completed before DKS failure; current device state is uncertain" : "";
+            const auto firmware = runtime_->GetDiagnosticSnapshot().firmware;
+            const bool firmware_rejected = firmware.session_generation == runtime_->GetSessionGeneration() &&
+                (firmware.state == m605::FirmwareState::Unknown || firmware.state == m605::FirmwareState::Unsupported);
             WriteStatus(response, success, success ? 200 :
-                health == M605RuntimeHealth::IndeterminateStagedState ? 409 : 503,
+                health == M605RuntimeHealth::IndeterminateStagedState || firmware_rejected ? 409 : 503,
                 !success && *partial ? partial : std::string_view{});
         });
     };
@@ -603,6 +686,15 @@ void MagneticControlService::RegisterRoutes(httplib::Server& server) {
             if (!HardwareAvailable() || runtime_->GetHealth() != M605RuntimeHealth::Clean ||
                 runtime_->IsPersistentSafetyQuarantined()) {
                 respond(false, 409, "Magnetic runtime unavailable or safety quarantined", empty, empty); return;
+            }
+            auto hall_pause = hall_telemetry_ ?
+                std::optional<m605::hall::M605HallTelemetry::ScopedPause>(hall_telemetry_->PauseForTransaction()) :
+                std::nullopt;
+            if (!runtime_->PrepareTransportSession()) {
+                const auto firmware = runtime_->GetDiagnosticSnapshot().firmware;
+                respond(false, firmware.state == m605::FirmwareState::ReadFailed ? 503 : 409,
+                    runtime_->GetLastError(), empty, empty);
+                return;
             }
 
             const auto host = host_profile_();
@@ -695,5 +787,231 @@ void MagneticControlService::RegisterRoutes(httplib::Server& server) {
     batch_write("/api/magnetic/batch/actuation", Mutation::Actuation);
     batch_write("/api/magnetic/batch/rapid-trigger", Mutation::RtOn);
     batch_write("/api/magnetic/batch/deadzone", Mutation::Deadzone);
+
+    server.Get("/api/magnetic/hall/snapshot", [this](const httplib::Request& request, httplib::Response& response) {
+        if (!IsAllowedLoopbackHost(request.get_header_value("Host"))) { response.status = 403; return; }
+        const Json body = hall_telemetry_ ? HallSnapshotJson(hall_telemetry_->GetSnapshot()) :
+            Json{{"status", "error"}, {"api_version", 1}, {"last_error", "Hall telemetry unavailable"}};
+        response.status = 200;
+        response.set_header("Cache-Control", "no-store");
+        response.set_content(body.dump(), "application/json; charset=utf-8");
+    });
+
+    server.Post("/api/magnetic/hall/start", [this](const httplib::Request& request, httplib::Response& response) {
+        if (!ValidRequest(request, response)) return;
+        const Json body = Json::parse(request.body, nullptr, false);
+        bool unlock_fa = false;
+        if (!body.is_object() || body.size() > 1 ||
+            (body.size() == 1 && !Boolean(body, "unlock_fa", unlock_fa))) {
+            response.status = 422;
+            response.set_content(R"({"status":"error","api_version":1,"last_error":"Invalid unlock_fa parameter"})",
+                                 "application/json; charset=utf-8");
+            return;
+        }
+        if (!HardwareAvailable()) {
+            response.status = 409;
+            response.set_content(R"({"status":"error","api_version":1,"last_error":"DeviceDisconnected: connected native_hid device required"})",
+                                 "application/json; charset=utf-8");
+            return;
+        }
+        const bool ok = hall_telemetry_ && hall_telemetry_->Start(unlock_fa);
+        Json out = hall_telemetry_ ? HallSnapshotJson(hall_telemetry_->GetSnapshot()) :
+            Json{{"status", "error"}, {"api_version", 1}, {"last_error", "Hall telemetry unavailable"}};
+        if (!ok) out["status"] = "error";
+        response.status = ok ? 200 : 503;
+        response.set_header("Cache-Control", "no-store");
+        response.set_content(out.dump(), "application/json; charset=utf-8");
+    });
+
+    server.Post("/api/magnetic/hall/stop", [this](const httplib::Request& request, httplib::Response& response) {
+        if (!ValidRequest(request, response)) return;
+        const Json body = Json::parse(request.body, nullptr, false);
+        if (!body.is_object() || !body.empty()) {
+            response.status = 422;
+            response.set_content(R"({"status":"error","api_version":1,"last_error":"Expected empty JSON object"})",
+                                 "application/json; charset=utf-8");
+            return;
+        }
+        if (hall_telemetry_) hall_telemetry_->Stop();
+        Json out = hall_telemetry_ ? HallSnapshotJson(hall_telemetry_->GetSnapshot()) :
+            Json{{"status", "ok"}, {"api_version", 1}, {"active", false}};
+        response.status = 200;
+        response.set_header("Cache-Control", "no-store");
+        response.set_content(out.dump(), "application/json; charset=utf-8");
+    });
+
+    server.Get("/api/magnetic/hall/verify/status", [this](const httplib::Request& request, httplib::Response& response) {
+        if (!IsAllowedLoopbackHost(request.get_header_value("Host"))) { response.status = 403; return; }
+        Json out = hall_telemetry_ ? VerifyStatusJson(hall_telemetry_->GetVerifyStatus()) :
+            Json{{"status", "error"}, {"api_version", 1}, {"state", "Failed"}, {"error", "Hall telemetry unavailable"}};
+        response.status = 200;
+        response.set_header("Cache-Control", "no-store");
+        response.set_content(out.dump(), "application/json; charset=utf-8");
+    });
+
+    server.Post("/api/magnetic/hall/verify/stop", [this](const httplib::Request& request, httplib::Response& response) {
+        if (!ValidRequest(request, response)) return;
+        const Json body = Json::parse(request.body, nullptr, false);
+        if (!body.is_object() || !body.empty()) {
+            response.status = 422;
+            response.set_content(R"({"status":"error","api_version":1,"last_error":"Expected empty JSON object"})",
+                                 "application/json; charset=utf-8");
+            return;
+        }
+        if (hall_telemetry_) hall_telemetry_->StopVerify();
+        Json out = hall_telemetry_ ? VerifyStatusJson(hall_telemetry_->GetVerifyStatus()) :
+            Json{{"status", "ok"}, {"api_version", 1}, {"state", "Idle"}};
+        response.status = 200;
+        response.set_header("Cache-Control", "no-store");
+        response.set_content(out.dump(), "application/json; charset=utf-8");
+    });
+
+    server.Post("/api/magnetic/hall/verify/start", [this](const httplib::Request& request, httplib::Response& response) {
+        if (!ValidRequest(request, response)) return;
+        const Json body = Json::parse(request.body, nullptr, false);
+        m605::hall::VerifyRequest req;
+        bool valid = body.is_object() &&
+            LogicalKey(body, "logical_id", req.logical_id) &&
+            body.contains("mode") && body.at("mode").is_string();
+        if (valid) {
+            req.mode = body.at("mode").get<std::string>();
+            valid = (req.mode == "actuation" || req.mode == "rt" || req.mode == "deadzone");
+        }
+        const std::set<std::string> allowed_fields = {
+            "logical_id", "mode", "actuation_points", "rt_points",
+            "dz_top_mm", "dz_bottom_mm", "dz_rt_mm", "restore_actuation_mm", "unlock_fa"
+        };
+        if (valid) {
+            for (auto it = body.begin(); it != body.end(); ++it) {
+                if (allowed_fields.find(it.key()) == allowed_fields.end()) {
+                    valid = false;
+                    break;
+                }
+            }
+        }
+        if (valid && body.contains("actuation_points")) {
+            const auto& arr = body.at("actuation_points");
+            valid = arr.is_array() && !arr.empty() && arr.size() <= 8;
+            if (valid) {
+                req.actuation_points.clear();
+                for (const auto& v : arr) {
+                    if (!v.is_number()) { valid = false; break; }
+                    const double mm = v.get<double>();
+                    const double raw = std::round(mm * 10.0);
+                    if (!std::isfinite(mm) || raw < 1 || raw > 40 || std::abs(mm * 10.0 - raw) > 1e-4) {
+                        valid = false; break;
+                    }
+                    req.actuation_points.push_back(raw / 10.0);
+                }
+            }
+        }
+        if (valid && body.contains("rt_points")) {
+            const auto& arr = body.at("rt_points");
+            valid = arr.is_array() && !arr.empty() && arr.size() <= 8;
+            if (valid) {
+                req.rt_points.clear();
+                for (const auto& v : arr) {
+                    if (!v.is_number()) { valid = false; break; }
+                    const double mm = v.get<double>();
+                    const double raw = std::round(mm * 10.0);
+                    if (!std::isfinite(mm) || raw < 1 || raw > 25 || std::abs(mm * 10.0 - raw) > 1e-4) {
+                        valid = false; break;
+                    }
+                    req.rt_points.push_back(raw / 10.0);
+                }
+            }
+        }
+        if (valid && body.contains("dz_top_mm")) valid = Millimeters(body, "dz_top_mm", 0, 5, req.dz_top_mm);
+        if (valid && body.contains("dz_bottom_mm")) valid = Millimeters(body, "dz_bottom_mm", 0, 5, req.dz_bottom_mm);
+        if (valid && body.contains("dz_rt_mm")) valid = Millimeters(body, "dz_rt_mm", 1, 25, req.dz_rt_mm);
+        if (valid && body.contains("restore_actuation_mm")) valid = Millimeters(body, "restore_actuation_mm", 1, 40, req.restore_actuation_mm);
+        if (valid && body.contains("unlock_fa")) valid = Boolean(body, "unlock_fa", req.unlock_fa);
+
+        if (!valid) {
+            response.status = 422;
+            response.set_content(R"({"status":"error","api_version":1,"state":"Failed","error":"Invalid closed-loop verification parameters"})",
+                                 "application/json; charset=utf-8");
+            return;
+        }
+        if (!HardwareAvailable() || runtime_->GetHealth() != M605RuntimeHealth::Clean ||
+            runtime_->IsPersistentSafetyQuarantined()) {
+            response.status = 409;
+            response.set_content(R"({"status":"error","api_version":1,"state":"Failed","error":"Magnetic runtime unavailable or safety quarantined"})",
+                                 "application/json; charset=utf-8");
+            return;
+        }
+
+        {
+            std::unique_lock<std::mutex> write_lock(write_mutex_, std::try_to_lock);
+            if (!write_lock.owns_lock() || runtime_->HasQueuedWork() ||
+                runtime_->GetHealth() == M605RuntimeHealth::TransactionInProgress) {
+                response.status = 409;
+                response.set_content(R"({"status":"error","api_version":1,"state":"Failed","error":"Another magnetic setting is applying"})",
+                                     "application/json; charset=utf-8");
+                return;
+            }
+            auto hall_pause = hall_telemetry_ ?
+                std::optional<m605::hall::M605HallTelemetry::ScopedPause>(hall_telemetry_->PauseForTransaction()) :
+                std::nullopt;
+            if (!runtime_->PrepareTransportSession()) {
+                const auto firmware = runtime_->GetDiagnosticSnapshot().firmware;
+                response.status = firmware.state == m605::FirmwareState::ReadFailed ? 503 : 409;
+                Json out = {{"status", "error"}, {"api_version", 1}, {"state", "Failed"},
+                            {"error", runtime_->GetLastError()}};
+                response.set_content(out.dump(), "application/json; charset=utf-8");
+                return;
+            }
+        }
+
+        const auto host = host_profile_();
+        if (host.global_rt_press_raw && host.global_rt_release_raw) {
+            req.inherited_rt_press_mm = *host.global_rt_press_raw / 10.0;
+            req.inherited_rt_release_mm = *host.global_rt_release_raw / 10.0;
+        }
+
+        auto check_writable = [this]() -> bool {
+            return HardwareAvailable() && runtime_->GetHealth() == M605RuntimeHealth::Clean &&
+                   !runtime_->IsPersistentSafetyQuarantined();
+        };
+
+        m605::hall::VerifyHardwareWriter writer;
+        writer.set_actuation = [this, check_writable](uint16_t logical_id, double mm) {
+            std::lock_guard<std::mutex> lock(write_mutex_);
+            if (!check_writable()) return false;
+            if (profiles_) profiles_->ExternalMutationLocked();
+            return runtime_->SetPerKeyActuation(logical_id, mm).get();
+        };
+        writer.set_rt = [this, check_writable](uint16_t logical_id, double press_mm, double release_mm) {
+            std::lock_guard<std::mutex> lock(write_mutex_);
+            if (!check_writable()) return false;
+            if (profiles_) profiles_->ExternalMutationLocked();
+            const auto shadow = runtime_->GetAppliedRuntimeState();
+            const auto dks = shadow.per_key_dks.find(logical_id);
+            if (dks == shadow.per_key_dks.end() || !dks->second.standard_runtime_configuration) {
+                if (!runtime_->RestorePerKeyDksToStandard(logical_id).get()) return false;
+            }
+            return runtime_->SetPerKeyRapidTrigger(logical_id, press_mm, release_mm).get();
+        };
+        writer.disable_rt = [this, check_writable](uint16_t logical_id, double p, double r) {
+            std::lock_guard<std::mutex> lock(write_mutex_);
+            if (!check_writable()) return false;
+            if (profiles_) profiles_->ExternalMutationLocked();
+            return runtime_->DisablePerKeyRapidTrigger(logical_id, p, r).get();
+        };
+        writer.set_deadzone = [this, check_writable](uint16_t logical_id, double top_mm, double bottom_mm) {
+            std::lock_guard<std::mutex> lock(write_mutex_);
+            if (!check_writable()) return false;
+            if (profiles_) profiles_->ExternalMutationLocked();
+            return runtime_->SetPerKeyDeadzone(logical_id, top_mm, bottom_mm).get();
+        };
+
+        const bool started = hall_telemetry_ && hall_telemetry_->StartVerify(req, std::move(writer));
+        Json out = hall_telemetry_ ? VerifyStatusJson(hall_telemetry_->GetVerifyStatus()) :
+            Json{{"status", "error"}, {"api_version", 1}, {"state", "Failed"}, {"error", "Hall telemetry unavailable"}};
+        if (!started) out["status"] = "error";
+        response.status = started ? 200 : 503;
+        response.set_header("Cache-Control", "no-store");
+        response.set_content(out.dump(), "application/json; charset=utf-8");
+    });
 }
 } // namespace aura
