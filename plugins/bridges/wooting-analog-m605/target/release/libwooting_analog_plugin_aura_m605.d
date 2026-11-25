@@ -1,1 +1,0 @@
-G:\Aura\plugins\bridges\wooting-analog-m605\target\release\libwooting_analog_plugin_aura_m605.rlib: G:\Aura\plugins\bridges\wooting-analog-m605\src\lib.rs G:\Aura\plugins\bridges\wooting-analog-m605\src\shm.rs
