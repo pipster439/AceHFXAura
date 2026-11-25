@@ -13,6 +13,8 @@ Current code is the implementation authority. Guides below have distinct roles; 
 | [WinUI development launch](development/WINUI_DEVELOPMENT.md) | Incremental native/client build, isolated data and local launch |
 | [Manual acceptance](testing/MANUAL_TESTS.md) | Physical keyboard and CS2 checks |
 | [Studio workflow](studio/STUDIO_WORKFLOW.md) | Blockly editing, preview, publishing and orchestration |
+| [External MCP server](../plugins/mcp/README.md) | Stdio MCP tools/resources for Studio, plugins, magnetic switches & Automation |
+| [Wooting Analog bridge](../plugins/bridges/wooting-analog-m605/README.md) | Shared-memory Wooting Analog SDK plugin crate for M605 Hall telemetry |
 | [Packaging](development/PACKAGING.md) / [Release checklist](development/RELEASE_CHECKLIST.md) | WinUI ZIP layout, runtime ownership and release gates |
 | [alpha.4 client contract](development/ALPHA4_CLIENT_CONTRACT.md) | Native GSI routes, client lifecycle and validation |
 | [Configuration](development/CONFIGURATION.md) | Canonical config, defaults, Studio ownership and write contract |

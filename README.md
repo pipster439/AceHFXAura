@@ -4,7 +4,13 @@ Aura 是面向 **ROG Falchion Ace HFX** 的高性能独立 Windows 灯光控制�
 
 当前 alpha 版本号以仓库根目录的 [`VERSION`](VERSION) 为单一事实源；核心能力与已知限制见 [`CHANGELOG.md`](CHANGELOG.md)。
 
-`0.1.0-alpha.8` 已公开发布为 [GitHub prerelease](https://github.com/pipster439/AceHFXAura/releases/tag/v0.1.0-alpha.8)，发布提交为 `c52398bef2738f71b927594424736a42da5184ab`。WinUI 为发行入口；本版改进 Studio、对话式 AI 与本地测试/恢复工具，沿用 Native HID、Automation v2、GSI 与 publication 语义。当前工作树的后续稳定性修复尚未发布；硬件、hosted CI 与软件包验收分别记录。使用方式见 [Studio 指南](docs/studio/STUDIO_WORKFLOW.md)，版本变化见 [CHANGELOG](CHANGELOG.md)。
+`0.1.0-alpha.8` 为上一公开测试版（[GitHub prerelease](https://github.com/pipster439/AceHFXAura/releases/tag/v0.1.0-alpha.8)，提交 `c52398b`）。当前 `0.1.0-alpha.9-rc.1` 候选版本重点新增：
+
+- **ROG Falchion Ace HFX 实时霍尔遥测与闭环校验**：68 键霍尔行程实时采样与垂直线性键程可视化、`FA 00 / FA 10` 原厂固件兼容开关、`Local\AuraM605HallAnalogV1` 无锁共享内存广播，以及面向触发点（AP）、Rapid Trigger（RT）与上下死区的交互式闭环校验。
+- **统一插件与扩展中心**：将原生 C++ DLL 插件（新增可选 `AuraBindHallAnalog` v1 霍尔深度接入，内置 [`effect_hall_reactive.dll`](plugins/src/effect_hall_reactive.cpp) 示例）、[Wooting Analog SDK Rust 桥接](plugins/bridges/wooting-analog-m605/README.md) 与 [Aura MCP 外部接入服务](plugins/mcp/README.md) 整合至独立 **插件** 页与 `/api/plugins/overview`。
+- **Studio 外部 MCP 接入替代内置 AI 助手**：移除原内置对话面板与 LLM 设置弹窗，改为标准 stdio JSON-RPC 2.0 MCP Server（[`plugins/mcp/aura_mcp_server.py`](plugins/mcp/aura_mcp_server.py)），支持由外部 AI 客户端直接编排光效、编译插件并调控磁轴、Profile 与自动化规则。
+
+使用方式见 [Studio 指南](docs/studio/STUDIO_WORKFLOW.md)、[插件/MCP 文档](plugins/mcp/README.md)，版本变化见 [CHANGELOG](CHANGELOG.md)。
 
 ## 硬件后端架构 (Hardware Backends)
 
@@ -34,7 +40,9 @@ Aura 是面向 **ROG Falchion Ace HFX** 的高性能独立 Windows 灯光控制�
 - **原生 Lighting 控制**：选择内置效果，编辑 schema 提供的颜色、开关、枚举和数值参数，应用基础灯效并处理配置版本冲突。
 - **在 Studio 制作光效**：用 Blockly 组合全键填色、单键控制、波纹、颜色运算、时间、变量、循环、按键状态和 GSI 数据。
 - **直接预览到键盘**：浏览器中的 JS 运行时与原生插件共享同一套顺序控制语义；停止预览后，键盘恢复显示当前已应用方案。
-- **对话式 AI 助手**：在 Settings 配置 OpenAI-compatible provider，API 密钥使用 Windows 受保护存储；自然多轮聊天生成 typed/validated 建议，查看 Diff 后显式 Apply，支持 Undo 和快照。AI 不自动 Apply 或 Publish，对话仅在当前会话保留，provider API 可能收费。
+- **MCP 外部 AI 接入（取代内置 AI 助手）**：通过标准 stdio MCP Server（[`plugins/mcp/aura_mcp_server.py`](plugins/mcp/aura_mcp_server.py)）接入外部 AI 客户端，可直接读取 68 键位表与 IR/C++ 规范，发布 EffectProgram IR、编译 C++ 插件、调控磁轴参数（触发点 / RT / 死区 / DKS / SpeedTap / 闭环校验）及管理 Profile 与 Automation v2；在「插件」页或 Studio 菜单「MCP 外部接入」即可一键复制客户端配置。
+- **霍尔行程遥测、可视化与闭环校验**：在「磁轴设置」通过原生 `FF00` / `FFC0` HID 通道开启 68 键实时模拟键程广播与垂直线性键程可视化，并对单键实际数字触发与光学/霍尔读数执行 AP / RT / 死区闭环校验。
+- **插件中心与 Wooting 生态桥接**：统一管理 `plugins/` 原生插件（含可选 `AuraBindHallAnalog` v1 压感通道）与 [Wooting Analog SDK 桥接](plugins/bridges/wooting-analog-m605/README.md)，支持 UAC 手柄映射及支持 Wooting SDK 的第三方应用零句柄冲突读取 68 键模拟行程。
 - **本地 Test Bench 与安全草稿**：确定性场景模拟、自动保存/恢复、有限快照、`.auraeffect` 导入导出与 Ctrl+Shift+P 命令面板。
 - **编排自动化**：按前台进程和 GSI 条件选择基础方案，也可以在击杀等事件发生时播放一次叠加，或在低血量等条件成立期间持续叠加。
 - **自动部署 CS2 GSI**：检测 Steam 库中的 CS2 `cfg` 目录，经界面确认后写入 `gamestate_integration_aura.cfg`，并在诊断页显示连接状态、字段与事件。
@@ -173,9 +181,13 @@ Legacy GSI 绑定/游戏叠加使用原有 CS2 前台与约 10 秒活跃判定�
 
 Studio 的条件可以组合进程、GSI 字段、`and`、`or` 和 `not`。常用比较运算包括 `==`、`!=`、`<`、`<=`、`>`、`>=` 与 `contains`。第一人称对局中可用字段仍受 CS2 实际发送的数据限制；观战/GOTV 字段不会凭空补全。
 
-## 动态插件系统
+## 动态插件系统与外部生态桥接
 
-内置方案和动态插件使用相同的 `IEffect` 渲染接口。daemon 启动时扫描 `plugins/` 中的 DLL（惯例文件名为 `effect_*.dll`），也接受 Studio 发出的单插件热重载请求。
+内置方案和动态插件使用相同的 `IEffect` 渲染接口。daemon 启动时扫描 `plugins/` 中的 DLL（惯例文件名为 `effect_*.dll`）与 `.aurair` 积木程序，提供 `GET /api/plugins/overview` 与 `POST /api/plugins/rescan`（[`PluginOverviewService`](include/config/plugin_overview_service.h)），也接受 Studio 发出的单插件热重载请求。可选扩展 ABI `AuraGetHallAnalogVersion` / `AuraBindHallAnalog`（`AURA_HALL_ANALOG_VERSION = 1`）允许原生插件以 seq-lock 方式零硬件冲突读取 `Local\AuraM605HallAnalogV1` 68 键行程（见参考实现 [`effect_hall_reactive.cpp`](plugins/src/effect_hall_reactive.cpp)）。
+
+外部生态扩展收拢在 `plugins/` 子目录，不再堆叠进主程序核心逻辑：
+- [`plugins/bridges/wooting-analog-m605/`](plugins/bridges/wooting-analog-m605/README.md)：Rust 编写的 Wooting Analog SDK `cdylib` 桥接，通过共享内存暴露 68 键模拟输入；
+- [`plugins/mcp/`](plugins/mcp/README.md)：零依赖 Python stdio MCP Server，向外部 AI 客户端提供完整的 Studio、插件、灯效与磁轴工具集。
 
 插件管理器会先把 DLL 复制到 `plugins/.cache` 再加载，因此 Windows 不会锁住原文件，Studio 可以继续生成新版本。每次发布使用不可变的唯一插件名；正在运行的实例通过共享所有权保持有效，加载失败不会破坏旧实例。
 

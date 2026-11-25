@@ -22,11 +22,87 @@ from typing import Any
 
 PROTOCOL_DEFAULT = "2024-11-05"
 SUPPORTED_PROTOCOLS = ("2024-11-05", "2025-03-26", "2025-06-18")
-SERVER_INFO = {"name": "aura-mcp", "version": "1.0.0"}
+SERVER_INFO = {"name": "aura-mcp", "version": "1.1.0"}
 
 HEX32_RE = re.compile(r"^[a-f0-9]{32}$")
 PROJECT_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,47}$")
 CPP_NAME_RE = re.compile(r"^[A-Za-z0-9_]{1,64}$")
+
+# Authoritative 68-key ROG Falchion Ace HFX table aligned 1:1 with
+# kHallKeyTable in include/aura/hardware/m605_hall_telemetry.h:
+#   (canonical_name, logical_id, hid_usage)
+HALL_KEY_TABLE: tuple[tuple[str, int, int], ...] = (
+    # Row 0 (15 keys)
+    ("ESC", 0x0100, 41), ("1", 0x0600, 30), ("2", 0x0700, 31), ("3", 0x0101, 32),
+    ("4", 0x0102, 33), ("5", 0x0103, 34), ("6", 0x0104, 35), ("7", 0x0105, 36),
+    ("8", 0x0106, 37), ("9", 0x0107, 38), ("0", 0x0108, 39), ("-", 0x0109, 45),
+    ("=", 0x010A, 46), ("BACKSPACE", 0x0706, 42), ("INS", 0x0608, 73),
+    # Row 1 (15 keys)
+    ("TAB", 0x0200, 43), ("Q", 0x0601, 20), ("W", 0x0701, 26), ("E", 0x0201, 8),
+    ("R", 0x0202, 21), ("T", 0x0203, 23), ("Y", 0x0204, 28), ("U", 0x0205, 24),
+    ("I", 0x0206, 12), ("O", 0x0207, 18), ("P", 0x0208, 19), ("[", 0x0209, 47),
+    ("]", 0x020A, 48), ("\\", 0x0607, 49), ("DEL", 0x0708, 76),
+    # Row 2 (14 keys)
+    ("CAPS", 0x0300, 57), ("A", 0x0602, 4), ("S", 0x0702, 22), ("D", 0x0301, 7),
+    ("F", 0x0302, 9), ("G", 0x0303, 10), ("H", 0x0304, 11), ("J", 0x0305, 13),
+    ("K", 0x0306, 14), ("L", 0x0307, 15), (";", 0x0308, 51), ("'", 0x0309, 52),
+    ("ENTER", 0x0707, 40), ("PGUP", 0x060B, 75),
+    # Row 3 (14 keys)
+    ("L_SHIFT", 0x0400, 225), ("Z", 0x0703, 29), ("X", 0x0401, 27), ("C", 0x0501, 6),
+    ("V", 0x0402, 25), ("B", 0x0403, 5), ("N", 0x0404, 17), ("M", 0x0405, 16),
+    (",", 0x0406, 54), (".", 0x0407, 55), ("/", 0x0408, 56), ("R_SHIFT", 0x040A, 229),
+    ("UP", 0x070A, 82), ("PGDN", 0x070B, 78),
+    # Row 4 (10 keys)
+    ("L_CTRL", 0x0500, 224), ("L_WIN", 0x0604, 227), ("L_ALT", 0x0704, 226),
+    ("SPACE", 0x0503, 44), ("R_ALT", 0x0507, 230), ("FN", 0x0508, 232),
+    ("COPILOT", 0x050A, 228), ("LEFT", 0x060A, 80), ("DOWN", 0x050B, 81),
+    ("RIGHT", 0x040B, 79),
+)
+
+KEY_ALIASES: dict[str, str] = {
+    "ESCAPE": "ESC",
+    "BACK": "BACKSPACE",
+    "INSERT": "INS",
+    "DELETE": "DEL",
+    "CAPSLOCK": "CAPS",
+    "CAPS_LOCK": "CAPS",
+    "RETURN": "ENTER",
+    "LSHIFT": "L_SHIFT",
+    "LEFT_SHIFT": "L_SHIFT",
+    "RSHIFT": "R_SHIFT",
+    "RIGHT_SHIFT": "R_SHIFT",
+    "LCTRL": "L_CTRL",
+    "LEFT_CTRL": "L_CTRL",
+    "LWIN": "L_WIN",
+    "LEFT_WIN": "L_WIN",
+    "WIN": "L_WIN",
+    "LALT": "L_ALT",
+    "LEFT_ALT": "L_ALT",
+    "RALT": "R_ALT",
+    "RIGHT_ALT": "R_ALT",
+    "SPACEBAR": "SPACE",
+    "MINUS": "-",
+    "EQUAL": "=",
+    "PLUS": "=",
+    "LBRACKET": "[",
+    "RBRACKET": "]",
+    "BACKSLASH": "\\",
+    "SEMICOLON": ";",
+    "APOSTROPHE": "'",
+    "QUOTE": "'",
+    "COMMA": ",",
+    "PERIOD": ".",
+    "DOT": ".",
+    "SLASH": "/",
+    "ARROW_UP": "UP",
+    "ARROW_DOWN": "DOWN",
+    "ARROW_LEFT": "LEFT",
+    "ARROW_RIGHT": "RIGHT",
+}
+
+KEY_NAME_TO_SPEC: dict[str, tuple[str, int, int]] = {name: (name, lid, hid) for name, lid, hid in HALL_KEY_TABLE}
+LOGICAL_ID_TO_SPEC: dict[int, tuple[str, int, int]] = {lid: (name, lid, hid) for name, lid, hid in HALL_KEY_TABLE}
+FN_LOGICAL_ID = 0x0508
 
 EFFECT_IR_V1_GUIDE = """# Aura EffectProgram IR v1 Specification
 
@@ -149,7 +225,7 @@ public:
 
     void Render(uint64_t elapsed_ms, aura::FrameBuffer& out_frame, const aura::Keymap& keymap) override {
         out_frame.Clear();
-        // Base ambient glow using keymap->GetAllKeys(), then layer Hall depth if bound_:
+        // Base ambient glow using keymap.GetAllKeys(), then layer Hall depth if bound_:
         if (bound_) {
             AuraHallAnalogSnapshotV1 snap{};
             if (host_.read_snapshot(host_.context, &snap, sizeof(snap)) == 1 && snap.active) {
@@ -190,6 +266,54 @@ def _ensure_loopback_base(raw_url: str, label: str) -> str:
     if parsed.scheme != "http" or parsed.hostname not in ("127.0.0.1", "localhost", "::1"):
         raise ValueError(f"{label} must be an http loopback URL (127.0.0.1 / localhost): {raw_url}")
     return f"{parsed.scheme}://{parsed.netloc}"
+
+
+def resolve_logical_id(key: Any) -> int:
+    """Resolve key name (e.g. 'W', 'L_SHIFT', 'SPACE'), hex string ('0x0701'), or int to logical_id."""
+    if isinstance(key, bool):
+        raise ValueError("Key specifier cannot be boolean")
+    if isinstance(key, int):
+        if key not in LOGICAL_ID_TO_SPEC:
+            raise ValueError(f"Unknown logical_id 0x{key:04X}; must be one of the 68 verified M605 keys")
+        return key
+    if isinstance(key, str):
+        raw = key.strip()
+        if not raw:
+            raise ValueError("Empty key specifier")
+        if raw.lower().startswith("0x"):
+            try:
+                val = int(raw, 16)
+            except ValueError as exc:
+                raise ValueError(f"Invalid hex logical_id: {key}") from exc
+            if val not in LOGICAL_ID_TO_SPEC:
+                raise ValueError(f"Unknown logical_id {raw}; must be one of the 68 verified M605 keys")
+            return val
+        if raw.isdigit() and raw not in KEY_NAME_TO_SPEC:
+            val = int(raw)
+            if val in LOGICAL_ID_TO_SPEC:
+                return val
+        upper = raw.upper().replace("-", "_") if len(raw) > 1 else raw
+        canonical = KEY_ALIASES.get(upper, upper)
+        spec = KEY_NAME_TO_SPEC.get(canonical)
+        if spec is None and raw in KEY_NAME_TO_SPEC:
+            spec = KEY_NAME_TO_SPEC[raw]
+        if spec is None:
+            raise ValueError(f"Unknown M605 key name '{key}'; inspect resource aura://keymap/m605-68 for valid keys")
+        return spec[1]
+    raise ValueError(f"Unsupported key specifier type: {type(key).__name__}")
+
+
+def _resolve_logical_ids(keys: Any) -> list[int]:
+    if not isinstance(keys, list) or not keys:
+        raise ValueError("'keys' must be a non-empty list of key names or logical_ids")
+    seen: set[int] = set()
+    resolved: list[int] = []
+    for k in keys:
+        lid = resolve_logical_id(k)
+        if lid not in seen:
+            seen.add(lid)
+            resolved.append(lid)
+    return resolved
 
 
 class AuraHttpError(RuntimeError):
@@ -248,7 +372,7 @@ class AuraHttpClient:
         except urllib.error.HTTPError as exc:
             raw = exc.read().decode("utf-8", errors="replace")
             parsed = _parse_json_or_text(raw)
-            msg = parsed.get("message") if isinstance(parsed, dict) else raw
+            msg = parsed.get("message") or parsed.get("error") or parsed.get("last_error") if isinstance(parsed, dict) else raw
             raise AuraHttpError(exc.code, url, f"HTTP {exc.code} from {url}: {msg}", parsed) from exc
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             raise AuraHttpError(None, url, f"Connection failed to {url}: {exc}") from exc
@@ -257,12 +381,20 @@ class AuraHttpClient:
         _, _, body = self.request(self.daemon_url, "GET", path, timeout=timeout)
         return body
 
-    def daemon_post(self, path: str, payload: Any, timeout: float = 5.0) -> Any:
+    def daemon_post(self, path: str, payload: Any, timeout: float = 15.0) -> Any:
         _, _, body = self.request(self.daemon_url, "POST", path, payload=payload, timeout=timeout)
         return body
 
     def daemon_patch(self, path: str, payload: Any, timeout: float = 5.0) -> Any:
         _, _, body = self.request(self.daemon_url, "PATCH", path, payload=payload, timeout=timeout)
+        return body
+
+    def daemon_put(self, path: str, payload: Any, timeout: float = 5.0) -> Any:
+        _, _, body = self.request(self.daemon_url, "PUT", path, payload=payload, timeout=timeout)
+        return body
+
+    def daemon_delete(self, path: str, payload: Any, timeout: float = 5.0) -> Any:
+        _, _, body = self.request(self.daemon_url, "DELETE", path, payload=payload, timeout=timeout)
         return body
 
     def studio_get_raw(self, path: str, timeout: float = 5.0) -> tuple[int, dict[str, str], Any]:
@@ -326,7 +458,7 @@ class AuraMcpServer:
         return [
             {
                 "name": "aura_status",
-                "description": "Probe Aura daemon (19897) and Studio web server (19898) health, active plugins, IR programs, global FPS, and Hall telemetry state.",
+                "description": "Probe Aura daemon (19897) and Studio web server (19898) health, active plugins, IR programs, global FPS, and magnetic/Hall state.",
                 "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
             },
             {
@@ -466,13 +598,165 @@ class AuraMcpServer:
                 },
             },
             {
-                "name": "aura_automation_rules",
-                "description": "List Automation v2 capabilities and configured rules, or dry-run validate a rule payload against POST /api/automation/v2/validate.",
+                "name": "aura_hall_verify",
+                "description": "Run or inspect closed-loop Hall actuation, Rapid Trigger, or Deadzone verification on a physical M605 key.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
-                        "action": {"type": "string", "enum": ["list", "validate"], "default": "list"},
-                        "rule": {"type": "object", "description": "Automation v2 rule object when action is 'validate'."},
+                        "action": {"type": "string", "enum": ["status", "start", "stop"], "default": "status"},
+                        "key": {"description": "Key name (e.g. 'W', 'A', 'SPACE') or logical_id when action is 'start'."},
+                        "mode": {"type": "string", "enum": ["actuation", "rt", "deadzone"]},
+                        "actuation_points": {"type": "array", "items": {"type": "number"}, "description": "Up to 8 target points in mm (0.1..4.0)."},
+                        "rt_points": {"type": "array", "items": {"type": "number"}, "description": "Up to 8 RT sensitivities in mm (0.1..2.5)."},
+                        "dz_top_mm": {"type": "number", "minimum": 0.0, "maximum": 0.5},
+                        "dz_bottom_mm": {"type": "number", "minimum": 0.0, "maximum": 0.5},
+                        "dz_rt_mm": {"type": "number", "minimum": 0.1, "maximum": 2.5},
+                        "restore_actuation_mm": {"type": "number", "minimum": 0.1, "maximum": 4.0},
+                        "unlock_fa": {"type": "boolean"},
+                    },
+                    "additionalProperties": False,
+                },
+            },
+            {
+                "name": "aura_magnetic_set_actuation",
+                "description": "Set magnetic switch actuation travel (0.1..4.0 mm, 0.1 mm step) for a single key, a batch of keys, or globally.",
+                "inputSchema": {
+                    "type": "object",
+                    "required": ["scope", "mm"],
+                    "properties": {
+                        "scope": {"type": "string", "enum": ["single", "batch", "global"]},
+                        "mm": {"type": "number", "minimum": 0.1, "maximum": 4.0},
+                        "key": {"description": "Target key name or logical_id for scope='single'."},
+                        "keys": {"type": "array", "description": "List of key names or logical_ids for scope='batch'."},
+                    },
+                    "additionalProperties": False,
+                },
+            },
+            {
+                "name": "aura_magnetic_set_rapid_trigger",
+                "description": "Enable or disable per-key Rapid Trigger (0.1..2.5 mm press/release) on a single key or batch (blocked legacy global RT is intentionally excluded).",
+                "inputSchema": {
+                    "type": "object",
+                    "required": ["scope", "action"],
+                    "properties": {
+                        "scope": {"type": "string", "enum": ["single", "batch"]},
+                        "action": {"type": "string", "enum": ["enable", "disable"]},
+                        "key": {"description": "Key name or logical_id for scope='single'."},
+                        "keys": {"type": "array", "description": "Key names or logical_ids for scope='batch'."},
+                        "press_mm": {"type": "number", "minimum": 0.1, "maximum": 2.5},
+                        "release_mm": {"type": "number", "minimum": 0.1, "maximum": 2.5},
+                        "resolve_dks": {"type": "boolean", "default": False, "description": "Explicitly confirm restoring DKS to Standard before enabling RT."},
+                    },
+                    "additionalProperties": False,
+                },
+            },
+            {
+                "name": "aura_magnetic_set_deadzone",
+                "description": "Set top/bottom deadzone (0.0..0.5 mm) for single key, batch, global baseline, or reset all per-key overrides.",
+                "inputSchema": {
+                    "type": "object",
+                    "required": ["scope"],
+                    "properties": {
+                        "scope": {"type": "string", "enum": ["single", "batch", "global", "reset_all"]},
+                        "key": {"description": "Key name or logical_id for scope='single'."},
+                        "keys": {"type": "array", "description": "Key names or logical_ids for scope='batch'."},
+                        "top_mm": {"type": "number", "minimum": 0.0, "maximum": 0.5},
+                        "bottom_mm": {"type": "number", "minimum": 0.0, "maximum": 0.5},
+                        "confirm_all_keys": {"type": "boolean", "description": "Required true when scope='reset_all'."},
+                    },
+                    "additionalProperties": False,
+                },
+            },
+            {
+                "name": "aura_magnetic_set_dks",
+                "description": "Configure 4-slot Dynamic Key Stroke (DKS) on a key or restore a key back to Standard configuration.",
+                "inputSchema": {
+                    "type": "object",
+                    "required": ["action", "key"],
+                    "properties": {
+                        "action": {"type": "string", "enum": ["set", "standard"]},
+                        "key": {"description": "Source key name or logical_id."},
+                        "start_mm": {"type": "number", "minimum": 0.1, "maximum": 4.0},
+                        "end_mm": {"type": "number", "minimum": 0.1, "maximum": 4.0},
+                        "slots": {
+                            "type": "array",
+                            "description": "4 slot objects with {target: {kind: 'DefaultSentinel'|'LogicalKey', key|logical_id}, down_start, down_end, up_start, up_end} ('Inactive'|'Tap'|'Release'|'Hold').",
+                        },
+                        "resolve_rt": {"type": "boolean", "default": False},
+                    },
+                    "additionalProperties": False,
+                },
+            },
+            {
+                "name": "aura_magnetic_set_speedtap",
+                "description": "Manage SpeedTap SOCD pairs, master engine toggle, or reset SpeedTap runtime back to baseline.",
+                "inputSchema": {
+                    "type": "object",
+                    "required": ["action"],
+                    "properties": {
+                        "action": {"type": "string", "enum": ["pair_enable", "pair_disable", "master", "profile_reset"]},
+                        "key1": {"description": "First key name or logical_id for pair_enable/pair_disable."},
+                        "key2": {"description": "Second key name or logical_id for pair_enable/pair_disable."},
+                        "enabled": {"type": "boolean", "description": "Master switch state when action='master'."},
+                        "confirm_profile_baseline": {"type": "boolean", "description": "Required true when action='profile_reset'."},
+                    },
+                    "additionalProperties": False,
+                },
+            },
+            {
+                "name": "aura_magnetic_maintenance",
+                "description": "Toggle firmware static analog lighting effect or acknowledge persistent magnetic safety quarantine.",
+                "inputSchema": {
+                    "type": "object",
+                    "required": ["action"],
+                    "properties": {
+                        "action": {"type": "string", "enum": ["static_analog", "acknowledge_quarantine"]},
+                        "enabled": {"type": "boolean", "description": "Required when action='static_analog'."},
+                    },
+                    "additionalProperties": False,
+                },
+            },
+            {
+                "name": "aura_device_profiles",
+                "description": "Inspect, activate, mutate, or refresh hardware slot on magnetic device profiles (/api/device-profiles*).",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "action": {
+                            "type": "string",
+                            "enum": ["list", "runtime", "get", "activate", "refresh_hardware_slot", "mutate"],
+                            "default": "list",
+                        },
+                        "profile_id": {"type": "string", "description": "Profile GUID for 'get' or 'activate'."},
+                        "reason": {"type": "string", "enum": ["Manual", "Automation", "Startup", "Reconnect", "Restore"], "default": "Manual"},
+                        "expected_revision": {"type": "integer", "description": "Document revision; auto-fetched when omitted."},
+                        "temporary_override": {"type": "object", "description": "Optional temporary magnetic override for host_managed 'activate'."},
+                        "mutation": {
+                            "type": "string",
+                            "enum": ["create", "duplicate", "rename", "update", "delete", "defaults", "automation", "migrate-legacy-rt"],
+                        },
+                        "payload": {"type": "object", "description": "Body forwarded to /api/device-profiles/<mutation> (expected_revision auto-filled)."},
+                    },
+                    "additionalProperties": False,
+                },
+            },
+            {
+                "name": "aura_automation_rules",
+                "description": "List Automation v2 capabilities and configured rules, or validate/create/update/delete/replace rules with optimistic revision checks.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "action": {
+                            "type": "string",
+                            "enum": ["list", "validate", "create", "update", "delete", "replace"],
+                            "default": "list",
+                        },
+                        "expected_revision": {"type": "string", "description": "Revision hash; auto-fetched from /api/automation/v2/records when omitted."},
+                        "id": {"type": "string", "description": "Target rule ID for 'update', 'delete', or patch 'validate'."},
+                        "rule": {"type": "object", "description": "Automation v2 rule object for 'create' or 'validate'."},
+                        "patch": {"type": "object", "description": "Sparse JSON Merge Patch object for 'update' or 'validate'."},
+                        "rules": {"type": "array", "description": "Complete ordered rule array when action is 'replace'."},
+                        "position": {"type": "integer", "minimum": 0},
                     },
                     "additionalProperties": False,
                 },
@@ -495,14 +779,14 @@ class AuraMcpServer:
             },
             {
                 "uri": "aura://keymap/m605-68",
-                "name": "ROG Falchion Ace HFX 68-Key Map",
-                "description": "Compact calibrated LED ID and physical geometry coordinates from calibrated_keymap.json.",
+                "name": "ROG Falchion Ace HFX 68-Key Map & Logical IDs",
+                "description": "Calibrated LED IDs, physical coordinates, verified logical_id, and USB HID usages for all 68 keys.",
                 "mimeType": "application/json",
             },
             {
                 "uri": "aura://overview",
                 "name": "Live Aura System Overview",
-                "description": "Real-time snapshot of Aura plugins, bridges, IR programs, lighting, and Hall status.",
+                "description": "Real-time snapshot of Aura plugins, bridges, IR programs, lighting, and magnetic/Hall status.",
                 "mimeType": "application/json",
             },
         ]
@@ -521,6 +805,13 @@ class AuraMcpServer:
                 "description": "Guide an external AI to write and compile a native C++ plugin using Hall Analog travel.",
                 "arguments": [
                     {"name": "description", "description": "Desired Hall-depth reactive effect", "required": False}
+                ],
+            },
+            {
+                "name": "tune_magnetic_profile",
+                "description": "Guide an external AI to inspect M605 magnetic state and configure AP/RT/Deadzone/SpeedTap safely.",
+                "arguments": [
+                    {"name": "game_or_style", "description": "Target game or typing style (e.g. CS2/Valorant FPS, typing)", "required": False}
                 ],
             },
         ]
@@ -577,7 +868,8 @@ class AuraMcpServer:
             "instructions": (
                 "Aura MCP server bridges Aura daemon (19897) and Studio web/compiler server (19898). "
                 "Read aura://schemas/effect-ir-v1 before authoring IR programs with studio_publish_ir_program, "
-                "or aura://schemas/native-plugin-cpp before calling studio_compile_cpp_effect."
+                "aura://schemas/native-plugin-cpp before calling studio_compile_cpp_effect, and "
+                "aura://keymap/m605-68 for key coordinates and magnetic logical IDs."
             ),
         }
 
@@ -595,16 +887,22 @@ class AuraMcpServer:
             if not keymap_path.is_file():
                 raise ValueError(f"Keymap file not found: {keymap_path}")
             raw = json.loads(keymap_path.read_text(encoding="utf-8"))
-            compact = {
-                k: {
+            raw_keys = raw.get("keys") or {}
+            compact: dict[str, Any] = {}
+            for k, v in raw_keys.items():
+                spec = KEY_NAME_TO_SPEC.get(k)
+                entry = {
                     "led_id": v.get("led_id"),
                     "physical_x": v.get("physical_x"),
                     "physical_y": v.get("physical_y"),
                     "physical_row": v.get("physical_row"),
                     "physical_col": v.get("physical_col"),
                 }
-                for k, v in (raw.get("keys") or {}).items()
-            }
+                if spec is not None:
+                    entry["logical_id"] = spec[1]
+                    entry["logical_id_hex"] = f"0x{spec[1]:04X}"
+                    entry["hid_usage"] = spec[2]
+                compact[k] = entry
             payload = {"device_profile": raw.get("device_profile", {}), "key_count": len(compact), "keys": compact}
             return {
                 "contents": [
@@ -631,8 +929,8 @@ class AuraMcpServer:
     def _handle_prompt_get(self, params: dict[str, Any]) -> dict[str, Any]:
         name = params.get("name") if isinstance(params, dict) else None
         args = (params.get("arguments") or {}) if isinstance(params, dict) else {}
-        desc = str(args.get("description") or "custom lighting effect")
         if name == "create_ir_effect":
+            desc = str(args.get("description") or "custom lighting effect")
             text = (
                 f"Create an Aura EffectProgram IR v1 lighting effect for: {desc}.\n"
                 "1. Read `aura://schemas/effect-ir-v1` and `aura://keymap/m605-68`.\n"
@@ -645,6 +943,7 @@ class AuraMcpServer:
                 "messages": [{"role": "user", "content": {"type": "text", "text": text}}],
             }
         if name == "create_hall_reactive_cpp_plugin":
+            desc = str(args.get("description") or "custom Hall reactive lighting effect")
             text = (
                 f"Create a native Aura C++ ABI-v1 + Hall Analog v1 lighting plugin for: {desc}.\n"
                 "1. Read `aura://schemas/native-plugin-cpp` and `aura://keymap/m605-68`.\n"
@@ -655,6 +954,19 @@ class AuraMcpServer:
             )
             return {
                 "description": "Author and compile a native C++ Hall-reactive Aura plugin",
+                "messages": [{"role": "user", "content": {"type": "text", "text": text}}],
+            }
+        if name == "tune_magnetic_profile":
+            style = str(args.get("game_or_style") or "competitive FPS")
+            text = (
+                f"Tune the ROG Falchion Ace HFX magnetic switch configuration for: {style}.\n"
+                "1. Inspect current state via `aura_hall_telemetry(action='snapshot')` and `aura_device_profiles(action='list')`.\n"
+                "2. Adjust AP (`aura_magnetic_set_actuation`), RT (`aura_magnetic_set_rapid_trigger`), Deadzone "
+                "(`aura_magnetic_set_deadzone`), and/or SpeedTap (`aura_magnetic_set_speedtap`).\n"
+                "3. Optionally run a closed-loop Hall verification pass with `aura_hall_verify(action='start', ...)`."
+            )
+            return {
+                "description": "Inspect and tune M605 magnetic switches via MCP",
                 "messages": [{"role": "user", "content": {"type": "text", "text": text}}],
             }
         raise ValueError(f"Unknown prompt: {name}")
@@ -680,6 +992,14 @@ class AuraMcpServer:
             "aura_lighting_get": self._tool_lighting_get,
             "aura_lighting_set_base": self._tool_lighting_set_base,
             "aura_hall_telemetry": self._tool_hall_telemetry,
+            "aura_hall_verify": self._tool_hall_verify,
+            "aura_magnetic_set_actuation": self._tool_magnetic_set_actuation,
+            "aura_magnetic_set_rapid_trigger": self._tool_magnetic_set_rapid_trigger,
+            "aura_magnetic_set_deadzone": self._tool_magnetic_set_deadzone,
+            "aura_magnetic_set_dks": self._tool_magnetic_set_dks,
+            "aura_magnetic_set_speedtap": self._tool_magnetic_set_speedtap,
+            "aura_magnetic_maintenance": self._tool_magnetic_maintenance,
+            "aura_device_profiles": self._tool_device_profiles,
             "aura_automation_rules": self._tool_automation_rules,
         }
         handler = dispatch.get(name)
@@ -960,19 +1280,304 @@ class AuraMcpServer:
             }
         raise ValueError("'action' must be 'snapshot', 'start', or 'stop'")
 
+    def _tool_hall_verify(self, args: dict[str, Any]) -> Any:
+        action = args.get("action", "status")
+        if action == "status":
+            return self.client.daemon_get("/api/magnetic/hall/verify/status")
+        if action == "stop":
+            return self.client.daemon_post("/api/magnetic/hall/verify/stop", {})
+        if action == "start":
+            if "key" not in args:
+                raise ValueError("'key' is required when action is 'start'")
+            mode = args.get("mode")
+            if mode not in ("actuation", "rt", "deadzone"):
+                raise ValueError("'mode' must be 'actuation', 'rt', or 'deadzone'")
+            body: dict[str, Any] = {
+                "logical_id": resolve_logical_id(args["key"]),
+                "mode": mode,
+            }
+            for opt in (
+                "actuation_points",
+                "rt_points",
+                "dz_top_mm",
+                "dz_bottom_mm",
+                "dz_rt_mm",
+                "restore_actuation_mm",
+                "unlock_fa",
+            ):
+                if opt in args:
+                    body[opt] = args[opt]
+            return self.client.daemon_post("/api/magnetic/hall/verify/start", body)
+        raise ValueError("'action' must be 'status', 'start', or 'stop'")
+
+    def _tool_magnetic_set_actuation(self, args: dict[str, Any]) -> Any:
+        scope = args.get("scope")
+        if "mm" not in args:
+            raise ValueError("'mm' is required")
+        mm = float(args["mm"])
+        if scope == "single":
+            if "key" not in args:
+                raise ValueError("'key' is required for scope='single'")
+            return self.client.daemon_post("/api/magnetic/actuation", {"logical_id": resolve_logical_id(args["key"]), "mm": mm})
+        if scope == "batch":
+            ids = _resolve_logical_ids(args.get("keys"))
+            return self.client.daemon_post("/api/magnetic/batch/actuation", {"logical_ids": ids, "millimeters": mm})
+        if scope == "global":
+            return self.client.daemon_post("/api/magnetic/global/actuation", {"mm": mm})
+        raise ValueError("'scope' must be 'single', 'batch', or 'global'")
+
+    def _tool_magnetic_set_rapid_trigger(self, args: dict[str, Any]) -> Any:
+        scope = args.get("scope")
+        action = args.get("action")
+        if scope not in ("single", "batch"):
+            raise ValueError("'scope' must be 'single' or 'batch'")
+        if action not in ("enable", "disable"):
+            raise ValueError("'action' must be 'enable' or 'disable'")
+
+        if action == "enable":
+            if "press_mm" not in args or "release_mm" not in args:
+                raise ValueError("'press_mm' and 'release_mm' are required when action='enable'")
+            press_mm = float(args["press_mm"])
+            release_mm = float(args["release_mm"])
+            resolve_dks = bool(args.get("resolve_dks", False))
+            if scope == "single":
+                if "key" not in args:
+                    raise ValueError("'key' is required for scope='single'")
+                return self.client.daemon_post(
+                    "/api/magnetic/rapid-trigger",
+                    {
+                        "logical_id": resolve_logical_id(args["key"]),
+                        "press_mm": press_mm,
+                        "release_mm": release_mm,
+                        "resolve_dks": resolve_dks,
+                    },
+                )
+            return self.client.daemon_post(
+                "/api/magnetic/batch/rapid-trigger",
+                {
+                    "logical_ids": _resolve_logical_ids(args.get("keys")),
+                    "action": "enable",
+                    "press_mm": press_mm,
+                    "release_mm": release_mm,
+                    "resolve_dks": resolve_dks,
+                },
+            )
+
+        if scope == "single":
+            if "key" not in args:
+                raise ValueError("'key' is required for scope='single'")
+            return self.client.daemon_post(
+                "/api/magnetic/rapid-trigger/disable",
+                {"logical_id": resolve_logical_id(args["key"])},
+            )
+        return self.client.daemon_post(
+            "/api/magnetic/batch/rapid-trigger",
+            {"logical_ids": _resolve_logical_ids(args.get("keys")), "action": "disable"},
+        )
+
+    def _tool_magnetic_set_deadzone(self, args: dict[str, Any]) -> Any:
+        scope = args.get("scope")
+        if scope == "reset_all":
+            if args.get("confirm_all_keys") is not True:
+                raise ValueError("scope='reset_all' requires confirm_all_keys=true")
+            return self.client.daemon_post("/api/magnetic/deadzone/reset-all", {"confirm_all_keys": True})
+        if "top_mm" not in args or "bottom_mm" not in args:
+            raise ValueError("'top_mm' and 'bottom_mm' are required")
+        top_mm = float(args["top_mm"])
+        bottom_mm = float(args["bottom_mm"])
+        if scope == "single":
+            if "key" not in args:
+                raise ValueError("'key' is required for scope='single'")
+            return self.client.daemon_post(
+                "/api/magnetic/deadzone",
+                {"logical_id": resolve_logical_id(args["key"]), "top_mm": top_mm, "bottom_mm": bottom_mm},
+            )
+        if scope == "batch":
+            return self.client.daemon_post(
+                "/api/magnetic/batch/deadzone",
+                {"logical_ids": _resolve_logical_ids(args.get("keys")), "top_mm": top_mm, "bottom_mm": bottom_mm},
+            )
+        if scope == "global":
+            return self.client.daemon_post("/api/magnetic/global/deadzone", {"top_mm": top_mm, "bottom_mm": bottom_mm})
+        raise ValueError("'scope' must be 'single', 'batch', 'global', or 'reset_all'")
+
+    def _tool_magnetic_set_dks(self, args: dict[str, Any]) -> Any:
+        action = args.get("action")
+        if "key" not in args:
+            raise ValueError("'key' is required")
+        source_lid = resolve_logical_id(args["key"])
+        if action == "standard":
+            return self.client.daemon_post("/api/magnetic/dks/standard", {"logical_id": source_lid})
+        if action != "set":
+            raise ValueError("'action' must be 'set' or 'standard'")
+
+        if "start_mm" not in args or "end_mm" not in args:
+            raise ValueError("'start_mm' and 'end_mm' are required when action='set'")
+        slots = args.get("slots")
+        if not isinstance(slots, list) or len(slots) != 4:
+            raise ValueError("'slots' must be an array of 4 slot definitions")
+
+        normalized_slots: list[dict[str, Any]] = []
+        for idx, slot in enumerate(slots):
+            if not isinstance(slot, dict):
+                raise ValueError(f"Slot {idx} must be an object")
+            target = slot.get("target")
+            if not isinstance(target, dict):
+                raise ValueError(f"Slot {idx} missing object 'target'")
+            kind = target.get("kind")
+            if kind == "DefaultSentinel":
+                norm_target: dict[str, Any] = {"kind": "DefaultSentinel"}
+            elif kind == "LogicalKey":
+                raw_target_key = target.get("key") if "key" in target else target.get("logical_id")
+                if raw_target_key is None:
+                    raise ValueError(f"Slot {idx} LogicalKey target requires 'key' or 'logical_id'")
+                target_lid = resolve_logical_id(raw_target_key)
+                if target_lid == FN_LOGICAL_ID:
+                    raise ValueError(f"Slot {idx} cannot bind FN (0x0508) as a DKS action target")
+                norm_target = {"kind": "LogicalKey", "logical_id": target_lid}
+            else:
+                raise ValueError(f"Slot {idx} target.kind must be 'DefaultSentinel' or 'LogicalKey'")
+
+            norm_slot = {
+                "target": norm_target,
+                "down_start": slot.get("down_start"),
+                "down_end": slot.get("down_end"),
+                "up_start": slot.get("up_start"),
+                "up_end": slot.get("up_end"),
+            }
+            normalized_slots.append(norm_slot)
+
+        payload = {
+            "logical_id": source_lid,
+            "start_mm": float(args["start_mm"]),
+            "end_mm": float(args["end_mm"]),
+            "slots": normalized_slots,
+            "resolve_rt": bool(args.get("resolve_rt", False)),
+        }
+        return self.client.daemon_post("/api/magnetic/dks", payload)
+
+    def _tool_magnetic_set_speedtap(self, args: dict[str, Any]) -> Any:
+        action = args.get("action")
+        if action in ("pair_enable", "pair_disable"):
+            if "key1" not in args or "key2" not in args:
+                raise ValueError("'key1' and 'key2' are required")
+            k1 = resolve_logical_id(args["key1"])
+            k2 = resolve_logical_id(args["key2"])
+            route = "/api/magnetic/speedtap/pair" if action == "pair_enable" else "/api/magnetic/speedtap/pair/disable"
+            return self.client.daemon_post(route, {"key1": k1, "key2": k2})
+        if action == "master":
+            if "enabled" not in args or not isinstance(args["enabled"], bool):
+                raise ValueError("Boolean 'enabled' is required when action='master'")
+            return self.client.daemon_post("/api/magnetic/speedtap/master", {"enabled": args["enabled"]})
+        if action == "profile_reset":
+            if args.get("confirm_profile_baseline") is not True:
+                raise ValueError("action='profile_reset' requires confirm_profile_baseline=true")
+            return self.client.daemon_post("/api/magnetic/speedtap/profile-reset", {"confirm_profile_baseline": True})
+        raise ValueError("'action' must be 'pair_enable', 'pair_disable', 'master', or 'profile_reset'")
+
+    def _tool_magnetic_maintenance(self, args: dict[str, Any]) -> Any:
+        action = args.get("action")
+        if action == "static_analog":
+            if "enabled" not in args or not isinstance(args["enabled"], bool):
+                raise ValueError("Boolean 'enabled' is required when action='static_analog'")
+            return self.client.daemon_post("/api/magnetic/analog-effect/static", {"enabled": args["enabled"]})
+        if action == "acknowledge_quarantine":
+            return self.client.daemon_post("/api/magnetic/safety/acknowledge-external-resynchronization", {})
+        raise ValueError("'action' must be 'static_analog' or 'acknowledge_quarantine'")
+
+    def _tool_device_profiles(self, args: dict[str, Any]) -> Any:
+        action = args.get("action", "list")
+        if action == "list":
+            return self.client.daemon_get("/api/device-profiles")
+        if action == "runtime":
+            return self.client.daemon_get("/api/device-profiles/runtime")
+        if action == "get":
+            pid = args.get("profile_id")
+            if not isinstance(pid, str) or not pid.strip():
+                raise ValueError("'profile_id' is required when action='get'")
+            return self.client.daemon_get(f"/api/device-profiles/{pid.strip()}")
+        if action == "refresh_hardware_slot":
+            return self.client.daemon_post("/api/device-profiles/hardware-slot/refresh", {}, timeout=10.0)
+        if action == "activate":
+            pid = args.get("profile_id")
+            if not isinstance(pid, str) or not pid.strip():
+                raise ValueError("'profile_id' is required when action='activate'")
+            rev = args.get("expected_revision")
+            if rev is None:
+                rev = self.client.daemon_get("/api/device-profiles").get("document_revision")
+            reason = args.get("reason", "Manual")
+            body: dict[str, Any] = {
+                "profile_id": pid.strip(),
+                "reason": reason,
+                "expected_revision": int(rev),
+            }
+            if args.get("temporary_override") is not None:
+                body["temporary_override"] = args["temporary_override"]
+            return self.client.daemon_post("/api/device-profiles/activate", body, timeout=30.0)
+        if action == "mutate":
+            mutation = args.get("mutation")
+            if mutation not in (
+                "create", "duplicate", "rename", "update", "delete", "defaults", "automation", "migrate-legacy-rt"
+            ):
+                raise ValueError("'mutation' must be one of create, duplicate, rename, update, delete, defaults, automation, migrate-legacy-rt")
+            body = dict(args.get("payload") or {})
+            if "expected_revision" not in body:
+                rev = args.get("expected_revision")
+                if rev is None:
+                    rev = self.client.daemon_get("/api/device-profiles").get("document_revision")
+                body["expected_revision"] = int(rev)
+            return self.client.daemon_post(f"/api/device-profiles/{mutation}", body, timeout=15.0)
+        raise ValueError("'action' must be one of list, runtime, get, activate, refresh_hardware_slot, mutate")
+
     def _tool_automation_rules(self, args: dict[str, Any]) -> Any:
         action = args.get("action", "list")
-        if action == "validate":
-            rule = args.get("rule")
-            if not isinstance(rule, dict):
-                raise ValueError("'rule' object is required when action is 'validate'")
-            return self.client.daemon_post("/api/automation/v2/validate", {"rule": rule})
         if action == "list":
             return {
                 "capabilities": self.client.daemon_get("/api/automation/v2/capabilities"),
                 "records": self.client.daemon_get("/api/automation/v2/records"),
             }
-        raise ValueError("'action' must be 'list' or 'validate'")
+
+        expected_rev = args.get("expected_revision")
+        if expected_rev is None:
+            expected_rev = self.client.daemon_get("/api/automation/v2/records").get("revision", "")
+
+        body: dict[str, Any] = {"expected_revision": expected_rev}
+        if "id" in args:
+            body["id"] = args["id"]
+        if "position" in args:
+            body["position"] = int(args["position"])
+
+        if action == "validate":
+            if "patch" in args:
+                body["patch"] = args["patch"]
+            else:
+                rule = args.get("rule")
+                if not isinstance(rule, dict):
+                    raise ValueError("'rule' or 'patch' object is required when action is 'validate'")
+                body["rule"] = rule
+            return self.client.daemon_post("/api/automation/v2/validate", body)
+        if action == "create":
+            rule = args.get("rule")
+            if not isinstance(rule, dict):
+                raise ValueError("'rule' object is required when action is 'create'")
+            body["rule"] = rule
+            return self.client.daemon_post("/api/automation/v2/rules", body)
+        if action == "update":
+            if "id" not in args or not isinstance(args.get("patch"), dict):
+                raise ValueError("'id' and 'patch' are required when action is 'update'")
+            body["patch"] = args["patch"]
+            return self.client.daemon_patch("/api/automation/v2/rules", body)
+        if action == "delete":
+            if "id" not in args:
+                raise ValueError("'id' is required when action is 'delete'")
+            return self.client.daemon_delete("/api/automation/v2/rules", body)
+        if action == "replace":
+            rules = args.get("rules")
+            if not isinstance(rules, list):
+                raise ValueError("'rules' array is required when action is 'replace'")
+            body["rules"] = rules
+            return self.client.daemon_put("/api/automation/v2/rules", body)
+        raise ValueError("'action' must be one of list, validate, create, update, delete, replace")
 
 
 def serve_stdio(server: AuraMcpServer | None = None) -> int:

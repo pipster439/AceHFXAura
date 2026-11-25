@@ -47,7 +47,7 @@ test('import creates an independent draft and cannot overwrite or publish', () =
   assert.deepEqual(catalog,{fixture:{published:'unchanged'}}); assert.ok(!('applied_plugin' in draft));
 });
 test('palette discovers all required commands and searches Chinese and English', () => {
-  assert.equal(STUDIO_COMMAND_DEFINITIONS.length,13); assert.equal(new Set(STUDIO_COMMAND_DEFINITIONS.map(c=>c.id)).size,13);
+  assert.equal(STUDIO_COMMAND_DEFINITIONS.length,12); assert.equal(new Set(STUDIO_COMMAND_DEFINITIONS.map(c=>c.id)).size,12);
   assert.equal(filterStudioCommands('Test Bench')[0].id,'bench'); assert.equal(filterStudioCommands('验证')[0].id,'validate'); assert.deepEqual(filterStudioCommands('impossible command'),[]);
 });
 test('command dispatch shares safety gates for native and local surfaces; no duplicate execution', () => {

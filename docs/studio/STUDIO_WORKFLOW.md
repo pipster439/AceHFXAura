@@ -2,7 +2,11 @@
 
 Studio 由本地 Web 服务提供，也通过 WinUI WebView2 使用。硬件默认 auto（Native HID 优先，保留 gated legacy_hal 回退）。
 
-## alpha.8 Studio 助手与工具
+## alpha.9-rc.1：以 MCP 外部接入替代内置 AI 助手
+
+自 `0.1.0-alpha.9-rc.1` 起，Studio 不再内置 AI 对话面板与 OpenAI-compatible 设置弹窗。外部 AI 客户端通过 [`plugins/mcp/aura_mcp_server.py`](../../plugins/mcp/aura_mcp_server.py)（标准 stdio MCP）即可直接读取键位表、规范文档与工程配置，发布 EffectProgram IR、编译 C++ 插件并调控磁轴、Profile 与自动化规则。可在桌面端 **工作室 → 更多 → MCP 外部接入** 或 **插件** 页一键复制客户端配置；详细能力清单见 [`plugins/mcp/README.md`](../../plugins/mcp/README.md)。
+
+## alpha.8 Studio 助手与工具（历史记录，内置 AI 对话已于 alpha.9-rc.1 移除）
 
 WinUI 原生 Studio 命令、状态、最近工程与 Assistant 围绕现有 WebView2 / Blockly 编辑器工作。Ctrl+Shift+P 打开命令面板；它复用现有命令与验证，disabled 命令会说明原因。
 

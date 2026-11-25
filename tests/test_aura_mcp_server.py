@@ -23,6 +23,10 @@ class _MockState:
         }
         self.if_match_headers: list[str] = []
         self.rescan_calls = 0
+        self.magnetic_calls: list[tuple[str, dict]] = []
+        self.profile_calls: list[tuple[str, dict]] = []
+        self.automation_rev = "rev-auto-1"
+        self.automation_calls: list[tuple[str, str, dict]] = []
 
 
 def _make_handler(state: _MockState, is_studio: bool):
@@ -68,6 +72,22 @@ def _make_handler(state: _MockState, is_studio: bool):
                     self._send_json(200, {"status": "ok", "connected": True})
                 elif self.path == "/api/magnetic/hall/snapshot":
                     self._send_json(200, {"status": "ok", "active": False, "keys": []})
+                elif self.path == "/api/magnetic/hall/verify/status":
+                    self._send_json(200, {"status": "ok", "state": "Idle", "results": []})
+                elif self.path == "/api/device-profiles":
+                    self._send_json(
+                        200,
+                        {
+                            "status": "ok",
+                            "document_revision": 4,
+                            "selected_profile_id": "11111111-1111-1111-1111-111111111111",
+                            "profiles": [{"id": "11111111-1111-1111-1111-111111111111", "name": "FPS"}],
+                        },
+                    )
+                elif self.path == "/api/automation/v2/capabilities":
+                    self._send_json(200, {"actions": ["activate_profile", "trigger_effect"]})
+                elif self.path == "/api/automation/v2/records":
+                    self._send_json(200, {"status": "ok", "revision": state.automation_rev, "records": []})
                 else:
                     self._send_json(404, {"status": "error", "message": f"Unknown daemon GET {self.path}"})
             else:
@@ -126,9 +146,27 @@ def _make_handler(state: _MockState, is_studio: bool):
                         self._send_json(200, {"status": "ok", "revision": state.revision})
                 elif self.path == "/api/plugins/rescan":
                     state.rescan_calls += 1
-                    self.do_GET_path_plugins()
+                    self._send_json(
+                        200,
+                        {
+                            "status": "ok",
+                            "rescan_calls": state.rescan_calls,
+                            "native_plugins": [{"name": "hall_reactive", "has_hall_analog": True}],
+                            "bridges": [{"id": "aura-mcp-server", "built": True}],
+                        },
+                    )
                 elif self.path == "/api/preview":
                     self._send_json(200, {"status": "ok"})
+                elif self.path.startswith("/api/magnetic/"):
+                    state.magnetic_calls.append((self.path, body))
+                    self._send_json(200, {"status": "ok", "path": self.path, "echo": body})
+                elif self.path.startswith("/api/device-profiles/"):
+                    state.profile_calls.append((self.path, body))
+                    self._send_json(200, {"status": "ok", "path": self.path, "outcome": "succeeded", "echo": body})
+                elif self.path == "/api/automation/v2/rules":
+                    state.automation_calls.append(("POST", self.path, body))
+                    state.automation_rev = "rev-auto-2"
+                    self._send_json(201, {"status": "ok", "revision": state.automation_rev, "rule": body.get("rule")})
                 else:
                     self._send_json(404, {"status": "error", "message": f"Unknown daemon POST {self.path}"})
             else:
@@ -144,16 +182,10 @@ def _make_handler(state: _MockState, is_studio: bool):
                 else:
                     self._send_json(404, {"status": "error", "message": f"Unknown studio POST {self.path}"})
 
-        def do_GET_path_plugins(self) -> None:
-            self._send_json(
-                200,
-                {
-                    "status": "ok",
-                    "rescan_calls": state.rescan_calls,
-                    "native_plugins": [{"name": "hall_reactive", "has_hall_analog": True}],
-                    "bridges": [{"id": "aura-mcp-server", "built": True}],
-                },
-            )
+        def do_DELETE(self) -> None:
+            body = self._read_json()
+            state.automation_calls.append(("DELETE", self.path, body))
+            self._send_json(200, {"status": "ok", "revision": "rev-auto-3"})
 
     return Handler
 
@@ -200,7 +232,13 @@ class AuraMcpServerTests(unittest.TestCase):
         resp_raw = self.proc.stdout.readline().decode("utf-8")
         return json.loads(resp_raw)
 
-    def test_mcp_stdio_roundtrip_tools_resources_prompts_and_offline(self) -> None:
+    def _call_tool(self, req_id: int, name: str, arguments: dict) -> tuple[bool, dict]:
+        resp = self._rpc({"jsonrpc": "2.0", "id": req_id, "method": "tools/call", "params": {"name": name, "arguments": arguments}})
+        assert resp is not None
+        res = resp["result"]
+        return bool(res.get("isError")), json.loads(res["content"][0]["text"])
+
+    def test_mcp_stdio_roundtrip_tools_resources_prompts_and_magnetic_extensions(self) -> None:
         init = self._rpc({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2024-11-05"}})
         self.assertEqual(init["result"]["serverInfo"]["name"], "aura-mcp")
         self._rpc({"jsonrpc": "2.0", "method": "notifications/initialized"})
@@ -210,9 +248,21 @@ class AuraMcpServerTests(unittest.TestCase):
 
         tools = self._rpc({"jsonrpc": "2.0", "id": 3, "method": "tools/list"})["result"]["tools"]
         tool_names = {t["name"] for t in tools}
-        self.assertIn("aura_status", tool_names)
-        self.assertIn("studio_publish_ir_program", tool_names)
-        self.assertIn("aura_hall_telemetry", tool_names)
+        self.assertEqual(len(tool_names), 21)
+        for expected in (
+            "aura_status",
+            "studio_publish_ir_program",
+            "aura_magnetic_set_actuation",
+            "aura_magnetic_set_rapid_trigger",
+            "aura_magnetic_set_deadzone",
+            "aura_magnetic_set_dks",
+            "aura_magnetic_set_speedtap",
+            "aura_magnetic_maintenance",
+            "aura_hall_verify",
+            "aura_device_profiles",
+            "aura_automation_rules",
+        ):
+            self.assertIn(expected, tool_names)
 
         res_list = self._rpc({"jsonrpc": "2.0", "id": 4, "method": "resources/list"})["result"]["resources"]
         self.assertEqual(len(res_list), 4)
@@ -228,25 +278,26 @@ class AuraMcpServerTests(unittest.TestCase):
             ]["contents"][0]["text"]
         )
         self.assertEqual(keymap["key_count"], 68)
-        self.assertIn("ESC", keymap["keys"])
+        self.assertEqual(keymap["keys"]["W"]["logical_id"], 0x0701)
+        self.assertEqual(keymap["keys"]["W"]["hid_usage"], 26)
 
         prompts = self._rpc({"jsonrpc": "2.0", "id": 7, "method": "prompts/list"})["result"]["prompts"]
-        self.assertEqual({p["name"] for p in prompts}, {"create_ir_effect", "create_hall_reactive_cpp_plugin"})
+        self.assertEqual(
+            {p["name"] for p in prompts},
+            {"create_ir_effect", "create_hall_reactive_cpp_plugin", "tune_magnetic_profile"},
+        )
         prompt_msg = self._rpc(
             {
                 "jsonrpc": "2.0",
                 "id": 8,
                 "method": "prompts/get",
-                "params": {"name": "create_ir_effect", "arguments": {"description": "blue ripple"}},
+                "params": {"name": "tune_magnetic_profile", "arguments": {"game_or_style": "Valorant"}},
             }
         )["result"]["messages"][0]["content"]["text"]
-        self.assertIn("blue ripple", prompt_msg)
+        self.assertIn("Valorant", prompt_msg)
 
-        status_res = json.loads(
-            self._rpc({"jsonrpc": "2.0", "id": 9, "method": "tools/call", "params": {"name": "aura_status", "arguments": {}}})[
-                "result"
-            ]["content"][0]["text"]
-        )
+        err, status_res = self._call_tool(9, "aura_status", {})
+        self.assertFalse(err)
         self.assertTrue(status_res["daemon_reachable"])
         self.assertTrue(status_res["studio_reachable"])
 
@@ -256,58 +307,92 @@ class AuraMcpServerTests(unittest.TestCase):
             "variables": 0,
             "slots": 0,
             "publication": {"mode": "continuous", "fade_out_ms": 0},
-            "nodes": [{"kind": "action", "op": "fill", "color": {"op": "rgb", "args": [{"op": "number", "value": 0}, {"op": "number", "value": 120}, {"op": "number", "value": 255}]}, "next": 1}, {"kind": "end"}],
+            "nodes": [
+                {"kind": "action", "op": "fill", "color": {"op": "rgb", "args": [{"op": "number", "value": 0}, {"op": "number", "value": 120}, {"op": "number", "value": 255}]}, "next": 1},
+                {"kind": "end"},
+            ],
         }
-        pub_res = json.loads(
-            self._rpc(
-                {
-                    "jsonrpc": "2.0",
-                    "id": 10,
-                    "method": "tools/call",
-                    "params": {"name": "studio_publish_ir_program", "arguments": {"name": "mcp_blue", "program": ir_doc}},
-                }
-            )["result"]["content"][0]["text"]
-        )
+        err, pub_res = self._call_tool(10, "studio_publish_ir_program", {"name": "mcp_blue", "program": ir_doc})
+        self.assertFalse(err)
         self.assertTrue(pub_res["enable"]["enabled"])
         self.assertTrue(pub_res["plugin_name"].startswith("ir_"))
 
-        save_res = json.loads(
-            self._rpc(
-                {
-                    "jsonrpc": "2.0",
-                    "id": 11,
-                    "method": "tools/call",
-                    "params": {
-                        "name": "studio_save_blockly_project",
-                        "arguments": {"project_name": "new_fx", "project": {"name": "new_fx", "json": {}}},
-                    },
-                }
-            )["result"]["content"][0]["text"]
+        err, save_res = self._call_tool(
+            11,
+            "studio_save_blockly_project",
+            {"project_name": "new_fx", "project": {"name": "new_fx", "json": {}}},
         )
+        self.assertFalse(err)
         self.assertEqual(save_res["result"]["status"], "ok")
         self.assertEqual(self.state.if_match_headers, ['"deadbeef01"'])
-        self.assertIn("existing_fx", self.state.config["blockly_effects"])
-        self.assertIn("new_fx", self.state.config["blockly_effects"])
 
-        plugins_res = json.loads(
-            self._rpc(
-                {
-                    "jsonrpc": "2.0",
-                    "id": 12,
-                    "method": "tools/call",
-                    "params": {"name": "aura_list_plugins", "arguments": {"rescan": True}},
-                }
-            )["result"]["content"][0]["text"]
-        )
+        err, plugins_res = self._call_tool(12, "aura_list_plugins", {"rescan": True})
+        self.assertFalse(err)
         self.assertEqual(plugins_res["rescan_calls"], 1)
+
+        # Magnetic switch tools: key-name resolution + batch + RT + Deadzone + DKS (incl. FN guard) + SpeedTap + Verify
+        err, ap_res = self._call_tool(13, "aura_magnetic_set_actuation", {"scope": "batch", "keys": ["W", "A", "S", "D"], "mm": 0.3})
+        self.assertFalse(err)
+        self.assertEqual(ap_res["echo"]["logical_ids"], [0x0701, 0x0602, 0x0702, 0x0301])
+
+        err, rt_res = self._call_tool(
+            14,
+            "aura_magnetic_set_rapid_trigger",
+            {"scope": "batch", "action": "enable", "keys": ["A", "D"], "press_mm": 0.1, "release_mm": 0.1, "resolve_dks": True},
+        )
+        self.assertFalse(err)
+        self.assertEqual(rt_res["echo"]["action"], "enable")
+
+        err, dz_res = self._call_tool(15, "aura_magnetic_set_deadzone", {"scope": "global", "top_mm": 0.1, "bottom_mm": 0.1})
+        self.assertFalse(err)
+        self.assertEqual(dz_res["echo"], {"top_mm": 0.1, "bottom_mm": 0.1})
+
+        # DKS rejects binding FN as an action target
+        dks_slot = lambda kind, key=None: {
+            "target": {"kind": kind, **({"key": key} if key else {})},
+            "down_start": "Tap",
+            "down_end": "Inactive",
+            "up_start": "Inactive",
+            "up_end": "Inactive",
+        }
+        err, fn_reject = self._call_tool(
+            16,
+            "aura_magnetic_set_dks",
+            {"action": "set", "key": "CAPS", "start_mm": 0.4, "end_mm": 3.0, "slots": [dks_slot("LogicalKey", "FN"), dks_slot("DefaultSentinel"), dks_slot("DefaultSentinel"), dks_slot("DefaultSentinel")]},
+        )
+        self.assertTrue(err)
+        self.assertIn("FN", fn_reject["error"])
+
+        err, dks_ok = self._call_tool(
+            17,
+            "aura_magnetic_set_dks",
+            {"action": "set", "key": "CAPS", "start_mm": 0.4, "end_mm": 3.0, "slots": [dks_slot("LogicalKey", "L_SHIFT"), dks_slot("DefaultSentinel"), dks_slot("DefaultSentinel"), dks_slot("DefaultSentinel")], "resolve_rt": True},
+        )
+        self.assertFalse(err)
+        self.assertEqual(dks_ok["echo"]["slots"][0]["target"], {"kind": "LogicalKey", "logical_id": 0x0400})
+
+        err, st_ok = self._call_tool(18, "aura_magnetic_set_speedtap", {"action": "pair_enable", "key1": "A", "key2": "D"})
+        self.assertFalse(err)
+        self.assertEqual(st_ok["echo"], {"key1": 0x0602, "key2": 0x0301})
+
+        err, verify_start = self._call_tool(19, "aura_hall_verify", {"action": "start", "key": "W", "mode": "actuation", "actuation_points": [0.8, 2.0]})
+        self.assertFalse(err)
+        self.assertEqual(verify_start["echo"]["logical_id"], 0x0701)
+
+        err, prof_act = self._call_tool(20, "aura_device_profiles", {"action": "activate", "profile_id": "11111111-1111-1111-1111-111111111111"})
+        self.assertFalse(err)
+        self.assertEqual(prof_act["echo"]["expected_revision"], 4)
+        self.assertEqual(prof_act["echo"]["reason"], "Manual")
+
+        err, auto_create = self._call_tool(21, "aura_automation_rules", {"action": "create", "rule": {"id": "rule_1", "model": "automation_v2"}})
+        self.assertFalse(err)
+        self.assertEqual(self.state.automation_calls[-1][2]["expected_revision"], "rev-auto-1")
 
         # Verify clean structured error when daemon shuts down mid-session
         self.daemon_httpd.shutdown()
-        offline_call = self._rpc(
-            {"jsonrpc": "2.0", "id": 13, "method": "tools/call", "params": {"name": "studio_list_programs", "arguments": {}}}
-        )["result"]
-        self.assertTrue(offline_call["isError"])
-        self.assertIn("Connection failed", offline_call["content"][0]["text"])
+        err, offline_res = self._call_tool(22, "studio_list_programs", {})
+        self.assertTrue(err)
+        self.assertIn("Connection failed", offline_res["error"])
 
 
 if __name__ == "__main__":

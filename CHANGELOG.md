@@ -1,3 +1,10 @@
+## [0.1.0-alpha.9-rc.1] — Hall Telemetry, Unified Plugins & External MCP
+
+- **68 键霍尔实时行程遥测与闭环校验**：新增 `M605HallTelemetry`（`Local\AuraM605HallAnalogV1` 无锁 seq-lock 共享内存广播、安全 `04 04 01` 停流保护及未打补丁原厂固件 `FA 00 / FA 10` 兼容开关），并在 WinUI `MagneticSwitchPage` 整合垂直线性键程可视化与 AP / RT / 死区交互式闭环校验。
+- **统一插件架构与 Hall Analog C ABI v1**：在 `plugin_interface.h` 与 `PluginManager` 增加独立的 `AuraGetHallAnalogVersion` / `AuraBindHallAnalog`（v1）扩展协商接口，附带 [`plugins/src/effect_hall_reactive.cpp`](plugins/src/effect_hall_reactive.cpp) 按压深度联动参考插件及 `plugin_hall_analog` CTest；新增 [`PluginOverviewService`](include/config/plugin_overview_service.h)（`/api/plugins/overview`、`/api/plugins/rescan`）与独立 **插件** 页（`PluginsPage`）。
+- **Wooting Analog SDK 生态桥接**：在 [`plugins/bridges/wooting-analog-m605/`](plugins/bridges/wooting-analog-m605/README.md) 提供通过共享内存零句柄冲突读取 68 键模拟深度的 Wooting 插件桥接，配套管理员安装脚本。
+- **移除 Studio 内置 AI 助手，改用外部 stdio MCP Server**：删除 WinUI 内置对话窗口、LLM 服务配置/密钥管理及相关在线测试依赖；在 [`plugins/mcp/aura_mcp_server.py`](plugins/mcp/aura_mcp_server.py) 提供零依赖 stdio JSON-RPC 2.0 MCP 服务端（覆盖 Studio IR/Blockly/C++ 编译、插件中心、基础灯效、全套磁轴与 DKS/SpeedTap 参数写入、闭环校验、设备 Profile 与 Automation v2 规则管理），并在「插件」页及 Studio 菜单提供一键客户端配置导出。
+
 ## [Unreleased] — Stabilization
 
 - Blockly 工程在隔离工作区验证结构、大小、节点类型与输入 Schema 后加载；拒绝未知或跨工作室工程并保留当前草稿，AI Apply/Undo 复用同一加载边界。
