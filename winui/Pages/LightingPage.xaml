@@ -183,33 +183,122 @@
                                   Toggled="HallOverlayToggle_Toggled"
                                   AutomationProperties.AutomationId="LightingHallOverlayToggle" />
 
+                    <ComboBox x:Name="HallOverlayModeCombo"
+                              Header="叠加模式"
+                              MinWidth="260"
+                              HorizontalAlignment="Left"
+                              SelectionChanged="HallOverlayModeCombo_SelectionChanged"
+                              AutomationProperties.AutomationId="LightingHallOverlayMode">
+                        <ComboBoxItem Content="按压高亮 (Glow)" Tag="glow" />
+                        <ComboBoxItem Content="深度渐变 (Gradient)" Tag="gradient" />
+                        <ComboBoxItem Content="光环扩散 (Halo)" Tag="halo" />
+                    </ComboBox>
+
                     <Grid ColumnSpacing="16" RowSpacing="12">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <ComboBox x:Name="HallOverlayModeCombo"
-                                  Grid.Column="0"
-                                  Header="叠加模式"
-                                  HorizontalAlignment="Stretch"
-                                  SelectionChanged="HallOverlayControl_Changed"
-                                  AutomationProperties.AutomationId="LightingHallOverlayMode">
-                            <ComboBoxItem Content="按压高亮 (Glow)" Tag="glow" />
-                            <ComboBoxItem Content="深度渐变 (Gradient)" Tag="gradient" />
-                            <ComboBoxItem Content="光环扩散 (Halo)" Tag="halo" />
-                        </ComboBox>
-                        <ComboBox x:Name="HallOverlayColorCombo"
-                                  Grid.Column="1"
-                                  Header="压感主色"
-                                  HorizontalAlignment="Stretch"
-                                  SelectionChanged="HallOverlayControl_Changed"
-                                  AutomationProperties.AutomationId="LightingHallOverlayColor">
-                            <ComboBoxItem Content="冰蓝 (#00DCFF)" Tag="0,220,255" />
-                            <ComboBoxItem Content="琥珀金 (#FFBE28)" Tag="255,190,40" />
-                            <ComboBoxItem Content="霓虹粉 (#FF3CA0)" Tag="255,60,160" />
-                            <ComboBoxItem Content="翡翠绿 (#28FF96)" Tag="40,255,150" />
-                            <ComboBoxItem Content="纯白 (#FFFFFF)" Tag="255,255,255" />
-                        </ComboBox>
+
+                        <StackPanel Grid.Column="0" Spacing="6">
+                            <TextBlock Text="压感颜色" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                            <DropDownButton x:Name="HallOverlayColorButton"
+                                            HorizontalAlignment="Stretch"
+                                            HorizontalContentAlignment="Left"
+                                            AutomationProperties.AutomationId="LightingHallOverlayColorButton">
+                                <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                                    <Border x:Name="HallOverlayColorSwatch"
+                                            Width="24" Height="24" CornerRadius="4"
+                                            BorderThickness="1"
+                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" />
+                                    <TextBlock x:Name="HallOverlayColorText"
+                                               Text="#00DCFF  (0, 220, 255)"
+                                               VerticalAlignment="Center"
+                                               Style="{ThemeResource BodyTextBlockStyle}" />
+                                </StackPanel>
+                                <DropDownButton.Flyout>
+                                    <Flyout>
+                                        <StackPanel Spacing="12">
+                                            <ColorPicker x:Name="HallOverlayColorPicker"
+                                                         IsAlphaEnabled="False"
+                                                         IsHexInputVisible="True"
+                                                         IsColorSliderVisible="True"
+                                                         ColorChanged="HallOverlayColorPicker_ColorChanged"
+                                                         AutomationProperties.AutomationId="LightingHallOverlayColorPicker" />
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <Button Padding="4" Tag="0,220,255" Click="HallOverlayQuickColor_Click" ToolTipService.ToolTip="冰蓝 (#00DCFF)">
+                                                    <Border Width="18" Height="18" CornerRadius="4" Background="#00DCFF" />
+                                                </Button>
+                                                <Button Padding="4" Tag="255,190,40" Click="HallOverlayQuickColor_Click" ToolTipService.ToolTip="琥珀金 (#FFBE28)">
+                                                    <Border Width="18" Height="18" CornerRadius="4" Background="#FFBE28" />
+                                                </Button>
+                                                <Button Padding="4" Tag="255,60,160" Click="HallOverlayQuickColor_Click" ToolTipService.ToolTip="霓虹粉 (#FF3CA0)">
+                                                    <Border Width="18" Height="18" CornerRadius="4" Background="#FF3CA0" />
+                                                </Button>
+                                                <Button Padding="4" Tag="40,255,150" Click="HallOverlayQuickColor_Click" ToolTipService.ToolTip="翡翠绿 (#28FF96)">
+                                                    <Border Width="18" Height="18" CornerRadius="4" Background="#28FF96" />
+                                                </Button>
+                                                <Button Padding="4" Tag="255,255,255" Click="HallOverlayQuickColor_Click" ToolTipService.ToolTip="纯白 (#FFFFFF)">
+                                                    <Border Width="18" Height="18" CornerRadius="4" Background="#FFFFFF" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" />
+                                                </Button>
+                                                <Button x:Name="HallOverlayUseBaseColorBtn"
+                                                        Content="沿用当前灯效色彩"
+                                                        Click="HallOverlayUseBaseColor_Click"
+                                                        AutomationProperties.AutomationId="LightingHallOverlayUseBaseColor" />
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Flyout>
+                                </DropDownButton.Flyout>
+                            </DropDownButton>
+                        </StackPanel>
+
+                        <StackPanel x:Name="HallOverlaySecondaryColorPanel" Grid.Column="1" Spacing="6" Visibility="Collapsed">
+                            <TextBlock Text="渐变终点色" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                            <DropDownButton x:Name="HallOverlaySecondaryColorButton"
+                                            HorizontalAlignment="Stretch"
+                                            HorizontalContentAlignment="Left"
+                                            AutomationProperties.AutomationId="LightingHallOverlaySecondaryColorButton">
+                                <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                                    <Border x:Name="HallOverlaySecondaryColorSwatch"
+                                            Width="24" Height="24" CornerRadius="4"
+                                            BorderThickness="1"
+                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" />
+                                    <TextBlock x:Name="HallOverlaySecondaryColorText"
+                                               Text="#FF50B4  (255, 80, 180)"
+                                               VerticalAlignment="Center"
+                                               Style="{ThemeResource BodyTextBlockStyle}" />
+                                </StackPanel>
+                                <DropDownButton.Flyout>
+                                    <Flyout>
+                                        <StackPanel Spacing="12">
+                                            <ColorPicker x:Name="HallOverlaySecondaryColorPicker"
+                                                         IsAlphaEnabled="False"
+                                                         IsHexInputVisible="True"
+                                                         IsColorSliderVisible="True"
+                                                         ColorChanged="HallOverlaySecondaryColorPicker_ColorChanged"
+                                                         AutomationProperties.AutomationId="LightingHallOverlaySecondaryColorPicker" />
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <Button Padding="4" Tag="255,80,180" Click="HallOverlayQuickSecondaryColor_Click" ToolTipService.ToolTip="品红 (#FF50B4)">
+                                                    <Border Width="18" Height="18" CornerRadius="4" Background="#FF50B4" />
+                                                </Button>
+                                                <Button Padding="4" Tag="0,220,255" Click="HallOverlayQuickSecondaryColor_Click" ToolTipService.ToolTip="冰蓝 (#00DCFF)">
+                                                    <Border Width="18" Height="18" CornerRadius="4" Background="#00DCFF" />
+                                                </Button>
+                                                <Button Padding="4" Tag="255,190,40" Click="HallOverlayQuickSecondaryColor_Click" ToolTipService.ToolTip="琥珀金 (#FFBE28)">
+                                                    <Border Width="18" Height="18" CornerRadius="4" Background="#FFBE28" />
+                                                </Button>
+                                                <Button Padding="4" Tag="40,255,150" Click="HallOverlayQuickSecondaryColor_Click" ToolTipService.ToolTip="翡翠绿 (#28FF96)">
+                                                    <Border Width="18" Height="18" CornerRadius="4" Background="#28FF96" />
+                                                </Button>
+                                                <Button Padding="4" Tag="255,255,255" Click="HallOverlayQuickSecondaryColor_Click" ToolTipService.ToolTip="纯白 (#FFFFFF)">
+                                                    <Border Width="18" Height="18" CornerRadius="4" Background="#FFFFFF" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" />
+                                                </Button>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Flyout>
+                                </DropDownButton.Flyout>
+                            </DropDownButton>
+                        </StackPanel>
                     </Grid>
 
                     <StackPanel Spacing="4" HorizontalAlignment="Stretch">

@@ -38,12 +38,14 @@ public sealed partial class LightingPage : Page
     private bool _hallOverlayDirty;
     private int[] _hallOverlayColor = [0, 220, 255];
     private int[] _hallOverlaySecondaryColor = [255, 80, 180];
+    private Action<(int r, int g, int b)>? _onAccentColorChanged;
 
     public LightingPage()
     {
         _isApplyingModel = true;
 
         InitializeComponent();
+        UpdateHallColorDisplays();
         PageLayout.Attach(this, LightingContent, PageContent, width => {
             _contentWidth = width;
             var wide = width >= 1300;
@@ -425,6 +427,7 @@ public sealed partial class LightingPage : Page
     {
         if (DynamicParametersPanel == null) return;
 
+        _onAccentColorChanged = null;
         foreach (var row in DynamicParametersPanel.Children.OfType<StackPanel>().SelectMany(p => p.Children.OfType<Grid>()).ToArray()) _parameterRows.Remove(row);
         DynamicParametersPanel.Children.Clear();
 
@@ -505,7 +508,8 @@ public sealed partial class LightingPage : Page
         var picker = new ColorPicker
         {
             IsAlphaEnabled = false,
-            IsHexInputVisible = true
+            IsHexInputVisible = true,
+            IsColorSliderVisible = true
         };
 
         var rgb = ExtractRgb(_draftParameters.GetValueOrDefault(schema.Key)) ?? (255, 255, 255);
@@ -514,20 +518,172 @@ public sealed partial class LightingPage : Page
         colorText.Text = $"#{rgb.r:X2}{rgb.g:X2}{rgb.b:X2}  ({rgb.r}, {rgb.g}, {rgb.b})";
         picker.Color = winColor;
 
-        picker.ColorChanged += (s, args) =>
+        var flyout = new Flyout();
+        if (string.Equals(schema.Key, "bg", StringComparison.OrdinalIgnoreCase))
         {
-            if (_isApplyingModel) return;
-            var c = args.NewColor;
-            _draftParameters[schema.Key] = new int[] { c.R, c.G, c.B };
-            swatchBorder.Background = new SolidColorBrush(c);
-            colorText.Text = $"#{c.R:X2}{c.G:X2}{c.B:X2}  ({c.R}, {c.G}, {c.B})";
-            EvaluateDirty();
-        };
+            var pairedSchema = _draftPreset?.ParameterSchema?.FirstOrDefault(p =>
+                p.Type == EffectParamType.Color &&
+                string.Equals(p.Key, "color", StringComparison.OrdinalIgnoreCase));
+            var pairedRgb = pairedSchema != null ? ExtractRgb(_draftParameters.GetValueOrDefault("color")) : null;
+            var baseRgb = ColorBrightnessHelper.NormalizeToFullBrightness(rgb.r, rgb.g, rgb.b, pairedRgb);
+            int brightnessPct = ColorBrightnessHelper.GetBrightnessPercent(rgb.r, rgb.g, rgb.b);
+            bool syncingBgControls = false;
 
-        var flyout = new Flyout
+            var brightnessValueText = new TextBlock
+            {
+                Text = $"{brightnessPct}%",
+                Width = 48,
+                TextAlignment = TextAlignment.Right,
+                Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"],
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            var brightnessHeader = new Grid { ColumnSpacing = 12 };
+            brightnessHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            brightnessHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            var brightnessTitle = new TextBlock
+            {
+                Text = "底色亮度",
+                Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"],
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            Grid.SetColumn(brightnessTitle, 0);
+            Grid.SetColumn(brightnessValueText, 1);
+            brightnessHeader.Children.Add(brightnessTitle);
+            brightnessHeader.Children.Add(brightnessValueText);
+
+            var brightnessSlider = new Slider
+            {
+                Minimum = 0,
+                Maximum = 100,
+                StepFrequency = 1,
+                Value = brightnessPct,
+                HorizontalAlignment = HorizontalAlignment.Stretch
+            };
+
+            CheckBox? followCheck = pairedSchema != null
+                ? new CheckBox { Content = $"沿用{pairedSchema.DisplayName}" }
+                : null;
+
+            void ApplyBgFromBase(int pct)
+            {
+                int clampedPct = Math.Clamp(pct, 0, 100);
+                var (sr, sg, sb) = ColorBrightnessHelper.ScaleByBrightness(baseRgb, clampedPct);
+                var scaledColor = Windows.UI.Color.FromArgb(255, (byte)sr, (byte)sg, (byte)sb);
+                syncingBgControls = true;
+                try
+                {
+                    brightnessValueText.Text = $"{clampedPct}%";
+                    if ((int)Math.Round(brightnessSlider.Value) != clampedPct)
+                        brightnessSlider.Value = clampedPct;
+                    picker.Color = scaledColor;
+                    _draftParameters[schema.Key] = new int[] { sr, sg, sb };
+                    swatchBorder.Background = new SolidColorBrush(scaledColor);
+                    colorText.Text = $"#{sr:X2}{sg:X2}{sb:X2}  ({sr}, {sg}, {sb})";
+                }
+                finally
+                {
+                    syncingBgControls = false;
+                }
+                EvaluateDirty();
+            }
+
+            brightnessSlider.ValueChanged += (_, args) =>
+            {
+                if (_isApplyingModel || syncingBgControls) return;
+                ApplyBgFromBase((int)Math.Round(args.NewValue));
+            };
+
+            picker.ColorChanged += (s, args) =>
+            {
+                if (_isApplyingModel) return;
+                var c = args.NewColor;
+                _draftParameters[schema.Key] = new int[] { c.R, c.G, c.B };
+                swatchBorder.Background = new SolidColorBrush(c);
+                colorText.Text = $"#{c.R:X2}{c.G:X2}{c.B:X2}  ({c.R}, {c.G}, {c.B})";
+                if (!syncingBgControls)
+                {
+                    syncingBgControls = true;
+                    try
+                    {
+                        if (followCheck != null && followCheck.IsChecked == true)
+                            followCheck.IsChecked = false;
+                        int pct = ColorBrightnessHelper.GetBrightnessPercent(c.R, c.G, c.B);
+                        brightnessValueText.Text = $"{pct}%";
+                        brightnessSlider.Value = pct;
+                        if (Math.Max(c.R, Math.Max(c.G, c.B)) > 0)
+                            baseRgb = ColorBrightnessHelper.NormalizeToFullBrightness(c.R, c.G, c.B);
+                    }
+                    finally
+                    {
+                        syncingBgControls = false;
+                    }
+                }
+                EvaluateDirty();
+            };
+
+            var presetsRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+            foreach (int presetPct in new[] { 0, 15, 30, 100 })
+            {
+                var pBtn = new Button
+                {
+                    Content = $"{presetPct}%",
+                    Padding = new Thickness(8, 3, 8, 3)
+                };
+                int targetPct = presetPct;
+                pBtn.Click += (_, _) => ApplyBgFromBase(targetPct);
+                presetsRow.Children.Add(pBtn);
+            }
+
+            var flyoutPanel = new StackPanel { Spacing = 12 };
+            flyoutPanel.Children.Add(picker);
+            flyoutPanel.Children.Add(new Border
+            {
+                Height = 1,
+                Background = (Brush)Application.Current.Resources["DividerStrokeColorDefaultBrush"]
+            });
+            flyoutPanel.Children.Add(brightnessHeader);
+            flyoutPanel.Children.Add(brightnessSlider);
+            flyoutPanel.Children.Add(presetsRow);
+
+            if (followCheck != null)
+            {
+                followCheck.Checked += (_, _) =>
+                {
+                    if (_isApplyingModel) return;
+                    var accent = ExtractRgb(_draftParameters.GetValueOrDefault("color"));
+                    baseRgb = accent is { } ac
+                        ? ColorBrightnessHelper.NormalizeToFullBrightness(ac.r, ac.g, ac.b, baseRgb)
+                        : baseRgb;
+                    int curPct = (int)Math.Round(brightnessSlider.Value);
+                    if (curPct == 0) curPct = 15;
+                    ApplyBgFromBase(curPct);
+                };
+                _onAccentColorChanged = accent =>
+                {
+                    if (followCheck.IsChecked != true) return;
+                    baseRgb = ColorBrightnessHelper.NormalizeToFullBrightness(accent.r, accent.g, accent.b, baseRgb);
+                    ApplyBgFromBase((int)Math.Round(brightnessSlider.Value));
+                };
+                flyoutPanel.Children.Add(followCheck);
+            }
+
+            flyout.Content = flyoutPanel;
+        }
+        else
         {
-            Content = picker
-        };
+            picker.ColorChanged += (s, args) =>
+            {
+                if (_isApplyingModel) return;
+                var c = args.NewColor;
+                _draftParameters[schema.Key] = new int[] { c.R, c.G, c.B };
+                swatchBorder.Background = new SolidColorBrush(c);
+                colorText.Text = $"#{c.R:X2}{c.G:X2}{c.B:X2}  ({c.R}, {c.G}, {c.B})";
+                if (string.Equals(schema.Key, "color", StringComparison.OrdinalIgnoreCase))
+                    _onAccentColorChanged?.Invoke((c.R, c.G, c.B));
+                EvaluateDirty();
+            };
+            flyout.Content = picker;
+        }
         dropDownBtn.Flyout = flyout;
 
         container.Children.Add(dropDownBtn);
@@ -1030,43 +1186,7 @@ public sealed partial class LightingPage : Page
             ? [Math.Clamp(sc[0], 0, 255), Math.Clamp(sc[1], 0, 255), Math.Clamp(sc[2], 0, 255)]
             : [255, 80, 180];
 
-        if (HallOverlayColorCombo != null)
-        {
-            string tag = $"{_hallOverlayColor[0]},{_hallOverlayColor[1]},{_hallOverlayColor[2]}";
-            int idx = -1;
-            for (int i = 0; i < HallOverlayColorCombo.Items.Count; i++)
-            {
-                if (HallOverlayColorCombo.Items[i] is ComboBoxItem item &&
-                    string.Equals(item.Tag as string, tag, StringComparison.Ordinal))
-                {
-                    idx = i;
-                    break;
-                }
-            }
-            if (idx < 0)
-            {
-                ComboBoxItem? customItem = null;
-                for (int i = 0; i < HallOverlayColorCombo.Items.Count; i++)
-                {
-                    if (HallOverlayColorCombo.Items[i] is ComboBoxItem item &&
-                        item.Name == "CustomHallOverlayColorItem")
-                    {
-                        customItem = item;
-                        idx = i;
-                        break;
-                    }
-                }
-                if (customItem == null)
-                {
-                    customItem = new ComboBoxItem { Name = "CustomHallOverlayColorItem" };
-                    HallOverlayColorCombo.Items.Add(customItem);
-                    idx = HallOverlayColorCombo.Items.Count - 1;
-                }
-                customItem.Content = $"自定义 ({_hallOverlayColor[0]}, {_hallOverlayColor[1]}, {_hallOverlayColor[2]})";
-                customItem.Tag = tag;
-            }
-            HallOverlayColorCombo.SelectedIndex = idx;
-        }
+        UpdateHallColorDisplays();
 
         int pct = (int)Math.Round(Math.Clamp(_hallOverlay.Intensity, 0.0, 1.0) * 100.0);
         if (HallOverlayIntensitySlider != null) HallOverlayIntensitySlider.Value = pct;
@@ -1080,6 +1200,33 @@ public sealed partial class LightingPage : Page
         if (HallOverlaySaveBtn != null) HallOverlaySaveBtn.IsEnabled = false;
         if (HallOverlayStatusText != null)
             HallOverlayStatusText.Text = _hallOverlay.Enabled ? "已开启 · 与当前 Aura 灯效叠加运行" : "已关闭";
+    }
+
+    private void UpdateHallColorDisplays()
+    {
+        var primary = Windows.UI.Color.FromArgb(255, (byte)_hallOverlayColor[0], (byte)_hallOverlayColor[1], (byte)_hallOverlayColor[2]);
+        if (HallOverlayColorSwatch != null)
+            HallOverlayColorSwatch.Background = new SolidColorBrush(primary);
+        if (HallOverlayColorText != null)
+            HallOverlayColorText.Text = $"#{primary.R:X2}{primary.G:X2}{primary.B:X2}  ({primary.R}, {primary.G}, {primary.B})";
+        if (HallOverlayColorPicker != null && HallOverlayColorPicker.Color != primary)
+            HallOverlayColorPicker.Color = primary;
+
+        var secondary = Windows.UI.Color.FromArgb(255, (byte)_hallOverlaySecondaryColor[0], (byte)_hallOverlaySecondaryColor[1], (byte)_hallOverlaySecondaryColor[2]);
+        if (HallOverlaySecondaryColorSwatch != null)
+            HallOverlaySecondaryColorSwatch.Background = new SolidColorBrush(secondary);
+        if (HallOverlaySecondaryColorText != null)
+            HallOverlaySecondaryColorText.Text = $"#{secondary.R:X2}{secondary.G:X2}{secondary.B:X2}  ({secondary.R}, {secondary.G}, {secondary.B})";
+        if (HallOverlaySecondaryColorPicker != null && HallOverlaySecondaryColorPicker.Color != secondary)
+            HallOverlaySecondaryColorPicker.Color = secondary;
+
+        if (HallOverlaySecondaryColorPanel != null)
+        {
+            string mode = (HallOverlayModeCombo?.SelectedItem as ComboBoxItem)?.Tag as string ?? _hallOverlay?.Mode ?? "glow";
+            HallOverlaySecondaryColorPanel.Visibility = string.Equals(mode, "gradient", StringComparison.OrdinalIgnoreCase)
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+        }
     }
 
     private void MarkHallOverlayDirty()
@@ -1097,20 +1244,94 @@ public sealed partial class LightingPage : Page
         MarkHallOverlayDirty();
     }
 
-    private void HallOverlayControl_Changed(object sender, SelectionChangedEventArgs e)
+    private void HallOverlayModeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (HallOverlaySecondaryColorPanel != null)
+        {
+            string mode = (HallOverlayModeCombo?.SelectedItem as ComboBoxItem)?.Tag as string ?? "glow";
+            HallOverlaySecondaryColorPanel.Visibility = string.Equals(mode, "gradient", StringComparison.OrdinalIgnoreCase)
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+        }
+        if (_isApplyingModel) return;
+        MarkHallOverlayDirty();
+    }
+
+    private void HallOverlayColorPicker_ColorChanged(ColorPicker sender, ColorChangedEventArgs args)
     {
         if (_isApplyingModel) return;
-        if (HallOverlayColorCombo?.SelectedItem is ComboBoxItem { Tag: string rgbTag })
+        var c = args.NewColor;
+        _hallOverlayColor = [c.R, c.G, c.B];
+        if (HallOverlayColorSwatch != null)
+            HallOverlayColorSwatch.Background = new SolidColorBrush(c);
+        if (HallOverlayColorText != null)
+            HallOverlayColorText.Text = $"#{c.R:X2}{c.G:X2}{c.B:X2}  ({c.R}, {c.G}, {c.B})";
+        MarkHallOverlayDirty();
+    }
+
+    private void HallOverlaySecondaryColorPicker_ColorChanged(ColorPicker sender, ColorChangedEventArgs args)
+    {
+        if (_isApplyingModel) return;
+        var c = args.NewColor;
+        _hallOverlaySecondaryColor = [c.R, c.G, c.B];
+        if (HallOverlaySecondaryColorSwatch != null)
+            HallOverlaySecondaryColorSwatch.Background = new SolidColorBrush(c);
+        if (HallOverlaySecondaryColorText != null)
+            HallOverlaySecondaryColorText.Text = $"#{c.R:X2}{c.G:X2}{c.B:X2}  ({c.R}, {c.G}, {c.B})";
+        MarkHallOverlayDirty();
+    }
+
+    private static int[]? TryParseRgbTag(string? tag)
+    {
+        if (string.IsNullOrWhiteSpace(tag)) return null;
+        var parts = tag.Split(',');
+        if (parts.Length == 3 &&
+            int.TryParse(parts[0], out int r) &&
+            int.TryParse(parts[1], out int g) &&
+            int.TryParse(parts[2], out int b))
         {
-            var parts = rgbTag.Split(',');
-            if (parts.Length == 3 &&
-                int.TryParse(parts[0], out int r) &&
-                int.TryParse(parts[1], out int g) &&
-                int.TryParse(parts[2], out int b))
-            {
-                _hallOverlayColor = [Math.Clamp(r, 0, 255), Math.Clamp(g, 0, 255), Math.Clamp(b, 0, 255)];
-            }
+            return [Math.Clamp(r, 0, 255), Math.Clamp(g, 0, 255), Math.Clamp(b, 0, 255)];
         }
+        return null;
+    }
+
+    private void HallOverlayQuickColor_Click(object sender, RoutedEventArgs e)
+    {
+        if (_isApplyingModel || sender is not Button { Tag: string tag }) return;
+        if (TryParseRgbTag(tag) is not { } rgb) return;
+        _hallOverlayColor = rgb;
+        _isApplyingModel = true;
+        try { UpdateHallColorDisplays(); }
+        finally { _isApplyingModel = false; }
+        MarkHallOverlayDirty();
+    }
+
+    private void HallOverlayQuickSecondaryColor_Click(object sender, RoutedEventArgs e)
+    {
+        if (_isApplyingModel || sender is not Button { Tag: string tag }) return;
+        if (TryParseRgbTag(tag) is not { } rgb) return;
+        _hallOverlaySecondaryColor = rgb;
+        _isApplyingModel = true;
+        try { UpdateHallColorDisplays(); }
+        finally { _isApplyingModel = false; }
+        MarkHallOverlayDirty();
+    }
+
+    private void HallOverlayUseBaseColor_Click(object sender, RoutedEventArgs e)
+    {
+        if (_isApplyingModel) return;
+        var baseRgb = ExtractRgb(_draftParameters.GetValueOrDefault("color"))
+            ?? ExtractRgb(_draftParameters.GetValueOrDefault("color1"));
+        if (baseRgb is not { } rgb)
+        {
+            if (HallOverlayStatusText != null)
+                HallOverlayStatusText.Text = "当前默认灯效不含单色参数";
+            return;
+        }
+        _hallOverlayColor = [Math.Clamp(rgb.r, 0, 255), Math.Clamp(rgb.g, 0, 255), Math.Clamp(rgb.b, 0, 255)];
+        _isApplyingModel = true;
+        try { UpdateHallColorDisplays(); }
+        finally { _isApplyingModel = false; }
         MarkHallOverlayDirty();
     }
 
