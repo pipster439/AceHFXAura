@@ -3,8 +3,8 @@
     Aura Release Packaging & Automated Regression Pipeline for Windows 11 x64.
 .DESCRIPTION
     完整的 AceHFXAura 独立发布包自动化构建、多阶段质量网关验证、资产打包与合规审计流水线。
-    默认执行全量端到端验证（C++ 编译 -> CTest -> 磁轴协议压测 -> .NET 测试 -> 前端测试与打包 ->
-    WinUI 自包含发布 -> 运行时资产组装 -> 分发包审计 -> 独立包运行时 Smoke 测试 -> SHA-256 生成）。
+    默认执行全量端到端验证（C++ / Rust 插件编译 -> CTest -> 磁轴协议压测 -> .NET 测试 -> 前端测试与打包 ->
+    WinUI 自包含发布 -> 运行时资产与插件/部署脚本组装 -> 分发包安全审计 -> 独立包运行时与一键部署 Smoke 测试 -> SHA-256 生成）。
 
 .PARAMETER Mode
     打包模式:
@@ -18,7 +18,10 @@
     显式跳过自动化测试套件（等效于 -Mode Fast）。
 
 .PARAMETER SkipBuild
-    跳过 C++ Native 编译，直接复用已有的 Release 产物。
+    跳过 C++ Native / Rust 桥接编译，直接复用已有的 Release 产物。
+
+.PARAMETER SkipFrontend
+    跳过 frontend 的 npm test / npm run build，直接复用仓库内已构建好的 web/index.html。
 
 .PARAMETER SkipZip
     跳过最终 ZIP 压缩包生成，仅保留已校验的候选解压目录。
@@ -50,8 +53,8 @@
     快速生成发布包（跳过测试，适合本地快速验证打包结构）。
 
 .EXAMPLE
-    .\package_release.ps1 -SkipBuild -SkipTests
-    复用已有构建产物快速打包。
+    .\package_release.ps1 -SkipBuild -SkipTests -SkipFrontend
+    复用已有构建产物与预构建前端快速打包发布。
 
 .EXAMPLE
     .\package_release.ps1 -Mode TestOnly -RepeatMagneticTests 20
@@ -63,8 +66,13 @@ param(
     [ValidateSet("Full", "Fast", "PackageOnly", "TestOnly", "Legacy")]
     [string]$Mode = "Full",
 
+    [switch]$Fast,
+    [switch]$PackageOnly,
+    [switch]$TestOnly,
+    [switch]$Legacy,
     [switch]$SkipTests,
     [switch]$SkipBuild,
+    [switch]$SkipFrontend,
     [switch]$SkipZip,
     [switch]$Clean,
     [string]$BuildDir = "build",
@@ -90,17 +98,18 @@ if ($ExtraArgs) {
     for ($i = 0; $i -lt $ExtraArgs.Count; $i++) {
         $arg = $ExtraArgs[$i]
         switch -Regex ($arg) {
-            "^--?h(elp)?$"    { $Help = $true }
-            "^-\?$"           { $Help = $true }
-            "^--skip-build$"  { $SkipBuild = $true }
-            "^--skip-tests$"  { $SkipTests = $true }
-            "^--fast$"        { $Mode = "Fast" }
-            "^--package-only$"{ $Mode = "PackageOnly" }
-            "^--test-only$"   { $Mode = "TestOnly" }
-            "^--legacy$"      { $Mode = "Legacy" }
-            "^--skip-zip$"    { $SkipZip = $true }
-            "^--clean$"       { $Clean = $true }
-            "^--build-dir$"   {
+            "^--?h(elp)?$"       { $Help = $true }
+            "^-\?$"              { $Help = $true }
+            "^--?skip-build$"    { $SkipBuild = $true }
+            "^--?skip-frontend$" { $SkipFrontend = $true }
+            "^--?skip-tests$"    { $SkipTests = $true }
+            "^--?fast$"          { $Fast = $true }
+            "^--?package-only$"  { $PackageOnly = $true }
+            "^--?test-only$"     { $TestOnly = $true }
+            "^--?legacy$"        { $Legacy = $true }
+            "^--?skip-zip$"      { $SkipZip = $true }
+            "^--?clean$"         { $Clean = $true }
+            "^--build-dir$"      {
                 if ($i + 1 -lt $ExtraArgs.Count) {
                     $BuildDir = $ExtraArgs[++$i]
                 }
@@ -114,6 +123,16 @@ if ($ExtraArgs) {
     }
 }
 
+if ($Legacy) {
+    $Mode = "Legacy"
+} elseif ($TestOnly) {
+    $Mode = "TestOnly"
+} elseif ($PackageOnly) {
+    $Mode = "PackageOnly"
+} elseif ($Fast) {
+    $Mode = "Fast"
+}
+
 if ($Help) {
     Write-Host @"
 =========================================================
@@ -122,7 +141,7 @@ if ($Help) {
 
 用法:
     .\package_release.ps1 [-Mode <Full|Fast|PackageOnly|TestOnly|Legacy>]
-                          [-SkipTests] [-SkipBuild] [-SkipZip] [-Clean]
+                          [-SkipTests] [-SkipBuild] [-SkipFrontend] [-SkipZip] [-Clean]
                           [-BuildDir <目录>] [-Configuration <Release|Debug>]
                           [-Generator <CMake生成器>] [-RepeatMagneticTests <次数>]
                           [-Help]
@@ -134,8 +153,8 @@ if ($Help) {
     .\package_release.ps1 -Fast
         快速打包模式 (跳过自动化测试，适合本地快速验证发布结构)
 
-    .\package_release.ps1 -SkipBuild -SkipTests
-        复用已有 C++ Release 构建产物快速打包发布
+    .\package_release.ps1 -SkipBuild -SkipTests -SkipFrontend
+        复用已有 C++ Release 构建产物与预构建前端快速打包发布
 
     .\package_release.ps1 -Mode TestOnly -RepeatMagneticTests 20
         仅运行全部测试网关与 20 次磁轴协议压测，不生成打包产物
@@ -143,7 +162,8 @@ if ($Help) {
 参数说明:
     -Mode                  打包模式: Full(默认全量), Fast(跳过测试), PackageOnly(跳过构建与测试), TestOnly(仅测试), Legacy(旧版C++启动器)
     -SkipTests             跳过回归测试网关 (等效于 -Mode Fast)
-    -SkipBuild             跳过 C++ Native 编译 (复用既有 Release 二进制)
+    -SkipBuild             跳过 C++ Native / Rust 桥接编译 (复用既有 Release 二进制)
+    -SkipFrontend          跳过前端 npm test / build (复用仓库内 web/index.html)
     -SkipZip               仅输出并验证候选目录，不生成 .zip 压缩包
     -Clean                 构建前清理 build/ 与临时 dist 目录
     -BuildDir              C++ 构建目录名称 (默认: build)
@@ -235,6 +255,7 @@ Write-Success "Python 解释器: $PythonExe (v$pyVer)"
 
 # 1.2 Git 与代码仓库状态
 $CommitSha = "unknown"
+$FullSha = "unknown"
 $Branch = "unknown"
 if (Get-Command git -ErrorAction SilentlyContinue) {
     $CommitSha = (git rev-parse --short HEAD) 2>$null
@@ -254,6 +275,7 @@ if ([string]::IsNullOrWhiteSpace($ReleaseVersion)) {
     Write-Fail "VERSION 文件内容为空！"
     exit 1
 }
+$CleanVersion = $ReleaseVersion.TrimStart('v')
 Write-Success "发行版本单一事实源: $ReleaseVersion"
 
 # 1.4 CMake
@@ -278,14 +300,34 @@ if (-not $NpmCmd) {
     $NpmCmd = (Get-Command npm -ErrorAction SilentlyContinue)
 }
 if (-not $NpmCmd) {
-    Write-Fail "未在 PATH 中找到 npm！"
-    exit 1
+    if ($SkipFrontend -and -not $RunTests) {
+        Write-Warn "未在 PATH 中找到 npm，但已指定 -SkipFrontend，将继续复用预构建前端。"
+    } else {
+        Write-Fail "未在 PATH 中找到 npm！"
+        exit 1
+    }
+} else {
+    $nodeVer = (node --version)
+    $npmVer = (& $NpmCmd.Source --version)
+    Write-Success "Node.js $nodeVer / npm v$npmVer"
 }
-$nodeVer = (node --version)
-$npmVer = (& $NpmCmd.Source --version)
-Write-Success "Node.js $nodeVer / npm v$npmVer"
 
-# 1.7 Visual Studio 工具链探测
+# 1.7 Rust / Cargo (Wooting 桥接可选/推荐工具链)
+$CargoExe = $null
+$cargoCmd = Get-Command cargo -ErrorAction SilentlyContinue
+if ($cargoCmd) {
+    $CargoExe = $cargoCmd.Source
+} elseif (Test-Path (Join-Path $env:USERPROFILE ".cargo\bin\cargo.exe")) {
+    $CargoExe = Join-Path $env:USERPROFILE ".cargo\bin\cargo.exe"
+}
+if ($CargoExe) {
+    $cargoVer = (& $CargoExe --version)
+    Write-Success "Rust Cargo (Wooting 桥接): $cargoVer"
+} else {
+    Write-Info "未在 PATH 中找到 cargo：如本地已有编译好的 Wooting 桥接 DLL 将继续复用。"
+}
+
+# 1.8 Visual Studio 工具链探测
 $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
 $VsToolchainDir = $null
 $DetectedGenerator = $Generator
@@ -354,20 +396,23 @@ if ($Clean) {
 }
 
 # ---------------------------------------------------------
-# 步骤 3: C++ Release 目标编译
+# 步骤 3: C++ & Rust Release 目标编译
 # ---------------------------------------------------------
 $FullBuildDir = Join-Path $RepoRoot $BuildDir
 $ReleaseBinDir = Join-Path $FullBuildDir $Configuration
 $DaemonExe = Join-Path $ReleaseBinDir "aura_daemon.exe"
 $WebUiExe = Join-Path $ReleaseBinDir "aura_web_ui.exe"
+$HallPluginDll = Join-Path $ReleaseBinDir "effect_hall_reactive.dll"
+$WootingManifest = Join-Path $RepoRoot "plugins\bridges\wooting-analog-m605\Cargo.toml"
+$WootingDll = Join-Path $RepoRoot "plugins\bridges\wooting-analog-m605\target\release\wooting_analog_plugin_aura_m605.dll"
 $CurrentCache = Join-Path $FullBuildDir "CMakeCache.txt"
 
 if (-not $SkipBuild) {
-    Write-Step "3/9" "编译 C++ Native 运行时与测试目标 ($Configuration)"
+    Write-Step "3/9" "编译 C++ Native 运行时与扩展插件 ($Configuration)"
     if (-not (Test-Path $FullBuildDir)) {
         New-Item -ItemType Directory -Path $FullBuildDir -Force | Out-Null
     }
-    
+
     if (-not (Test-Path $CurrentCache)) {
         Write-Info "初始化配置 CMake (-G `"$DetectedGenerator`" -A x64)..."
         Assert-Command { cmake -S $RepoRoot -B $FullBuildDir -G "$DetectedGenerator" -A x64 } "CMake 配置失败"
@@ -383,10 +428,21 @@ if (-not $SkipBuild) {
         Write-Fail "编译完成但核心产物缺失: aura_daemon.exe 或 aura_web_ui.exe 不存在！"
         exit 1
     }
+    if (-not (Test-Path $HallPluginDll)) {
+        Write-Fail "编译完成但内置霍尔示例插件缺失: $HallPluginDll"
+        exit 1
+    }
     Write-Success "aura_daemon.exe: $((Get-Item $DaemonExe).Length) 字节"
     Write-Success "aura_web_ui.exe: $((Get-Item $WebUiExe).Length) 字节"
+    Write-Success "effect_hall_reactive.dll: $((Get-Item $HallPluginDll).Length) 字节"
+
+    if ($CargoExe -and (Test-Path $WootingManifest)) {
+        Write-Info "构建 Wooting Analog SDK Rust 桥接 DLL..."
+        Assert-Command { & $CargoExe build --release --manifest-path $WootingManifest } "Wooting 桥接 Rust 构建失败"
+        Write-Success "wooting_analog_plugin_aura_m605.dll: $((Get-Item $WootingDll).Length) 字节"
+    }
 } else {
-    Write-Step "3/9" "跳过 C++ 编译 (-SkipBuild)"
+    Write-Step "3/9" "跳过 C++ / Rust 编译 (-SkipBuild)"
     if (-not (Test-Path $DaemonExe) -or -not (Test-Path $WebUiExe)) {
         Write-Fail "指定的构建目录缺少必要二进制: $DaemonExe 或 $WebUiExe"
         exit 1
@@ -402,7 +458,7 @@ $TestSummary = @{}
 if ($RunTests) {
     Write-Step "4/9" "执行自动化回归测试质量网关"
 
-    # 4.1 CTest 核心套件 (19个测试)
+    # 4.1 CTest 核心套件
     Write-Info "运行 CTest 测试套件..."
     $env:AURA_BIN_DIR = $ReleaseBinDir
     $env:AURA_INTEGRATION_BIN = $ReleaseBinDir
@@ -429,26 +485,39 @@ if ($RunTests) {
     $TestSummary["DotNetTests"] = "PASS"
 
     # 4.4 前端单页应用单元测试
-    Write-Info "运行前端单元测试 (npm test)..."
-    Assert-Command {
-        Set-Location (Join-Path $RepoRoot "frontend")
-        & $NpmCmd.Source test
-        Set-Location $RepoRoot
-    } "前端单元测试未通过"
-    Write-Success "前端单元测试全部通过。"
-    $TestSummary["FrontendTests"] = "PASS"
+    if ($SkipFrontend -and -not (Test-Path (Join-Path $RepoRoot "frontend\node_modules"))) {
+        Write-Warn "已指定 -SkipFrontend 且缺少 frontend/node_modules，跳过 npm test。"
+        $TestSummary["FrontendTests"] = "SKIPPED (-SkipFrontend)"
+    } else {
+        Write-Info "运行前端单元测试 (npm test)..."
+        Assert-Command {
+            Set-Location (Join-Path $RepoRoot "frontend")
+            & $NpmCmd.Source test
+            Set-Location $RepoRoot
+        } "前端单元测试未通过"
+        Write-Success "前端单元测试全部通过。"
+        $TestSummary["FrontendTests"] = "PASS"
+    }
 
-    # 4.5 Python 守护进程与端点回归测试
-    Write-Info "运行 Python Daemon & WebUI 进阶回归测试..."
+    # 4.5 Python 守护进程、MCP 与打包护栏回归测试
+    Write-Info "运行 Python Daemon / WebUI / MCP / 打包护栏回归测试..."
     Assert-Command {
         Set-Location (Join-Path $RepoRoot "tests")
         & $PythonExe -B -m unittest -v test_runtime_entrypoints.TestWebUiEntrypoint test_runtime_entrypoints.TestDaemonEntrypoint test_automation_v2_daemon test_automation_authoring_daemon test_automation_effect_daemon test_automation_reload_daemon test_automation_retrigger_daemon test_global_lighting_daemon
-        & $PythonExe -B -m unittest -v test_winui_productization.TestGsiConfigurationContract
-        & $PythonExe -B -m unittest -v test_studio_release_regression
+        if ($LASTEXITCODE -ne 0) { Set-Location $RepoRoot; exit $LASTEXITCODE }
+        & $PythonExe -B -m unittest -v test_winui_productization.TestGsiConfigurationContract test_studio_release_regression test_aura_mcp_server test_release_archive_guards test_package_metadata test_deploy_script
         Set-Location $RepoRoot
     } "Python 进阶回归测试未通过"
     Write-Success "Python 进阶回归测试网关全部通过。"
     $TestSummary["PythonRegression"] = "PASS"
+
+    # 4.6 Rust Wooting 桥接测试 (如存在 cargo)
+    if ($CargoExe -and (Test-Path $WootingManifest)) {
+        Write-Info "运行 Wooting 桥接 Rust 单元测试..."
+        Assert-Command { & $CargoExe test --manifest-path $WootingManifest } "Wooting 桥接 Rust 测试未通过"
+        Write-Success "Wooting 桥接 Rust 测试通过。"
+        $TestSummary["RustBridgeTests"] = "PASS"
+    }
 } else {
     Write-Step "4/9" "跳过回归测试套件 (-Mode $Mode / -SkipTests)"
     $TestSummary["Tests"] = "SKIPPED"
@@ -457,19 +526,28 @@ if ($RunTests) {
 # ---------------------------------------------------------
 # 步骤 5: 前端单页应用生产构建
 # ---------------------------------------------------------
-Write-Step "5/9" "构建前端 React 生产打包资源 (web/index.html)"
 $WebHtml = Join-Path $RepoRoot "web\index.html"
-Assert-Command {
-    Set-Location (Join-Path $RepoRoot "frontend")
-    & $NpmCmd.Source run build
-    Set-Location $RepoRoot
-} "前端打包构建失败"
+if ($SkipFrontend) {
+    Write-Step "5/9" "跳过前端构建 (-SkipFrontend)，复用已有 web/index.html"
+    if (-not (Test-Path $WebHtml) -or (Get-Item $WebHtml).Length -lt 1000) {
+        Write-Fail "web/index.html 缺失或无效，无法使用 -SkipFrontend！"
+        exit 1
+    }
+    Write-Success "复用预构建 web/index.html ($((Get-Item $WebHtml).Length) 字节)"
+} else {
+    Write-Step "5/9" "构建前端 React 生产打包资源 (web/index.html)"
+    Assert-Command {
+        Set-Location (Join-Path $RepoRoot "frontend")
+        & $NpmCmd.Source run build
+        Set-Location $RepoRoot
+    } "前端打包构建失败"
 
-if (-not (Test-Path $WebHtml) -or (Get-Item $WebHtml).Length -lt 1000) {
-    Write-Fail "web/index.html 生成异常！"
-    exit 1
+    if (-not (Test-Path $WebHtml) -or (Get-Item $WebHtml).Length -lt 1000) {
+        Write-Fail "web/index.html 生成异常！"
+        exit 1
+    }
+    Write-Success "web/index.html 构建完成 ($((Get-Item $WebHtml).Length) 字节)"
 }
-Write-Success "web/index.html 构建完成 ($((Get-Item $WebHtml).Length) 字节)"
 
 if ($Mode -eq "TestOnly") {
     Write-Header "测试网关全部通过！(-Mode TestOnly 模式下不执行打包)"
@@ -483,6 +561,9 @@ Write-Step "6/9" "发布 WinUI 桌面客户端并组装发布目录"
 
 $pkgScript = Join-Path $RepoRoot "tools\package_release.py"
 $pkgArgs = @("--build-dir", $BuildDir, "--skip-build")
+if ($SkipFrontend) {
+    $pkgArgs += "--skip-frontend"
+}
 if ($SkipZip) {
     $pkgArgs += "--skip-zip"
 }
@@ -496,7 +577,7 @@ Assert-Command { & $PythonExe $pkgScript @pkgArgs } "发行包发布组装失败
 # ---------------------------------------------------------
 # 步骤 7: 分发包内容审计与合规验证
 # ---------------------------------------------------------
-Write-Step "7/9" "审计分发包合规性与资产完整性"
+Write-Step "7/9" "审计分发包合规性、私钥泄漏与资产完整性"
 
 $DistDir = Join-Path $RepoRoot "dist"
 $CandidateDir = Get-ChildItem $DistDir -Directory -Filter "Aura-v*-windows-x64-*" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
@@ -511,9 +592,34 @@ Write-Success "定位最新候选包目录: $($CandidateDir.FullName)"
 Assert-Command {
     & $PythonExe (Join-Path $RepoRoot "tools\package_winui.py") --verify $CandidateDir.FullName
 } "候选包目录结构校验未通过"
-Write-Success "候选包依赖清单与 runtime-manifest 校验完全一致。"
+Write-Success "候选包依赖清单、扩展插件与 runtime-manifest 校验完全一致。"
 
-# 7.2 严防专有 HAL 与用户数据泄露
+$ZipFile = Join-Path $DistDir "Aura-v$CleanVersion-windows-x64.zip"
+$ShaFile = "$ZipFile.sha256"
+
+# 7.2 调用官方 CI 发布包合规与路径泄漏审计
+$verifyCiScript = Join-Path $RepoRoot "tools\ci\verify_release_package.py"
+$auditReportTemp = Join-Path $env:TEMP ("aura-release-audit-" + [Guid]::NewGuid().ToString("N") + ".json")
+try {
+    $ciVerifyArgs = @(
+        $verifyCiScript,
+        "--directory", $CandidateDir.FullName,
+        "--version", $CleanVersion,
+        "--private-path", $RepoRoot,
+        "--output", $auditReportTemp
+    )
+    if (-not $SkipZip -and (Test-Path $ZipFile)) {
+        $ciVerifyArgs += @("--zip", $ZipFile)
+    }
+    Assert-Command { & $PythonExe @ciVerifyArgs } "分发包安全合规与路径泄漏审计失败"
+    Write-Success "verify_release_package.py 审计通过（无私有路径泄漏、无凭证残留、ZIP 路径与 CRC 合法）。"
+} finally {
+    if (Test-Path $auditReportTemp) {
+        Remove-Item -LiteralPath $auditReportTemp -Force -ErrorAction SilentlyContinue
+    }
+}
+
+# 7.3 严防专有 HAL 与用户数据泄露
 $forbiddenFound = $false
 Get-ChildItem -Path $CandidateDir.FullName -Recurse | ForEach-Object {
     $name = $_.Name.ToLower()
@@ -541,25 +647,25 @@ if ($forbiddenFound) {
 Write-Success "安全合规审计通过：无 ASUS 专有 HAL、无用户配置、无本地标记、无审计残留。"
 
 # ---------------------------------------------------------
-# 步骤 8: 独立分发包运行时 Smoke 测试
+# 步骤 8: 独立分发包运行时 & 一键部署 Smoke 测试
 # ---------------------------------------------------------
-Write-Step "8/9" "执行独立包脱离源码环境运行时 Smoke 测试"
+Write-Step "8/9" "执行独立包脱离源码环境运行时与一键部署 Smoke 测试"
 
 $env:AURA_PACKAGE_DIR = $CandidateDir.FullName
+if (-not $SkipZip -and (Test-Path $ZipFile)) {
+    $env:AURA_PACKAGE_ZIP = $ZipFile
+}
 Assert-Command {
     Set-Location (Join-Path $RepoRoot "tests")
-    & $PythonExe -B -m unittest -v test_winui_productization.TestPackagedRuntime
+    & $PythonExe -B -m unittest -v test_winui_productization.TestPackagedRuntime test_deploy_script
     Set-Location $RepoRoot
-} "独立分发包运行时 Smoke 测试失败"
-Write-Success "分发包脱离源码运行环境 Smoke 测试通过。"
+} "独立分发包运行时或一键部署 Smoke 测试失败"
+Write-Success "分发包脱离源码运行环境与一键部署 Smoke 测试通过。"
 
 # ---------------------------------------------------------
 # 步骤 9: 生成分发包哈希与报告
 # ---------------------------------------------------------
 Write-Step "9/9" "验证发布候选 ZIP 包与哈希校验码"
-
-$ZipFile = Join-Path $DistDir "Aura-v$ReleaseVersion-windows-x64.zip"
-$ShaFile = "$ZipFile.sha256"
 
 if (-not $SkipZip) {
     if (-not (Test-Path $ZipFile)) {
@@ -582,18 +688,19 @@ if (-not $SkipZip) {
     # ---------------------------------------------------------
     # 成功总结面板
     # ---------------------------------------------------------
-    Write-Header "AceHFXAura v$ReleaseVersion 发布包构建与审计顺利完成！"
-    Write-Host "  [版本编号]  : v$ReleaseVersion" -ForegroundColor Green
+    Write-Header "AceHFXAura v$CleanVersion 发布包构建与审计顺利完成！"
+    Write-Host "  [版本编号]  : v$CleanVersion" -ForegroundColor Green
     Write-Host "  [源码提交]  : $CommitSha ($FullSha)" -ForegroundColor Gray
     Write-Host "  [发布产物]  : $ZipFile" -ForegroundColor Cyan
     Write-Host "  [文件大小]  : $([math]::Round($zipSize / 1MB, 2)) MB ($($zipSize.ToString('N0')) 字节)" -ForegroundColor Gray
     Write-Host "  [SHA-256]   : $zipSha" -ForegroundColor Yellow
     Write-Host "  [解压目录]  : $($CandidateDir.FullName)" -ForegroundColor Gray
+    Write-Host "  [部署入口]  : deploy_aura.bat / deploy_aura.ps1 (已包含于发布包根目录)" -ForegroundColor Cyan
     Write-Host "  [测试状态]  : 全部测试网关通过 ($($TestSummary.Keys.Count) 组)" -ForegroundColor Green
     Write-Host "  [实机验收]  : PENDING OWNER TEST (等待仓库所有者真机物理测试)" -ForegroundColor DarkYellow
     Write-Host "`n提示: 本脚本已完成纯自动化准备；正式发布前请勿执行 git push 或创建 GitHub Release。" -ForegroundColor Gray
 } else {
-    Write-Header "AceHFXAura v$ReleaseVersion 目录式候选包构建完成！(--SkipZip 已指定)"
+    Write-Header "AceHFXAura v$CleanVersion 目录式候选包构建完成！(--SkipZip 已指定)"
     Write-Host "  [候选目录]  : $($CandidateDir.FullName)" -ForegroundColor Cyan
 }
 

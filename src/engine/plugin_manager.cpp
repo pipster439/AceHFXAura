@@ -434,7 +434,7 @@ TriggeredEffectInstance PluginManager::Instantiate(std::shared_ptr<const PluginE
                                                    std::shared_ptr<bool> destruction_failed, bool quiet) {
     if(generation&&generation->program) {
         try {
-            auto effect=std::shared_ptr<Effect>(new ProgramEffect(generation->program,&logical_keyboard_host),
+            auto effect=std::shared_ptr<Effect>(new ProgramEffect(generation->program,&logical_keyboard_host,&hall_analog_host),
                 [owner=generation](Effect* pointer){delete pointer;});
             static_cast<ProgramEffect*>(effect.get())->SetGenerationId(generation->generation_id);
             return TriggeredEffectInstance(std::move(generation),std::move(effect));
@@ -630,6 +630,19 @@ std::shared_ptr<const PluginEntry> PluginManager::PrepareEffectGeneration(const 
 bool PluginManager::HasPlugin(const std::string& effect_name) const {
     std::lock_guard<std::mutex> lock(mutex_);
     return plugins_.find(effect_name) != plugins_.end();
+}
+
+bool PluginManager::PluginUsesHallAnalog(const std::string& effect_name) const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto it = plugins_.find(effect_name);
+    if (it == plugins_.end() || !it->second) return false;
+    const auto& entry = *it->second;
+    if (entry.hall_analog.version == AURA_HALL_ANALOG_VERSION && entry.hall_analog.bind != nullptr) return true;
+    return entry.program && entry.program->UsesHall();
+}
+
+const AuraHallAnalogHostV1* PluginManager::GetHallAnalogHost() {
+    return &hall_analog_host;
 }
 
 std::vector<PluginSummary> PluginManager::GetPluginSummaries() const {

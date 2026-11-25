@@ -931,6 +931,128 @@ bool LightingControlService::ValidatePatchRequestSecurity(const httplib::Request
     return true;
 }
 
+LightingControlService::OpResult LightingControlService::UpdateDefaultProfile(
+    const std::string& profile_name, const std::string& expected_revision, std::string& out_new_revision) {
+    if (expected_revision.empty() || profile_name.empty()) {
+        return {400, "Validation Error", "Missing required fields 'expected_revision' or 'default_profile'", ""};
+    }
+
+    NamedConfigLock lock(kConfigWriteMutexName, 5000);
+    if (!lock.IsAcquired()) {
+        return {500, "Internal Error", "Failed to acquire cross-process configuration lock", ""};
+    }
+
+    std::string content;
+    std::string current_rev;
+    if (!ReadRawConfigFile(content, current_rev)) {
+        return {500, "Internal Error", "Failed to read configuration file", ""};
+    }
+
+    if (current_rev != expected_revision) {
+        return {409, "Conflict", "Configuration has been modified externally", current_rev};
+    }
+
+    try {
+        auto root = nlohmann::ordered_json::parse(content);
+        if (!root.is_object()) {
+            return {500, "Config Error", "Configuration root must be a JSON object", current_rev};
+        }
+        if (!root.contains("profiles") || !root["profiles"].is_object()) {
+            return {500, "Config Error", "Configuration root missing 'profiles' object", current_rev};
+        }
+        if (!root["profiles"].contains(profile_name) || !root["profiles"][profile_name].is_object()) {
+            return {404, "Profile Not Found", "Lighting profile '" + profile_name + "' does not exist", current_rev};
+        }
+
+        if (root.contains("default_profile") && root["default_profile"].is_string() &&
+            root["default_profile"].get<std::string>() == profile_name) {
+            out_new_revision = current_rev;
+            return {200, "", "Default lighting profile unchanged", current_rev};
+        }
+
+        root["default_profile"] = profile_name;
+        std::string formatted = root.dump(2);
+        if (!AtomicWriteConfigFile(config_path_, formatted, file_replacer_)) {
+            return {500, "Internal Error", "Failed to atomically replace configuration file", current_rev};
+        }
+        out_new_revision = ComputeFileRevision(formatted);
+        return {200, "", "Default lighting profile switched", out_new_revision};
+    } catch (const std::exception& e) {
+        return {500, "Internal Error", std::string("Failed to mutate configuration: ") + e.what(), current_rev};
+    }
+}
+
+LightingControlService::OpResult LightingControlService::GetHallLightingOverlay(
+    HallLightingConfig& out_cfg, std::string& out_revision) {
+    std::string content;
+    if (!ReadRawConfigFile(content, out_revision)) {
+        return {500, "Read Error", "Cannot read configuration", ""};
+    }
+    try {
+        auto root = nlohmann::ordered_json::parse(content);
+        if (!root.is_object()) {
+            return {500, "Config Error", "Configuration must be an object", out_revision};
+        }
+        out_cfg = ParseHallLightingConfig(nlohmann::json::parse(content));
+        return {200, "", "ok", out_revision};
+    } catch (const std::exception& e) {
+        return {500, "Config Error", e.what(), out_revision};
+    }
+}
+
+LightingControlService::OpResult LightingControlService::UpdateHallLightingOverlayPatch(
+    const nlohmann::json& patch_fields, const std::string& expected_revision,
+    HallLightingConfig& out_cfg, std::string& out_new_revision) {
+    if (expected_revision.empty()) {
+        return {400, "Validation Error", "Missing required 'expected_revision'", ""};
+    }
+    if (!patch_fields.is_object()) {
+        return {400, "Validation Error", "Patch payload must be a JSON object", ""};
+    }
+
+    NamedConfigLock lock(kConfigWriteMutexName, 5000);
+    if (!lock.IsAcquired()) {
+        return {500, "Internal Error", "Failed to acquire cross-process configuration lock", ""};
+    }
+
+    std::string content;
+    std::string current_rev;
+    if (!ReadRawConfigFile(content, current_rev)) {
+        return {500, "Internal Error", "Failed to read configuration file", ""};
+    }
+    if (current_rev != expected_revision) {
+        return {409, "Conflict", "Configuration has been modified externally", current_rev};
+    }
+
+    try {
+        auto root = nlohmann::ordered_json::parse(content);
+        if (!root.is_object()) {
+            return {500, "Config Error", "Configuration root must be a JSON object", current_rev};
+        }
+        HallLightingConfig merged = ParseHallLightingConfig(nlohmann::json::parse(content));
+        nlohmann::ordered_json hl = HallLightingToJson(merged);
+        for (auto it = patch_fields.begin(); it != patch_fields.end(); ++it) {
+            if (it.key() == "expected_revision") continue;
+            hl[it.key()] = it.value();
+        }
+        root["hall_lighting"] = hl;
+        nlohmann::json validate_doc = nlohmann::json::parse(root.dump());
+        ValidateConfigDocument(validate_doc);
+        out_cfg = ParseHallLightingConfig(validate_doc);
+
+        std::string formatted = root.dump(2);
+        if (!AtomicWriteConfigFile(config_path_, formatted, file_replacer_)) {
+            return {500, "Internal Error", "Failed to atomically replace configuration file", current_rev};
+        }
+        out_new_revision = ComputeFileRevision(formatted);
+        return {200, "", "Hall lighting overlay updated", out_new_revision};
+    } catch (const std::runtime_error& e) {
+        return {400, "Validation Error", e.what(), current_rev};
+    } catch (const std::exception& e) {
+        return {500, "Internal Error", std::string("Failed to mutate configuration: ") + e.what(), current_rev};
+    }
+}
+
 LightingControlService::OpResult LightingControlService::GetGlobalFps(int& fps, std::string& revision) {
     std::string content;
     if (!ReadRawConfigFile(content, revision)) return {500, "Read Error", "Cannot read configuration", ""};
@@ -1389,6 +1511,136 @@ void LightingControlService::RegisterRoutes(httplib::Server& svr) {
                 err_j["current_revision"] = op.current_revision;
             }
             res.set_content(err_j.dump(), "application/json; charset=utf-8");
+        }
+    });
+
+    // 7. GET/PATCH /api/lighting/hall-overlay - 霍尔压感联动灯效叠加配置
+    svr.Get("/api/lighting/hall-overlay", [this](const httplib::Request&, httplib::Response& res) {
+        HallLightingConfig cfg;
+        std::string rev;
+        auto op = GetHallLightingOverlay(cfg, rev);
+        res.status = op.http_status;
+        if (op.http_status == 200) {
+            res.set_content(nlohmann::json{
+                {"status", "ok"},
+                {"api_version", 1},
+                {"revision", rev},
+                {"hall_lighting", HallLightingToJson(cfg)}
+            }.dump(), "application/json; charset=utf-8");
+        } else {
+            res.set_content(nlohmann::json{{"status", "error"}, {"error", op.error_code}, {"message", op.message}}.dump(),
+                            "application/json; charset=utf-8");
+        }
+    });
+
+    svr.Patch("/api/lighting/hall-overlay", [this](const httplib::Request& req, httplib::Response& res) {
+        if (!ValidatePatchRequestSecurity(req, res)) return;
+        std::string expected_rev;
+        nlohmann::json body;
+        try {
+            body = nlohmann::json::parse(req.body);
+            if (!body.is_object()) {
+                res.status = 400;
+                res.set_content(R"json({"status":"error","error":"Validation Error","message":"Request body must be a JSON object"})json", "application/json; charset=utf-8");
+                return;
+            }
+            static const std::unordered_set<std::string> kAllowed = {
+                "expected_revision", "enabled", "mode", "color", "secondary_color", "intensity", "min_depth_mm"
+            };
+            bool has_mutation = false;
+            for (auto it = body.begin(); it != body.end(); ++it) {
+                if (kAllowed.find(it.key()) == kAllowed.end()) {
+                    res.status = 400;
+                    res.set_content(nlohmann::json{{"status","error"},{"error","Validation Error"},{"message","Unexpected field '" + it.key() + "'"}}.dump(), "application/json; charset=utf-8");
+                    return;
+                }
+                if (it.key() != "expected_revision") has_mutation = true;
+            }
+            if (!body.contains("expected_revision") || !body["expected_revision"].is_string()) {
+                res.status = 400;
+                res.set_content(R"json({"status":"error","error":"Validation Error","message":"String field 'expected_revision' is required"})json", "application/json; charset=utf-8");
+                return;
+            }
+            if (!has_mutation) {
+                res.status = 400;
+                res.set_content(R"json({"status":"error","error":"Validation Error","message":"At least one hall_lighting field must be provided"})json", "application/json; charset=utf-8");
+                return;
+            }
+            expected_rev = body["expected_revision"].get<std::string>();
+        } catch (const std::exception& e) {
+            res.status = 400;
+            res.set_content(nlohmann::json{{"status","error"},{"error","Validation Error"},{"message",std::string("Malformed JSON: ") + e.what()}}.dump(), "application/json; charset=utf-8");
+            return;
+        }
+        HallLightingConfig updated_cfg;
+        std::string new_rev;
+        auto op = UpdateHallLightingOverlayPatch(body, expected_rev, updated_cfg, new_rev);
+        res.status = op.http_status;
+        if (op.http_status == 200) {
+            res.set_content(nlohmann::json{
+                {"status", "ok"},
+                {"api_version", 1},
+                {"revision", new_rev},
+                {"hall_lighting", HallLightingToJson(updated_cfg)},
+                {"message", op.message}
+            }.dump(), "application/json; charset=utf-8");
+        } else {
+            nlohmann::json err = {{"status", "error"}, {"error", op.error_code}, {"message", op.message}};
+            if (!op.current_revision.empty()) err["current_revision"] = op.current_revision;
+            res.set_content(err.dump(), "application/json; charset=utf-8");
+        }
+    });
+
+    // 8. PATCH /api/lighting/default-profile - 切换默认生效灯效方案
+    svr.Patch("/api/lighting/default-profile", [this](const httplib::Request& req, httplib::Response& res) {
+        if (!ValidatePatchRequestSecurity(req, res)) {
+            return;
+        }
+        std::string target_profile;
+        std::string expected_rev;
+        try {
+            auto j = nlohmann::json::parse(req.body);
+            if (!j.is_object()) {
+                res.status = 400;
+                res.set_content(R"json({"status":"error","error":"Validation Error","message":"Request body must be a JSON object"})json", "application/json; charset=utf-8");
+                return;
+            }
+            static const std::unordered_set<std::string> kAllowed = {"expected_revision", "default_profile"};
+            for (auto it = j.begin(); it != j.end(); ++it) {
+                if (kAllowed.find(it.key()) == kAllowed.end()) {
+                    res.status = 400;
+                    res.set_content(nlohmann::json{{"status","error"},{"error","Validation Error"},{"message","Unexpected field '" + it.key() + "'"}}.dump(), "application/json; charset=utf-8");
+                    return;
+                }
+            }
+            if (!j.contains("expected_revision") || !j["expected_revision"].is_string() ||
+                !j.contains("default_profile") || !j["default_profile"].is_string()) {
+                res.status = 400;
+                res.set_content(R"json({"status":"error","error":"Validation Error","message":"String fields 'expected_revision' and 'default_profile' are required"})json", "application/json; charset=utf-8");
+                return;
+            }
+            expected_rev = j["expected_revision"].get<std::string>();
+            target_profile = j["default_profile"].get<std::string>();
+        } catch (const std::exception& e) {
+            res.status = 400;
+            res.set_content(nlohmann::json{{"status","error"},{"error","Validation Error"},{"message",std::string("Malformed JSON: ") + e.what()}}.dump(), "application/json; charset=utf-8");
+            return;
+        }
+        std::string new_rev;
+        auto op = UpdateDefaultProfile(target_profile, expected_rev, new_rev);
+        res.status = op.http_status;
+        if (op.http_status == 200) {
+            res.set_content(nlohmann::json{
+                {"status", "ok"},
+                {"api_version", 1},
+                {"default_profile", target_profile},
+                {"message", op.message},
+                {"revision", new_rev}
+            }.dump(), "application/json; charset=utf-8");
+        } else {
+            nlohmann::json err = {{"status", "error"}, {"error", op.error_code}, {"message", op.message}};
+            if (!op.current_revision.empty()) err["current_revision"] = op.current_revision;
+            res.set_content(err.dump(), "application/json; charset=utf-8");
         }
     });
 }

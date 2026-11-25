@@ -1838,6 +1838,44 @@ bool TestHardwareSlotProtocol() {
     return query==expected && aura::NativeHidBackend::IsSupportedOutputReport(query) && !ParseBasicInfoActiveSlot(nullptr,65);
 }
 
+bool TestCoalescedBatchSingleApplyAndShadowState() {
+    auto io = std::make_unique<FakeTransport>();
+    auto* io_ptr = io.get();
+    auto wait = std::make_unique<FakeWait>(io_ptr, BlockPhase::None);
+    auto latch_state = std::make_shared<LatchState>();
+    auto runtime = aura::M605RuntimeTestAccess::Create(
+        std::move(io), std::move(wait), std::make_unique<FakeLatch>(latch_state));
+
+    std::vector<aura::M605BatchStageOp> ops{
+        {aura::M605BatchStageOp::Kind::Actuation, 0x0701, 0.8, 0.0},
+        {aura::M605BatchStageOp::Kind::Actuation, 0x0602, 0.8, 0.0},
+        {aura::M605BatchStageOp::Kind::DksStandard, 0x0701, 0.0, 0.0},
+        {aura::M605BatchStageOp::Kind::RapidTriggerOn, 0x0701, 0.2, 0.3},
+        {aura::M605BatchStageOp::Kind::Deadzone, 0x0602, 0.1, 0.2},
+    };
+    if (!runtime->SubmitCoalescedBatch(ops).get()) return false;
+    if (latch_state->armed || latch_state->arms != 1 || latch_state->clears != 1) return false;
+
+    const auto events = io_ptr->Events();
+    const auto apply_count = std::count(events.begin(), events.end(), "apply");
+    const auto reports = io_ptr->StageReports();
+    // 2 actuation + 4 DKS + 2 RT + 1 deadzone = 9 stage packets, all committed by 1 apply (50 55).
+    if (apply_count != 1 || reports.size() != 9) return false;
+
+    const auto shadow = runtime->GetAppliedRuntimeState();
+    if (shadow.per_key_actuation_raw.at(0x0701) != 8 ||
+        shadow.per_key_actuation_raw.at(0x0602) != 8 ||
+        !shadow.per_key_rapid_trigger.at(0x0701).enabled ||
+        shadow.per_key_rapid_trigger.at(0x0701).press_raw != 2 ||
+        shadow.per_key_rapid_trigger.at(0x0701).release_raw != 3 ||
+        shadow.per_key_deadzone.at(0x0602).top_raw != 1 ||
+        shadow.per_key_deadzone.at(0x0602).bottom_raw != 2 ||
+        !shadow.per_key_dks.at(0x0701).standard_runtime_configuration) {
+        return false;
+    }
+    return true;
+}
+
 int main() {
     if (!TestHardwareSlotProtocol()) { std::cerr << "hardware slot protocol failed\n"; return 1; }
     using namespace aura::m605;
@@ -2107,6 +2145,8 @@ int main() {
         !TestRemovalDuringSettleAndOfflineRecovery()) {
         std::cerr << "FAIL: stale transport lifecycle\n"; return 1;
     }
+
+    if (!TestCoalescedBatchSingleApplyAndShadowState()) { std::cerr << "FAIL: coalesced batch\n"; return 1; }
 
     std::cout << "M605 packet, mapping, and validation checks passed\n";
     return 0;

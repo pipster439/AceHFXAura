@@ -519,6 +519,31 @@ bool TestService() {
             "DKS restored before RT submission failed") == std::string::npos ||
         body.at("batch_result").at("results")[1].at("status") != "NotExecuted") return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
 
+    // Recover from the stage-failure quarantine above before testing coalesced batch apply.
+    const auto recover_before_coalesced = post("/api/magnetic/safety/acknowledge-external-resynchronization",
+        R"({"confirm_external_resynchronization":true})");
+    if (!recover_before_coalesced || recover_before_coalesced->status != 200)
+        return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
+
+    // Validate /api/magnetic/batch/apply coalesced single-apply transaction route.
+    const auto before_coalesced = io_ptr->reports.size();
+    const auto coalesced_bad = post("/api/magnetic/batch/apply", R"({"ops":[],"resolve_dks":true})");
+    if (!coalesced_bad || coalesced_bad->status != 422 || io_ptr->reports.size() != before_coalesced)
+        return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
+    const auto coalesced_ok = post("/api/magnetic/batch/apply",
+        R"({"ops":[{"kind":"actuation","logical_id":1793,"mm":0.8},{"kind":"actuation","logical_id":1538,"mm":0.8},{"kind":"rapid_trigger_enable","logical_id":1793,"press_mm":0.2,"release_mm":0.2},{"kind":"deadzone","logical_id":1538,"top_mm":0.1,"bottom_mm":0.1}],"resolve_dks":true})");
+    if (!coalesced_ok || coalesced_ok->status != 200)
+        return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
+    body = Json::parse(coalesced_ok->body);
+    if (!body.contains("timing_ms") || body.at("applied_ops") != 5)
+        return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
+    size_t coalesced_apply_packets = 0;
+    for (size_t idx = before_coalesced; idx < io_ptr->reports.size(); ++idx) {
+        if (io_ptr->reports[idx][1] == 0x50 && io_ptr->reports[idx][2] == 0x55) ++coalesced_apply_packets;
+    }
+    if (coalesced_apply_packets != 1)
+        return finish((std::cerr << "Failure line " << __LINE__ << '\n', false));
+
     return finish(true);
 }
 }

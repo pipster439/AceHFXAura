@@ -5,6 +5,7 @@
 #include "engine/layer_compositor.h"
 #include "aura/aura_types.h"
 #include "aura/keymap.h"
+#include "config/config_contract.h"
 #include <memory>
 #include <mutex>
 #include <chrono>
@@ -29,6 +30,10 @@ public:
     void SetInputSources(const AudioFeatureSource* audio, const ScreenColorSource* screen);
     const AudioFeatureSource* GetAudioSource() const { return audio_source_; }
     const ScreenColorSource* GetScreenSource() const { return screen_source_; }
+    void SetHallAnalogHost(const AuraHallAnalogHostV1* host);
+    void SetHallLightingConfig(const HallLightingConfig& config);
+    HallLightingConfig GetHallLightingConfig() const;
+    bool ActiveEffectUsesHall() const;
     const LayerCompositor& GetCompositor() const { return compositor_; }
     const FrameBuffer& GetLastFrame() const { return last_frame_; }
     struct RenderDiagnostics {
@@ -64,6 +69,9 @@ private:
     LayerCompositor compositor_;
     const AudioFeatureSource* audio_source_{nullptr};
     const ScreenColorSource* screen_source_{nullptr};
+    AuraHallAnalogHostV1 hall_host_{};
+    mutable std::mutex hall_config_mutex_;
+    HallLightingConfig hall_lighting_{};
     FrameBuffer last_frame_{};
     mutable std::mutex render_diagnostics_mutex_;
     RenderDiagnostics render_diagnostics_{};

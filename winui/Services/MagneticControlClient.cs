@@ -176,8 +176,20 @@ public sealed class MagneticStatus
     [JsonPropertyName("static_analog_effect")] public MagneticKnownBool StaticAnalogEffect { get; set; } = new();
     [JsonPropertyName("rapid_trigger_master")] public MagneticKnownBool RapidTriggerMaster { get; set; } = new();
     [JsonPropertyName("batch_result")] public MagneticBatchResult? BatchResult { get; set; }
+    [JsonPropertyName("timing_ms")] public double? TimingMs { get; set; }
+    [JsonPropertyName("applied_ops")] public int? AppliedOps { get; set; }
     public bool Succeeded => Status == "ok";
 }
+
+public sealed record MagneticBatchOp(
+    [property: JsonPropertyName("kind")] string Kind,
+    [property: JsonPropertyName("logical_id"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ushort? LogicalId = null,
+    [property: JsonPropertyName("mm"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] double? Mm = null,
+    [property: JsonPropertyName("press_mm"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] double? PressMm = null,
+    [property: JsonPropertyName("release_mm"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] double? ReleaseMm = null,
+    [property: JsonPropertyName("top_mm"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] double? TopMm = null,
+    [property: JsonPropertyName("bottom_mm"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] double? BottomMm = null
+);
 
 public interface IMagneticControlClient
 {
@@ -202,6 +214,8 @@ public interface IMagneticControlClient
     Task<MagneticStatus> SetBatchRapidTriggerAsync(IReadOnlyList<ushort> logicalIds, bool enable,
         double? pressMm = null, double? releaseMm = null, bool resolveDks = false);
     Task<MagneticStatus> SetBatchDeadzoneAsync(IReadOnlyList<ushort> logicalIds, double topMm, double bottomMm);
+    Task<MagneticStatus> ApplyCoalescedBatchAsync(IReadOnlyList<MagneticBatchOp> ops, bool resolveDks = true) =>
+        Task.FromResult(new MagneticStatus { Status = "error", LastError = "Coalesced batch endpoint unsupported on mock client" });
 }
 
 public sealed class MagneticControlClient(HttpClient? http = null) : IMagneticControlClient
@@ -256,6 +270,9 @@ public sealed class MagneticControlClient(HttpClient? http = null) : IMagneticCo
             SendAsync("batch/rapid-trigger", new { logical_ids = logicalIds, action = "disable" }, batch: true);
     public Task<MagneticStatus> SetBatchDeadzoneAsync(IReadOnlyList<ushort> logicalIds, double topMm, double bottomMm) =>
         SendAsync("batch/deadzone", new { logical_ids = logicalIds, top_mm = topMm, bottom_mm = bottomMm }, batch: true);
+
+    public Task<MagneticStatus> ApplyCoalescedBatchAsync(IReadOnlyList<MagneticBatchOp> ops, bool resolveDks = true) =>
+        SendAsync("batch/apply", new { ops, resolve_dks = resolveDks }, batch: true);
 
     private async Task<MagneticStatus> SendAsync(string path, object? body, bool batch = false)
     {

@@ -177,7 +177,7 @@ void PreserveMagneticExtensions(Json& magnetic, const Json& prior) {
 void PreserveProfileExtensions(Json& next, const Json& old) {
     PreserveUnknown(next, old, {"schema_version", "id", "name", "magnetic", "lighting", "automation", "activation_backend", "hardware_slot"});
     if (next.contains("lighting") && old.contains("lighting"))
-        PreserveUnknown(next["lighting"], old.at("lighting"), {"legacy_effect_reference", "ownership"});
+        PreserveUnknown(next["lighting"], old.at("lighting"), {"legacy_effect_reference", "ownership", "aura_effect_profile"});
     if (next.contains("magnetic") && old.contains("magnetic"))
         PreserveMagneticExtensions(next["magnetic"], old.at("magnetic"));
 }
@@ -340,6 +340,13 @@ void DeviceProfileRuntime::Validate(const Json& doc) {
             profile.at("lighting").at("control_owner") != "AuraDirectRgb" &&
             profile.at("lighting").at("control_owner") != "FirmwareBank")
             throw ProfileError(422, "Unsupported lighting control owner");
+        if (profile.at("lighting").contains("aura_effect_profile") &&
+            !profile.at("lighting").at("aura_effect_profile").is_null()) {
+            const auto& linked = profile.at("lighting").at("aura_effect_profile");
+            if (!linked.is_string() || linked.get_ref<const std::string&>().empty() ||
+                linked.get_ref<const std::string&>().size() > 128)
+                throw ProfileError(422, "Invalid linked Aura lighting profile name");
+        }
         if (backend == "hardware_slot" && (!profile.contains("hardware_slot") ||
             !profile.at("hardware_slot").is_number_integer() ||
             profile.at("hardware_slot").get<int64_t>() < 1 || profile.at("hardware_slot").get<int64_t>() > 5))

@@ -51,4 +51,48 @@ class TestGlobalLightingDaemon(unittest.TestCase):
             self.assertEqual(request(19897,"/api/lighting/profiles/override")[1]["profile"]["fps"],60)
             time.sleep(.2);self.assertEqual(request(19897,"/api/runtime/status")[1]["runtime"]["fps"],60)
 
+    def test_switch_default_lighting_profile_endpoint(self):
+        config = {
+            "default_profile": "desktop",
+            "profiles": {
+                "desktop": {"type": "static", "color": [0, 128, 255]},
+                "combat": {"type": "breathing", "color": [255, 40, 40], "period_ms": 1800},
+            },
+        }
+        with runtime.TestAutomationReloadDaemon().daemon(config) as (_, _, path):
+            code, lst, _ = request(19897, "/api/lighting/profiles")
+            self.assertEqual(code, 200)
+            rev = lst["revision"]
+            self.assertEqual(request(19897, "/api/lighting/default-profile", "PATCH",
+                                     {"expected_revision": rev, "default_profile": "missing"})[0], 404)
+            code, switched, _ = request(19897, "/api/lighting/default-profile", "PATCH",
+                                          {"expected_revision": rev, "default_profile": "combat"})
+            self.assertEqual(code, 200)
+            self.assertEqual(switched["default_profile"], "combat")
+            self.assertEqual(request(19897, "/api/lighting/default-profile", "PATCH",
+                                     {"expected_revision": rev, "default_profile": "desktop"})[0], 409)
+            saved = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(saved["default_profile"], "combat")
+            deadline = time.monotonic() + 5
+            while request(19897, "/api/runtime/status")[1]["runtime"]["active_profile"] != "combat":
+                self.assertLess(time.monotonic(), deadline)
+                time.sleep(0.05)
+
+    def test_hall_lighting_overlay_endpoint_validation_and_reload(self):
+        config = {"default_profile": "desktop", "profiles": {"desktop": {"type": "static", "color": [0, 128, 255]}}}
+        with runtime.TestAutomationReloadDaemon().daemon(config) as (_, _, path):
+            code, cur, _ = request(19897, "/api/lighting/hall-overlay")
+            self.assertEqual(code, 200)
+            self.assertFalse(cur["hall_lighting"]["enabled"])
+            rev = cur["revision"]
+            self.assertEqual(request(19897, "/api/lighting/hall-overlay", "PATCH", {"expected_revision": rev, "mode": "bad"})[0], 400)
+            code, updated, _ = request(19897, "/api/lighting/hall-overlay", "PATCH",
+                                       {"expected_revision": rev, "enabled": True, "mode": "halo", "color": [120, 240, 255], "intensity": 0.75, "min_depth_mm": 0.2})
+            self.assertEqual(code, 200)
+            self.assertTrue(updated["hall_lighting"]["enabled"])
+            self.assertEqual(updated["hall_lighting"]["mode"], "halo")
+            self.assertEqual(request(19897, "/api/lighting/hall-overlay", "PATCH", {"expected_revision": rev, "enabled": False})[0], 409)
+            saved = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(saved["hall_lighting"]["mode"], "halo")
+
 if __name__=="__main__":unittest.main()

@@ -663,6 +663,124 @@ public sealed class UpdateBaseLightingResult
     };
 }
 
+public sealed class HallLightingOverlayDto
+{
+    [JsonPropertyName("enabled")]
+    public bool Enabled { get; set; }
+
+    [JsonPropertyName("mode")]
+    public string Mode { get; set; } = "glow";
+
+    [JsonPropertyName("color")]
+    public int[] Color { get; set; } = [0, 220, 255];
+
+    [JsonPropertyName("secondary_color")]
+    public int[] SecondaryColor { get; set; } = [255, 80, 180];
+
+    [JsonPropertyName("intensity")]
+    public double Intensity { get; set; } = 0.75;
+
+    [JsonPropertyName("min_depth_mm")]
+    public double MinDepthMm { get; set; } = 0.15;
+}
+
+public sealed class HallLightingOverlayResponseDto
+{
+    [JsonPropertyName("status")]
+    public string Status { get; set; } = "";
+
+    [JsonPropertyName("api_version")]
+    public int ApiVersion { get; set; }
+
+    [JsonPropertyName("revision")]
+    public string Revision { get; set; } = "";
+
+    [JsonPropertyName("hall_lighting")]
+    public HallLightingOverlayDto? HallLighting { get; set; }
+}
+
+public sealed class HallLightingOverlayPatchDto
+{
+    [JsonPropertyName("expected_revision")]
+    public string ExpectedRevision { get; set; } = "";
+
+    [JsonPropertyName("enabled")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? Enabled { get; set; }
+
+    [JsonPropertyName("mode")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Mode { get; set; }
+
+    [JsonPropertyName("color")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int[]? Color { get; set; }
+
+    [JsonPropertyName("secondary_color")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int[]? SecondaryColor { get; set; }
+
+    [JsonPropertyName("intensity")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public double? Intensity { get; set; }
+
+    [JsonPropertyName("min_depth_mm")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public double? MinDepthMm { get; set; }
+}
+
+public sealed class HallLightingOverlayResult
+{
+    public bool IsSuccess { get; init; }
+    public string ErrorMessage { get; init; } = "";
+    public string Revision { get; init; } = "";
+    public HallLightingOverlayDto? HallLighting { get; init; }
+
+    public static HallLightingOverlayResult Success(HallLightingOverlayDto hallLighting, string revision) => new()
+    {
+        IsSuccess = true,
+        HallLighting = hallLighting,
+        Revision = revision
+    };
+
+    public static HallLightingOverlayResult Failure(string error) => new()
+    {
+        IsSuccess = false,
+        ErrorMessage = error
+    };
+}
+
+public sealed class UpdateHallLightingOverlayResult
+{
+    public UpdateProfileStatus Status { get; init; }
+    public bool IsSuccess => Status == UpdateProfileStatus.Success;
+    public bool IsConflict => Status == UpdateProfileStatus.Conflict;
+    public string ErrorMessage { get; init; } = "";
+    public string NewRevision { get; init; } = "";
+    public string CurrentRevision { get; init; } = "";
+    public HallLightingOverlayDto? HallLighting { get; init; }
+
+    public static UpdateHallLightingOverlayResult Success(string newRevision, HallLightingOverlayDto? hallLighting = null) => new()
+    {
+        Status = UpdateProfileStatus.Success,
+        NewRevision = newRevision,
+        HallLighting = hallLighting
+    };
+
+    public static UpdateHallLightingOverlayResult Conflict(string currentRevision, string message) => new()
+    {
+        Status = UpdateProfileStatus.Conflict,
+        CurrentRevision = currentRevision,
+        ErrorMessage = string.IsNullOrEmpty(message) ? "配置已被其他编辑器修改" : message
+    };
+
+    public static UpdateHallLightingOverlayResult Failure(UpdateProfileStatus status, string message) => new()
+    {
+        Status = status,
+        ErrorMessage = message
+    };
+}
+
 public sealed class ProfileListResult
 {
     public bool IsSuccess { get; init; }
@@ -752,8 +870,14 @@ public interface IAuraControlClient
     Task<ProfileListResult> GetProfilesAsync(CancellationToken cancellationToken = default);
     Task<ProfileDetailResult> GetProfileAsync(string name, CancellationToken cancellationToken = default);
     Task<UpdateProfileResult> UpdateProfileAsync(string name, ProfilePatchDto patch, CancellationToken cancellationToken = default);
-
-
+    Task<UpdateProfileResult> SetDefaultLightingProfileAsync(string profileName, string expectedRevision, CancellationToken cancellationToken = default) =>
+        Task.FromResult(UpdateProfileResult.Failure(UpdateProfileStatus.Failure, "Default profile switching unsupported on mock client"));
+        Task<UpdateProfileResult> SwitchDefaultLightingProfileAsync(string profileName, CancellationToken cancellationToken = default) =>
+        Task.FromResult(UpdateProfileResult.Failure(UpdateProfileStatus.Failure, "Default profile switching unsupported on mock client"));
+    Task<HallLightingOverlayResult> GetHallLightingOverlayAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult(HallLightingOverlayResult.Failure("Hall lighting overlay unsupported on mock client"));
+    Task<UpdateHallLightingOverlayResult> UpdateHallLightingOverlayAsync(HallLightingOverlayPatchDto patch, CancellationToken cancellationToken = default) =>
+        Task.FromResult(UpdateHallLightingOverlayResult.Failure(UpdateProfileStatus.Failure, "Hall lighting overlay unsupported on mock client"));
 }
 
 public sealed partial class AuraControlClient : IAuraControlClient
@@ -1052,6 +1176,79 @@ public sealed partial class AuraControlClient : IAuraControlClient
         }
     }
 
+    public async Task<UpdateProfileResult> SetDefaultLightingProfileAsync(string profileName, string expectedRevision, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(profileName) || string.IsNullOrWhiteSpace(expectedRevision))
+        {
+            return UpdateProfileResult.Failure(UpdateProfileStatus.ValidationError, "方案名称和版本修订号不能为空");
+        }
+
+        try
+        {
+            string url = "http://127.0.0.1:19897/api/lighting/default-profile";
+            string patchJson = JsonSerializer.Serialize(new
+            {
+                expected_revision = expectedRevision,
+                default_profile = profileName
+            }, JsonOptions);
+
+            using var req = new HttpRequestMessage(new HttpMethod("PATCH"), url)
+            {
+                Content = new StringContent(patchJson, System.Text.Encoding.UTF8, "application/json")
+            };
+
+            using var res = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+            var resJson = await res.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+
+            if (res.StatusCode == System.Net.HttpStatusCode.OK)
+            {
+                var okDto = JsonSerializer.Deserialize<BaseLightingPatchResponseDto>(resJson, JsonOptions);
+                if (okDto != null && okDto.ApiVersion == 1 && !string.IsNullOrEmpty(okDto.Revision) && string.Equals(okDto.Status, "ok", StringComparison.OrdinalIgnoreCase))
+                {
+                    return UpdateProfileResult.Success(okDto.Revision);
+                }
+                return UpdateProfileResult.Failure(UpdateProfileStatus.Failure, "Unexpected non-ok response from daemon");
+            }
+
+            ApiErrorResponseDto? errDto = null;
+            try { errDto = JsonSerializer.Deserialize<ApiErrorResponseDto>(resJson, JsonOptions); } catch { }
+            string msg = errDto?.Message ?? res.ReasonPhrase ?? $"HTTP {(int)res.StatusCode}";
+
+            if (res.StatusCode == System.Net.HttpStatusCode.Conflict)
+                return UpdateProfileResult.Conflict(errDto?.CurrentRevision ?? "", msg);
+            if (res.StatusCode == System.Net.HttpStatusCode.BadRequest)
+                return UpdateProfileResult.Failure(UpdateProfileStatus.ValidationError, msg);
+            if (res.StatusCode == System.Net.HttpStatusCode.NotFound)
+                return UpdateProfileResult.Failure(UpdateProfileStatus.NotFound, msg);
+
+            return UpdateProfileResult.Failure(UpdateProfileStatus.Failure, msg);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return UpdateProfileResult.Failure(UpdateProfileStatus.Failure, "Request canceled");
+        }
+        catch (Exception ex)
+        {
+            return UpdateProfileResult.Failure(UpdateProfileStatus.Failure, ex.Message);
+        }
+    }
+
+    public async Task<UpdateProfileResult> SwitchDefaultLightingProfileAsync(string profileName, CancellationToken cancellationToken = default)
+    {
+        var list = await GetProfilesAsync(cancellationToken).ConfigureAwait(false);
+        if (!list.IsSuccess || string.IsNullOrEmpty(list.Revision))
+        {
+            return UpdateProfileResult.Failure(UpdateProfileStatus.Failure, string.IsNullOrEmpty(list.ErrorMessage) ? "读取灯效方案列表失败" : list.ErrorMessage);
+        }
+
+        var result = await SetDefaultLightingProfileAsync(profileName, list.Revision, cancellationToken).ConfigureAwait(false);
+        if (result.IsConflict && !string.IsNullOrEmpty(result.CurrentRevision))
+        {
+            result = await SetDefaultLightingProfileAsync(profileName, result.CurrentRevision, cancellationToken).ConfigureAwait(false);
+        }
+        return result;
+    }
+
     public async Task<UpdateBaseLightingResult> UpdateBaseLightingAsync(BaseLightingPatchDto patch, CancellationToken cancellationToken = default)
     {
         try
@@ -1113,4 +1310,105 @@ public sealed partial class AuraControlClient : IAuraControlClient
         }
     }
 
+    public async Task<HallLightingOverlayResult> GetHallLightingOverlayAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Get, "http://127.0.0.1:19897/api/lighting/hall-overlay");
+            using var res = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+
+            var json = await res.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            if (!res.IsSuccessStatusCode)
+            {
+                return HallLightingOverlayResult.Failure($"HTTP {(int)res.StatusCode}: {res.ReasonPhrase}");
+            }
+
+            var dto = JsonSerializer.Deserialize<HallLightingOverlayResponseDto>(json, JsonOptions);
+            if (dto == null || dto.HallLighting == null)
+            {
+                return HallLightingOverlayResult.Failure("Empty or invalid JSON payload");
+            }
+
+            if (!string.Equals(dto.Status, "ok", StringComparison.OrdinalIgnoreCase))
+            {
+                return HallLightingOverlayResult.Failure($"Daemon returned non-ok status: {dto.Status}");
+            }
+
+            if (dto.ApiVersion != 1)
+            {
+                return HallLightingOverlayResult.Failure($"Unsupported API version: {dto.ApiVersion} (expected 1)");
+            }
+
+            return HallLightingOverlayResult.Success(dto.HallLighting, dto.Revision);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return HallLightingOverlayResult.Failure("Request canceled");
+        }
+        catch (Exception ex)
+        {
+            return HallLightingOverlayResult.Failure(ex.Message);
+        }
+    }
+
+    public async Task<UpdateHallLightingOverlayResult> UpdateHallLightingOverlayAsync(HallLightingOverlayPatchDto patch, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            string url = "http://127.0.0.1:19897/api/lighting/hall-overlay";
+            string patchJson = JsonSerializer.Serialize(patch, JsonOptions);
+
+            using var req = new HttpRequestMessage(new HttpMethod("PATCH"), url)
+            {
+                Content = new StringContent(patchJson, System.Text.Encoding.UTF8, "application/json")
+            };
+
+            using var res = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+            var resJson = await res.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+
+            if (res.StatusCode == System.Net.HttpStatusCode.OK)
+            {
+                var okDto = JsonSerializer.Deserialize<HallLightingOverlayResponseDto>(resJson, JsonOptions);
+                if (okDto != null && okDto.ApiVersion == 1 && !string.IsNullOrEmpty(okDto.Revision) && string.Equals(okDto.Status, "ok", StringComparison.OrdinalIgnoreCase))
+                {
+                    return UpdateHallLightingOverlayResult.Success(okDto.Revision, okDto.HallLighting);
+                }
+                return UpdateHallLightingOverlayResult.Failure(UpdateProfileStatus.Failure, "Unexpected non-ok response from daemon");
+            }
+
+            ApiErrorResponseDto? errDto = null;
+            try
+            {
+                errDto = JsonSerializer.Deserialize<ApiErrorResponseDto>(resJson, JsonOptions);
+            }
+            catch { }
+
+            string msg = errDto?.Message ?? res.ReasonPhrase ?? $"HTTP {(int)res.StatusCode}";
+
+            if (res.StatusCode == System.Net.HttpStatusCode.Conflict)
+            {
+                return UpdateHallLightingOverlayResult.Conflict(errDto?.CurrentRevision ?? "", msg);
+            }
+
+            if (res.StatusCode == System.Net.HttpStatusCode.BadRequest)
+            {
+                return UpdateHallLightingOverlayResult.Failure(UpdateProfileStatus.ValidationError, msg);
+            }
+
+            if (res.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                return UpdateHallLightingOverlayResult.Failure(UpdateProfileStatus.NotFound, msg);
+            }
+
+            return UpdateHallLightingOverlayResult.Failure(UpdateProfileStatus.Failure, msg);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return UpdateHallLightingOverlayResult.Failure(UpdateProfileStatus.Failure, "Request canceled");
+        }
+        catch (Exception ex)
+        {
+            return UpdateHallLightingOverlayResult.Failure(UpdateProfileStatus.Failure, ex.Message);
+        }
+    }
 }

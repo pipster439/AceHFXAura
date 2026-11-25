@@ -87,6 +87,7 @@ public sealed class MagneticSettingsModel
     public MagneticKeyDraft? Draft => SelectedLogicalId is ushort id && _drafts.TryGetValue(id, out var draft) ? draft : null;
     public MagneticGlobalDraft GlobalDraft { get; } = new();
     public MagneticStatus? Status { get; private set; }
+    public double? LastTimingMs => Status?.TimingMs;
     // Short-lived daemon snapshot. The Profile Runtime remains the sole baseline owner.
     public ProfileApiResponse? BaselineSnapshot { get; private set; }
     public MagneticGlobalActuationState ManualGlobalActuation {
@@ -317,6 +318,74 @@ public sealed class MagneticSettingsModel
         _multiIds.Clear();
         BatchDraft.Clear(); LastBatchResult = null;
         return true;
+    }
+
+    public bool SelectKeys(IEnumerable<ushort> logicalIds)
+    {
+        if (Busy) return false;
+        var validIds = logicalIds.Where(id => MagneticKeyLayout.Find(id) != null).Distinct().ToArray();
+        if (validIds.Length == 0) return false;
+        SelectedLogicalId = null;
+        _multiIds.Clear();
+        foreach (var id in validIds) _multiIds.Add(id);
+        SelectionContext = MagneticSelectionContext.Multi;
+        BatchDraft.Clear(); LastBatchResult = null;
+        DksEditorOpen = false;
+        return true;
+    }
+
+    public Task<bool> ApplyCoalescedBatchAsync(IReadOnlyList<MagneticBatchOp> ops, bool resolveDks = true)
+    {
+        if (!CanWrite || ops.Count == 0) return Task.FromResult(false);
+        bool refreshBaseline = ops.Any(op => op.Kind is "global_actuation" or "global_deadzone");
+        return SubmitAsync(() => _client.ApplyCoalescedBatchAsync(ops, resolveDks), () =>
+        {
+            foreach (var op in ops)
+            {
+                switch (op.Kind)
+                {
+                    case "global_actuation":
+                        GlobalDraft.ActuationMm = null;
+                        break;
+                    case "global_deadzone":
+                        GlobalDraft.TopMm = null;
+                        GlobalDraft.BottomMm = null;
+                        break;
+                    case "actuation":
+                        if (IsMultiMode) BatchDraft.ActuationMm = null;
+                        if (op.LogicalId is ushort actId && _drafts.TryGetValue(actId, out var actDraft))
+                            actDraft.ActuationMm = null;
+                        break;
+                    case "deadzone":
+                        if (IsMultiMode) { BatchDraft.TopMm = null; BatchDraft.BottomMm = null; }
+                        if (op.LogicalId is ushort dzId && _drafts.TryGetValue(dzId, out var dzDraft))
+                        {
+                            dzDraft.TopMm = null;
+                            dzDraft.BottomMm = null;
+                        }
+                        break;
+                    case "rapid_trigger_enable":
+                    case "rapid_trigger_disable":
+                        if (IsMultiMode)
+                        {
+                            BatchDraft.RtAction = MagneticBatchRtAction.Unchanged;
+                            BatchDraft.PressMm = null;
+                            BatchDraft.ReleaseMm = null;
+                        }
+                        if (op.LogicalId is ushort rtId && _drafts.TryGetValue(rtId, out var rtDraft))
+                        {
+                            rtDraft.RapidTriggerEnabled = null;
+                            rtDraft.PressMm = null;
+                            rtDraft.ReleaseMm = null;
+                        }
+                        break;
+                    case "dks_standard":
+                        if (op.LogicalId is ushort dksId && _drafts.TryGetValue(dksId, out var dksDraft))
+                            dksDraft.DksDirty = false;
+                        break;
+                }
+            }
+        }, refreshBaseline: refreshBaseline);
     }
 
     public bool ConfigureDksEditor()

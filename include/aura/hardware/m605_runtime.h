@@ -69,6 +69,22 @@ struct HardwareSlotResult {
     std::string observed_at_utc, error;
 };
 
+struct M605BatchStageOp {
+    enum class Kind {
+        Actuation,
+        RapidTriggerOn,
+        RapidTriggerOff,
+        Deadzone,
+        GlobalActuation,
+        GlobalDeadzone,
+        DksStandard
+    };
+    Kind kind = Kind::Actuation;
+    uint16_t logical_key_id = 0;
+    double first_mm = 0.0;
+    double second_mm = 0.0;
+};
+
 enum class M605RuntimeHealth {
     Clean,
     TransactionInProgress,
@@ -213,6 +229,8 @@ public:
     // Phase 6.1A Global Magnetic Settings:
     std::future<bool> SetGlobalActuation(double millimeters);
     std::future<bool> SetGlobalDeadzone(double top_mm, double bottom_mm);
+    // Coalesced batch transaction: stages all ops and issues a single 50 55 apply.
+    std::future<bool> SubmitCoalescedBatch(std::vector<M605BatchStageOp> ops);
     // Compatibility rejection stub: never queues or writes 51 53.
     std::future<bool> SetGlobalRapidTrigger(
         double press_mm, double release_mm, double top_mm, double bottom_mm, bool separate_mode);
@@ -255,10 +273,14 @@ private:
     enum class Kind {
         Actuation, Analog, RapidTrigger, Deadzone, ResetAllDeadzone,
         SpeedTapPair, SpeedTapMaster, SpeedTapProfileReset, Dks,
-        GlobalActuation, GlobalDeadzone, GlobalRapidTrigger, ResetAllActuation
+        GlobalActuation, GlobalDeadzone, GlobalRapidTrigger, ResetAllActuation,
+        CoalescedBatch
     };
     struct Job {
         std::array<m605::Report, 4> stages{};
+        std::vector<m605::Report> batch_stages;
+        std::vector<bool> batch_stage_is_dks;
+        std::vector<M605BatchStageOp> batch_ops;
         m605::Report apply = m605::BuildRuntimeApply();
         uint8_t stage_count = 0;
         Kind kind;

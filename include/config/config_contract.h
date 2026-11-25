@@ -10,6 +10,62 @@
 
 namespace aura {
 
+struct HallLightingConfig {
+    bool enabled{false};
+    std::string mode{"glow"}; // "glow" | "gradient" | "halo"
+    ColorRGB color{255, 255, 255};
+    ColorRGB secondary_color{220, 40, 255};
+    double intensity{0.85};
+    double min_depth_mm{0.10};
+
+    bool operator==(const HallLightingConfig& other) const {
+        return enabled == other.enabled && mode == other.mode &&
+               color.r == other.color.r && color.g == other.color.g && color.b == other.color.b &&
+               secondary_color.r == other.secondary_color.r && secondary_color.g == other.secondary_color.g &&
+               secondary_color.b == other.secondary_color.b &&
+               intensity == other.intensity && min_depth_mm == other.min_depth_mm;
+    }
+};
+
+inline HallLightingConfig ParseHallLightingConfig(const nlohmann::json& root) {
+    HallLightingConfig cfg;
+    if (!root.is_object() || !root.contains("hall_lighting") || !root.at("hall_lighting").is_object()) {
+        return cfg;
+    }
+    const auto& hl = root.at("hall_lighting");
+    if (hl.contains("enabled") && hl.at("enabled").is_boolean()) cfg.enabled = hl.at("enabled").get<bool>();
+    if (hl.contains("mode") && hl.at("mode").is_string()) {
+        const auto m = hl.at("mode").get<std::string>();
+        if (m == "glow" || m == "gradient" || m == "halo") cfg.mode = m;
+    }
+    auto parse_rgb = [](const nlohmann::json& j, const char* key, ColorRGB& dst) {
+        if (j.contains(key) && j.at(key).is_array() && j.at(key).size() >= 3) {
+            dst = ColorRGB(
+                static_cast<uint8_t>(std::clamp(j.at(key)[0].get<int>(), 0, 255)),
+                static_cast<uint8_t>(std::clamp(j.at(key)[1].get<int>(), 0, 255)),
+                static_cast<uint8_t>(std::clamp(j.at(key)[2].get<int>(), 0, 255)));
+        }
+    };
+    parse_rgb(hl, "color", cfg.color);
+    parse_rgb(hl, "secondary_color", cfg.secondary_color);
+    if (hl.contains("intensity") && hl.at("intensity").is_number())
+        cfg.intensity = std::clamp(hl.at("intensity").get<double>(), 0.0, 1.0);
+    if (hl.contains("min_depth_mm") && hl.at("min_depth_mm").is_number())
+        cfg.min_depth_mm = std::clamp(hl.at("min_depth_mm").get<double>(), 0.05, 2.0);
+    return cfg;
+}
+
+inline nlohmann::json HallLightingToJson(const HallLightingConfig& cfg) {
+    return {
+        {"enabled", cfg.enabled},
+        {"mode", cfg.mode},
+        {"color", {cfg.color.r, cfg.color.g, cfg.color.b}},
+        {"secondary_color", {cfg.secondary_color.r, cfg.secondary_color.g, cfg.secondary_color.b}},
+        {"intensity", std::round(cfg.intensity * 100.0) / 100.0},
+        {"min_depth_mm", std::round(cfg.min_depth_mm * 100.0) / 100.0}
+    };
+}
+
 inline constexpr int kDefaultConfigFps = 25;
 inline constexpr int kMinConfigFps = 10;
 inline constexpr int kMaxConfigFps = 100;
@@ -28,6 +84,37 @@ inline bool IsValidConfigFps(const nlohmann::json& value) {
 // fields remain opaque so narrow edits preserve authoring and future client data.
 inline void ValidateConfigDocument(const nlohmann::json& root) {
     ValidateAutomationContainers(root);
+    if (root.contains("hall_lighting")) {
+        const auto& hl = root.at("hall_lighting");
+        if (!hl.is_object()) throw std::runtime_error("/hall_lighting must be an object");
+        for (auto it = hl.begin(); it != hl.end(); ++it) {
+            const auto& k = it.key();
+            if (k == "enabled") {
+                if (!it.value().is_boolean()) throw std::runtime_error("/hall_lighting/enabled must be boolean");
+            } else if (k == "mode") {
+                if (!it.value().is_string()) throw std::runtime_error("/hall_lighting/mode must be a string");
+                const auto& m = it.value().get_ref<const std::string&>();
+                if (m != "glow" && m != "gradient" && m != "halo")
+                    throw std::runtime_error("/hall_lighting/mode must be glow, gradient, or halo");
+            } else if (k == "color" || k == "secondary_color") {
+                if (!it.value().is_array() || it.value().size() != 3)
+                    throw std::runtime_error("/hall_lighting/" + k + " must be RGB");
+                for (const auto& ch : it.value())
+                    if (!ch.is_number_integer() || ch.get<int64_t>() < 0 || ch.get<int64_t>() > 255)
+                        throw std::runtime_error("/hall_lighting/" + k + " must contain integers in [0,255]");
+            } else if (k == "intensity") {
+                if (!it.value().is_number() || !std::isfinite(it.value().get<double>()) ||
+                    it.value().get<double>() < 0.0 || it.value().get<double>() > 1.0)
+                    throw std::runtime_error("/hall_lighting/intensity must be in [0,1]");
+            } else if (k == "min_depth_mm") {
+                if (!it.value().is_number() || !std::isfinite(it.value().get<double>()) ||
+                    it.value().get<double>() < 0.05 || it.value().get<double>() > 2.0)
+                    throw std::runtime_error("/hall_lighting/min_depth_mm must be in [0.05,2.0]");
+            } else {
+                throw std::runtime_error("/hall_lighting has unexpected field '" + k + "'");
+            }
+        }
+    }
     if (root.contains("fps") && !IsValidConfigFps(root.at("fps")))
         throw std::runtime_error("/fps must be an integer in [10,100]");
     if (root.contains("blockly_effects") && !root.at("blockly_effects").is_object())

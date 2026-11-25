@@ -10,6 +10,7 @@
 #include <mutex>
 #include <string_view>
 #include <filesystem>
+#include <chrono>
 
 namespace aura {
 class DeviceProfileRuntime;
@@ -35,6 +36,7 @@ public:
     void StopDeviceProfileAutomation();
     void Stop();
     m605::hall::HallTelemetrySnapshot GetHallSnapshot() const;
+    void SyncAutoHallDemand(bool needed);
 
 private:
     bool HardwareAvailable() const;
@@ -49,6 +51,10 @@ private:
     std::unique_ptr<HardwareRtGateMonitor> rt_gate_monitor_;
     std::unique_ptr<DeviceProfileAutomationCoordinator> automation_coordinator_;
     std::unique_ptr<m605::hall::M605HallTelemetry> hall_telemetry_;
+    std::mutex hall_demand_mutex_;
+    bool manual_hall_requested_{false};
+    bool auto_hall_active_{false};
+    std::chrono::steady_clock::time_point last_auto_hall_retry_{};
 };
 
 } // namespace aura

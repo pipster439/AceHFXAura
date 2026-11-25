@@ -254,7 +254,17 @@ aura_web_ui.exe --port 19898 --config config.json
 package_release.bat
 ```
 
-脚本从 `VERSION` 生成客户端、原生程序及包元数据，构建前端、C++ sidecar 并发布 WinUI；输出 `dist/Aura-v<VERSION>-windows-x64-<build-id>/`、ZIP 与 SHA-256。它不部署到用户目录、不清理用户 runtime、不自动发布 GitHub Release。旧 launcher 仅保留显式 `--legacy` 工程入口，产物位于 `dist/legacy/`，不是 alpha.4 默认包。
+脚本从 `VERSION` 生成客户端、原生程序及包元数据，构建前端（可用 `-SkipFrontend` 复用 `web/index.html`）、C++ sidecar / 示例霍尔插件、Rust Wooting 桥接并发布 WinUI；输出 `dist/Aura-v<VERSION>-windows-x64-<build-id>/`、ZIP 与 SHA-256（内含内置 `plugins/` 与一键部署脚本 `deploy_aura.bat` / `deploy_aura.ps1`）。打包脚本本身不部署到用户目录、不清理用户 runtime、不自动发布 GitHub Release。
+
+在新电脑解压发布包后，可直接运行包根目录一键部署脚本：
+
+```powershell
+# 标准安装至 %LOCALAPPDATA%\Programs\Aura，检测依赖并初始化内置插件（不覆盖已有 config.json）
+.\deploy_aura.bat
+# 如缺少 WebView2 并需导出 MCP 配置、安装 Wooting 桥接，或部署为便携版：
+.\deploy_aura.bat -InstallWebView2 -ExportMcpConfig -InstallWootingBridge
+.\deploy_aura.bat -Portable -InstallDir D:\Apps\Aura
+```
 
 出于保守的第三方资产策略，打包脚本不会从本机复制、内嵌或附带 `AacKbHal_x64.dll`。仅在显式选择 legacy HAL 或 auto 回退到 HAL 时，程序从用户已安装的 ASUS 官方目录/注册路径定位 DLL，并且只加载通过已验证 SHA-256 与内存签名 Gate 的版本。如果缺失或版本不受支持，请通过 Armoury Crate / ASUS 官方驱动包安装或修复，不要从非官方来源下载 DLL。
 

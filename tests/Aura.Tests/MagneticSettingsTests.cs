@@ -1077,6 +1077,34 @@ public sealed class MagneticSettingsTests
         Assert.IsEmpty(magnetic.Calls);
     }
 
+    [TestMethod]
+    public async Task SelectKeysAndApplyCoalescedBatchTracksTimingAndClearsDrafts()
+    {
+        var fake = new Fake();
+        var model = new MagneticSettingsModel(fake);
+        await model.RefreshAsync();
+
+        Assert.IsTrue(model.SelectKeys([0x0701, 0x0602, 0x0702, 0x0301]));
+        Assert.IsTrue(model.IsMultiMode);
+        Assert.AreEqual(4, model.SelectedCount);
+
+        model.EditBatchActuation(0.8);
+        model.EditBatchRapidTrigger(MagneticBatchRtAction.Enable, 0.2, 0.3);
+        var ops = new List<MagneticBatchOp>();
+        foreach (var id in model.SelectedLogicalIds)
+        {
+            ops.Add(new MagneticBatchOp("actuation", LogicalId: id, Mm: 0.8));
+            ops.Add(new MagneticBatchOp("rapid_trigger_enable", LogicalId: id, PressMm: 0.2, ReleaseMm: 0.3));
+        }
+
+        Assert.IsTrue(await model.ApplyCoalescedBatchAsync(ops, resolveDks: true));
+        Assert.AreEqual(1, fake.CoalescedBatches.Count);
+        Assert.AreEqual(8, fake.CoalescedBatches[0].Count);
+        Assert.AreEqual(42.5, model.LastTimingMs);
+        Assert.IsNull(model.BatchDraft.ActuationMm);
+        Assert.AreEqual(MagneticBatchRtAction.Unchanged, model.BatchDraft.RtAction);
+    }
+
     private sealed class CaptureHandler : HttpMessageHandler
     {
         public string? Path { get; private set; }
@@ -1141,6 +1169,14 @@ public sealed class MagneticSettingsTests
             Record($"batch-rt:{string.Join(',', ids)}:{enable}:{press:F1}:{release:F1}:{resolveDks}");
         public Task<MagneticStatus> SetBatchDeadzoneAsync(IReadOnlyList<ushort> ids, double top, double bottom) =>
             Record($"batch-deadzone:{string.Join(',', ids)}:{top:F1}:{bottom:F1}");
+        public List<IReadOnlyList<MagneticBatchOp>> CoalescedBatches { get; } = [];
+        public Task<MagneticStatus> ApplyCoalescedBatchAsync(IReadOnlyList<MagneticBatchOp> ops, bool resolveDks = true)
+        {
+            CoalescedBatches.Add(ops);
+            Status.TimingMs = 42.5;
+            Status.AppliedOps = ops.Count;
+            return Record($"coalesced:{ops.Count}:{resolveDks}");
+        }
         public Task<MagneticStatus> AcknowledgeExternalResynchronizationAsync()
         {
             Status.PersistentSafetyQuarantine = false;

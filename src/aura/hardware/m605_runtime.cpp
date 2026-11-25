@@ -8,13 +8,32 @@ namespace aura {
 
 // The only production implementation of the internal transport seam. It
 // reuses NativeHidBackend's endpoint validation and overlapped write path.
+struct NativeAckState {
+    bool stage_acked = false;
+    bool apply_acked = false;
+};
+
 class M605NativeTransport final : public m605::detail::Transport {
 public:
     bool IsConnected() const override { return backend_.IsConnected(); }
     bool IsCurrentSession() const override { return backend_.ProbeCurrentM605Transport(); }
     bool Connect() override { return backend_.Connect(); }
-    bool WriteStage(const m605::Report& report) override { return backend_.SendReport(report); }
-    bool WriteApply(const m605::Report& report) override { return backend_.SendReport(report); }
+    bool WriteStage(const m605::Report& report) override {
+        bool acked = false;
+        const bool ok = backend_.SendReportWithAck(report, &acked, 80);
+        if (ack_state_) {
+            ack_state_->stage_acked = ok && acked;
+            ack_state_->apply_acked = false;
+        }
+        return ok;
+    }
+    void SetAckState(std::shared_ptr<NativeAckState> ack_state) { ack_state_ = std::move(ack_state); }
+    bool WriteApply(const m605::Report& report) override {
+        bool acked = false;
+        const bool ok = backend_.SendReportWithAck(report, &acked, 100);
+        if (ack_state_) ack_state_->apply_acked = ok && acked;
+        return ok;
+    }
     bool QueryBasicInfo(m605::Report& response) override { return backend_.QueryBasicInfo(response); }
     m605::FirmwareCompatibility ReadFirmwareCompatibility() override { return backend_.ReadFirmwareCompatibility(); }
     void Disconnect() override { backend_.Disconnect(); }
@@ -22,6 +41,7 @@ public:
 
 private:
     NativeHidBackend backend_;
+    std::shared_ptr<NativeAckState> ack_state_;
 };
 
 namespace {
@@ -80,9 +100,21 @@ private:
 
 class VendorSettleWait final : public m605::detail::SettleWait {
 public:
-    void WaitBetweenDksStages() override { std::this_thread::sleep_for(std::chrono::milliseconds(30)); }
-    void WaitBeforeApply() override { std::this_thread::sleep_for(std::chrono::milliseconds(210)); }
-    void WaitAfterApply() override { std::this_thread::sleep_for(std::chrono::milliseconds(400)); }
+    void SetAckState(std::shared_ptr<NativeAckState> ack_state) { ack_state_ = std::move(ack_state); }
+    void WaitBetweenDksStages() override {
+        const int ms = (ack_state_ && ack_state_->stage_acked) ? 5 : 30;
+        std::this_thread::sleep_for(std::chrono::milliseconds(ms));
+    }
+    void WaitBeforeApply() override {
+        const int ms = (ack_state_ && ack_state_->stage_acked) ? 15 : 210;
+        std::this_thread::sleep_for(std::chrono::milliseconds(ms));
+    }
+    void WaitAfterApply() override {
+        const int ms = (ack_state_ && ack_state_->apply_acked) ? 30 : 400;
+        std::this_thread::sleep_for(std::chrono::milliseconds(ms));
+    }
+private:
+    std::shared_ptr<NativeAckState> ack_state_;
 };
 
 std::future<bool> RejectedOperation() {
@@ -113,6 +145,13 @@ M605Runtime::M605Runtime(std::unique_ptr<m605::detail::Transport> transport,
     : transport_(std::move(transport)),
       settle_wait_(std::move(settle_wait)),
       safety_latch_(std::move(safety_latch)) {
+    if (auto* native_transport = dynamic_cast<M605NativeTransport*>(transport_.get())) {
+        if (auto* vendor_wait = dynamic_cast<VendorSettleWait*>(settle_wait_.get())) {
+            auto ack = std::make_shared<NativeAckState>();
+            native_transport->SetAckState(ack);
+            vendor_wait->SetAckState(ack);
+        }
+    }
     if (safety_latch_->IsQuarantined()) {
         health_ = M605RuntimeHealth::PersistentSafetyQuarantine;
         last_error_ = "Persistent M605 safety quarantine: external device resynchronization must be acknowledged";
@@ -427,6 +466,77 @@ std::future<bool> M605Runtime::SetGlobalRapidTrigger(
     return RejectedOperation();
 }
 
+std::future<bool> M605Runtime::SubmitCoalescedBatch(std::vector<M605BatchStageOp> ops) {
+    if (ops.empty() || ops.size() > 512) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (health_ == M605RuntimeHealth::Clean ||
+            health_ == M605RuntimeHealth::TransactionInProgress) {
+            last_error_ = "Coalesced batch requires 1..512 operations";
+        }
+        return RejectedOperation();
+    }
+    Job job{};
+    job.kind = Kind::CoalescedBatch;
+    job.batch_ops = ops;
+    job.apply = m605::BuildRuntimeApply();
+    for (const auto& op : ops) {
+        switch (op.kind) {
+        case M605BatchStageOp::Kind::Actuation: {
+            auto r = m605::BuildPerKeyActuation(op.logical_key_id, op.first_mm);
+            if (!r) return RejectedOperation();
+            job.batch_stages.push_back(*r);
+            job.batch_stage_is_dks.push_back(false);
+            break;
+        }
+        case M605BatchStageOp::Kind::Deadzone: {
+            auto r = m605::BuildPerKeyDeadzone(op.logical_key_id, op.first_mm, op.second_mm);
+            if (!r) return RejectedOperation();
+            job.batch_stages.push_back(*r);
+            job.batch_stage_is_dks.push_back(false);
+            break;
+        }
+        case M605BatchStageOp::Kind::RapidTriggerOn:
+        case M605BatchStageOp::Kind::RapidTriggerOff: {
+            auto stages = m605::BuildPerKeyRapidTriggerStages(
+                op.logical_key_id, op.first_mm, op.second_mm,
+                op.kind == M605BatchStageOp::Kind::RapidTriggerOn);
+            if (!stages) return RejectedOperation();
+            job.batch_stages.push_back((*stages)[0]);
+            job.batch_stage_is_dks.push_back(false);
+            job.batch_stages.push_back((*stages)[1]);
+            job.batch_stage_is_dks.push_back(false);
+            break;
+        }
+        case M605BatchStageOp::Kind::GlobalActuation: {
+            auto r = m605::BuildGlobalActuation(op.first_mm);
+            if (!r || !NativeHidBackend::IsSupportedOutputReport(*r)) return RejectedOperation();
+            job.batch_stages.push_back(*r);
+            job.batch_stage_is_dks.push_back(false);
+            break;
+        }
+        case M605BatchStageOp::Kind::GlobalDeadzone: {
+            auto r = m605::BuildGlobalDeadzone(op.first_mm, op.second_mm);
+            if (!r || !NativeHidBackend::IsSupportedOutputReport(*r)) return RejectedOperation();
+            job.batch_stages.push_back(*r);
+            job.batch_stage_is_dks.push_back(false);
+            break;
+        }
+        case M605BatchStageOp::Kind::DksStandard: {
+            auto stages = m605::BuildPerKeyDksStages(
+                m605::StandardDksConfiguration(op.logical_key_id));
+            if (!stages) return RejectedOperation();
+            for (const auto& s : *stages) {
+                if (!NativeHidBackend::IsSupportedOutputReport(s)) return RejectedOperation();
+                job.batch_stages.push_back(s);
+                job.batch_stage_is_dks.push_back(true);
+            }
+            break;
+        }
+        }
+    }
+    return Enqueue(std::move(job));
+}
+
 std::future<bool> M605Runtime::Enqueue(Job job) {
     auto future = job.completion.get_future();
     bool queued = false;
@@ -499,7 +609,7 @@ void M605Runtime::WorkerLoop() {
                 const char* names[] = {"KeyActuation", "Analog", "RapidTrigger", "KeyDeadzone",
                     "ResetAllDeadzone", "SpeedTapPair", "SpeedTapMaster", "SpeedTapProfileReset",
                     "Dks", "AllKeyActuation", "AllKeyDeadzone", "GlobalRapidTrigger",
-                    "ResetAllPerKeyActuationOverrides"};
+                    "ResetAllPerKeyActuationOverrides", "CoalescedBatch"};
                 last_failed_kind_ = names[static_cast<size_t>(job.kind)];
                 last_failed_logical_id_ = job.logical_key_id;
                 last_failed_generation_ = session_generation_;
@@ -522,7 +632,14 @@ bool M605Runtime::Execute(const Job& job, M605TimingSnapshot& timing) {
         destination += Milliseconds(start);
         return result;
     };
-    if (job.stage_count == 0 || job.stage_count > job.stages.size()) {
+    const bool is_coalesced = (job.kind == Kind::CoalescedBatch);
+    const size_t total_stages = is_coalesced ? job.batch_stages.size() : job.stage_count;
+    const bool valid_stage_count = is_coalesced
+        ? (!job.batch_stages.empty() &&
+           job.batch_stages.size() == job.batch_stage_is_dks.size() &&
+           !job.batch_ops.empty())
+        : (job.stage_count > 0 && job.stage_count <= job.stages.size());
+    if (!valid_stage_count) {
         std::lock_guard<std::mutex> lock(mutex_);
         last_error_ = "Invalid internal M605 stage count";
         return false; // Fail closed before opening a handle or writing a report.
@@ -540,15 +657,17 @@ bool M605Runtime::Execute(const Job& job, M605TimingSnapshot& timing) {
         last_error_ = "Durable safety latch could not be established; no device write was attempted";
         return false;
     }
-    for (uint8_t i = 0; i < job.stage_count; ++i) {
-        if (!measure([&] { return transport_->WriteStage(job.stages[i]); }, timing.stage_submit_ms)) {
+    for (size_t i = 0; i < total_stages; ++i) {
+        const auto& stage_report = is_coalesced ? job.batch_stages[i] : job.stages[i];
+        if (!measure([&] { return transport_->WriteStage(stage_report); }, timing.stage_submit_ms)) {
             const std::string error = transport_->GetLastError();
             transport_->Disconnect();
             MarkIndeterminate("stage " + std::to_string(i + 1) +
                               " write did not complete: " + error);
             return false;
         }
-        if (job.kind == Kind::Dks && i + 1 < job.stage_count) {
+        const bool is_dks_stage = is_coalesced ? job.batch_stage_is_dks[i] : (job.kind == Kind::Dks);
+        if (is_dks_stage && i + 1 < total_stages && (!is_coalesced || job.batch_stage_is_dks[i + 1])) {
             measure([&] { settle_wait_->WaitBetweenDksStages(); return true; },
                 timing.inter_stage_settle_ms);
         }
@@ -618,7 +737,54 @@ bool M605Runtime::Execute(const Job& job, M605TimingSnapshot& timing) {
         } else if (job.kind == Kind::GlobalDeadzone) {
             applied_state_.global_deadzone = {job.stages[0][5], job.stages[0][6]};
             // 51 58 likewise does not prove per-key override removal.
-
+        } else if (job.kind == Kind::CoalescedBatch) {
+            size_t stage_idx = 0;
+            for (const auto& op : job.batch_ops) {
+                switch (op.kind) {
+                case M605BatchStageOp::Kind::Actuation:
+                    applied_state_.per_key_actuation_raw[op.logical_key_id] =
+                        job.batch_stages[stage_idx][7];
+                    stage_idx += 1;
+                    break;
+                case M605BatchStageOp::Kind::Deadzone:
+                    applied_state_.per_key_deadzone[op.logical_key_id] = {
+                        job.batch_stages[stage_idx][8],
+                        job.batch_stages[stage_idx][7]};
+                    stage_idx += 1;
+                    break;
+                case M605BatchStageOp::Kind::RapidTriggerOn:
+                case M605BatchStageOp::Kind::RapidTriggerOff: {
+                    auto& rt = applied_state_.per_key_rapid_trigger[op.logical_key_id];
+                    for (size_t k = 0; k < 2; ++k) {
+                        const auto& r = job.batch_stages[stage_idx + k];
+                        rt.enabled = r[9] != 0;
+                        rt.continuous = false;
+                        if (r[3] == 0 || r[3] == 1) { rt.press_raw = r[7]; rt.press_known = true; }
+                        if (r[3] == 0 || r[3] == 2) { rt.release_raw = r[7]; rt.release_known = true; }
+                    }
+                    stage_idx += 2;
+                    break;
+                }
+                case M605BatchStageOp::Kind::GlobalActuation:
+                    applied_state_.global_actuation_raw = job.batch_stages[stage_idx][5];
+                    stage_idx += 1;
+                    break;
+                case M605BatchStageOp::Kind::GlobalDeadzone:
+                    applied_state_.global_deadzone = {
+                        job.batch_stages[stage_idx][5],
+                        job.batch_stages[stage_idx][6]};
+                    stage_idx += 1;
+                    break;
+                case M605BatchStageOp::Kind::DksStandard:
+                    applied_state_.per_key_dks[op.logical_key_id] = {
+                        job.batch_stages[stage_idx][5],
+                        job.batch_stages[stage_idx][6],
+                        m605::StandardDksConfiguration(op.logical_key_id).slots,
+                        true};
+                    stage_idx += 4;
+                    break;
+                }
+            }
         }
         last_error_.clear();
     }

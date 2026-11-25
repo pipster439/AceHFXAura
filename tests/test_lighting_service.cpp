@@ -749,6 +749,29 @@ int main() {
         std::filesystem::remove(path);
     }
 
+    {
+        const auto hall_path = CreateTempConfigFile("hall_overlay_api",
+            R"({"fps":25,"default_profile":"desktop","profiles":{"desktop":{"type":"static","color":[0,120,255]}}})");
+        aura::LightingControlService hl_svc(hall_path);
+        aura::HallLightingConfig cfg;
+        std::string rev, new_rev;
+        CHECK(hl_svc.GetHallLightingOverlay(cfg, rev).http_status == 200 && !cfg.enabled && cfg.mode == "glow",
+            "default hall overlay reads cleanly when absent");
+        nlohmann::json patch = {{"enabled", true}, {"mode", "halo"}, {"color", {255, 180, 40}}, {"intensity", 0.9}, {"min_depth_mm", 0.15}};
+        CHECK(hl_svc.UpdateHallLightingOverlayPatch(patch, rev, cfg, new_rev).http_status == 200 &&
+              cfg.enabled && cfg.mode == "halo" && cfg.color.r == 255 && !new_rev.empty(),
+            "hall overlay patch succeeds and mutates fields");
+        CHECK(hl_svc.UpdateHallLightingOverlayPatch(nlohmann::json{{"enabled", false}}, rev, cfg, rev).http_status == 409,
+            "hall overlay stale revision returns 409");
+        CHECK(hl_svc.UpdateHallLightingOverlayPatch(nlohmann::json{{"mode", "invalid_mode"}}, new_rev, cfg, rev).http_status == 400,
+            "hall overlay invalid mode returns 400");
+        aura::RuleEngine hl_reader;
+        CHECK(hl_reader.LoadConfig(hall_path) && hl_reader.GetHallLightingConfig().enabled &&
+              hl_reader.GetHallLightingConfig().mode == "halo",
+            "RuleEngine reloads persisted hall_lighting config");
+        std::filesystem::remove(hall_path);
+    }
+
     // 清理测试临时文件
     std::error_code ec;
     std::filesystem::remove(test_cfg_path, ec);

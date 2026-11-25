@@ -35,6 +35,7 @@ public:
     bool UsesGsi() const;
     bool UsesAudio() const;
     bool UsesScreen() const;
+    bool UsesHall() const;
     uint32_t InstructionCount() const;
     struct Impl;
 private:
@@ -48,6 +49,7 @@ struct EffectProgramStatus {
     bool keyboard_available{false};
     bool audio_available{false};
     bool screen_available{false};
+    bool hall_available{false};
     uint32_t instructions{0}, work_units{0}, pc{0};
     EffectProgramError error;
 };
@@ -58,7 +60,8 @@ struct EffectProgramStatus {
 class ProgramEffect final : public Effect {
 public:
     explicit ProgramEffect(std::shared_ptr<const EffectProgram> program,
-                           const AuraLogicalKeyboardHostV1* keyboard = nullptr);
+                           const AuraLogicalKeyboardHostV1* keyboard = nullptr,
+                           const AuraHallAnalogHostV1* hall = nullptr);
     ~ProgramEffect() override;
     ProgramEffect(const ProgramEffect&) = delete;
     ProgramEffect& operator=(const ProgramEffect&) = delete;

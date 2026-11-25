@@ -618,6 +618,64 @@ bool NativeHidBackend::SendReport(const std::array<uint8_t, HID_REPORT_SIZE>& re
     return false;
 }
 
+bool NativeHidBackend::SendReportWithAck(const std::array<uint8_t, HID_REPORT_SIZE>& report,
+                                         bool* ack_received,
+                                         uint32_t timeout_ms) {
+    if (ack_received) *ack_received = false;
+    const bool expect_ack = (report[1] == 0x51 || report[1] == 0x50);
+    if (expect_ack && validated_target_ && IsConnected()) {
+        HidD_FlushQueue(hDevice_);
+    }
+    if (!SendReport(report)) {
+        return false;
+    }
+    if (!expect_ack) {
+        return true;
+    }
+
+    HANDLE event = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!event) {
+        return true; // Write succeeded; fallback to conservative host settle wait.
+    }
+
+    const ULONGLONG deadline = GetTickCount64() + timeout_ms;
+    std::array<uint8_t, HID_REPORT_SIZE> reply{};
+    bool nak_seen = false;
+    do {
+        OVERLAPPED overlapped{};
+        overlapped.hEvent = event;
+        ResetEvent(event);
+        DWORD received = 0;
+        BOOL ready = ReadFile(hDevice_, reply.data(), HID_REPORT_SIZE, &received, &overlapped);
+        if (!ready && ::GetLastError() == ERROR_IO_PENDING) {
+            const ULONGLONG now = GetTickCount64();
+            const DWORD remaining = now >= deadline ? 0 : static_cast<DWORD>(deadline - now);
+            const DWORD waited = WaitForSingleObject(event, remaining);
+            if (waited != WAIT_OBJECT_0) {
+                CancelIoEx(hDevice_, &overlapped);
+                GetOverlappedResult(hDevice_, &overlapped, &received, TRUE);
+                break;
+            }
+            ready = GetOverlappedResult(hDevice_, &overlapped, &received, FALSE);
+        }
+        if (!ready || received != HID_REPORT_SIZE) {
+            break;
+        }
+        if (reply[0] == 0 && reply[1] == 0xFF && reply[2] == 0xAA) {
+            last_error_ = "Firmware NAK (FF AA): configuration command rejected";
+            nak_seen = true;
+            break;
+        }
+        if (reply[0] == 0 && reply[1] == report[1] && reply[2] == report[2]) {
+            if (ack_received) *ack_received = true;
+            break;
+        }
+    } while (GetTickCount64() < deadline);
+
+    CloseHandle(event);
+    return !nak_seen;
+}
+
 bool NativeHidBackend::PushFrame(const FrameBuffer& frame, const std::vector<uint8_t>& padded_table) {
     std::lock_guard<std::mutex> write_lock(DeviceWriteMutex());
     if (!IsConnected()) {

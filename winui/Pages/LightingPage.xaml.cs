@@ -33,6 +33,11 @@ public sealed partial class LightingPage : Page
     private int? _draftPeriodMs;
     private readonly Dictionary<string, object> _draftParameters = new();
     private bool _isDirty = false;
+    private HallLightingOverlayDto? _hallOverlay;
+    private string _hallOverlayRevision = "";
+    private bool _hallOverlayDirty;
+    private int[] _hallOverlayColor = [0, 220, 255];
+    private int[] _hallOverlaySecondaryColor = [255, 80, 180];
 
     public LightingPage()
     {
@@ -198,6 +203,9 @@ public sealed partial class LightingPage : Page
 
             // 3. 将 cleanLighting 回填至 UI 与本地草稿
             ApplyCleanLightingToUi();
+
+            // 4. 加载软件霍尔压感联动叠加配置（非阻塞）
+            await LoadHallOverlayCoreAsync(token);
 
             _isApplyingModel = false;
             _reloadOnEnter = false;
@@ -967,6 +975,244 @@ public sealed partial class LightingPage : Page
                 await LoadLightingPageDataAsync(_lifetime.Token);
         }
         return saved && !_isDirty;
+    }
+
+    private async Task LoadHallOverlayCoreAsync(CancellationToken token)
+    {
+        try
+        {
+            var hRes = await _client.GetHallLightingOverlayAsync(token);
+            if (token.IsCancellationRequested) return;
+            if (hRes.IsSuccess && hRes.HallLighting != null)
+            {
+                _hallOverlay = hRes.HallLighting;
+                _hallOverlayRevision = hRes.Revision;
+                ApplyHallOverlayToUi();
+            }
+            else if (HallOverlayStatusText != null)
+            {
+                HallOverlayStatusText.Text = "压感联动配置暂不可用（守护进程未返回）";
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            if (HallOverlayStatusText != null)
+                HallOverlayStatusText.Text = $"读取失败：{ex.Message}";
+        }
+    }
+
+    private void ApplyHallOverlayToUi()
+    {
+        if (_hallOverlay == null) return;
+
+        if (HallOverlayToggle != null)
+            HallOverlayToggle.IsOn = _hallOverlay.Enabled;
+
+        if (HallOverlayModeCombo != null)
+        {
+            int idx = -1;
+            for (int i = 0; i < HallOverlayModeCombo.Items.Count; i++)
+            {
+                if (HallOverlayModeCombo.Items[i] is ComboBoxItem item &&
+                    string.Equals(item.Tag as string, _hallOverlay.Mode, StringComparison.OrdinalIgnoreCase))
+                {
+                    idx = i;
+                    break;
+                }
+            }
+            HallOverlayModeCombo.SelectedIndex = idx >= 0 ? idx : 0;
+        }
+
+        _hallOverlayColor = _hallOverlay.Color is { Length: 3 } c
+            ? [Math.Clamp(c[0], 0, 255), Math.Clamp(c[1], 0, 255), Math.Clamp(c[2], 0, 255)]
+            : [0, 220, 255];
+        _hallOverlaySecondaryColor = _hallOverlay.SecondaryColor is { Length: 3 } sc
+            ? [Math.Clamp(sc[0], 0, 255), Math.Clamp(sc[1], 0, 255), Math.Clamp(sc[2], 0, 255)]
+            : [255, 80, 180];
+
+        if (HallOverlayColorCombo != null)
+        {
+            string tag = $"{_hallOverlayColor[0]},{_hallOverlayColor[1]},{_hallOverlayColor[2]}";
+            int idx = -1;
+            for (int i = 0; i < HallOverlayColorCombo.Items.Count; i++)
+            {
+                if (HallOverlayColorCombo.Items[i] is ComboBoxItem item &&
+                    string.Equals(item.Tag as string, tag, StringComparison.Ordinal))
+                {
+                    idx = i;
+                    break;
+                }
+            }
+            if (idx < 0)
+            {
+                ComboBoxItem? customItem = null;
+                for (int i = 0; i < HallOverlayColorCombo.Items.Count; i++)
+                {
+                    if (HallOverlayColorCombo.Items[i] is ComboBoxItem item &&
+                        item.Name == "CustomHallOverlayColorItem")
+                    {
+                        customItem = item;
+                        idx = i;
+                        break;
+                    }
+                }
+                if (customItem == null)
+                {
+                    customItem = new ComboBoxItem { Name = "CustomHallOverlayColorItem" };
+                    HallOverlayColorCombo.Items.Add(customItem);
+                    idx = HallOverlayColorCombo.Items.Count - 1;
+                }
+                customItem.Content = $"自定义 ({_hallOverlayColor[0]}, {_hallOverlayColor[1]}, {_hallOverlayColor[2]})";
+                customItem.Tag = tag;
+            }
+            HallOverlayColorCombo.SelectedIndex = idx;
+        }
+
+        int pct = (int)Math.Round(Math.Clamp(_hallOverlay.Intensity, 0.0, 1.0) * 100.0);
+        if (HallOverlayIntensitySlider != null) HallOverlayIntensitySlider.Value = pct;
+        if (HallOverlayIntensityText != null) HallOverlayIntensityText.Text = $"{pct}%";
+
+        int tenths = (int)Math.Round(Math.Clamp(_hallOverlay.MinDepthMm, 0.0, 1.0) * 10.0);
+        if (HallOverlayMinDepthSlider != null) HallOverlayMinDepthSlider.Value = tenths;
+        if (HallOverlayMinDepthText != null) HallOverlayMinDepthText.Text = $"{tenths / 10.0:F1} mm";
+
+        _hallOverlayDirty = false;
+        if (HallOverlaySaveBtn != null) HallOverlaySaveBtn.IsEnabled = false;
+        if (HallOverlayStatusText != null)
+            HallOverlayStatusText.Text = _hallOverlay.Enabled ? "已开启 · 与当前 Aura 灯效叠加运行" : "已关闭";
+    }
+
+    private void MarkHallOverlayDirty()
+    {
+        _hallOverlayDirty = true;
+        if (HallOverlaySaveBtn != null)
+            HallOverlaySaveBtn.IsEnabled = true;
+        if (HallOverlayStatusText != null)
+            HallOverlayStatusText.Text = "有未应用的修改";
+    }
+
+    private void HallOverlayToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_isApplyingModel) return;
+        MarkHallOverlayDirty();
+    }
+
+    private void HallOverlayControl_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isApplyingModel) return;
+        if (HallOverlayColorCombo?.SelectedItem is ComboBoxItem { Tag: string rgbTag })
+        {
+            var parts = rgbTag.Split(',');
+            if (parts.Length == 3 &&
+                int.TryParse(parts[0], out int r) &&
+                int.TryParse(parts[1], out int g) &&
+                int.TryParse(parts[2], out int b))
+            {
+                _hallOverlayColor = [Math.Clamp(r, 0, 255), Math.Clamp(g, 0, 255), Math.Clamp(b, 0, 255)];
+            }
+        }
+        MarkHallOverlayDirty();
+    }
+
+    private void HallOverlayIntensitySlider_ValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
+    {
+        if (HallOverlayIntensityText != null)
+            HallOverlayIntensityText.Text = $"{(int)Math.Round(e.NewValue)}%";
+        if (_isApplyingModel) return;
+        MarkHallOverlayDirty();
+    }
+
+    private void HallOverlayMinDepthSlider_ValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
+    {
+        if (HallOverlayMinDepthText != null)
+            HallOverlayMinDepthText.Text = $"{Math.Round(e.NewValue) / 10.0:F1} mm";
+        if (_isApplyingModel) return;
+        MarkHallOverlayDirty();
+    }
+
+    private async void HallOverlaySaveBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (_saving || !_hallOverlayDirty || _lifetime == null ||
+            HallOverlayToggle == null || HallOverlayModeCombo == null ||
+            HallOverlayIntensitySlider == null || HallOverlayMinDepthSlider == null ||
+            HallOverlaySaveBtn == null)
+        {
+            return;
+        }
+
+        var token = _lifetime.Token;
+        HallOverlaySaveBtn.IsEnabled = false;
+        try
+        {
+            if (string.IsNullOrEmpty(_hallOverlayRevision))
+            {
+                var latest = await _client.GetHallLightingOverlayAsync(token);
+                if (token.IsCancellationRequested) return;
+                if (!latest.IsSuccess || string.IsNullOrEmpty(latest.Revision))
+                {
+                    HallOverlaySaveBtn.IsEnabled = _hallOverlayDirty;
+                    ShowNotification(InfoBarSeverity.Error, "读取压感联动失败", latest.ErrorMessage);
+                    return;
+                }
+                _hallOverlayRevision = latest.Revision;
+            }
+
+            string mode = (HallOverlayModeCombo.SelectedItem as ComboBoxItem)?.Tag as string ?? "glow";
+            double intensity = Math.Round(Math.Clamp(HallOverlayIntensitySlider.Value / 100.0, 0.0, 1.0), 2);
+            double minDepthMm = Math.Round(Math.Clamp(HallOverlayMinDepthSlider.Value / 10.0, 0.0, 1.0), 2);
+
+            var patch = new HallLightingOverlayPatchDto
+            {
+                ExpectedRevision = _hallOverlayRevision,
+                Enabled = HallOverlayToggle.IsOn,
+                Mode = mode,
+                Color = _hallOverlayColor,
+                SecondaryColor = _hallOverlaySecondaryColor,
+                Intensity = intensity,
+                MinDepthMm = minDepthMm
+            };
+
+            var res = await _client.UpdateHallLightingOverlayAsync(patch, token);
+            if (token.IsCancellationRequested) return;
+
+            if (res.IsSuccess)
+            {
+                _hallOverlayRevision = res.NewRevision;
+                _hallOverlay = res.HallLighting ?? new HallLightingOverlayDto
+                {
+                    Enabled = HallOverlayToggle.IsOn,
+                    Mode = mode,
+                    Color = _hallOverlayColor,
+                    SecondaryColor = _hallOverlaySecondaryColor,
+                    Intensity = intensity,
+                    MinDepthMm = minDepthMm
+                };
+                _isApplyingModel = true;
+                try { ApplyHallOverlayToUi(); }
+                finally { _isApplyingModel = false; }
+                ShowNotification(InfoBarSeverity.Success, "压感联动已更新",
+                    HallOverlayToggle.IsOn ? "霍尔压感联动已开启，并与当前 Aura 灯效叠加运行。" : "霍尔压感联动已关闭。");
+            }
+            else if (res.IsConflict)
+            {
+                ShowNotification(InfoBarSeverity.Warning, "压感联动配置已被外部修改", "已自动为您重新载入最新配置。");
+                _isApplyingModel = true;
+                try { await LoadHallOverlayCoreAsync(token); }
+                finally { _isApplyingModel = false; }
+            }
+            else
+            {
+                HallOverlaySaveBtn.IsEnabled = _hallOverlayDirty;
+                if (HallOverlayStatusText != null) HallOverlayStatusText.Text = $"保存失败：{res.ErrorMessage}";
+                ShowNotification(InfoBarSeverity.Error, "应用压感联动失败", res.ErrorMessage);
+            }
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+        catch (Exception ex)
+        {
+            HallOverlaySaveBtn.IsEnabled = _hallOverlayDirty;
+            ShowNotification(InfoBarSeverity.Error, "应用压感联动异常", ex.Message);
+        }
     }
 
     private void ShowNotification(InfoBarSeverity severity, string title, string message)

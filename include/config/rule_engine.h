@@ -1,6 +1,7 @@
 #pragma once
 
 #include "engine/effect.h"
+#include "config/config_contract.h"
 #include "gsi/automation_input.h"
 #include <functional>
 #include <optional>
@@ -142,6 +143,10 @@ public:
         std::lock_guard<std::mutex> lock(mutex_);
         return last_config_error_;
     }
+    HallLightingConfig GetHallLightingConfig() const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return hall_lighting_;
+    }
     bool HasProfile(const std::string& name) const;
     std::shared_ptr<const Profile> GetProfile(const std::string& name) const;
 
@@ -166,6 +171,7 @@ private:
     std::string fallback_profile_;
     int target_fps_{25};
     HardwareBackend hardware_backend_{HardwareBackend::Auto};
+    HallLightingConfig hall_lighting_;
     std::unordered_map<std::string, std::shared_ptr<Profile>> profiles_;
 
     struct EdgeMemory {

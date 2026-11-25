@@ -45,6 +45,11 @@ struct Keyboard {
     static uint32_t AURA_PLUGIN_CALL Read(void* context,AuraLogicalKeyboardSnapshotV1* out,uint32_t bytes){auto& self=*static_cast<Keyboard*>(context);++self.reads;if(bytes!=sizeof(*out))return 0;*out=self.snapshot;return 1;}
     AuraLogicalKeyboardHostV1 Host(){return {sizeof(AuraLogicalKeyboardHostV1),1,this,&Read};}
 };
+struct HallAnalog {
+    AuraHallAnalogSnapshotV1 snapshot{};unsigned reads{0};
+    static uint32_t AURA_PLUGIN_CALL Read(void* context,AuraHallAnalogSnapshotV1* out,uint32_t bytes){auto& self=*static_cast<HallAnalog*>(context);++self.reads;if(bytes!=sizeof(*out))return 0;*out=self.snapshot;return 1;}
+    AuraHallAnalogHostV1 Host(){return {sizeof(AuraHallAnalogHostV1),AURA_HALL_ANALOG_VERSION,this,&Read};}
+};
 class FixtureGsi final:public IGsiReader {
 public:
     Json fields=Json::object();bool available{false};mutable std::string text;
@@ -216,6 +221,56 @@ try{
     auto budget_program=Program(Json::array({Fill(R(10),1),Fill(R(200),1)}));ProgramEffect budget(EffectProgram::Compile(budget_program));Render(budget,keys,0);
     Require(budget.Status().yielded&&budget.Status().work_units<=4096&&budget.Status().pc==1,"action yields before exceeding remaining frame budget");
     auto isolated_a=std::make_unique<ProgramEffect>(shared),isolated_b=std::make_unique<ProgramEffect>(shared);Render(*isolated_a,keys,2);Require(!isolated_b->Status().instructions,"shared immutable program has independent instance state");
+    {
+        HallAnalog hall;
+        auto hall_host=hall.Host();
+        auto mkHallKeyDepth=[](const char* key,const char* unit,double def){
+            return Json{{"op","hall_key_depth"},{"key",key},{"unit",unit},{"default",N(def)}};
+        };
+        auto mkHallDepth=[](const char* unit,double def){
+            return Json{{"op","hall_depth"},{"unit",unit},{"default",N(def)}};
+        };
+        auto mkHallFeat=[](const char* feat,double def){
+            return Json{{"op","hall_feature"},{"feature",feat},{"default",N(def)}};
+        };
+        auto compiled=EffectProgram::Compile(Program(Json::array({
+            {{"kind","loopInit"},{"slot",0},{"mode","keys"},{"zone","wasd"},{"next",1}},
+            {{"kind","loopTest"},{"slot",0},{"mode","keys"},{"zone","wasd"},{"body",2},{"after",4}},
+            {{"kind","action"},{"op","setKey"},{"led",{{"op","coords"},{"field","led_id"}}},{"keySlot",0},
+             {"color",E("rgb",{
+                 E("mul",{mkHallDepth("normalized",0.0),N(255)}),
+                 E("mul",{mkHallKeyDepth("W","mm",0.0),N(50)}),
+                 E("mul",{mkHallFeat("active_count",0.0),N(40)})
+             })},{"next",3}},
+            {{"kind","increment"},{"slot",0},{"next",1}},
+            {{"kind","end"}}
+        }),0,0,1));
+        Require(compiled->UsesHall() && !shared->UsesHall(),"UsesHall detects hall expressions accurately");
+        ProgramEffect hall_fx(compiled,&host,&hall_host);
+        // 1. Inactive Hall snapshot -> falls back to default (0)
+        auto out0=Render(hall_fx,keys,0);
+        Require(!hall_fx.Status().hall_available && out0.buffer[w*3]==0,"inactive Hall stream falls back to default");
+        // 2. Active Hall snapshot: W=2.0mm (norm 0.5), A=4.0mm (norm 1.0)
+        hall.snapshot={sizeof(AuraHallAnalogSnapshotV1),AURA_HALL_ANALOG_VERSION,1,2,1000,5,0,{}};
+        hall.snapshot.keys[0]={26,0x0701,0.5f,2.0f,1500,1,0}; // W
+        hall.snapshot.keys[1]={4,0x0602,1.0f,4.0f,2000,1,0};  // A
+        auto out1=Render(hall_fx,keys,16);
+        int a_led=-1; Require(keys.FindLedId("A",a_led) && a_led>=0,"find A LED");
+        Require(hall_fx.Status().hall_available,"hall_available reflects active stream");
+        Require(std::abs(static_cast<int>(out1.buffer[w*3])-127)<=1,"hall_depth normalized renders W at 50%");
+        Require(std::abs(static_cast<int>(out1.buffer[a_led*3])-255)<=1,"hall_depth normalized renders A at 100%");
+        Require(std::abs(static_cast<int>(out1.buffer[w*3+1])-100)<=1,"hall_key_depth mm reads W 2.0mm * 50");
+        Require(std::abs(static_cast<int>(out1.buffer[w*3+2])-80)<=1,"hall_feature active_count reads 2 * 40");
+        // Reject malformed Hall expressions
+        auto bad_hall=plain;bad_hall["nodes"][0]["color"]=E("rgb",{mkHallKeyDepth("NO_SUCH_KEY","mm",0),N(0),N(0)});Reject(bad_hall,"reject unknown hall_key_depth key");
+        bad_hall["nodes"][0]["color"]=E("rgb",{mkHallDepth("inches",0),N(0),N(0)});Reject(bad_hall,"reject unknown hall_depth unit");
+        bad_hall["nodes"][0]["color"]=E("rgb",{mkHallFeat("unknown",0),N(0),N(0)});Reject(bad_hall,"reject unknown hall_feature");
+        bad_hall["nodes"][0]["color"]=E("rgb",{Json{{"op","hall_depth"},{"default",B(true)}},N(0),N(0)});Reject(bad_hall,"reject non-number hall default");
+        // Warm 10,000 render allocations check with active Hall reads
+        Render(hall_fx,keys,32); const auto hall_allocs=allocation_count.load(); FrameBuffer hbuf;
+        for(uint64_t t=48;t<10048;++t) hall_fx.Render(t,hbuf,keys);
+        Require(allocation_count.load()==hall_allocs && !hall_fx.Status().faulted,"10000 Hall renders perform zero heap allocations");
+    }
     auto bad=plain;bad["nodes"][0]["color"]=N(3);Reject(bad,"reject expression type mismatch");bad=plain;bad["nodes"][0]["next"]=9;Reject(bad,"reject missing PC");bad=plain;bad["extra"]=true;Reject(bad,"reject arbitrary root fields");bad=plain;bad["nodes"][0]["op"]="shell";Reject(bad,"reject arbitrary actions");bad=plain;bad["variables"]=65;Reject(bad,"reject variable excess");bad=plain;bad["slots"]=65;Reject(bad,"reject slot excess");bad=plain;bad["nodes"][0]["color"]={{"op","eval"},{"args",Json::array()}};Reject(bad,"reject arbitrary expression");
     bad=plain;bad["nodes"][0]["color"]=E("rgb",{{{"op","gsi_number"},{"path","event.kill"},{"default",N(0)}},N(0),N(0)});Reject(bad,"reject retired event pulses");
     bad=plain;bad["nodes"][0]["color"]=E("rgb",{{{{"op","audio_feature"},{"feature","invalid_feat"},{"default",N(0)}},N(0),N(0)}});Reject(bad,"reject invalid audio feature");

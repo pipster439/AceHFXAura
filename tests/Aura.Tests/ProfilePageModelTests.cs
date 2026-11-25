@@ -1074,4 +1074,44 @@ public sealed class ProfilePageModelTests
         Assert.IsFalse(presentation.Accept(model.NoticeSequence)); Assert.IsFalse(model.HasConflict);
         Assert.AreEqual("保留草稿", model.Draft.Name); Assert.AreEqual(1, api.Activated.Count);
     }
+
+    [TestMethod]
+    public void LinkedLightingProfileRoundTripAndValidation()
+    {
+        var doc = ProfileJson.NewDefault();
+        doc.Profiles[0].Lighting.AuraEffectProfile = "fps_pulse";
+        var json = ProfileJson.Serialize(doc);
+        StringAssert.Contains(json, "aura_effect_profile");
+        var decoded = ProfileJson.Deserialize(json);
+        Assert.AreEqual("fps_pulse", decoded.Profiles[0].Lighting.AuraEffectProfile);
+
+        doc.Profiles[0].Lighting.AuraEffectProfile = "   ";
+        Assert.ThrowsExactly<InvalidDataException>(() => ProfileValidator.Validate(doc));
+        doc.Profiles[0].Lighting.AuraEffectProfile = new string('x', 129);
+        Assert.ThrowsExactly<InvalidDataException>(() => ProfileValidator.Validate(doc));
+    }
+
+    [TestMethod]
+    public async Task SetDefaultLightingProfileClientSendsPatchAndRevision()
+    {
+        var fakeHttp = new HttpClient(new StubLightingPatchHandler()) { Timeout = TimeSpan.FromSeconds(5) };
+        IAuraControlClient client = new AuraControlClient(fakeHttp);
+        var res = await client.SetDefaultLightingProfileAsync("fps_pulse", "rev-1");
+        Assert.IsTrue(res.IsSuccess);
+        Assert.AreEqual("rev-2", res.NewRevision);
+    }
+
+    private sealed class StubLightingPatchHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Assert.AreEqual(HttpMethod.Patch, request.Method);
+            Assert.AreEqual("/api/lighting/default-profile", request.RequestUri?.AbsolutePath);
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("{\"status\":\"ok\",\"api_version\":1,\"default_profile\":\"fps_pulse\",\"revision\":\"rev-2\"}",
+                    System.Text.Encoding.UTF8, "application/json")
+            });
+        }
+    }
 }

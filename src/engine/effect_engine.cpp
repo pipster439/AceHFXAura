@@ -4,6 +4,8 @@
 #include "engine/input_sources.h"
 #include "gsi/automation_input.h"
 #include "utils/logger.h"
+#include <algorithm>
+#include <cmath>
 
 namespace aura {
 
@@ -27,8 +29,141 @@ EffectEngine::EffectEngine()
     last_frame_.Clear();
 }
 
+namespace {
+struct EngineHallUsageEntry { uint16_t usage; const char* key_name; };
+constexpr std::array<EngineHallUsageEntry, 68> kEngineHallKeys = {{
+    {41, "ESC"}, {30, "1"}, {31, "2"}, {32, "3"}, {33, "4"}, {34, "5"}, {35, "6"},
+    {36, "7"}, {37, "8"}, {38, "9"}, {39, "0"}, {45, "-"}, {46, "="}, {42, "BACKSPACE"}, {73, "INS"},
+    {43, "TAB"}, {20, "Q"}, {26, "W"}, {8, "E"}, {21, "R"}, {23, "T"}, {28, "Y"},
+    {24, "U"}, {12, "I"}, {18, "O"}, {19, "P"}, {47, "["}, {48, "]"}, {49, "\\"}, {76, "DEL"},
+    {57, "CAPS"}, {4, "A"}, {22, "S"}, {7, "D"}, {9, "F"}, {10, "G"}, {11, "H"},
+    {13, "J"}, {14, "K"}, {15, "L"}, {51, ";"}, {52, "'"}, {40, "ENTER"}, {75, "PGUP"},
+    {225, "L_SHIFT"}, {29, "Z"}, {27, "X"}, {6, "C"}, {25, "V"}, {5, "B"}, {17, "N"},
+    {16, "M"}, {54, ","}, {55, "."}, {56, "/"}, {229, "R_SHIFT"}, {82, "UP"}, {78, "PGDN"},
+    {224, "L_CTRL"}, {227, "L_WIN"}, {226, "L_ALT"}, {44, "SPACE"}, {230, "R_ALT"},
+    {232, "FN"}, {228, "COPILOT"}, {80, "LEFT"}, {81, "DOWN"}, {79, "RIGHT"}
+}};
+
+const char* EngineKeyForUsage(uint16_t hid_usage) {
+    for (const auto& entry : kEngineHallKeys) {
+        if (entry.usage == hid_usage) return entry.key_name;
+    }
+    return nullptr;
+}
+
+uint8_t ClampChannel(double v) {
+    return static_cast<uint8_t>(std::clamp(std::round(v), 0.0, 255.0));
+}
+
+ColorRGB BlendHallPixel(ColorRGB base, ColorRGB target, double alpha, bool screen_add) {
+    alpha = std::clamp(alpha, 0.0, 1.0);
+    if (screen_add) {
+        return ColorRGB(
+            ClampChannel(base.r * (1.0 - 0.25 * alpha) + target.r * alpha),
+            ClampChannel(base.g * (1.0 - 0.25 * alpha) + target.g * alpha),
+            ClampChannel(base.b * (1.0 - 0.25 * alpha) + target.b * alpha));
+    }
+    return ColorRGB(
+        ClampChannel(base.r * (1.0 - alpha) + target.r * alpha),
+        ClampChannel(base.g * (1.0 - alpha) + target.g * alpha),
+        ClampChannel(base.b * (1.0 - alpha) + target.b * alpha));
+}
+
+void ApplyHallDepthOverlay(const HallLightingConfig& cfg, const AuraHallAnalogHostV1& hall_host,
+                           const Keymap& keymap, FrameBuffer& out_frame) {
+    if (!cfg.enabled || cfg.intensity <= 0.0 || !hall_host.read_snapshot) return;
+    AuraHallAnalogSnapshotV1 snap{};
+    if (hall_host.read_snapshot(hall_host.context, &snap, sizeof(snap)) != 1 ||
+        snap.struct_size != sizeof(snap) || snap.version != AURA_HALL_ANALOG_VERSION ||
+        !snap.active || snap.count == 0) {
+        return;
+    }
+
+    const uint32_t count = std::min<uint32_t>(snap.count, AURA_HALL_ANALOG_MAX_KEYS);
+    const double floor_mm = std::clamp(cfg.min_depth_mm, 0.05, 2.0);
+    const double span = std::max(0.5, 4.0 - floor_mm);
+
+    if (cfg.mode == "halo") {
+        struct ActiveKey { double x, y, energy; };
+        std::array<ActiveKey, AURA_HALL_ANALOG_MAX_KEYS> sources{};
+        uint32_t source_count = 0;
+        const auto& all_keys = keymap.GetAllKeys();
+        for (uint32_t i = 0; i < count; ++i) {
+            const auto& k = snap.keys[i];
+            if (k.depth_mm < floor_mm) continue;
+            const char* name = EngineKeyForUsage(k.hid_usage);
+            if (!name) continue;
+            auto it = all_keys.find(name);
+            if (it == all_keys.end()) continue;
+            const double t = std::clamp((k.depth_mm - floor_mm) / span, 0.0, 1.0);
+            sources[source_count++] = {it->second.physical_x, it->second.physical_y, t};
+        }
+        if (source_count == 0) return;
+
+        for (const auto& [name, info] : all_keys) {
+            if (info.led_id < 0 || info.led_id >= static_cast<int>(TOTAL_LEDS)) continue;
+            double best = 0.0;
+            for (uint32_t s = 0; s < source_count; ++s) {
+                const double dx = info.physical_x - sources[s].x;
+                const double dy = info.physical_y - sources[s].y;
+                const double d2 = dx * dx + dy * dy;
+                const double sigma2 = 0.75 + 2.5 * sources[s].energy;
+                const double contribution = sources[s].energy * std::exp(-d2 / sigma2);
+                if (contribution > best) best = contribution;
+            }
+            if (best < 0.02) continue;
+            const size_t base_idx = static_cast<size_t>(info.led_id) * 3;
+            const ColorRGB base(out_frame.buffer[base_idx], out_frame.buffer[base_idx + 1], out_frame.buffer[base_idx + 2]);
+            out_frame.SetKey(static_cast<size_t>(info.led_id),
+                BlendHallPixel(base, cfg.color, best * cfg.intensity, true));
+        }
+        return;
+    }
+
+    const bool gradient = (cfg.mode == "gradient");
+    for (uint32_t i = 0; i < count; ++i) {
+        const auto& k = snap.keys[i];
+        if (k.depth_mm < floor_mm) continue;
+        const char* name = EngineKeyForUsage(k.hid_usage);
+        int led_id = -1;
+        if (!name || !keymap.FindLedId(name, led_id) || led_id < 0 || led_id >= static_cast<int>(TOTAL_LEDS)) continue;
+        const double t = std::clamp((k.depth_mm - floor_mm) / span, 0.0, 1.0);
+        const ColorRGB target = gradient
+            ? ColorRGB(
+                ClampChannel(cfg.color.r * (1.0 - t) + cfg.secondary_color.r * t),
+                ClampChannel(cfg.color.g * (1.0 - t) + cfg.secondary_color.g * t),
+                ClampChannel(cfg.color.b * (1.0 - t) + cfg.secondary_color.b * t))
+            : cfg.color;
+        const size_t idx = static_cast<size_t>(led_id) * 3;
+        const ColorRGB base(out_frame.buffer[idx], out_frame.buffer[idx + 1], out_frame.buffer[idx + 2]);
+        out_frame.SetKey(static_cast<size_t>(led_id),
+            BlendHallPixel(base, target, t * cfg.intensity, !gradient));
+    }
+}
+} // namespace
+
 void EffectEngine::SetInputSources(const AudioFeatureSource* audio, const ScreenColorSource* screen) {
     audio_source_ = audio; screen_source_ = screen;
+}
+void EffectEngine::SetHallAnalogHost(const AuraHallAnalogHostV1* host) {
+    std::lock_guard<std::mutex> lock(hall_config_mutex_);
+    hall_host_ = host ? *host : AuraHallAnalogHostV1{};
+}
+void EffectEngine::SetHallLightingConfig(const HallLightingConfig& config) {
+    std::lock_guard<std::mutex> lock(hall_config_mutex_);
+    hall_lighting_ = config;
+}
+HallLightingConfig EffectEngine::GetHallLightingConfig() const {
+    std::lock_guard<std::mutex> lock(hall_config_mutex_);
+    return hall_lighting_;
+}
+bool EffectEngine::ActiveEffectUsesHall() const {
+    std::lock_guard<std::mutex> lock(profile_mutex_);
+    if (!active_profile_ || !active_profile_->base_effect) return false;
+    if (auto prog = std::dynamic_pointer_cast<ProgramEffect>(active_profile_->base_effect)) {
+        return prog->Program() && prog->Program()->UsesHall();
+    }
+    return false;
 }
 
 EffectEngine::RenderDiagnostics EffectEngine::GetRenderDiagnostics() const {
@@ -180,6 +315,17 @@ void EffectEngine::TickAt(uint64_t elapsed_ms, FrameBuffer& out_frame, const Key
         } else {
             out_frame.Clear();
         }
+    }
+
+    if (!is_preview) {
+        HallLightingConfig hall_cfg;
+        AuraHallAnalogHostV1 hall_host{};
+        {
+            std::lock_guard<std::mutex> lock(hall_config_mutex_);
+            hall_cfg = hall_lighting_;
+            hall_host = hall_host_;
+        }
+        ApplyHallDepthOverlay(hall_cfg, hall_host, keymap, out_frame);
     }
 
     // Fixed V2 class placement: Base -> persistent -> transient.

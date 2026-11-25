@@ -438,6 +438,7 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
         }
 
         ValidateAutomationContainers(j);
+        const HallLightingConfig new_hall_lighting = ParseHallLightingConfig(j);
         std::vector<RulePlanEntry> new_plan;
         std::set<std::string> v2_ids;
         uint64_t new_freshness = 3000;
@@ -554,6 +555,7 @@ bool RuleEngine::LoadConfig(const std::string& config_path) {
             default_profile_name_ = def_name;
             target_fps_ = new_fps;
             hardware_backend_ = new_backend;
+            hall_lighting_ = new_hall_lighting;
             fallback_profile_ = std::move(new_fallback);
             profiles_ = std::move(new_profiles);
             // Preserve unchanged rule memory; edited/enabled records seed on next decision.

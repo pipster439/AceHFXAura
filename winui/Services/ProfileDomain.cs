@@ -65,6 +65,8 @@ public sealed class ProfileLighting
     // Legacy effect reference semantics stay independent of the RGB admission policy.
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? ControlOwner { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? AuraEffectProfile { get; set; }
     public string? LegacyEffectReference { get; set; }
     public string Ownership { get; set; } = "LegacyUnmanaged";
     [JsonExtensionData] public Dictionary<string, JsonElement>? Extensions { get; set; }
@@ -152,6 +154,9 @@ public static class ProfileValidator
         foreach (var profile in document.Profiles) {
             if (profile.Lighting.ControlOwner is not (null or "AuraDirectRgb" or "FirmwareBank"))
                 throw new InvalidDataException("Unsupported lighting control owner.");
+            if (profile.Lighting.AuraEffectProfile is string linkedLighting &&
+                (string.IsNullOrWhiteSpace(linkedLighting) || linkedLighting.Length > 128))
+                throw new InvalidDataException("Invalid linked Aura lighting profile name.");
             if (profile.ActivationBackend is not ("host_managed" or "hardware_slot") ||
                 profile.ActivationBackend == "hardware_slot" && profile.HardwareSlot is not (>= 1 and <= 5))
                 throw new InvalidDataException("Invalid activation backend or hardware slot (expected 1–5).");

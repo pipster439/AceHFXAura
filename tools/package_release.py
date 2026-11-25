@@ -401,7 +401,8 @@ def main():
     parser.add_argument("--clean", action="store_true", help="构建前清理既有 build 目录（用于切换生成器或纯净重构）")
     parser.add_argument("--legacy", action="store_true", help="显式构建旧 C++ launcher，非 alpha.4 主发行包")
     parser.add_argument("--build-dir", default=None, help="WinUI 包使用的 C++ build 目录")
-    parser.add_argument("--skip-build", action="store_true", help="复用已验证的 C++ build；仍重新构建 frontend 和 publish WinUI")
+    parser.add_argument("--skip-build", action="store_true", help="复用已验证的 C++ / Rust build；仍发布 WinUI 并校验资产")
+    parser.add_argument("--skip-frontend", action="store_true", help="跳过 npm ci / frontend 构建，直接复用已提交的 web/index.html")
     args = parser.parse_args()
 
     version = resolve_release_version(args.version)
@@ -409,7 +410,7 @@ def main():
         if args.clean:
             parser.error("WinUI packaging does not delete build directories; select a new --build-dir")
         from package_winui import build
-        build(version, VS_GENERATOR, VCVARS_BAT, args.build_dir, args.skip_build, args.skip_zip)
+        build(version, VS_GENERATOR, VCVARS_BAT, args.build_dir, args.skip_build, args.skip_zip, args.skip_frontend)
         return
     global DIST_DIR
     DIST_DIR = os.path.join(REPO_ROOT, "dist", "legacy")

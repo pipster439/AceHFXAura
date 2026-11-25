@@ -227,6 +227,24 @@ void MagneticControlService::Stop() {
     if (rt_gate_monitor_) rt_gate_monitor_->Stop();
     runtime_->Stop();
 }
+void MagneticControlService::SyncAutoHallDemand(bool needed) {
+    if (!hall_telemetry_) return;
+    std::lock_guard<std::mutex> lock(hall_demand_mutex_);
+    const bool active = hall_telemetry_->GetSnapshot().active;
+    if (needed) {
+        if (active) return;
+        if (!HardwareAvailable()) return;
+        const auto now = std::chrono::steady_clock::now();
+        if (now - last_auto_hall_retry_ < std::chrono::seconds(5)) return;
+        last_auto_hall_retry_ = now;
+        if (hall_telemetry_->Start(false)) {
+            auto_hall_active_ = true;
+        }
+    } else if (!manual_hall_requested_ && auto_hall_active_) {
+        auto_hall_active_ = false;
+        hall_telemetry_->Stop();
+    }
+}
 m605::hall::HallTelemetrySnapshot MagneticControlService::GetHallSnapshot() const {
     return hall_telemetry_ ? hall_telemetry_->GetSnapshot() : m605::hall::HallTelemetrySnapshot{};
 }
@@ -788,6 +806,193 @@ void MagneticControlService::RegisterRoutes(httplib::Server& server) {
     batch_write("/api/magnetic/batch/rapid-trigger", Mutation::RtOn);
     batch_write("/api/magnetic/batch/deadzone", Mutation::Deadzone);
 
+    server.Post("/api/magnetic/batch/apply", [this](const httplib::Request& request, httplib::Response& response) {
+        if (!ValidRequest(request, response)) return;
+        const Json body = Json::parse(request.body, nullptr, false);
+        bool resolve_dks = false;
+        if (!ExactFields(body, {"ops", "resolve_dks"}) ||
+            !body.at("ops").is_array() || body.at("ops").empty() ||
+            body.at("ops").size() > 512 ||
+            !Boolean(body, "resolve_dks", resolve_dks)) {
+            WriteStatus(response, false, 422, "Invalid coalesced batch shape: expected non-empty ops array and resolve_dks boolean");
+            return;
+        }
+
+        std::unique_lock<std::mutex> write_lock(write_mutex_, std::try_to_lock);
+        if (!write_lock.owns_lock() || runtime_->HasQueuedWork() ||
+            runtime_->GetHealth() == M605RuntimeHealth::TransactionInProgress) {
+            WriteStatus(response, false, 409, "Another magnetic setting is applying");
+            return;
+        }
+        if (!HardwareAvailable() || runtime_->GetHealth() != M605RuntimeHealth::Clean ||
+            runtime_->IsPersistentSafetyQuarantined()) {
+            WriteStatus(response, false, 409, "Magnetic runtime unavailable or safety quarantined");
+            return;
+        }
+        auto hall_pause = hall_telemetry_ ?
+            std::optional<m605::hall::M605HallTelemetry::ScopedPause>(hall_telemetry_->PauseForTransaction()) :
+            std::nullopt;
+        if (!runtime_->PrepareTransportSession()) {
+            const auto firmware = runtime_->GetDiagnosticSnapshot().firmware;
+            WriteStatus(response, false, firmware.state == m605::FirmwareState::ReadFailed ? 503 : 409);
+            return;
+        }
+
+        const auto host = host_profile_();
+        const auto shadow = runtime_->GetAppliedRuntimeState();
+        std::vector<M605BatchStageOp> planned_ops;
+        planned_ops.reserve(body.at("ops").size() * 2);
+        std::set<uint16_t> dks_cleared;
+        Json configured_dks = Json::array(), unknown_dks = Json::array();
+
+        for (const auto& item : body.at("ops")) {
+            if (!item.is_object() || !item.contains("kind") || !item.at("kind").is_string()) {
+                WriteStatus(response, false, 422, "Invalid coalesced batch operation entry");
+                return;
+            }
+            const auto& kind = item.at("kind").get_ref<const std::string&>();
+            M605BatchStageOp op{};
+            if (kind == "actuation") {
+                if (!ExactFields(item, {"kind", "logical_id", "mm"}) ||
+                    !LogicalKey(item, "logical_id", op.logical_key_id) ||
+                    !Millimeters(item, "mm", 1, 40, op.first_mm)) {
+                    WriteStatus(response, false, 422, "Invalid actuation op in coalesced batch");
+                    return;
+                }
+                op.kind = M605BatchStageOp::Kind::Actuation;
+            } else if (kind == "deadzone") {
+                if (!ExactFields(item, {"kind", "logical_id", "top_mm", "bottom_mm"}) ||
+                    !LogicalKey(item, "logical_id", op.logical_key_id) ||
+                    !Millimeters(item, "top_mm", 0, 5, op.first_mm) ||
+                    !Millimeters(item, "bottom_mm", 0, 5, op.second_mm)) {
+                    WriteStatus(response, false, 422, "Invalid deadzone op in coalesced batch");
+                    return;
+                }
+                op.kind = M605BatchStageOp::Kind::Deadzone;
+            } else if (kind == "rapid_trigger_enable") {
+                if (!ExactFields(item, {"kind", "logical_id", "press_mm", "release_mm"}) ||
+                    !LogicalKey(item, "logical_id", op.logical_key_id) ||
+                    !Millimeters(item, "press_mm", 1, 25, op.first_mm) ||
+                    !Millimeters(item, "release_mm", 1, 25, op.second_mm)) {
+                    WriteStatus(response, false, 422, "Invalid rapid_trigger_enable op in coalesced batch");
+                    return;
+                }
+                op.kind = M605BatchStageOp::Kind::RapidTriggerOn;
+                const auto dks_it = shadow.per_key_dks.find(op.logical_key_id);
+                if (dks_cleared.find(op.logical_key_id) == dks_cleared.end()) {
+                    if (dks_it == shadow.per_key_dks.end()) {
+                        unknown_dks.push_back(op.logical_key_id);
+                        if (!resolve_dks) {
+                            WriteStatus(response, false, 409, "DKS state is unknown for RT key; set resolve_dks=true to apply");
+                            return;
+                        }
+                        M605BatchStageOp restore{};
+                        restore.kind = M605BatchStageOp::Kind::DksStandard;
+                        restore.logical_key_id = op.logical_key_id;
+                        planned_ops.push_back(restore);
+                        dks_cleared.insert(op.logical_key_id);
+                    } else if (!dks_it->second.standard_runtime_configuration) {
+                        configured_dks.push_back(op.logical_key_id);
+                        if (!resolve_dks) {
+                            WriteStatus(response, false, 409, "DKS is configured for RT key; confirm reset before applying RT");
+                            return;
+                        }
+                        M605BatchStageOp restore{};
+                        restore.kind = M605BatchStageOp::Kind::DksStandard;
+                        restore.logical_key_id = op.logical_key_id;
+                        planned_ops.push_back(restore);
+                        dks_cleared.insert(op.logical_key_id);
+                    }
+                }
+            } else if (kind == "rapid_trigger_disable") {
+                if (!(ExactFields(item, {"kind", "logical_id"}) ||
+                      (ExactFields(item, {"kind", "logical_id", "press_mm", "release_mm"}) &&
+                       Millimeters(item, "press_mm", 1, 25, op.first_mm) &&
+                       Millimeters(item, "release_mm", 1, 25, op.second_mm))) ||
+                    !LogicalKey(item, "logical_id", op.logical_key_id)) {
+                    WriteStatus(response, false, 422, "Invalid rapid_trigger_disable op in coalesced batch");
+                    return;
+                }
+                if (!item.contains("press_mm")) {
+                    if (host.global_rt_press_raw && host.global_rt_release_raw) {
+                        op.first_mm = *host.global_rt_press_raw / 10.0;
+                        op.second_mm = *host.global_rt_release_raw / 10.0;
+                    } else {
+                        const auto rt_it = shadow.per_key_rapid_trigger.find(op.logical_key_id);
+                        if (rt_it != shadow.per_key_rapid_trigger.end() &&
+                            rt_it->second.press_known && rt_it->second.release_known &&
+                            rt_it->second.press_raw >= 1 && rt_it->second.release_raw >= 1) {
+                            op.first_mm = rt_it->second.press_raw / 10.0;
+                            op.second_mm = rt_it->second.release_raw / 10.0;
+                        } else {
+                            op.first_mm = 0.2;
+                            op.second_mm = 0.2;
+                        }
+                    }
+                }
+                op.kind = M605BatchStageOp::Kind::RapidTriggerOff;
+            } else if (kind == "global_actuation") {
+                if (!ExactFields(item, {"kind", "mm"}) ||
+                    !Millimeters(item, "mm", 1, 40, op.first_mm)) {
+                    WriteStatus(response, false, 422, "Invalid global_actuation op in coalesced batch");
+                    return;
+                }
+                op.kind = M605BatchStageOp::Kind::GlobalActuation;
+            } else if (kind == "global_deadzone") {
+                if (!ExactFields(item, {"kind", "top_mm", "bottom_mm"}) ||
+                    !Millimeters(item, "top_mm", 0, 5, op.first_mm) ||
+                    !Millimeters(item, "bottom_mm", 0, 5, op.second_mm)) {
+                    WriteStatus(response, false, 422, "Invalid global_deadzone op in coalesced batch");
+                    return;
+                }
+                op.kind = M605BatchStageOp::Kind::GlobalDeadzone;
+            } else if (kind == "dks_standard") {
+                if (!ExactFields(item, {"kind", "logical_id"}) ||
+                    !LogicalKey(item, "logical_id", op.logical_key_id)) {
+                    WriteStatus(response, false, 422, "Invalid dks_standard op in coalesced batch");
+                    return;
+                }
+                op.kind = M605BatchStageOp::Kind::DksStandard;
+            } else {
+                WriteStatus(response, false, 422, "Unsupported coalesced batch op kind: " + kind);
+                return;
+            }
+            planned_ops.push_back(op);
+        }
+
+        if (profiles_) profiles_->ExternalMutationLocked();
+        const auto started = std::chrono::steady_clock::now();
+        const bool ok = runtime_->SubmitCoalescedBatch(planned_ops).get();
+        const double elapsed_ms = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - started).count();
+
+        const auto health = runtime_->GetHealth();
+        if (ok && health == M605RuntimeHealth::Clean && profiles_) {
+            try {
+                for (const auto& op : planned_ops) {
+                    if (op.kind == M605BatchStageOp::Kind::GlobalActuation)
+                        profiles_->RecordManualGlobalBaselineLocked("global_actuation_mm", op.first_mm);
+                    else if (op.kind == M605BatchStageOp::Kind::GlobalDeadzone)
+                        profiles_->RecordManualGlobalBaselineLocked("global_deadzone",
+                            {{"top_mm", op.first_mm}, {"bottom_mm", op.second_mm}});
+                }
+            } catch (const std::exception&) {
+                // Non-fatal for coalesced workbench fast path; device accepted transaction.
+            }
+        }
+        const auto firmware = runtime_->GetDiagnosticSnapshot().firmware;
+        const bool firmware_rejected = firmware.session_generation == runtime_->GetSessionGeneration() &&
+            (firmware.state == m605::FirmwareState::Unknown || firmware.state == m605::FirmwareState::Unsupported);
+        WriteStatus(response, ok, ok ? 200 :
+            (health == M605RuntimeHealth::IndeterminateStagedState || firmware_rejected ? 409 : 503));
+        Json output = Json::parse(response.body);
+        output["timing_ms"] = std::round(elapsed_ms * 10.0) / 10.0;
+        output["applied_ops"] = ok ? planned_ops.size() : 0;
+        output["configured_dks_keys"] = configured_dks;
+        output["unknown_dks_keys"] = unknown_dks;
+        response.set_content(output.dump(), "application/json; charset=utf-8");
+    });
+
     server.Get("/api/magnetic/hall/snapshot", [this](const httplib::Request& request, httplib::Response& response) {
         if (!IsAllowedLoopbackHost(request.get_header_value("Host"))) { response.status = 403; return; }
         const Json body = hall_telemetry_ ? HallSnapshotJson(hall_telemetry_->GetSnapshot()) :
@@ -814,7 +1019,15 @@ void MagneticControlService::RegisterRoutes(httplib::Server& server) {
                                  "application/json; charset=utf-8");
             return;
         }
-        const bool ok = hall_telemetry_ && hall_telemetry_->Start(unlock_fa);
+        bool ok = false;
+        {
+            std::lock_guard<std::mutex> hlock(hall_demand_mutex_);
+            ok = hall_telemetry_ && hall_telemetry_->Start(unlock_fa);
+            if (ok) {
+                manual_hall_requested_ = true;
+                auto_hall_active_ = false;
+            }
+        }
         Json out = hall_telemetry_ ? HallSnapshotJson(hall_telemetry_->GetSnapshot()) :
             Json{{"status", "error"}, {"api_version", 1}, {"last_error", "Hall telemetry unavailable"}};
         if (!ok) out["status"] = "error";
@@ -832,7 +1045,12 @@ void MagneticControlService::RegisterRoutes(httplib::Server& server) {
                                  "application/json; charset=utf-8");
             return;
         }
-        if (hall_telemetry_) hall_telemetry_->Stop();
+        {
+            std::lock_guard<std::mutex> hlock(hall_demand_mutex_);
+            manual_hall_requested_ = false;
+            auto_hall_active_ = false;
+            if (hall_telemetry_) hall_telemetry_->Stop();
+        }
         Json out = hall_telemetry_ ? HallSnapshotJson(hall_telemetry_->GetSnapshot()) :
             Json{{"status", "ok"}, {"api_version", 1}, {"active", false}};
         response.status = 200;

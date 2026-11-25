@@ -642,6 +642,8 @@ int main(int argc, char* argv[]) {
     // 10. 构建效果引擎
     aura::EffectEngine effect_engine;
     effect_engine.SetInputSources(&input_capture.Audio(), &input_capture.Screen());
+    effect_engine.SetHallAnalogHost(aura::PluginManager::GetHallAnalogHost());
+    effect_engine.SetHallLightingConfig(rule_engine.GetHallLightingConfig());
     std::shared_ptr<const aura::Profile> initial_profile = rule_engine.MatchProfile("", &gsi_adapter.GetState());
     std::string current_active_profile_name = initial_profile ? initial_profile->name : "(None)";
     effect_engine.SetActiveProfile(initial_profile);
@@ -870,6 +872,17 @@ int main(int argc, char* argv[]) {
         web_supervisor.SetSuppressed(automation.suppress_web_ui);
 
         magnetic_service.ObserveHardwareSlot(); // bounded10s read-only drift observation
+
+        const auto hall_lighting_cfg = rule_engine.GetHallLightingConfig();
+        effect_engine.SetHallLightingConfig(hall_lighting_cfg);
+        auto current_profile_for_hall = effect_engine.GetActiveProfile();
+        const bool need_hall_stream = !dry_run && (
+            hall_lighting_cfg.enabled ||
+            effect_engine.ActiveEffectUsesHall() ||
+            (current_profile_for_hall && !aura::ProfilePluginName(*current_profile_for_hall).empty() &&
+             aura::PluginManager::Instance().PluginUsesHallAnalog(aura::ProfilePluginName(*current_profile_for_hall)))
+        );
+        magnetic_service.SyncAutoHallDemand(need_hall_stream);
 
         // 零分配计算当前帧 (包含 GSI 原子读取与瞬态事件叠加)
         effect_engine.Tick(frame_buf, keymap, &gsi_adapter.GetState());

@@ -93,6 +93,9 @@ private:
     // cannot be interleaved with another runtime operation or a lighting frame.
     static std::mutex& DeviceWriteMutex();
     bool SendReport(const std::array<uint8_t, HID_REPORT_SIZE>& report);
+    bool SendReportWithAck(const std::array<uint8_t, HID_REPORT_SIZE>& report,
+                           bool* ack_received = nullptr,
+                           uint32_t timeout_ms = 100);
     // DeviceWriteMutex held. Only the fixed12 00 query, never arbitrary reads/commands.
     bool QueryBasicInfo(std::array<uint8_t, HID_REPORT_SIZE>& response);
     m605::FirmwareCompatibility ReadFirmwareCompatibility(); // DeviceWriteMutex held

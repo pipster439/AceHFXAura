@@ -10,19 +10,22 @@ Public ZIP metadata uses package-only `DebugType=None`, `DebugSymbols=false`, `I
 python tools/package_release.py
 # Reuse a native build already compiled/tested with the same VERSION:
 python tools/package_release.py --build-dir build --skip-build
+# Reuse checked-in web/index.html without reinstalling frontend dependencies:
+python tools/package_release.py --build-dir build --skip-build --skip-frontend
 # Verify an extracted candidate:
 python tools/package_winui.py --verify dist/Aura-v<VERSION>-windows-x64-<build-id>
 ```
 
-The default rebuilds frontend assets into the selected build directory (leaving tracked web/index.html unchanged), builds the native sidecars, publishes WinUI, verifies required files/roles/hashes/x64 PE architecture, then emits a versioned directory, ZIP and `.sha256`. `--skip-build` skips only native compilation. `--skip-zip` retains the verified directory. There is no release publishing, local deployment, config migration or user-runtime deletion. Do not pass `--clean` to the new pipeline. A stale native build is detected by the packaged runtime version test, so use `--skip-build` only after rebuilding.
+The default rebuilds frontend assets into the selected build directory (leaving tracked web/index.html unchanged), builds the native sidecars (`aura_daemon`, `aura_web_ui`, `effect_hall_reactive`) plus the Wooting Analog bridge DLL when `cargo` is present, publishes WinUI, bundles `plugins/` and root `deploy_aura.{ps1,bat}`, verifies required files/roles/hashes/x64 PE architecture, then emits a versioned directory, ZIP and `.sha256`. `--skip-build` skips native/Rust compilation. `--skip-frontend` reuses tracked `web/index.html`. `--skip-zip` retains the verified directory. There is no automatic deployment, config migration or user-runtime deletion during packaging. Do not pass `--clean` to the new pipeline. A stale native build is detected by the packaged runtime version test, so use `--skip-build` only after rebuilding.
 
-Build prerequisites: VS 2022/2026 C++ desktop workload + Windows SDK, CMake, Python, Node/npm, .NET 10 SDK. The installed Visual Studio supplies app-local x64 VC CRT redistributables. No ASUS proprietary binaries may enter the package.
+Build prerequisites: VS 2022/2026 C++ desktop workload + Windows SDK, CMake, Python, Node/npm (unless `--skip-frontend`), .NET 10 SDK, and optional Rust/Cargo for building the Wooting bridge DLL. The installed Visual Studio supplies app-local x64 VC CRT redistributables. No ASUS proprietary binaries may enter the package.
 
 ```text
 Aura-v<VERSION>-windows-x64-<build-id>/
   Aura.exe / Aura.dll / Aura.deps.json / Aura.runtimeconfig.json
   Aura.pri / App.xbf / MainWindow.xbf / Pages/*.xbf / Assets/
   .NET and Windows App SDK self-contained dependencies
+  deploy_aura.bat / deploy_aura.ps1
   runtime-payload/
     runtime-manifest.json
     aura_daemon.exe
@@ -33,8 +36,20 @@ Aura-v<VERSION>-windows-x64-<build-id>/
     include/engine/{effect.h,plugin_interface.h}
     include/aura/{aura_types.h,keymap.h}
     MSVC redistributable CRT DLLs
+  plugins/
+    effect_hall_reactive.dll
+    mcp/{aura_mcp_server.py,README.md}
+    bridges/wooting-analog-m605/{wooting_analog_plugin_aura_m605.dll,install_plugin.ps1,README.md}
   LICENSE / README_RELEASE.md / checksums.json
 ```
+
+## Clean-machine one-click deployment
+
+Every extracted release package (and repo root) includes `deploy_aura.bat` / `deploy_aura.ps1`:
+
+- Standard install (`deploy_aura.bat`): deploys binaries to `%LOCALAPPDATA%\Programs\Aura`, checks WebView2 Evergreen Runtime (pass `-InstallWebView2` to install automatically via `winget` or the official Evergreen bootstrapper), seeds `%LOCALAPPDATA%\Aura\plugins\` without overwriting existing `config.json`, and creates Start Menu shortcuts.
+- Portable deploy: `deploy_aura.bat -Portable [-InstallDir D:\Apps\Aura]` writes `portable.marker` and keeps data/plugins self-contained.
+- Optional switches: `-ExportMcpConfig`, `-InstallWootingBridge`, `-DesktopShortcut`, `-AutoStart`, `-Launch`, `-Uninstall [-PurgeData]`.
 
 Keep the complete directory together. Ordinary .NET publish omitted application PRI/XBF resources in the current SDK combination; the project explicitly includes them in publish output and packaging requires them.
 

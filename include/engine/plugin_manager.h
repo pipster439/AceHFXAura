@@ -202,6 +202,8 @@ public:
 
     // Checks if a plugin with the given effect name is loaded
     bool HasPlugin(const std::string& effect_name) const;
+    bool PluginUsesHallAnalog(const std::string& effect_name) const;
+    static const AuraHallAnalogHostV1* GetHallAnalogHost();
 
     // Returns a list of loaded effect names
     std::vector<std::string> GetLoadedPluginNames() const;

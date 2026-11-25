@@ -27,6 +27,8 @@ class _MockState:
         self.profile_calls: list[tuple[str, dict]] = []
         self.automation_rev = "rev-auto-1"
         self.automation_calls: list[tuple[str, str, dict]] = []
+        self.hall_overlay = {"enabled": False, "mode": "glow", "color": [255, 255, 255], "secondary_color": [220, 40, 255], "intensity": 0.85, "min_depth_mm": 0.1}
+        self.hall_overlay_rev = "rev-hall-1"
 
 
 def _make_handler(state: _MockState, is_studio: bool):
@@ -88,6 +90,16 @@ def _make_handler(state: _MockState, is_studio: bool):
                     self._send_json(200, {"actions": ["activate_profile", "trigger_effect"]})
                 elif self.path == "/api/automation/v2/records":
                     self._send_json(200, {"status": "ok", "revision": state.automation_rev, "records": []})
+                elif self.path == "/api/lighting/hall-overlay":
+                    self._send_json(
+                        200,
+                        {
+                            "status": "ok",
+                            "api_version": 1,
+                            "revision": state.hall_overlay_rev,
+                            "hall_lighting": dict(state.hall_overlay),
+                        },
+                    )
                 else:
                     self._send_json(404, {"status": "error", "message": f"Unknown daemon GET {self.path}"})
             else:
@@ -182,6 +194,35 @@ def _make_handler(state: _MockState, is_studio: bool):
                 else:
                     self._send_json(404, {"status": "error", "message": f"Unknown studio POST {self.path}"})
 
+        def do_PATCH(self) -> None:
+            body = self._read_json()
+            if not is_studio and self.path == "/api/lighting/hall-overlay":
+                if body.get("expected_revision") != state.hall_overlay_rev:
+                    self._send_json(
+                        409,
+                        {
+                            "status": "error",
+                            "current_revision": state.hall_overlay_rev,
+                            "message": "revision mismatch",
+                        },
+                    )
+                    return
+                for key in ("enabled", "mode", "color", "secondary_color", "intensity", "min_depth_mm"):
+                    if key in body:
+                        state.hall_overlay[key] = body[key]
+                state.hall_overlay_rev = "rev-hall-2"
+                self._send_json(
+                    200,
+                    {
+                        "status": "ok",
+                        "api_version": 1,
+                        "revision": state.hall_overlay_rev,
+                        "hall_lighting": dict(state.hall_overlay),
+                    },
+                )
+            else:
+                self._send_json(404, {"status": "error", "message": f"Unknown PATCH {self.path}"})
+
         def do_DELETE(self) -> None:
             body = self._read_json()
             state.automation_calls.append(("DELETE", self.path, body))
@@ -248,9 +289,10 @@ class AuraMcpServerTests(unittest.TestCase):
 
         tools = self._rpc({"jsonrpc": "2.0", "id": 3, "method": "tools/list"})["result"]["tools"]
         tool_names = {t["name"] for t in tools}
-        self.assertEqual(len(tool_names), 21)
+        self.assertEqual(len(tool_names), 22)
         for expected in (
             "aura_status",
+            "aura_lighting_hall_overlay",
             "studio_publish_ir_program",
             "aura_magnetic_set_actuation",
             "aura_magnetic_set_rapid_trigger",
@@ -271,6 +313,7 @@ class AuraMcpServerTests(unittest.TestCase):
             {"jsonrpc": "2.0", "id": 5, "method": "resources/read", "params": {"uri": "aura://schemas/effect-ir-v1"}}
         )["result"]["contents"][0]["text"]
         self.assertIn("schema_version", schema)
+        self.assertIn("hall_depth", schema)
 
         keymap = json.loads(
             self._rpc({"jsonrpc": "2.0", "id": 6, "method": "resources/read", "params": {"uri": "aura://keymap/m605-68"}})[
@@ -388,9 +431,24 @@ class AuraMcpServerTests(unittest.TestCase):
         self.assertFalse(err)
         self.assertEqual(self.state.automation_calls[-1][2]["expected_revision"], "rev-auto-1")
 
+        err, hall_get = self._call_tool(22, "aura_lighting_hall_overlay", {"action": "get"})
+        self.assertFalse(err)
+        self.assertFalse(hall_get["hall_lighting"]["enabled"])
+        self.assertEqual(hall_get["revision"], "rev-hall-1")
+
+        err, hall_update = self._call_tool(
+            23,
+            "aura_lighting_hall_overlay",
+            {"action": "update", "enabled": True, "mode": "halo", "intensity": 0.85, "color": [0, 220, 255]},
+        )
+        self.assertFalse(err)
+        self.assertEqual(hall_update["revision"], "rev-hall-2")
+        self.assertTrue(hall_update["hall_lighting"]["enabled"])
+        self.assertEqual(hall_update["hall_lighting"]["mode"], "halo")
+
         # Verify clean structured error when daemon shuts down mid-session
         self.daemon_httpd.shutdown()
-        err, offline_res = self._call_tool(22, "studio_list_programs", {})
+        err, offline_res = self._call_tool(24, "studio_list_programs", {})
         self.assertTrue(err)
         self.assertIn("Connection failed", offline_res["error"])
 

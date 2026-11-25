@@ -87,7 +87,8 @@ public sealed class PerKeyRapidTriggerCutoverTests
         Assert.IsNotNull(root);
         var manual = File.ReadAllText(Path.Combine(root.FullName, "winui", "Pages", "MagneticSwitchPage.xaml.cs"));
         Assert.DoesNotContain("全局快速触发", manual);
-        StringAssert.Contains(manual, "旧版快速触发参数（只读）");
+        Assert.DoesNotContain("旧版快速触发参数", manual);
+        StringAssert.Contains(manual, "GlobalRtGuidePanel.Visibility = Visibility.Visible;");
         StringAssert.Contains(manual, "PressSlider.IsEnabled = false;");
         var page = File.ReadAllText(Path.Combine(root.FullName, "winui", "Pages", "ProfilesPage.xaml.cs"));
         StringAssert.Contains(page, "GlobalRtEnabled.IsEnabled = false;");

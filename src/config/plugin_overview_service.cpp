@@ -39,7 +39,13 @@ std::string PluginOverviewService::BuildOverviewJsonString() const {
     const auto plugins_dir = std::filesystem::weakly_canonical(
         std::filesystem::absolute(runtime_root_ / "plugins"), ec);
     const auto wooting_dir = plugins_dir / "bridges" / "wooting-analog-m605";
-    const auto wooting_dll = wooting_dir / "target" / "release" / "wooting_analog_plugin_aura_m605.dll";
+    const auto packaged_wooting_dll = wooting_dir / "wooting_analog_plugin_aura_m605.dll";
+    const auto dev_wooting_dll = wooting_dir / "target" / "release" / "wooting_analog_plugin_aura_m605.dll";
+    const auto wooting_dll = std::filesystem::is_regular_file(packaged_wooting_dll, ec)
+                                 ? packaged_wooting_dll
+                                 : (std::filesystem::is_regular_file(dev_wooting_dll, ec)
+                                        ? dev_wooting_dll
+                                        : packaged_wooting_dll);
     const auto install_script = wooting_dir / "install_plugin.ps1";
     const std::filesystem::path installed_dll =
         R"(C:\Program Files\WootingAnalogPlugins\aura-m605-plugin\wooting_analog_plugin_aura_m605.dll)";

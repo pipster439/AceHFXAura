@@ -18,6 +18,7 @@
 #include <unordered_set>
 
 #include "aura/aura_types.h"
+#include "config/config_contract.h"
 #include "config/config_writer_util.h"
 #include "third_party/json.hpp"
 #include "third_party/httplib.h"
@@ -174,8 +175,13 @@ public:
     OpResult GetPresetCatalog(std::vector<BuiltinLightingPreset>& out_presets);
     OpResult GetBaseLighting(BaseLightingDetail& out_detail);
     OpResult UpdateBaseLighting(const BaseLightingPatchInput& patch, std::string& out_new_revision);
+    OpResult UpdateDefaultProfile(const std::string& profile_name, const std::string& expected_revision,
+                                  std::string& out_new_revision);
     OpResult GetGlobalFps(int& fps, std::string& revision);
     OpResult UpdateGlobalFps(int fps, const std::string& expected_revision, std::string& revision);
+    OpResult GetHallLightingOverlay(HallLightingConfig& out_cfg, std::string& out_revision);
+    OpResult UpdateHallLightingOverlayPatch(const nlohmann::json& patch_fields, const std::string& expected_revision,
+                                            HallLightingConfig& out_cfg, std::string& out_new_revision);
 
 private:
     std::filesystem::path config_path_;

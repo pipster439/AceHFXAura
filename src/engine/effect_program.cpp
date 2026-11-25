@@ -15,7 +15,7 @@ enum class Type { Number, Boolean, Text, Color };
 enum class Op { Number, Boolean, Text, Variable, Elapsed, Coordinates, GsiNumber, GsiBool, GsiText, Pressed, Decay,
     Sqrt, Abs, Neg, Ln, Log10, Exp, Pow10, Sin, Cos, Tan, Asin, Acos, Atan, Round, Ceil, Floor,
     Add, Sub, Mul, Div, Mod, Pow, Min, Max, Eq, Ne, Lt, Le, Gt, Ge, Not, And, Or,
-    Phase, Wave, Distance, Radial, Rgb, Hsv, Lerp, Brightness, Cycle, AudioFeature, ScreenColor };
+    Phase, Wave, Distance, Radial, Rgb, Hsv, Lerp, Brightness, Cycle, AudioFeature, ScreenColor, HallDepth, HallKeyDepth, HallFeature };
 enum class Kind { End, Jump, If, Wait, LoopInit, LoopTest, Increment, Action };
 enum class Action { Fill, SetKey, SetVar, ChangeVar, Ripple };
 enum class Loop { Repeat, Keys, While };
@@ -60,6 +60,36 @@ std::string Text(const Json& value, size_t maximum, const std::string& path) {
 bool In(std::string_view text, std::initializer_list<std::string_view> values) {
     return std::find(values.begin(), values.end(), text) != values.end();
 }
+struct HallUsageNameEntry { const char* name; uint16_t hid_usage; };
+constexpr std::array<HallUsageNameEntry, 75> kHallKeyUsages = {{
+    {"ESC", 41}, {"1", 30}, {"2", 31}, {"3", 32}, {"4", 33}, {"5", 34}, {"6", 35},
+    {"7", 36}, {"8", 37}, {"9", 38}, {"0", 39}, {"-", 45}, {"=", 46}, {"BACKSPACE", 42}, {"INS", 73},
+    {"TAB", 43}, {"Q", 20}, {"W", 26}, {"E", 8}, {"R", 21}, {"T", 23}, {"Y", 28},
+    {"U", 24}, {"I", 12}, {"O", 18}, {"P", 19}, {"[", 47}, {"]", 48}, {"\\", 49}, {"DEL", 76},
+    {"CAPS", 57}, {"A", 4}, {"S", 22}, {"D", 7}, {"F", 9}, {"G", 10}, {"H", 11},
+    {"J", 13}, {"K", 14}, {"L", 15}, {";", 51}, {"'", 52}, {"ENTER", 40}, {"PGUP", 75},
+    {"L_SHIFT", 225}, {"LSHIFT", 225}, {"Z", 29}, {"X", 27}, {"C", 6}, {"V", 25}, {"B", 5}, {"N", 17},
+    {"M", 16}, {",", 54}, {".", 55}, {"/", 56}, {"R_SHIFT", 229}, {"RSHIFT", 229}, {"UP", 82}, {"PGDN", 78},
+    {"L_CTRL", 224}, {"LCTRL", 224}, {"L_WIN", 227}, {"LWIN", 227}, {"L_ALT", 226}, {"LALT", 226},
+    {"SPACE", 44}, {"R_ALT", 230}, {"RALT", 230}, {"FN", 232}, {"COPILOT", 228},
+    {"LEFT", 80}, {"DOWN", 81}, {"RIGHT", 79}, {"RETURN", 40}
+}};
+uint16_t ResolveHallUsage(const std::string& key_name) {
+    if (key_name.empty()) return 0;
+    for (const auto& entry : kHallKeyUsages) {
+        std::string_view a(entry.name);
+        if (a.size() != key_name.size()) continue;
+        bool match = true;
+        for (size_t i = 0; i < a.size(); ++i) {
+            char ca = a[i];
+            char cb = key_name[i];
+            if (cb >= 'a' && cb <= 'z') cb = static_cast<char>(cb - 'a' + 'A');
+            if (ca != cb) { match = false; break; }
+        }
+        if (match) return entry.hid_usage;
+    }
+    return 0;
+}
 uint8_t Byte(double value) { return static_cast<uint8_t>(std::clamp(value, 0.0, 255.0)); }
 ColorRGB Scale(ColorRGB color, double factor) {
     factor = std::clamp(factor, 0.0, 1.0);
@@ -77,7 +107,7 @@ struct EffectProgram::Impl {
     std::vector<Expression> expressions;
     std::vector<Instruction> instructions;
     uint32_t entry{0}, variables{0}, slots{0}, fade{0};
-    bool one_shot{false}, keyboard{false}, gsi{false}, audio{false}, screen{false};
+    bool one_shot{false}, keyboard{false}, gsi{false}, audio{false}, screen{false}, hall{false};
 };
 namespace {
 class Compiler {
@@ -135,6 +165,39 @@ public:
             e.args[0] = Expr(value["default"], path + "/default", depth + 1); e.arity = 1;
             if (program->expressions[e.args[0]].type != Type::Color) Invalid(path, "Screen color default type mismatch");
             e.cost += program->expressions[e.args[0]].cost; program->screen = true;
+        } else if (op == "hall_depth") {
+            Fields(value, {"op", "default"}, {"unit"}, path);
+            std::string unit = "normalized";
+            if (value.contains("unit")) {
+                unit = Text(value["unit"], 16, path + "/unit");
+                if (!In(unit, {"normalized", "mm"})) Invalid(path + "/unit", "Unknown Hall depth unit");
+            }
+            e.op = Op::HallDepth; e.type = Type::Number; e.boolean = (unit == "mm");
+            e.args[0] = Expr(value["default"], path + "/default", depth + 1); e.arity = 1;
+            if (program->expressions[e.args[0]].type != Type::Number) Invalid(path, "Hall depth default type mismatch");
+            e.cost += program->expressions[e.args[0]].cost; program->hall = true;
+        } else if (op == "hall_key_depth") {
+            Fields(value, {"op", "key", "default"}, {"unit"}, path);
+            e.text = Text(value["key"], 32, path + "/key");
+            const uint16_t usage = ResolveHallUsage(e.text);
+            if (usage == 0) Invalid(path + "/key", "Unknown Hall key name");
+            std::string unit = "normalized";
+            if (value.contains("unit")) {
+                unit = Text(value["unit"], 16, path + "/unit");
+                if (!In(unit, {"normalized", "mm"})) Invalid(path + "/unit", "Unknown Hall depth unit");
+            }
+            e.op = Op::HallKeyDepth; e.type = Type::Number; e.index = usage; e.boolean = (unit == "mm");
+            e.args[0] = Expr(value["default"], path + "/default", depth + 1); e.arity = 1;
+            if (program->expressions[e.args[0]].type != Type::Number) Invalid(path, "Hall key depth default type mismatch");
+            e.cost += program->expressions[e.args[0]].cost; program->hall = true;
+        } else if (op == "hall_feature") {
+            Fields(value, {"op", "feature", "default"}, {}, path);
+            e.text = Text(value["feature"], 32, path + "/feature");
+            if (!In(e.text, {"max_depth", "avg_depth", "active_count", "active"})) Invalid(path + "/feature", "Unknown Hall feature");
+            e.op = Op::HallFeature; e.type = Type::Number;
+            e.args[0] = Expr(value["default"], path + "/default", depth + 1); e.arity = 1;
+            if (program->expressions[e.args[0]].type != Type::Number) Invalid(path, "Hall feature default type mismatch");
+            e.cost += program->expressions[e.args[0]].cost; program->hall = true;
         } else {
             Fields(value, {"op", "args"}, {"wave"}, path);
             struct Spec { Op op; uint32_t arity; Type result; };
@@ -270,6 +333,7 @@ bool EffectProgram::UsesKeyboard()const{return impl_->keyboard;}
 bool EffectProgram::UsesGsi()const{return impl_->gsi;}
 bool EffectProgram::UsesAudio()const{return impl_->audio;}
 bool EffectProgram::UsesScreen()const{return impl_->screen;}
+bool EffectProgram::UsesHall()const{return impl_->hall;}
 uint32_t EffectProgram::InstructionCount()const{return static_cast<uint32_t>(impl_->instructions.size());}
 
 struct ProgramEffect::Runtime {
@@ -277,7 +341,11 @@ struct ProgramEffect::Runtime {
     uint64_t generation_id{0};
     AuraLogicalKeyboardHostV1 host{};
     AuraLogicalKeyboardSnapshotV1 keyboard{};
+    AuraHallAnalogHostV1 hall_host{};
+    AuraHallAnalogSnapshotV1 hall_snapshot{};
     std::array<const KeyInfo*, 128> keys{};
+    std::array<uint16_t, 128> key_usages{};
+    uint32_t current_key_index{UINT32_MAX};
     uint32_t key_count{0}; const Keymap* keymap{nullptr};
     struct State {
         std::array<double, EffectProgram::MaxVariables> variables{};
@@ -292,10 +360,13 @@ struct ProgramEffect::Runtime {
     void CacheKeys(const Keymap& map) {
         if(keymap==&map)return;
         keys.fill(nullptr);key_count=0;
+        key_usages.fill(0);
         for(const auto& name:Keymap::GetStandardLayoutKeys()) {
             if(key_count==keys.size())throw RuntimeFault{"keymap_limit","Standard layout exceeds bounded key capacity"};
             auto found=map.GetAllKeys().find(name);
-            keys[key_count++]=found==map.GetAllKeys().end()?nullptr:&found->second;
+            keys[key_count]=found==map.GetAllKeys().end()?nullptr:&found->second;
+            key_usages[key_count]=ResolveHallUsage(name);
+            ++key_count;
         }
         keymap=&map;
     }
@@ -308,6 +379,23 @@ struct ProgramEffect::Runtime {
                 if(!std::memchr(keyboard.keys[i].name,0,AURA_LOGICAL_KEYBOARD_NAME_BYTES)) {keyboard={};break;}
         } else keyboard={};
         status.keyboard_available=keyboard.source_available==1;
+    }
+    void Hall() {
+        hall_snapshot={};
+        if(program->hall && hall_host.read_snapshot &&
+           hall_host.read_snapshot(hall_host.context,&hall_snapshot,sizeof(hall_snapshot))==1 &&
+           hall_snapshot.struct_size==sizeof(hall_snapshot) && hall_snapshot.version==AURA_HALL_ANALOG_VERSION &&
+           hall_snapshot.count<=AURA_HALL_ANALOG_MAX_KEYS && hall_snapshot.active==1) {
+            status.hall_available=true;
+        } else {
+            hall_snapshot.active=0; hall_snapshot.count=0; status.hall_available=false;
+        }
+    }
+    const AuraHallKeyStateV1* HallKeyStateByUsage(uint16_t usage) const {
+        if(!usage || !hall_snapshot.active)return nullptr;
+        for(uint32_t i=0;i<hall_snapshot.count;++i)
+            if(hall_snapshot.keys[i].hid_usage==usage)return &hall_snapshot.keys[i];
+        return nullptr;
     }
     const AuraLogicalKeyStateV1* KeyState() const {
         if(!current_key || !keyboard.source_available)return nullptr;
@@ -363,6 +451,43 @@ struct ProgramEffect::Runtime {
                         result.color = reading.sample.color;
                     }
                 }
+                return result;
+            }
+            case Op::HallDepth:{
+                result=Eval(e.args[0]);
+                if(hall_snapshot.active && current_key_index < key_count) {
+                    if(const auto* hk=HallKeyStateByUsage(key_usages[current_key_index])) {
+                        result.number = e.boolean ? std::clamp(static_cast<double>(hk->depth_mm), 0.0, 4.0)
+                                                  : std::clamp(static_cast<double>(hk->normalized), 0.0, 1.0);
+                        Finite(result.number);
+                    }
+                }
+                return result;
+            }
+            case Op::HallKeyDepth:{
+                result=Eval(e.args[0]);
+                if(const auto* hk=HallKeyStateByUsage(static_cast<uint16_t>(e.index))) {
+                    result.number = e.boolean ? std::clamp(static_cast<double>(hk->depth_mm), 0.0, 4.0)
+                                              : std::clamp(static_cast<double>(hk->normalized), 0.0, 1.0);
+                    Finite(result.number);
+                }
+                return result;
+            }
+            case Op::HallFeature:{
+                result=Eval(e.args[0]);
+                if(!hall_snapshot.active) return result;
+                if(e.text=="active") { result.number = 1.0; return result; }
+                double max_n = 0.0, sum_n = 0.0; uint32_t active_cnt = 0;
+                for(uint32_t i=0;i<hall_snapshot.count;++i) {
+                    const double norm = std::clamp(static_cast<double>(hall_snapshot.keys[i].normalized), 0.0, 1.0);
+                    if(norm > max_n) max_n = norm;
+                    sum_n += norm;
+                    if(hall_snapshot.keys[i].depth_mm >= 0.08f) ++active_cnt;
+                }
+                if(e.text=="max_depth") result.number = max_n;
+                else if(e.text=="avg_depth") result.number = hall_snapshot.count ? (sum_n / hall_snapshot.count) : 0.0;
+                else if(e.text=="active_count") result.number = static_cast<double>(active_cnt);
+                Finite(result.number);
                 return result;
             }
             default:break;
@@ -437,8 +562,8 @@ struct ProgramEffect::Runtime {
         }
     }
     bool Step(const Instruction& n) {
-        current_key=nullptr;
-        if(n.key_slot>=0) {const auto index=state.indices[static_cast<size_t>(n.key_slot)];if(index>=key_count||!keys[index])throw RuntimeFault{"invalid_key_context","Instruction key slot is unavailable"};current_key=keys[index];}
+        current_key=nullptr; current_key_index=UINT32_MAX;
+        if(n.key_slot>=0) {const auto index=state.indices[static_cast<size_t>(n.key_slot)];if(index>=key_count||!keys[index])throw RuntimeFault{"invalid_key_context","Instruction key slot is unavailable"};current_key=keys[index];current_key_index=index;}
         switch(n.kind) {
             case Kind::End:if(program->one_shot){state.terminal=true;state.terminal_at=context->elapsed_ms;}else state.pc=program->entry;return false;
             case Kind::Jump:state.pc=n.next;break;
@@ -465,7 +590,7 @@ struct ProgramEffect::Runtime {
         try {
             CacheKeys(ctx.keymap);
             if(!state.initialized || ctx.elapsed_ms<state.last){state={};state.initialized=true;state.pc=program->entry;}
-            state.last=ctx.elapsed_ms;Keyboard();
+            state.last=ctx.elapsed_ms;Keyboard();Hall();
             status.audio_available = ctx.audio && ctx.audio->Enabled();
             status.screen_available = ctx.screen && ctx.screen->Enabled();
             if(state.terminal) {
@@ -495,7 +620,9 @@ struct ProgramEffect::Runtime {
     }
 };
 
-ProgramEffect::ProgramEffect(std::shared_ptr<const EffectProgram> program,const AuraLogicalKeyboardHostV1* keyboard)
+ProgramEffect::ProgramEffect(std::shared_ptr<const EffectProgram> program,
+                             const AuraLogicalKeyboardHostV1* keyboard,
+                             const AuraHallAnalogHostV1* hall)
     :runtime_(std::make_unique<Runtime>()),program_(program) {
     if(!program)throw std::invalid_argument("ProgramEffect needs compiled program");
     runtime_->program=program->impl_;
@@ -503,6 +630,11 @@ ProgramEffect::ProgramEffect(std::shared_ptr<const EffectProgram> program,const 
         if(keyboard->struct_size!=sizeof(*keyboard)||keyboard->version!=AURA_LOGICAL_KEYBOARD_VERSION||!keyboard->read_snapshot)
             throw std::invalid_argument("Unsupported keyboard callback contract");
         runtime_->host=*keyboard;
+    }
+    if(hall) {
+        if(hall->struct_size!=sizeof(*hall)||hall->version!=AURA_HALL_ANALOG_VERSION||!hall->read_snapshot)
+            throw std::invalid_argument("Unsupported Hall analog callback contract");
+        runtime_->hall_host=*hall;
     }
 }
 ProgramEffect::~ProgramEffect()=default;

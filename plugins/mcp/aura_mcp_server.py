@@ -140,6 +140,9 @@ Aura's Studio execution engine compiles restricted EffectProgram IR v1 JSON into
   - `{"op": "gsi_number|gsi_bool|gsi_text", "path": "player.state.health", "default": <expr>}`
   - `{"op": "audio_feature", "feature": "rms|peak|centroid", "default": <num_expr>}`
   - `{"op": "screen_color", "default": <color_expr>}`
+  - `{"op": "hall_depth", "unit": "normalized|mm", "default": <num_expr>}` — live magnetic switch travel of the current `for_keys` key (`0..1` or `0..4 mm`); daemon auto-starts Hall stream whenever an enabled IR program uses it
+  - `{"op": "hall_key_depth", "key": "W", "unit": "normalized|mm", "default": <num_expr>}` — live magnetic switch travel of any specific named key (`W`, `A`, `SPACE`, `L_SHIFT`, etc.)
+  - `{"op": "hall_feature", "feature": "max_depth|avg_depth|active_count|active", "default": <num_expr>}` — keyboard-wide Hall analog aggregate telemetry
 - Math & Logic (`args: [...]`):
   - Unary num: `sqrt, abs, neg, ln, log10, exp, pow10, sin, cos, tan, asin, acos, atan, round, ceil, floor, decay` (`decay` takes 1 num ms arg and reads key release decay!)
   - Binary num: `add, sub, mul, div, mod, pow, min, max`
@@ -202,7 +205,7 @@ Aura's Studio execution engine compiles restricted EffectProgram IR v1 JSON into
 NATIVE_CPP_GUIDE = r"""# Aura Native C++ Plugin ABI v1 + Hall Analog v1 Template
 
 Compile with `studio_compile_cpp_effect` (`name`: `^[A-Za-z0-9_]{1,64}$`).
-Optional `AuraGetHallAnalogVersion` / `AuraBindHallAnalog` lets plugins read 68-key ROG Falchion Ace HFX magnetic switch depth in real time.
+Optional `AuraGetHallAnalogVersion` / `AuraBindHallAnalog` lets plugins read 68-key ROG Falchion Ace HFX magnetic switch depth in real time. Whenever a plugin exporting `AuraBindHallAnalog` or an IR program using `hall_depth` / `hall_key_depth` / `hall_feature` is active, the Aura daemon automatically starts the Hall shared-memory telemetry stream.
 
 ```cpp
 #include "engine/effect.h"
@@ -581,6 +584,23 @@ class AuraMcpServer:
                         "period_ms": {"type": "integer", "minimum": 100, "maximum": 60000},
                         "parameters": {"type": "object"},
                         "fps": {"type": "integer", "minimum": 10, "maximum": 100},
+                    },
+                    "additionalProperties": False,
+                },
+            },
+            {
+                "name": "aura_lighting_hall_overlay",
+                "description": "Read or update Aura's built-in software Hall depth reactive lighting overlay (layered on top of any base Aura effect or Studio program; daemon automatically starts the Hall stream when enabled).",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "action": {"type": "string", "enum": ["get", "update"], "default": "get"},
+                        "enabled": {"type": "boolean"},
+                        "mode": {"type": "string", "enum": ["glow", "gradient", "halo"]},
+                        "color": {"type": "array", "items": {"type": "integer", "minimum": 0, "maximum": 255}, "minItems": 3, "maxItems": 3},
+                        "secondary_color": {"type": "array", "items": {"type": "integer", "minimum": 0, "maximum": 255}, "minItems": 3, "maxItems": 3},
+                        "intensity": {"type": "number", "minimum": 0.0, "maximum": 1.0},
+                        "min_depth_mm": {"type": "number", "minimum": 0.05, "maximum": 2.0},
                     },
                     "additionalProperties": False,
                 },
@@ -991,6 +1011,7 @@ class AuraMcpServer:
             "studio_preview_frame": self._tool_preview_frame,
             "aura_lighting_get": self._tool_lighting_get,
             "aura_lighting_set_base": self._tool_lighting_set_base,
+            "aura_lighting_hall_overlay": self._tool_lighting_hall_overlay,
             "aura_hall_telemetry": self._tool_hall_telemetry,
             "aura_hall_verify": self._tool_hall_verify,
             "aura_magnetic_set_actuation": self._tool_magnetic_set_actuation,
@@ -1263,6 +1284,19 @@ class AuraMcpServer:
         if not results:
             raise ValueError("Provide at least one field to update (preset, effect, brightness, period_ms, parameters, fps)")
         return results
+
+    def _tool_lighting_hall_overlay(self, args: dict[str, Any]) -> Any:
+        action = args.get("action", "get")
+        if action == "get":
+            return self.client.daemon_get("/api/lighting/hall-overlay")
+        if action == "update":
+            fields = {k: args[k] for k in ("enabled", "mode", "color", "secondary_color", "intensity", "min_depth_mm") if k in args}
+            if not fields:
+                raise ValueError("Provide at least one field (enabled, mode, color, secondary_color, intensity, min_depth_mm) for action='update'")
+            cur = self.client.daemon_get("/api/lighting/hall-overlay")
+            fields["expected_revision"] = cur.get("revision", "")
+            return self.client.daemon_patch("/api/lighting/hall-overlay", fields)
+        raise ValueError("'action' must be 'get' or 'update'")
 
     def _tool_hall_telemetry(self, args: dict[str, Any]) -> Any:
         action = args.get("action", "snapshot")

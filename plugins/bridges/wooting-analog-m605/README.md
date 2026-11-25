@@ -10,16 +10,16 @@
 ## 构建
 
 ```powershell
-cargo test --manifest-path G:\Aura\plugins\bridges\wooting-analog-m605\Cargo.toml
-cargo build --release --manifest-path G:\Aura\plugins\bridges\wooting-analog-m605\Cargo.toml
+cargo test --manifest-path plugins\bridges\wooting-analog-m605\Cargo.toml
+cargo build --release --manifest-path plugins\bridges\wooting-analog-m605\Cargo.toml
 ```
 
-输出产物：`G:\Aura\plugins\bridges\wooting-analog-m605\target\release\wooting_analog_plugin_aura_m605.dll`
+输出产物：`plugins\bridges\wooting-analog-m605\target\release\wooting_analog_plugin_aura_m605.dll`（发布包中已预打包至 `<AURA_DATA_DIR>\plugins\bridges\wooting-analog-m605\wooting_analog_plugin_aura_m605.dll`）
 
 ## 安装到 Wooting Analog SDK 全局插件目录（需管理员 PowerShell）
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File G:\Aura\plugins\bridges\wooting-analog-m605\install_plugin.ps1
+powershell -ExecutionPolicy Bypass -File <AURA_DATA_DIR>\plugins\bridges\wooting-analog-m605\install_plugin.ps1
 ```
 
 插件将被复制到 `C:\Program Files\WootingAnalogPlugins\aura-m605-plugin\wooting_analog_plugin_aura_m605.dll`。

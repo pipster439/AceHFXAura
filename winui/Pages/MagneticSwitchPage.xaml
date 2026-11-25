@@ -32,8 +32,8 @@
                     </Grid.ColumnDefinitions>
 
                     <StackPanel Spacing="2" VerticalAlignment="Center">
-                        <TextBlock Text="磁轴设置" Style="{ThemeResource TitleTextBlockStyle}" />
-                        <TextBlock Text="ROG Falchion Ace HFX · 68 键霍尔磁轴工作台"
+                        <TextBlock Text="磁轴与方案" Style="{ThemeResource TitleTextBlockStyle}" />
+                        <TextBlock Text="ROG Falchion Ace HFX · 68 键霍尔磁轴与联动工作台"
                                    Style="{ThemeResource CaptionTextBlockStyle}"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                    TextWrapping="Wrap" />
@@ -78,6 +78,78 @@
                          Severity="Informational"
                          IsClosable="False" />
 
+                <!-- 1.5 配置方案与灯效联动工作栏 -->
+                <Border x:Name="WorkbenchProfileCard" Style="{StaticResource WorkbenchCardStyle}" Padding="14,12">
+                    <StackPanel Spacing="10">
+                        <Grid ColumnSpacing="8" RowSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <FontIcon Glyph="&#xE8FD;" FontSize="15" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                <TextBlock Text="当前方案" Style="{ThemeResource BodyStrongTextBlockStyle}" VerticalAlignment="Center" />
+                            </StackPanel>
+                            <ComboBox x:Name="WorkbenchProfileCombo"
+                                      Grid.Column="1"
+                                      MinWidth="150"
+                                      HorizontalAlignment="Stretch"
+                                      PlaceholderText="默认设备配置 (未连接方案服务)"
+                                      SelectionChanged="WorkbenchProfileCombo_SelectionChanged"
+                                      AutomationProperties.AutomationId="MagneticWorkbenchProfileCombo" />
+                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                <Button x:Name="WorkbenchProfileCreateButton" Content="新建" Click="WorkbenchProfileCreateButton_Click" AutomationProperties.AutomationId="MagneticProfileCreate" />
+                                <Button x:Name="WorkbenchProfileDuplicateButton" Content="复制" Click="WorkbenchProfileDuplicateButton_Click" AutomationProperties.AutomationId="MagneticProfileDuplicate" />
+                                <Button x:Name="WorkbenchProfileRenameButton" Content="重命名" Click="WorkbenchProfileRenameButton_Click" AutomationProperties.AutomationId="MagneticProfileRename" />
+                                <Button x:Name="WorkbenchProfileDeleteButton" Content="删除" Click="WorkbenchProfileDeleteButton_Click" AutomationProperties.AutomationId="MagneticProfileDelete" />
+                            </StackPanel>
+                        </Grid>
+
+                        <Grid ColumnSpacing="10" RowSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <FontIcon Glyph="&#xE790;" FontSize="14" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <TextBlock Text="联动灯效" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
+                            </StackPanel>
+                            <ComboBox x:Name="LinkedLightingCombo"
+                                      Grid.Column="1"
+                                      MinWidth="140"
+                                      HorizontalAlignment="Stretch"
+                                      PlaceholderText="不联动灯效"
+                                      SelectionChanged="LinkedLightingCombo_SelectionChanged"
+                                      AutomationProperties.AutomationId="MagneticLinkedLightingCombo" />
+                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <ToggleSwitch x:Name="InstantSyncToggle"
+                                              OnContent="实时同步"
+                                              OffContent="手动应用"
+                                              MinWidth="0"
+                                              Toggled="InstantSyncToggle_Toggled"
+                                              AutomationProperties.AutomationId="MagneticInstantSyncToggle" />
+                                <Border x:Name="SyncBadgeBorder"
+                                        Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                        CornerRadius="4"
+                                        Padding="8,4"
+                                        VerticalAlignment="Center">
+                                    <TextBlock x:Name="SyncBadgeText"
+                                               Text="实时同步就绪"
+                                               Style="{ThemeResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                </Border>
+                            </StackPanel>
+                            <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                <Button x:Name="OpenAutomationPageButton" Content="自动切换规则" Click="OpenAutomationPageButton_Click" AutomationProperties.AutomationId="MagneticOpenAutomation" />
+                                <Button x:Name="OpenProfilesAdvancedButton" Content="方案管理与诊断" Click="OpenProfilesAdvancedButton_Click" AutomationProperties.AutomationId="MagneticOpenProfilesAdvanced" />
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
                 <!-- 2. 全宽交互式 68 键工作台 -->
                 <Border Style="{StaticResource WorkbenchCardStyle}">
                     <StackPanel x:Name="KeyboardPanel" Spacing="12">
@@ -110,6 +182,18 @@
                                         Click="ClearSelectionButton_Click"
                                         AutomationProperties.AutomationId="MagneticClearSelection"
                                         Visibility="Collapsed" />
+                                <Button x:Name="QuickSelectWasdButton"
+                                        Content="WASD"
+                                        Click="QuickSelectWasdButton_Click"
+                                        AutomationProperties.AutomationId="MagneticQuickSelectWasd" />
+                                <Button x:Name="QuickSelectArrowsButton"
+                                        Content="方向键"
+                                        Click="QuickSelectArrowsButton_Click"
+                                        AutomationProperties.AutomationId="MagneticQuickSelectArrows" />
+                                <Button x:Name="QuickSelectAllButton"
+                                        Content="全选"
+                                        Click="QuickSelectAllButton_Click"
+                                        AutomationProperties.AutomationId="MagneticQuickSelectAll" />
                                 <TextBlock Text="点击选单键 · Ctrl+点击多选"
                                            Margin="4,0,0,0"
                                            VerticalAlignment="Center"
@@ -156,6 +240,26 @@
                                 <StackPanel x:Name="KeyboardRows" Spacing="5" HorizontalAlignment="Center" />
                             </ScrollViewer>
                         </Border>
+
+                        <!-- 键帽颜色状态图例 -->
+                        <StackPanel Orientation="Horizontal" Spacing="14" HorizontalAlignment="Right">
+                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                <Border Width="10" Height="10" CornerRadius="2" BorderThickness="1.5" BorderBrush="{ThemeResource AccentFillColorDefaultBrush}" />
+                                <TextBlock Text="自定义触发点" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                <Border Width="10" Height="10" CornerRadius="2" Background="{ThemeResource SystemFillColorSuccessBrush}" />
+                                <TextBlock Text="快速触发已启用" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                <Border Width="10" Height="10" CornerRadius="2" Background="{ThemeResource SystemFillColorCautionBrush}" />
+                                <TextBlock Text="DKS 已配置" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                <Border Width="10" Height="10" CornerRadius="2" Background="{ThemeResource AccentFillColorSecondaryBrush}" />
+                                <TextBlock Text="实时按压深度" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                            </StackPanel>
+                        </StackPanel>
 
                         <!-- 选中按键摘要 + 实时行程栏 -->
                         <Border x:Name="SelectedKeyHeroCard"
@@ -277,7 +381,7 @@
                             <FontIcon Glyph="&#xE7FC;" />
                         </SelectorBarItem.Icon>
                     </SelectorBarItem>
-                    <SelectorBarItem x:Name="TabUtility" Text="压感灯效与维护" Tag="utility">
+                    <SelectorBarItem x:Name="TabUtility" Text="维护与重置" Tag="utility">
                         <SelectorBarItem.Icon>
                             <FontIcon Glyph="&#xE713;" />
                         </SelectorBarItem.Icon>
@@ -470,6 +574,12 @@
                                         HorizontalAlignment="Stretch"
                                         ValueChanged="ActuationSlider_ValueChanged"
                                         AutomationProperties.Name="触发点草稿" />
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <Button x:Name="ActuationPreset02Button" Content="0.2 mm" Tag="0.2" Padding="8,3" Click="ActuationPreset_Click" AutomationProperties.AutomationId="MagneticActuationPreset02" />
+                                    <Button x:Name="ActuationPreset08Button" Content="0.8 mm" Tag="0.8" Padding="8,3" Click="ActuationPreset_Click" AutomationProperties.AutomationId="MagneticActuationPreset08" />
+                                    <Button x:Name="ActuationPreset15Button" Content="1.5 mm" Tag="1.5" Padding="8,3" Click="ActuationPreset_Click" AutomationProperties.AutomationId="MagneticActuationPreset15" />
+                                    <Button x:Name="ActuationPreset20Button" Content="2.0 mm" Tag="2.0" Padding="8,3" Click="ActuationPreset_Click" AutomationProperties.AutomationId="MagneticActuationPreset20" />
+                                </StackPanel>
                                 <ComboBox x:Name="BatchActuationPicker"
                                           Header="批量目标触发点"
                                           PlaceholderText="选择触发点"
@@ -553,7 +663,38 @@
                                     <ComboBoxItem Content="禁用" Tag="Disable" />
                                 </ComboBox>
 
-                                <Grid ColumnSpacing="16" RowSpacing="6">
+                                <Border x:Name="GlobalRtGuidePanel"
+                                        Visibility="Collapsed"
+                                        Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="6"
+                                        Padding="12"
+                                        AutomationProperties.AutomationId="MagneticGlobalRtGuide">
+                                    <StackPanel Spacing="10">
+                                        <TextBlock Text="键盘固件仅支持按按键单独或批量启用快速触发。请选择需要配置的按键分组："
+                                                   TextWrapping="Wrap"
+                                                   Style="{ThemeResource CaptionTextBlockStyle}"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <Button x:Name="GlobalRtQuickWasdButton"
+                                                    Content="配置 WASD"
+                                                    Style="{ThemeResource AccentButtonStyle}"
+                                                    Click="QuickSelectWasdButton_Click"
+                                                    AutomationProperties.AutomationId="MagneticGlobalRtQuickWasd" />
+                                            <Button x:Name="GlobalRtQuickArrowsButton"
+                                                    Content="配置方向键"
+                                                    Click="QuickSelectArrowsButton_Click"
+                                                    AutomationProperties.AutomationId="MagneticGlobalRtQuickArrows" />
+                                            <Button x:Name="GlobalRtQuickAllButton"
+                                                    Content="全选 68 键配置"
+                                                    Click="QuickSelectAllButton_Click"
+                                                    AutomationProperties.AutomationId="MagneticGlobalRtQuickAll" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+
+                                <Grid x:Name="RtSlidersGrid" ColumnSpacing="16" RowSpacing="6">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="*" />
@@ -576,6 +717,13 @@
                                     </StackPanel>
                                 </Grid>
 
+                                <StackPanel x:Name="RtPresetPanel" Orientation="Horizontal" Spacing="6">
+                                    <TextBlock Text="快捷灵敏度：" VerticalAlignment="Center" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                                    <Button x:Name="RtPreset01Button" Content="0.1 mm" Tag="0.1" Padding="8,3" Click="RtPreset_Click" AutomationProperties.AutomationId="MagneticRtPreset01" />
+                                    <Button x:Name="RtPreset02Button" Content="0.2 mm" Tag="0.2" Padding="8,3" Click="RtPreset_Click" AutomationProperties.AutomationId="MagneticRtPreset02" />
+                                    <Button x:Name="RtPreset04Button" Content="0.4 mm" Tag="0.4" Padding="8,3" Click="RtPreset_Click" AutomationProperties.AutomationId="MagneticRtPreset04" />
+                                </StackPanel>
+
                                 <TextBlock x:Name="RapidTriggerDisableWarningText"
                                            Text="当前无法确认已保存的全局灵敏度基线，暂无法安全禁用单键 RT。"
                                            TextWrapping="Wrap"
@@ -583,7 +731,7 @@
                                            Foreground="{ThemeResource SystemFillColorCautionBrush}"
                                            Visibility="Collapsed" />
 
-                                <Grid ColumnSpacing="8">
+                                <Grid x:Name="RtFooterGrid" ColumnSpacing="8">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
@@ -925,43 +1073,45 @@
                     </Border>
                 </StackPanel>
 
-                <!-- 分区 D: 硬件压感灯效与重置维护 -->
+                <!-- 分区 D: 压感联动跳转与重置维护 -->
                 <StackPanel x:Name="SectionUtilityPanel" Spacing="16" Visibility="Collapsed">
                     <Border x:Name="PressLightingCard" Style="{StaticResource WorkbenchCardStyle}">
                         <StackPanel Spacing="10">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <FontIcon Glyph="&#xE790;" FontSize="16" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" VerticalAlignment="Center" />
-                                <TextBlock Text="硬件压感灯效（实验性）" Style="{ThemeResource BodyStrongTextBlockStyle}" VerticalAlignment="Center" />
+                                <TextBlock Text="霍尔压感联动光效" Style="{ThemeResource BodyStrongTextBlockStyle}" VerticalAlignment="Center" />
                             </StackPanel>
-                            <TextBlock x:Name="AnalogDescriptionText"
+                            <TextBlock Text="实时霍尔按压深度已与 Aura 软件灯效合并渲染，可叠加运行在任意预设或工作室灯效之上，无需再开启与 Aura 互斥的固件硬件压感灯效。"
                                        TextWrapping="Wrap"
                                        Style="{ThemeResource BodyTextBlockStyle}"
-                                       AutomationProperties.AutomationId="MagneticAnalogLimitation" />
-                            <TextBlock x:Name="AnalogBlockedReasonText"
-                                       TextWrapping="Wrap"
-                                       Style="{ThemeResource CaptionTextBlockStyle}"
-                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                       AutomationProperties.AutomationId="MagneticAnalogBlockedReason" />
-                            <Grid ColumnSpacing="12">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Spacing="2" VerticalAlignment="Center">
-                                    <TextBlock x:Name="AnalogStateText" Text="当前来源：未知"
-                                               Style="{ThemeResource CaptionTextBlockStyle}"
-                                               Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
-                                    <ToggleSwitch x:Name="AnalogToggle"
-                                                  OnContent="硬件压感：开启"
-                                                  OffContent="硬件压感：关闭"
-                                                  Toggled="AnalogToggle_Toggled"
-                                                  AutomationProperties.AutomationId="MagneticAnalogEffect" />
-                                </StackPanel>
-                                <Button x:Name="AnalogApplyButton" Grid.Column="1" Content="应用硬件压感"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <Button x:Name="OpenLightingPageButton"
+                                    Content="前往灯效页配置"
+                                    Style="{ThemeResource AccentButtonStyle}"
+                                    Click="OpenLightingPageButton_Click"
+                                    AutomationProperties.AutomationId="MagneticOpenLightingPage" />
+                            <StackPanel Visibility="Collapsed">
+                                <TextBlock x:Name="AnalogDescriptionText"
+                                           TextWrapping="Wrap"
+                                           Style="{ThemeResource BodyTextBlockStyle}"
+                                           AutomationProperties.AutomationId="MagneticAnalogLimitation" />
+                                <TextBlock x:Name="AnalogBlockedReasonText"
+                                           TextWrapping="Wrap"
+                                           Style="{ThemeResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           AutomationProperties.AutomationId="MagneticAnalogBlockedReason" />
+                                <TextBlock x:Name="AnalogStateText" Text="当前来源：未知"
+                                           Style="{ThemeResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                                <ToggleSwitch x:Name="AnalogToggle"
+                                              OnContent="硬件压感：开启"
+                                              OffContent="硬件压感：关闭"
+                                              Toggled="AnalogToggle_Toggled"
+                                              AutomationProperties.AutomationId="MagneticAnalogEffect" />
+                                <Button x:Name="AnalogApplyButton" Content="应用硬件压感"
                                         Click="AnalogApplyButton_Click"
-                                        VerticalAlignment="Center"
                                         AutomationProperties.AutomationId="MagneticAnalogApply" />
-                            </Grid>
+                            </StackPanel>
                         </StackPanel>
                     </Border>
 
